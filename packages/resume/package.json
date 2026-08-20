@@ -1,0 +1,27 @@
+{
+  "name": "@jobhunter/resume",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@jobhunter/agent-core": "workspace:*",
+    "@jobhunter/domain": "workspace:*",
+    "mammoth": "^1.12.1",
+    "pdfjs-dist": "^6.2.108",
+    "zod": "^4.4.3"
+  }
+}

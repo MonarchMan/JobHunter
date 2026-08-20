@@ -1,0 +1,47 @@
+# 008 轻量 Agent 运行时设计
+
+> 状态：Implemented
+
+实现遵循 [Agent 与匹配设计](../../docs/arch/agent-and-matching.md)。
+
+## 包
+
+```text
+packages/agent-core/
+├─ definition.ts
+├─ runner.ts
+├─ tools.ts
+├─ budgets.ts
+├─ errors.ts
+└─ index.ts
+
+packages/llm/
+├─ model-client.ts
+├─ provider-registry.ts
+├─ fake-model-client.ts
+└─ providers/
+```
+
+ModelClient 使用项目自有 DTO，不向上暴露供应商 SDK 类型。Provider adapter 将供应商错误映射为 `rate_limited`、`temporary`、`invalid_auth`、`invalid_request`、`content_rejected`、`cancelled`。
+
+首个 Provider 使用 OpenAI 兼容的 `POST {baseUrl}/chat/completions` 边界，不向 Agent Core 暴露供应商 DTO。配置在组合根归一化：`JOBHUNTER_MODEL_BASE_URL`、`JOBHUNTER_MODEL_API_KEY`、`JOBHUNTER_MODEL_NAME` 优先，个人本地 `.env` 可使用 `BASE_URL`、`API_KEY`、`MODEL` 别名。API Key 仅保存在 `SecretString` 和请求头中，Provider metadata、异常与日志不得包含密钥。在线烟测通过显式脚本执行，不进入默认测试集合。
+
+## Runner
+
+Runner 自身不写业务表，只通过 AgentRunStore 保存运行和工具摘要。业务 Handler 在 Runner 返回后关联 ProfileVersion、JobEnrichment 或独立 MatchAdvice，不能把建议直接写回 MatchResult。
+
+AgentRunStore 允许同一 cacheKey 存在多个失败/取消运行，只对 succeeded 建立部分唯一约束。创建运行前先查成功缓存；并发提交成功发生唯一冲突时，当前运行读取胜出的成功记录并以 cache-race-resolved 结束，不覆盖对方结果。
+
+工具循环每一步先验证预算和取消，再验证工具名/input，执行只读工具并验证 output。结构化修复使用独立、固定提示且不允许工具。
+
+## Prompt Registry
+
+Prompt 以 `packages/*/prompts/<agent>/<version>.ts` 存储，导出文本与输出 Schema version。启动测试验证 key/version 唯一。
+
+## 评测
+
+`evals/<agent>/cases/*.json` 保存脱敏输入引用和期望断言；报告输出到不提交的 `var/evals`，发布基线摘要可提交 `docs/evals`。评测不默认在普通测试中调用付费模型。报告必须区分供应商调用失败、Schema 失败和事实质量失败，不能用“只统计成功样本”提高通过率。
+
+## 隐私
+
+Canonical input hash 在进程内从完整最小输入计算；持久化只保存哈希和已校验输出。若业务必须保留输出，输出 Schema 必须排除联系方式等不必要字段。

@@ -1,0 +1,42 @@
+{
+  "Code": 200,
+  "Data": {
+    "Count": 3,
+    "Posts": [
+      {
+        "PostId": "2046558434547101696",
+        "RecruitPostName": "AIGC 算法工程师",
+        "CountryName": "中国",
+        "LocationName": "深圳",
+        "BGName": "WXG",
+        "ComCode": "",
+        "ComName": "",
+        "ProductName": "AI 平台",
+        "CategoryName": "技术",
+        "Responsibility": "负责大模型应用与 Agent 系统研发。",
+        "LastUpdateTime": "2026年08月19日",
+        "PostURL": "http://careers.tencent.com/jobdesc.html?postId=2046558434547101696",
+        "SourceID": 1,
+        "IsValid": true,
+        "RequireWorkYearsName": "两年以上工作经验"
+      },
+      {
+        "PostId": "2046558482223759360",
+        "RecruitPostName": "大模型应用开发工程师",
+        "CountryName": "中国",
+        "LocationName": "上海",
+        "BGName": "CSIG",
+        "ComCode": "",
+        "ComName": "",
+        "ProductName": "云产品",
+        "CategoryName": "技术",
+        "Responsibility": "负责 RAG 与智能体应用开发。",
+        "LastUpdateTime": "2026年08月19日",
+        "PostURL": "http://careers.tencent.com/jobdesc.html?postId=2046558482223759360",
+        "SourceID": 1,
+        "IsValid": true,
+        "RequireWorkYearsName": "三年以上工作经验"
+      }
+    ]
+  }
+}

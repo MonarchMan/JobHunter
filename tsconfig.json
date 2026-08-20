@@ -1,0 +1,19 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./packages/source-core" },
+    { "path": "./packages/agent-core" },
+    { "path": "./packages/resume" },
+    { "path": "./packages/matching" },
+    { "path": "./packages/application" },
+    { "path": "./packages/sources" },
+    { "path": "./packages/llm" },
+    { "path": "./packages/db" },
+    { "path": "./packages/observability" },
+    { "path": "./packages/testkit" },
+    { "path": "./apps/cli" },
+    { "path": "./apps/worker" },
+    { "path": "./apps/web" }
+  ]
+}

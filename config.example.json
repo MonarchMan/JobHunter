@@ -1,0 +1,7 @@
+{
+  "logLevel": "info",
+  "worker": {
+    "pollIntervalMs": 1000,
+    "maxConcurrentNetworkTasks": 4
+  }
+}

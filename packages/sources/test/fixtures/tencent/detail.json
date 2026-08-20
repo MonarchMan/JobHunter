@@ -1,0 +1,22 @@
+{
+  "Code": 200,
+  "Data": {
+    "PostId": "2046558434547101696",
+    "RecruitPostName": "AIGC 算法工程师",
+    "LocationName": "深圳",
+    "BGName": "WXG",
+    "ComCode": "",
+    "ComName": "",
+    "OuterPostTypeID": "40002002",
+    "CategoryName": "技术",
+    "ProductName": "AI 平台",
+    "Responsibility": "负责大模型应用与 Agent 系统研发。",
+    "Requirement": "熟悉 TypeScript 或 Python，具备 RAG 与智能体项目经验。",
+    "LastUpdateTime": "2026年08月19日",
+    "PostURL": "http://careers.tencent.com/jobdesc.html?postId=2046558434547101696",
+    "SourceID": 1,
+    "IsValid": true,
+    "DepartmentIntroduction": "负责 AI 平台与应用落地。",
+    "RequireWorkYearsName": "两年以上工作经验"
+  }
+}

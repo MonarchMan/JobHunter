@@ -1,0 +1,136 @@
+{
+  "id": "redacted-agent-jobs-v1",
+  "profile": {
+    "targetRoles": ["Agent 开发", "大模型应用"],
+    "preferences": {
+      "locations": ["深圳"],
+      "companySizes": ["large", "medium"],
+      "employmentTypes": ["全职"],
+      "excludedTerms": ["外包"],
+      "remoteAccepted": null
+    },
+    "education": [],
+    "workExperience": [],
+    "projects": [],
+    "skills": [
+      {
+        "name": "TypeScript",
+        "level": "proficient",
+        "evidence": [{ "source": "resume", "quote": "TypeScript" }]
+      },
+      {
+        "name": "RAG",
+        "level": "proficient",
+        "evidence": [{ "source": "resume", "quote": "RAG" }]
+      }
+    ],
+    "domains": ["大模型应用"],
+    "yearsOfExperience": 5,
+    "managementExperience": false
+  },
+  "jobs": [
+    {
+      "job": {
+        "companyId": "018f0000-0000-7000-8000-00000000e001",
+        "sourceId": "018f0000-0000-7000-8000-00000000e002",
+        "externalJobId": "agent-engineer",
+        "title": "大模型 Agent 开发工程师",
+        "department": "AI 平台",
+        "jobFamily": "研发",
+        "locations": ["深圳"],
+        "employmentType": "全职",
+        "experienceText": "3 年以上开发经验",
+        "educationText": null,
+        "description": "负责 TypeScript Agent 平台和 RAG 检索系统研发。",
+        "detailUrl": "https://careers.example.com/jobs/agent-engineer",
+        "applyUrl": "https://careers.example.com/jobs/agent-engineer/apply",
+        "publishedAt": 1700000000000
+      },
+      "company": { "sizeCategory": "large", "industry": "大模型应用" },
+      "understanding": {
+        "requiredSkills": [
+          {
+            "value": "TypeScript",
+            "evidence": [{ "field": "description", "quote": "TypeScript" }]
+          },
+          {
+            "value": "RAG",
+            "evidence": [{ "field": "description", "quote": "RAG" }]
+          }
+        ],
+        "preferredSkills": [],
+        "minimumYearsExperience": {
+          "value": 3,
+          "evidence": [{ "field": "experienceText", "quote": "3 年以上" }]
+        },
+        "seniority": null,
+        "domains": [
+          { "value": "大模型应用", "evidence": [{ "field": "title", "quote": "大模型" }] }
+        ]
+      },
+      "relevant": true,
+      "mustNotExclude": true
+    },
+    {
+      "job": {
+        "companyId": "018f0000-0000-7000-8000-00000000e003",
+        "sourceId": "018f0000-0000-7000-8000-00000000e004",
+        "externalJobId": "llm-application",
+        "title": "大模型应用工程师",
+        "department": null,
+        "jobFamily": "研发",
+        "locations": ["深圳"],
+        "employmentType": "全职",
+        "experienceText": null,
+        "educationText": null,
+        "description": "建设企业知识库与 RAG 应用。",
+        "detailUrl": "https://careers.example.com/jobs/llm-application",
+        "applyUrl": "https://careers.example.com/jobs/llm-application/apply",
+        "publishedAt": 1699000000000
+      },
+      "company": { "sizeCategory": "medium", "industry": "大模型应用" },
+      "understanding": null,
+      "relevant": true,
+      "mustNotExclude": true
+    },
+    {
+      "job": {
+        "companyId": "018f0000-0000-7000-8000-00000000e005",
+        "sourceId": "018f0000-0000-7000-8000-00000000e006",
+        "externalJobId": "sales-outsourcing",
+        "title": "外包销售顾问",
+        "department": "销售",
+        "jobFamily": "销售",
+        "locations": ["北京"],
+        "employmentType": "全职",
+        "experienceText": null,
+        "educationText": null,
+        "description": "负责客户拓展。",
+        "detailUrl": "https://careers.example.com/jobs/sales-outsourcing",
+        "applyUrl": "https://careers.example.com/jobs/sales-outsourcing/apply",
+        "publishedAt": 1701000000000
+      },
+      "company": { "sizeCategory": "other", "industry": "销售服务" },
+      "understanding": null,
+      "relevant": false,
+      "mustNotExclude": false
+    }
+  ],
+  "adviceSamples": [
+    {
+      "externalJobId": "agent-engineer",
+      "output": {
+        "highlights": [
+          {
+            "text": "TypeScript 技能与岗位要求匹配。",
+            "references": [{ "kind": "evidence", "value": "技能匹配：TypeScript" }]
+          }
+        ],
+        "gaps": [],
+        "uncertainties": [],
+        "resumeEmphasis": ["突出已有的 TypeScript Agent 项目。"],
+        "preparation": ["准备 Agent 架构设计案例。"]
+      }
+    }
+  ]
+}

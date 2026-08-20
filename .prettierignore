@@ -1,0 +1,5 @@
+dist
+coverage
+var
+pnpm-lock.yaml
+docs/resumes

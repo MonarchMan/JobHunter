@@ -1,0 +1,25 @@
+{
+  "Code": 200,
+  "Data": {
+    "Count": 3,
+    "Posts": [
+      {
+        "PostId": "2046558500000000000",
+        "RecruitPostName": "Agent 平台工程师",
+        "CountryName": "中国",
+        "LocationName": "广州",
+        "BGName": "WXG",
+        "ComCode": "",
+        "ComName": "",
+        "ProductName": "智能平台",
+        "CategoryName": "技术",
+        "Responsibility": "负责 Agent 运行时与工具链建设。",
+        "LastUpdateTime": "2026年08月18日",
+        "PostURL": "http://careers.tencent.com/jobdesc.html?postId=2046558500000000000",
+        "SourceID": 1,
+        "IsValid": true,
+        "RequireWorkYearsName": "两年以上工作经验"
+      }
+    ]
+  }
+}

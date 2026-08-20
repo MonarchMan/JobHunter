@@ -1,0 +1,30 @@
+{
+  "name": "@jobhunter/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@jobhunter/agent-core": "workspace:*",
+    "@jobhunter/application": "workspace:*",
+    "@jobhunter/db": "workspace:*",
+    "@jobhunter/domain": "workspace:*",
+    "@jobhunter/llm": "workspace:*",
+    "@jobhunter/matching": "workspace:*",
+    "@jobhunter/source-core": "workspace:*",
+    "@jobhunter/sources": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false"
+  }
+}

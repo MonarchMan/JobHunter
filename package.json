@@ -1,0 +1,40 @@
+{
+  "name": "jobhunter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Personal job discovery and matching agent",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=11 <12"
+  },
+  "scripts": {
+    "preinstall": "node scripts/check-node-version.mjs",
+    "build": "tsc -b",
+    "clean": "node scripts/clean.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run --project unit",
+    "test:integration": "vitest run --project integration --passWithNoTests",
+    "test:e2e": "vitest run --project e2e --passWithNoTests",
+    "test:online": "vitest run --project online --passWithNoTests",
+    "docs:check": "node scripts/check-docs.mjs",
+    "check": "node scripts/run-checks.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^24.10.1",
+    "dependency-cruiser": "^17.3.8",
+    "eslint": "^9.39.2",
+    "globals": "^16.5.0",
+    "prettier": "^3.8.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.48.1",
+    "vitest": "^4.0.15"
+  }
+}

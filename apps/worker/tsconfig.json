@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
+  },
+  "include": ["src/**/*.ts"],
+  "references": [
+    { "path": "../../packages/agent-core" },
+    { "path": "../../packages/domain" },
+    { "path": "../../packages/application" },
+    { "path": "../../packages/db" },
+    { "path": "../../packages/llm" },
+    { "path": "../../packages/matching" },
+    { "path": "../../packages/source-core" },
+    { "path": "../../packages/sources" }
+  ]
+}

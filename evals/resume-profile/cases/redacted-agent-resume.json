@@ -1,0 +1,10 @@
+{
+  "id": "redacted-agent-resume-v1",
+  "inputRef": "docs/resumes/agent简历 - 新.docx",
+  "assertions": [
+    { "path": "/targetRoles", "operator": "exists" },
+    { "path": "/projects", "operator": "exists" },
+    { "path": "/skills", "operator": "exists" },
+    { "path": "/domains", "operator": "exists" }
+  ]
+}

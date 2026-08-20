@@ -1,0 +1,335 @@
+import {
+  CandidateProfileService,
+  createResumeProfileTaskHandler,
+  createMatchProfileTaskHandler,
+  createMatchRevisionTaskHandler,
+  dataRootCheck,
+  InitializationService,
+  modelConfigurationCheck,
+  nodeRuntimeCheck,
+  OfflineDoctorService,
+  type AppConfig,
+  type DoctorReport,
+  type InitializationResult,
+  HandlerRegistry,
+  JobExportService,
+  JobQueryService,
+  MatchWorkflowService,
+  ProfileInspectionService,
+  ProfileManagementService,
+  ResumeImportService,
+  ResumeProfileWorkflow,
+  SourceManagementService,
+  TaskService,
+  TaskWaitService,
+  createSourceSyncTaskHandler,
+  type EnqueueTaskResult,
+  type SourceOverview,
+  type TaskListFilter,
+  type TaskRecord,
+} from '@jobhunter/application';
+import {
+  NodeResumeFileReader,
+  openSqliteDatabase,
+  sqliteFileDoctorCheck,
+  SqliteAgentRunStore,
+  SqliteArtifactStore,
+  SqliteCandidateProfileRepository,
+  SqliteSourceManagementRepository,
+  SqliteCompanyLookupRepository,
+  SqliteJobQueryRepository,
+  SqliteMatchingRepository,
+  SqliteResumeDocumentRepository,
+  SqliteSystemInitializer,
+  SqliteTaskRepository,
+  type SqliteDatabaseHandle,
+  NodeJobExportFileStore,
+} from '@jobhunter/db';
+import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/domain';
+import { hashCanonical } from '@jobhunter/agent-core';
+import { OpenAiCompatibleModelClient } from '@jobhunter/llm';
+import { jobAdviceAgentDefinition } from '@jobhunter/matching';
+import { firstPartySourceCatalog } from '@jobhunter/sources';
+import { createProductionWorkerApplication, runWorkerProcess } from '@jobhunter/worker';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { setTimeout } from 'node:timers/promises';
+import { CliError, cliExitCode } from './model.js';
+
+export interface CliContainer {
+  readonly version: { get(): Readonly<Record<string, string>> };
+  readonly initialize?: { run(): Promise<InitializationResult> };
+  readonly doctor?: { run(): Promise<DoctorReport> };
+  readonly source?: {
+    list(): readonly SourceOverview[];
+    sync(selector: string): readonly EnqueueTaskResult[];
+    wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
+  };
+  readonly task?: {
+    list(filter?: TaskListFilter): readonly TaskRecord[];
+    get(taskId: string): TaskRecord | null;
+    retry(taskId: string): EnqueueTaskResult;
+    cancel(taskId: string): ReturnType<TaskService['cancel']>;
+    wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
+  };
+  readonly worker?: { start(): Promise<void> };
+  readonly job?: {
+    list(input: Parameters<JobQueryService['list']>[0]): ReturnType<JobQueryService['list']>;
+    show(id: string, profileVersionId?: string): ReturnType<JobQueryService['show']>;
+    export(
+      input: Parameters<JobExportService['export']>[0],
+    ): ReturnType<JobExportService['export']>;
+  };
+  readonly resume?: {
+    import(
+      input: Parameters<ResumeProfileWorkflow['import']>[0],
+    ): ReturnType<ResumeProfileWorkflow['import']>;
+  };
+  readonly profile?: {
+    show(id: string): ReturnType<ProfileManagementService['show']>;
+    history(id: string): ReturnType<ProfileManagementService['history']>;
+    set(id: string, pointer: string, value: unknown): ReturnType<ProfileManagementService['set']>;
+    lock(id: string, pointer: string): ReturnType<ProfileManagementService['lock']>;
+    unlock(id: string, pointer: string): ReturnType<ProfileManagementService['unlock']>;
+  };
+  readonly match?: {
+    run(profileId: string): ReturnType<MatchWorkflowService['run']>;
+    list(
+      input: Parameters<MatchWorkflowService['list']>[0],
+    ): ReturnType<MatchWorkflowService['list']>;
+    show(id: string): ReturnType<MatchWorkflowService['show']>;
+    wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
+  };
+  close(): Promise<void>;
+}
+
+export function createLocalCliContainer(config: AppConfig): CliContainer {
+  const initialization = new InitializationService(
+    new SqliteSystemInitializer(firstPartySourceCatalog),
+  );
+  const versions = { app: '0.1.0', schema: '0000', ruleset: 'v1', prompt: '1.0.0' };
+  const ids = new SystemIdGenerator();
+  let database: SqliteDatabaseHandle | null = null;
+  let services: {
+    readonly sources: SourceManagementService;
+    readonly tasks: TaskService;
+    readonly wait: TaskWaitService;
+    readonly jobs: JobQueryService;
+    readonly jobExports: JobExportService;
+    readonly resumes: ResumeProfileWorkflow;
+    readonly profiles: ProfileManagementService;
+    readonly matches: MatchWorkflowService;
+  } | null = null;
+  const operational = (): NonNullable<typeof services> => {
+    if (services) return services;
+    const databasePath = path.join(config.bootstrap.dataRoot.value, 'jobhunter.sqlite');
+    if (!existsSync(databasePath)) {
+      throw new CliError({
+        code: 'NOT_INITIALIZED',
+        message: '数据目录尚未初始化，请先运行 jh init。',
+        exitCode: cliExitCode.usage,
+      });
+    }
+    database = openSqliteDatabase({ dataRoot: config.bootstrap.dataRoot.value });
+    const queue = new SqliteTaskRepository(database.client);
+    const registry = new HandlerRegistry();
+    registry.register(
+      createSourceSyncTaskHandler({
+        run: () =>
+          Promise.reject(new Error('CLI process does not execute source synchronization.')),
+      }),
+    );
+    registry.register(createResumeProfileTaskHandler({ unavailable: true }));
+    registry.register(createMatchRevisionTaskHandler(null));
+    registry.register(createMatchProfileTaskHandler(null));
+    const tasks = new TaskService(
+      { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
+      registry,
+    );
+    const sources = new SourceManagementService({
+      sources: new SqliteSourceManagementRepository(database.client),
+      tasks,
+      ids,
+    });
+    const jobRepository = new SqliteJobQueryRepository(database.client);
+    const jobs = new JobQueryService({
+      jobs: jobRepository,
+      companies: new SqliteCompanyLookupRepository(database.client),
+    });
+    const profileRepository = new SqliteCandidateProfileRepository(database.client);
+    const candidateProfiles = new CandidateProfileService({
+      repository: profileRepository,
+      clock: { now: () => utcInstant(Date.now()) },
+      ids,
+    });
+    const profileInspection = new ProfileInspectionService({
+      profiles: profileRepository,
+      agentRuns: new SqliteAgentRunStore(database.client),
+    });
+    const resumeDocuments = new SqliteResumeDocumentRepository(database.client);
+    const matchingRepository = new SqliteMatchingRepository(database.client);
+    const modelMetadata =
+      config.model.baseUrl.value && config.model.modelName.value && config.model.apiKey.value
+        ? new OpenAiCompatibleModelClient({
+            baseUrl: config.model.baseUrl.value,
+            model: config.model.modelName.value,
+            apiKey: config.model.apiKey.value.reveal(),
+          }).metadata
+        : null;
+    services = {
+      sources,
+      tasks,
+      jobs,
+      jobExports: new JobExportService({
+        jobs: jobRepository,
+        query: jobs,
+        files: new NodeJobExportFileStore(),
+      }),
+      resumes: new ResumeProfileWorkflow({
+        files: new NodeResumeFileReader(),
+        imports: new ResumeImportService({
+          artifacts: new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value),
+          documents: resumeDocuments,
+          clock: { now: () => utcInstant(Date.now()) },
+          ids,
+        }),
+        profiles: candidateProfiles,
+        tasks,
+      }),
+      profiles: new ProfileManagementService({
+        profiles: candidateProfiles,
+        inspection: profileInspection,
+      }),
+      matches: new MatchWorkflowService({
+        matching: matchingRepository,
+        profiles: profileRepository,
+        tasks,
+        ids,
+        ...(modelMetadata
+          ? {
+              adviceSelector: {
+                agentKey: jobAdviceAgentDefinition.key,
+                agentVersion: jobAdviceAgentDefinition.version,
+                promptVersion: jobAdviceAgentDefinition.promptVersion,
+                modelConfigHash: hashCanonical(modelMetadata),
+              },
+            }
+          : {}),
+      }),
+      wait: new TaskWaitService(tasks, {
+        wait: (milliseconds, signal) => setTimeout(milliseconds, undefined, { signal }),
+      }),
+    };
+    return services;
+  };
+  return {
+    version: { get: () => ({ ...versions, node: process.versions.node }) },
+    initialize: {
+      run: () =>
+        initialization.initialize({
+          dataRoot: config.bootstrap.dataRoot.value,
+          configPath: config.bootstrap.configPath.value,
+          defaultConfig: {
+            logLevel: 'info',
+            worker: { pollIntervalMs: 1_000, maxConcurrentNetworkTasks: 4 },
+          },
+        }),
+    },
+    doctor: {
+      run: () =>
+        new OfflineDoctorService({
+          checks: [
+            nodeRuntimeCheck(),
+            dataRootCheck(config.bootstrap.dataRoot.value),
+            sqliteFileDoctorCheck(config.bootstrap.dataRoot.value),
+            modelConfigurationCheck(
+              config.model.provider.value !== null &&
+                config.model.baseUrl.value !== null &&
+                config.model.modelName.value !== null &&
+                config.model.apiKey.value !== null,
+            ),
+          ],
+          versions,
+        }).run(),
+    },
+    source: {
+      list: () => operational().sources.list(),
+      sync: (selector) => {
+        const service = operational().sources;
+        if (selector === 'all') return service.enqueueSync({ sourceIds: 'all' });
+        const source = service
+          .list()
+          .find((candidate) => candidate.id === selector || candidate.slug === selector);
+        if (!source) {
+          throw new CliError({
+            code: 'SOURCE_NOT_FOUND',
+            message: `来源不存在：${selector}`,
+            exitCode: cliExitCode.notFound,
+          });
+        }
+        return service.enqueueSync({ sourceIds: [source.id] });
+      },
+      wait: (taskId, signal) => operational().wait.wait(parseId(taskId, 'Task'), signal),
+    },
+    task: {
+      list: (filter) => operational().tasks.list(filter),
+      get: (taskId) => operational().tasks.get(parseId(taskId, 'Task')),
+      retry: (taskId) => operational().tasks.retryFailed(parseId(taskId, 'Task'), ids.generate()),
+      cancel: (taskId) => operational().tasks.cancel(parseId(taskId, 'Task')),
+      wait: (taskId, signal) => operational().wait.wait(parseId(taskId, 'Task'), signal),
+    },
+    worker: {
+      start: async () => {
+        operational();
+        await runWorkerProcess(
+          createProductionWorkerApplication({
+            dataRoot: config.bootstrap.dataRoot.value,
+            pollIntervalMs: config.worker.pollIntervalMs.value,
+            ...(config.model.baseUrl.value &&
+            config.model.modelName.value &&
+            config.model.apiKey.value
+              ? {
+                  model: {
+                    baseUrl: config.model.baseUrl.value,
+                    model: config.model.modelName.value,
+                    apiKey: config.model.apiKey.value.reveal(),
+                  },
+                }
+              : {}),
+          }),
+        );
+      },
+    },
+    job: {
+      list: (input) => operational().jobs.list(input),
+      show: (id, profileVersionId) => operational().jobs.show(id, profileVersionId),
+      export: (input) => operational().jobExports.export(input),
+    },
+    resume: {
+      import: (input) => operational().resumes.import(input),
+    },
+    profile: {
+      show: (id) => operational().profiles.show(id),
+      history: (id) => operational().profiles.history(id),
+      set: (id, pointer, value) => operational().profiles.set(id, pointer, value),
+      lock: (id, pointer) => operational().profiles.lock(id, pointer),
+      unlock: (id, pointer) => operational().profiles.unlock(id, pointer),
+    },
+    match: {
+      run: (profileId) => operational().matches.run(profileId),
+      list: (input) => operational().matches.list(input),
+      show: (id) => operational().matches.show(id),
+      wait: (taskId, signal) => operational().wait.wait(parseId(taskId, 'Task'), signal),
+    },
+    close: () => {
+      database?.close();
+      return Promise.resolve();
+    },
+  };
+}
+export function createMinimalCliContainer(): CliContainer {
+  return {
+    version: { get: () => ({ app: '0.1.0', node: process.versions.node }) },
+    close: () => Promise.resolve(),
+  };
+}
