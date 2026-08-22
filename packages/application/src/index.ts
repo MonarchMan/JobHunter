@@ -6,3 +6,5 @@ export * from './jobs/index.js';
 export * from './profile/index.js';
 export * from './sync/index.js';
 export * from './tasks/index.js';
+export * from './contracts/index.js';
+export * from './dashboard/index.js';

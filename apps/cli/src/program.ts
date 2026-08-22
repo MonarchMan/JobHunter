@@ -4,6 +4,7 @@ import type { CliContainer } from './container.js';
 import type { CliIo } from './io.js';
 import { CliError, cliExitCode, type CliExitCode, type CommandResult } from './model.js';
 import { HumanRenderer, JsonRenderer } from './renderer.js';
+import { cliOutputJsonSchema } from './schema.js';
 interface GlobalOptions {
   readonly json?: boolean;
   readonly dataRoot?: string;
@@ -20,6 +21,60 @@ interface JobOptions {
   readonly sort?: string;
   readonly cursor?: string;
   readonly limit?: string;
+}
+
+const helpExamples: Readonly<Record<string, readonly string[]>> = {
+  init: ['jh --data-root ./var init'],
+  doctor: ['jh --json doctor'],
+  version: ['jh version'],
+  schema: ['jh --json schema'],
+  'source list': ['jh --json source list'],
+  'source status': ['jh source status tencent-social'],
+  'source sync': ['jh source sync tencent-social', 'jh source sync --all --wait'],
+  'worker start': ['jh worker start'],
+  'task list': ['jh task list --status pending,running --limit 20'],
+  'task show': ['jh --json task show <taskId>'],
+  'task retry': ['jh task retry <taskId>'],
+  'task cancel': ['jh task cancel <taskId>'],
+  'job list': ['jh job list --company tencent --location 北京 --limit 20'],
+  'job show': ['jh job show <jobId>'],
+  'job export': ['jh job export ./exports/jobs.csv --format csv --bom'],
+  'resume import': ['jh resume import "./docs/resumes/agent简历 - 新.docx"'],
+  'profile show': ['jh --json profile show <profileId>'],
+  'profile history': ['jh profile history <profileId>'],
+  'profile set': ['jh profile set <profileId> /preferences/locations "[\\"北京\\"]"'],
+  'profile lock': ['jh profile lock <profileId> /preferences/locations'],
+  'profile unlock': ['jh profile unlock <profileId> /preferences/locations'],
+  'match run': ['jh match run <profileId> --wait'],
+  'match list': ['jh match list <profileId> --include-stale --limit 20'],
+  'match show': ['jh match show <matchResultId>'],
+  'backup create': ['jh backup create "D:\\JobHunter Backups\\backup-001"'],
+  'backup list': ['jh backup list "D:\\JobHunter Backups"'],
+  'backup verify': ['jh backup verify "D:\\JobHunter Backups\\backup-001"'],
+  'backup restore': [
+    'jh backup restore <backupDirectory>',
+    'jh backup restore <backupDirectory> --confirm <dryRunToken>',
+  ],
+};
+
+function configureCommandHelp(command: Command, io: CliIo, prefix = ''): void {
+  for (const child of command.commands) {
+    const path = prefix ? `${prefix} ${child.name()}` : child.name();
+    child.helpOption('-h, --help', '显示帮助信息').configureOutput({
+      writeOut: (value) => {
+        io.stdout.write(value);
+      },
+      writeErr: (value) => {
+        io.stderr.write(value);
+      },
+      getOutHelpWidth: () => 160,
+      getErrHelpWidth: () => 160,
+    });
+    const examples = helpExamples[path];
+    if (examples)
+      child.addHelpText('after', `\n示例：\n${examples.map((item) => `  ${item}`).join('\n')}\n`);
+    configureCommandHelp(child, io, path);
+  }
 }
 
 function commaValues(value: string | undefined): string[] | undefined {
@@ -111,6 +166,24 @@ function addJobFilterOptions(command: Command, includePagination = true): Comman
 }
 function errorFrom(value: unknown): CliError {
   if (value instanceof CliError) return value;
+  if (typeof value === 'object' && value !== null && 'exitCode' in value && value.exitCode === 0)
+    return new CliError({
+      code: 'CLI_INFORMATION_DISPLAYED',
+      message: value instanceof Error ? value.message : '命令信息已显示。',
+      exitCode: cliExitCode.success,
+      cause: value,
+    });
+  if (
+    value instanceof Error &&
+    'code' in value &&
+    (value.code === 'commander.helpDisplayed' || value.code === 'commander.version')
+  )
+    return new CliError({
+      code: 'CLI_INFORMATION_DISPLAYED',
+      message: value.message,
+      exitCode: cliExitCode.success,
+      cause: value,
+    });
   if (value instanceof Error && value.name === 'CompanyNotFoundError')
     return new CliError({
       code: 'COMPANY_NOT_FOUND',
@@ -203,6 +276,7 @@ export function createProgram(input: {
     .name('jh')
     .description('个人求职 Agent 命令行管理工具')
     .version('0.1.0')
+    .helpOption('-h, --help', '显示帮助信息')
     .exitOverride()
     .configureOutput({
       writeOut: (value) => {
@@ -775,6 +849,124 @@ export function createProgram(input: {
         ].join('\n'),
       });
     });
+
+  const backup = program.command('backup').description('创建、列出、校验和安全恢复本地备份');
+  backup
+    .command('create')
+    .description('创建包含 SQLite 快照和 Artifact 的一致性备份')
+    .argument('<directory>', '必须是尚不存在的目标目录')
+    .action(async (directory: string) => {
+      if (!input.container.backup)
+        throw new CliError({
+          code: 'CONFIGURATION_ERROR',
+          message: '备份服务未装配。',
+          exitCode: cliExitCode.usage,
+        });
+      const manifest = await input.container.backup.create(directory);
+      input.onResult({
+        data: { directory, manifest },
+        human: `备份已创建：${directory}\nArtifact：${String(manifest.artifacts.length)}`,
+      });
+    });
+  backup
+    .command('list')
+    .description('列出备份根目录中的 manifest')
+    .argument('<root>')
+    .action(async (root: string) => {
+      if (!input.container.backup)
+        throw new CliError({
+          code: 'CONFIGURATION_ERROR',
+          message: '备份服务未装配。',
+          exitCode: cliExitCode.usage,
+        });
+      const backups = await input.container.backup.list(root);
+      input.onResult({
+        data: { backups },
+        human:
+          backups
+            .map(
+              (item) =>
+                `${item.manifestValid ? 'valid' : 'invalid'}\t${item.createdAt ?? '-'}\t${item.directory}`,
+            )
+            .join('\n') || '没有备份。',
+      });
+    });
+  backup
+    .command('verify')
+    .description('重新计算数据库和 Artifact 哈希并校验 manifest')
+    .argument('<directory>')
+    .action(async (directory: string) => {
+      if (!input.container.backup)
+        throw new CliError({
+          code: 'CONFIGURATION_ERROR',
+          message: '备份服务未装配。',
+          exitCode: cliExitCode.usage,
+        });
+      try {
+        const manifest = await input.container.backup.verify(directory);
+        input.onResult({
+          data: { directory, manifest },
+          human: `备份有效：${directory}\n创建时间：${manifest.createdAt}`,
+        });
+      } catch (error) {
+        throw new CliError({
+          code: 'BACKUP_VERIFY_FAILED',
+          message: '备份不存在、格式无效或内容哈希不匹配。',
+          exitCode: cliExitCode.internal,
+          cause: error,
+        });
+      }
+    });
+  backup
+    .command('restore')
+    .description('默认仅生成恢复计划；真正恢复必须回传 --confirm 令牌')
+    .argument('<backupDirectory>')
+    .option('--target <dataRoot>', '恢复目标；默认当前全局 data-root')
+    .option('--confirm <token>', '回传 dry-run 生成的短期确认令牌')
+    .action(async (backupDirectory: string, options: { target?: string; confirm?: string }) => {
+      if (!input.container.backup)
+        throw new CliError({
+          code: 'CONFIGURATION_ERROR',
+          message: '备份服务未装配。',
+          exitCode: cliExitCode.usage,
+        });
+      try {
+        const result = await input.container.backup.restore({
+          backupDirectory,
+          ...(options.target ? { targetDataRoot: options.target } : {}),
+          ...(options.confirm ? { confirmationToken: options.confirm } : {}),
+        });
+        if ('kind' in result) {
+          input.onResult({
+            data: { dryRun: true, plan: result },
+            human: [
+              '恢复 dry-run；尚未修改任何文件。',
+              `目标：${result.targetDataRoot}`,
+              `数据库：${String(result.counts.databaseFiles)}，Artifact：${String(result.counts.artifacts)}`,
+              `字节：${String(result.bytes)}`,
+              ...result.warnings.map((warning) => `警告：${warning}`),
+              `确认令牌（${new Date(result.expiresAt).toISOString()} 前有效）：${result.confirmationToken}`,
+              '停止 Worker/Web/其他 CLI 后，使用同一命令并添加 --confirm <token>。',
+            ].join('\n'),
+          });
+        } else {
+          input.onResult({
+            data: { dryRun: false, result },
+            human: [
+              `恢复完成：${result.restoredDataRoot}`,
+              `旧数据目录：${result.previousDataRoot ?? '无'}`,
+            ].join('\n'),
+          });
+        }
+      } catch (error) {
+        throw new CliError({
+          code: 'RESTORE_REJECTED',
+          message: '恢复被拒绝：请重新 dry-run，并确认所有数据库进程已停止且目标未变化。',
+          exitCode: cliExitCode.usage,
+          cause: error,
+        });
+      }
+    });
   job
     .command('show')
     .description('显示职位完整详情')
@@ -920,6 +1112,20 @@ export function createProgram(input: {
           .join('\n'),
       });
     });
+  program
+    .command('schema')
+    .description('输出 --json 稳定 envelope 的 JSON Schema')
+    .action(() => {
+      input.onResult({
+        data: { schema: cliOutputJsonSchema },
+        human: '请使用 jh --json schema 获取机器可读 JSON Schema。',
+      });
+    });
+  program.addHelpText(
+    'after',
+    '\n全局示例：\n  jh --data-root ./var init\n  jh --json job list --limit 20\n  jh <command> --help\n\n退出码：0 成功；1 内部错误；2 用法/配置；3 未找到；4 部分成功/退化；5 任务最终失败。\n',
+  );
+  configureCommandHelp(program, input.io);
   return program;
 }
 export async function runCli(input: {
@@ -936,6 +1142,25 @@ export async function runCli(input: {
     },
   });
   try {
+    const helpIndex = input.argv.findIndex(
+      (argument) => argument === '--help' || argument === '-h',
+    );
+    if (helpIndex >= 0) {
+      let helpCommand = program;
+      for (let index = 0; index < helpIndex; index += 1) {
+        const argument = input.argv[index];
+        if (argument === '--data-root' || argument === '--config') {
+          index += 1;
+          continue;
+        }
+        if (!argument || argument.startsWith('-')) continue;
+        const child = helpCommand.commands.find((command) => command.name() === argument);
+        if (!child) break;
+        helpCommand = child;
+      }
+      helpCommand.outputHelp();
+      return cliExitCode.success;
+    }
     await program.parseAsync([...input.argv], { from: 'user' });
     const result = results.at(-1);
     if (!result) return cliExitCode.success;

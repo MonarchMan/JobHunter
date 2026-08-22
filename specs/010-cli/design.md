@@ -1,6 +1,6 @@
 # 010 CLI 设计
 
-> 状态：In Progress
+> 状态：Implemented
 
 ## 技术与结构
 

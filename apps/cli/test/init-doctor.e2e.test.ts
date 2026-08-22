@@ -1,6 +1,6 @@
 import { runLocalCli, type CliIo } from '../src/index.js';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -26,6 +26,31 @@ function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly s
 }
 
 describe('init and doctor commands', () => {
+  it('resolves a POSIX-style relative data path with spaces and Chinese characters', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-cli-relative-');
+    const relativeDataRoot = './相对 数据';
+    const expectedDataRoot = path.resolve(root.path, '相对 数据');
+    try {
+      const output = memoryIo();
+      expect(
+        await runLocalCli({
+          argv: ['--json', '--data-root', relativeDataRoot, 'init'],
+          io: output.io,
+          environment: {},
+          cwd: root.path,
+        }),
+      ).toBe(0);
+      expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+        ok: true,
+        data: { dataRoot: expectedDataRoot, configCreated: true },
+      });
+      expect((await stat(expectedDataRoot)).isDirectory()).toBe(true);
+      expect(output.stderr).toEqual([]);
+    } finally {
+      await root.cleanup();
+    }
+  });
+
   it('initializes idempotently without overwriting config and reports optional model degradation', async () => {
     const root = await createTemporaryDataRoot('jobhunter-cli-init-');
     const dataRoot = path.join(root.path, '中文 数据');

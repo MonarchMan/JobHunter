@@ -1,6 +1,14 @@
 import type { EnqueueTaskResult, SourceOverview, TaskRecord } from '@jobhunter/application';
 import { parseId, utcInstant } from '@jobhunter/domain';
-import { cliExitCode, runCli, type CliContainer, type CliIo } from '../src/index.js';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import {
+  cliExitCode,
+  cliOutputJsonSchema,
+  runCli,
+  type CliContainer,
+  type CliIo,
+} from '../src/index.js';
 import { describe, expect, it, vi } from 'vitest';
 
 function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly stderr: string[] } {
@@ -162,5 +170,103 @@ describe('CLI framework', () => {
     ).resolves.toBe(cliExitCode.partial);
     expect(JSON.parse(output.stdout.join(''))).toMatchObject({ ok: true });
     expect(output.stderr.join('')).toContain('Ctrl+C');
+  });
+
+  it('maps a final failed background task to exit code 5', async () => {
+    const output = memoryIo();
+    const sourceId = parseId('018f0000-0000-7000-8000-000000000202', 'JobSource');
+    const failed: TaskRecord = {
+      id: parseId('018f0000-0000-7000-8000-000000000303', 'Task'),
+      taskType: 'source.sync',
+      payload: { sourceId, trigger: 'manual' },
+      status: 'failed',
+      priority: 0,
+      idempotencyKey: 'failed-fixture',
+      concurrencyKey: `source-sync:${sourceId}`,
+      scheduleId: null,
+      retryOfTaskId: null,
+      attemptCount: 3,
+      maxAttempts: 3,
+      availableAt: utcInstant(1),
+      leaseOwner: null,
+      leaseExpiresAt: null,
+      lastHeartbeatAt: null,
+      cancelRequestedAt: null,
+      errorCategory: 'permanent',
+      errorSummary: 'safe failure',
+      createdAt: utcInstant(1),
+      startedAt: utcInstant(2),
+      finishedAt: utcInstant(3),
+    };
+    const overview: SourceOverview = {
+      id: sourceId,
+      companyName: '腾讯',
+      slug: 'tencent-social',
+      adapterKey: 'tencent.social',
+      enabled: true,
+      supportStatus: 'supported',
+      healthStatus: 'unhealthy',
+      lastRun: null,
+    };
+    const fixture: CliContainer = {
+      version: { get: () => ({ app: 'test' }) },
+      source: {
+        list: () => [overview],
+        sync: () => [{ kind: 'enqueued', task: failed }],
+        wait: () => Promise.resolve(failed),
+      },
+      close: () => Promise.resolve(),
+    };
+    await expect(
+      runCli({
+        argv: ['--json', 'source', 'sync', 'tencent-social', '--wait'],
+        container: fixture,
+        io: output.io,
+      }),
+    ).resolves.toBe(cliExitCode.taskFailed);
+  });
+
+  it('keeps the runtime and documented JSON schemas identical', async () => {
+    const output = memoryIo();
+    const fixture = container();
+    expect(
+      await runCli({
+        argv: ['--json', 'schema'],
+        container: fixture.value,
+        io: output.io,
+      }),
+    ).toBe(0);
+    expect(JSON.parse(output.stdout.join(''))).toEqual({
+      ok: true,
+      data: { schema: cliOutputJsonSchema },
+    });
+    const documented = JSON.parse(
+      await readFile(path.resolve('docs', 'schemas', 'cli-output.schema.json'), 'utf8'),
+    ) as unknown;
+    expect(documented).toEqual(cliOutputJsonSchema);
+  });
+
+  it('shows defaults, units, dangerous restore semantics and command examples in help', async () => {
+    const listOutput = memoryIo();
+    expect(
+      await runCli({
+        argv: ['job', 'list', '--help'],
+        container: container().value,
+        io: listOutput.io,
+      }),
+    ).toBe(0);
+    expect(listOutput.stdout.join('')).toContain('每页数量 1..100 (default: "50")');
+    expect(listOutput.stdout.join('')).toContain('示例：');
+
+    const restoreOutput = memoryIo();
+    expect(
+      await runCli({
+        argv: ['backup', 'restore', '--help'],
+        container: container().value,
+        io: restoreOutput.io,
+      }),
+    ).toBe(0);
+    expect(restoreOutput.stdout.join('')).toContain('默认仅生成恢复计划');
+    expect(restoreOutput.stdout.join('')).toContain('--confirm <token>');
   });
 });

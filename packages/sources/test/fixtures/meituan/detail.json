@@ -1,0 +1,29 @@
+{
+  "data": {
+    "jobUnionId": "4702437501",
+    "name": "大模型应用算法工程师（智能客服）",
+    "jobType": "3",
+    "jobStatus": "000",
+    "jobFamily": "技术类",
+    "jobFamilyGroup": "算法",
+    "cityList": [
+      { "code": "001001", "name": "北京市" },
+      { "code": "001009", "name": "上海市" }
+    ],
+    "department": [{ "code": null, "name": "核心本地商业-基础研发平台" }],
+    "workYear": "2年",
+    "desc": null,
+    "departmentIntro": "基础研发平台提供人工智能、大数据和云计算等核心技术能力。",
+    "jobDuty": "负责智能客服大模型和Agent核心能力建设。",
+    "jobRequirement": "计算机、人工智能、数学等相关专业硕士及以上学历。",
+    "precedence": "有大模型落地经验优先。",
+    "highLight": "参与大模型前沿技术探索。",
+    "firstPostTime": 1787054202000,
+    "refreshTime": 1787239800000,
+    "expiredTime": null,
+    "jobSpecialCode": "5",
+    "jobSource": "1"
+  },
+  "status": 1,
+  "message": "成功"
+}

@@ -1,0 +1,24 @@
+{
+  "coverage": "complete",
+  "pages": [
+    {
+      "page": 1,
+      "url": "https://career.huawei.com/cn/campus-recruitment-job-list?recruitmentType=INTERN",
+      "total": 1,
+      "capturedAt": 1,
+      "records": [
+        {
+          "id": "hw-fixture-1",
+          "jobId": "hw-fixture-1",
+          "jobName": "软件开发实习生",
+          "jobAddress": "东莞/深圳",
+          "jobDesc": "参与软件研发。",
+          "jobRequire": "本科在读。",
+          "categoryName": "研发类",
+          "deptName": "消费者业务",
+          "lastUpdateDate": "2026-08-22"
+        }
+      ]
+    }
+  ]
+}

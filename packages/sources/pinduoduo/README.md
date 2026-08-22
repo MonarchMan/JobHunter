@@ -1,10 +1,9 @@
 # 拼多多官网来源
 
-- 复核日期：`2026-08-20`
-- 入口：<https://careers.pddglobalhr.com/jobs>
-- 状态：`experimental`，默认禁用
-- 证据：页面可匿名显示 807 个职位，详情链接含稳定 `code`，例如 `/jobs/detail?code=T021366`
-- 阻断：前端列表请求显式经过风控封装并生成 `anti_content`；无该值的公开 POST 返回失败
-- 允许的降级：受控浏览器正常加载官网，由官网自身脚本发起请求，适配器只读取已渲染职位并操作可见分页。
-- 边界：不反向伪造 `anti_content`，不复用 Cookie，不绕过 CAPTCHA；出现验证或不能证明全量时返回 `access_blocked`/`partial`。
-- 决策：待通用 BrowserPool 具备受控会话翻页能力后再实现；若首期成本过高则保持 `experimental`，不影响其他来源和 Agent 主链路。
+- 复核日期：`2026-08-22`
+- 入口：<https://careers.pddglobalhr.com/campus/intern>
+- 状态：`supported`，默认启用；适配器：`pinduoduo.intern@1.0.0`
+- 协议：官网公开实习脚本使用匿名 `POST /api/careers/api/recruit/position/train/list`；请求体使用 `page/pageSize/t`，响应使用 `result.total` 与 `result.list`。
+- 门禁证据：`smoke-20260822-pinduoduo-01` 返回 2 条、1 页，coverage `complete`，2 个唯一稳定 ID；职位标题、实习类型、地点、职责和毕业年份已归一化。
+- 类别接口：参考脚本中的实习类型接口仅作为入口协议记录，不影响职位列表采集；适配器不保存 Cookie 或短期令牌。
+- 边界：拼多多社会招聘接口仍依赖官网风控 `anti_content`，未接入、不伪造；实习接口变化或出现验证时分别返回 `parse_changed`/`access_blocked`。

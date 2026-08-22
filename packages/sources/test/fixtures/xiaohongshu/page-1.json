@@ -1,0 +1,16 @@
+{
+  "data": {
+    "total": 1,
+    "totalPage": 1,
+    "list": [
+      {
+        "positionId": "red-fixture-1",
+        "positionName": "内容运营实习生",
+        "workplace": "上海",
+        "duty": "参与内容运营。",
+        "qualification": "本科在读。",
+        "publishTime": "2026-08-22 10:00:00"
+      }
+    ]
+  }
+}

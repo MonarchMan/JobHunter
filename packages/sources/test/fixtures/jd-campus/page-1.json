@@ -1,0 +1,47 @@
+{
+  "success": true,
+  "body": {
+    "totalNumber": 2,
+    "items": [
+      {
+        "publishId": 4864,
+        "reqId": 1581,
+        "positionDept": null,
+        "positionName": "物流运营",
+        "positionNameOpen": null,
+        "workCity": null,
+        "publishTime": 1709293170000,
+        "jobDirection": "采销与物流方向",
+        "workContent": "参与京东物流仓储供应链业务运营。",
+        "qualification": "统招本科及以上学历在校生，27届优先。",
+        "requirementVoList": [
+          { "workCity": "北京市-北京市", "positionBg": "京东物流", "positionDept": null },
+          { "workCity": "广东省-广州市", "positionBg": "京东物流", "positionDept": null }
+        ],
+        "jobCategory": "销售类",
+        "planId": 45,
+        "education": "本科",
+        "workYears": null,
+        "reqTagList": []
+      },
+      {
+        "publishId": 9136,
+        "reqId": 1582,
+        "positionDept": "京东零售",
+        "positionName": "产品实习生",
+        "positionNameOpen": null,
+        "workCity": "北京市",
+        "publishTime": 1709293170000,
+        "jobDirection": "产品方向",
+        "workContent": "参与产品需求分析与方案设计。",
+        "qualification": "本科及以上学历在校生。",
+        "requirementVoList": [],
+        "jobCategory": "产品类",
+        "planId": 45,
+        "education": "本科",
+        "workYears": null,
+        "reqTagList": []
+      }
+    ]
+  }
+}

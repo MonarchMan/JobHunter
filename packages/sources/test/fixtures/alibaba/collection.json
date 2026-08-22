@@ -1,0 +1,20 @@
+{
+  "coverage": "complete",
+  "pages": [
+    {
+      "page": 1,
+      "url": "https://campus-talent.alibaba.com/campus/position?batchId=100000560002",
+      "total": 1,
+      "capturedAt": 1,
+      "records": [
+        {
+          "id": "ali-fixture-1",
+          "positionName": "算法实习生",
+          "workCity": "杭州市",
+          "workContent": "参与算法项目。",
+          "publishTime": "2026-08-22 10:00:00"
+        }
+      ]
+    }
+  ]
+}

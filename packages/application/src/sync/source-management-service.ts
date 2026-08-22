@@ -28,6 +28,7 @@ export class SourceManagementService {
 
   public enqueueSync(input: {
     readonly sourceIds: readonly JobSourceId[] | 'all';
+    readonly idempotencyToken?: string;
   }): readonly EnqueueTaskResult[] {
     const selected =
       input.sourceIds === 'all'
@@ -38,7 +39,8 @@ export class SourceManagementService {
             if (!source.enabled) throw new TypeError(`Source is disabled: ${id}`);
             return source;
           });
-    const token = this.#ids.generate();
+    const suppliedToken = input.idempotencyToken?.trim();
+    const token = suppliedToken && suppliedToken.length > 0 ? suppliedToken : this.#ids.generate();
     return selected.map((source) =>
       this.#tasks.enqueue({
         taskType: 'source.sync',

@@ -21,7 +21,8 @@
     "@jobhunter/llm": "workspace:*",
     "@jobhunter/matching": "workspace:*",
     "@jobhunter/source-core": "workspace:*",
-    "@jobhunter/sources": "workspace:*"
+    "@jobhunter/sources": "workspace:*",
+    "playwright": "^1.62.1"
   },
   "scripts": {
     "build": "tsc -b",

@@ -9,7 +9,7 @@ Choose the least expensive public transport that exposes trustworthy job facts:
 
 An adapter declares this choice in `metadata.capabilities.transport`. JSON and HTML adapters use
 `SourceHttpClient`; browser adapters use the optional `SourcePageClient`, which returns a neutral HTML
-snapshot and does not expose browser-library objects to the contract. All variants use the same
+snapshot or same-session structured page collection and does not expose browser-library objects to the contract. All variants use the same
 `discover` → optional `fetchDetail` → `normalize` → `healthCheck` lifecycle.
 
 Adapters must call `assertPublicCollectionStrategy` during configuration/research validation. A source

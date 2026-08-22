@@ -13,16 +13,38 @@ describe('first-party source catalog', () => {
       firstPartySourceCatalog
         .filter((record) => record.source.enabledByDefault)
         .map((record) => record.company.slug),
-    ).toEqual(['tencent']);
+    ).toEqual([
+      'tencent',
+      'alibaba',
+      'baidu',
+      'bytedance',
+      'pinduoduo',
+      'meituan',
+      'dewu',
+      'xiaohongshu',
+      'jd',
+      'huawei',
+    ]);
     for (const record of firstPartySourceCatalog) {
       expect(record.source.enabledByDefault).toBe(record.source.supportStatus === 'supported');
       expect(record.source.baseUrl).toMatch(/^https:\/\//);
     }
   });
 
-  it('registers only adapters that passed the supported gate', () => {
+  it('registers adapters for configured sources while enablement remains gate-controlled', () => {
     const registry = new AdapterRegistry();
     registerFirstPartyAdapters(registry);
-    expect(registry.keys()).toEqual(['tencent.social']);
+    expect(registry.keys()).toEqual([
+      'alibaba.campus',
+      'baidu.campus',
+      'bytedance.social',
+      'dewu.campus',
+      'huawei.campus',
+      'jd.campus',
+      'meituan.social',
+      'pinduoduo.intern',
+      'tencent.social',
+      'xiaohongshu.campus',
+    ]);
   });
 });

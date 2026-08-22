@@ -1,22 +1,58 @@
 # 006 首批企业官网来源任务
 
-> 状态：In Progress
+> 状态：Implemented
 > 显式覆盖：FPS-001, FPS-002, FPS-003, FPS-004, FPS-005, FPS-006, FPS-007, FPS-008, FPS-009, FPS-010, FPS-011
 
 - [x] **FPS-T001** 建立来源目录模板、README 模板、support status 与公司/来源幂等 seed。（FPS-001,003）
 - [x] **FPS-T002** 完成腾讯 Spike、固定样本、适配器、契约和同步集成测试。（FPS-002..010）
-- [ ] **FPS-T003** 完成拼多多 Spike、固定样本、适配器、契约和同步集成测试。（FPS-002..010）
+- [x] **FPS-T003** 完成拼多多实习 Spike、固定样本、适配器、契约和同步集成测试。（FPS-002..010）
   - 2026-08-20：已完成 Spike；公开前端列表请求要求风控 `anti_content`，项目不规避该机制，因此保持 `experimental` 且本任务未完成。
-  - 后续仅允许受控浏览器运行官网自身脚本并读取渲染结果；不伪造风控值或绕过验证码。浏览器会话翻页成本过高时保持降级，不阻塞主链路。
-- [ ] **FPS-T004** 复盘 Wave A，只有存在已验证公共协议时才提取复用层，并重新跑两套契约测试。
-- [ ] **FPS-T005** 完成字节跳动 Spike 与适配器门禁；特别验证验证码/access_blocked。（FPS-006）
-- [ ] **FPS-T006** 完成美团 Spike 与适配器门禁。（FPS-002..010）
-- [ ] **FPS-T007** 完成小红书 Spike 与适配器门禁；特别验证验证码/access_blocked。（FPS-006）
-- [ ] **FPS-T008** 完成京东 Spike 与适配器门禁；测试去除 `jsessionid`。（FPS-007）
-- [ ] **FPS-T009** 完成阿里巴巴访问 Spike 和适配器门禁；若 blocked，提交范围例外且本任务不计交付完成。（FPS-002,003）
-- [ ] **FPS-T010** 完成百度社招路由 Spike 和适配器门禁；若 blocked，提交范围例外且本任务不计交付完成。（FPS-002,003）
-- [ ] **FPS-T011** 完成得物权威入口/飞书关系 Spike 和适配器门禁；若 blocked，提交范围例外且本任务不计交付完成。（FPS-002,003）
-- [ ] **FPS-T012** 完成华为目标运行环境 Spike 和适配器门禁；若 blocked，提交范围例外且本任务不计交付完成。（FPS-002,003）
+  - 2026-08-21：`smoke-20260821-pinduoduo-02` 尝试受控浏览器匿名加载，页面超时且未取得 DOM/分页证据；不伪造 `anti_content` 或绕过验证码，保持 `experimental`，不创建适配器。
+  - 2026-08-21：补充只读浏览器复核仍在 30 秒内未取得可读 DOM，浏览器连接随页面加载重置；未点击验证码、未输入数据、未注入风控参数，继续保持 `experimental`。
+  - 2026-08-22：参考脚本的实习接口 `train/list` 匿名返回 2 条、1 页完整数据；稳定 ID、实习字段归一化和定向在线 Smoke 通过，晋级 `supported`。社招 `anti_content` 风控接口仍不接入。
+- [x] **FPS-T004** 复盘 Wave A，只有存在已验证公共协议时才提取复用层，并重新跑两套契约测试。
+  - 2026-08-21：腾讯/美团协议不相同，拼多多受 `anti_content` 风控约束；未提取 ATS 复用层，仅复用 source-core 公共能力；两套来源契约测试通过。
+- [x] **FPS-T005** 完成字节跳动 Spike 与适配器门禁；特别验证验证码/access_blocked。（FPS-006）
+  - 2026-08-21：匿名入口 HTTP 200 但页面包含 CAPTCHA/verify 资源和错误页脚本，未取得稳定职位集合；保持 `experimental`，不创建适配器。
+  - 2026-08-21：后续匿名 HTTP GET 返回 HTTP 404，未取得当前页面或职位证据；继续保持 `experimental`。
+  - 2026-08-22：匿名浏览器页面恢复正常，显示职位筛选、分页和约 10000 个职位；继续补充受控分页采集端口，不复制页面运行时签名。
+  - 2026-08-22：响应驱动采集验证 `data.job_post_list/count`、`limit/offset` 和动态签名会话；两页 Smoke 返回 200 条、稳定 ID 与官方详情 URL，晋级 `supported`。按用户要求不跑 100 页全量 Smoke。
+- [x] **FPS-T006** 完成美团 Spike 与适配器门禁。（FPS-002..010）
+  - 2026-08-21：完成公开 JSON 协议 Spike、运行时 Schema、脱敏样本、离线契约测试和 `smoke-20260821-meituan-01`（24 页/2349 条）；已晋级 `supported` 并注册默认 Registry。
+  - 2026-08-21：显式运行 `JOBHUNTER_ONLINE_SOURCES=1 pnpm test:online`，美团在线 Smoke 通过，保持 `complete`。
+- [x] **FPS-T007** 完成小红书 Spike 与适配器门禁；特别验证验证码/access_blocked。（FPS-006）
+  - 2026-08-21：匿名入口 HTTP 200 仅返回“小红书”应用壳；公开 JS 暴露职位列表/详情路径但未取得可复现列表 Schema，且同一脚本包含 CAPTCHA 路径；保持 `experimental`，不猜测请求体、不创建适配器。
+  - 2026-08-21：后续匿名 HTTP GET 仍返回 200/约 4 KB 应用壳，初始 HTML 未出现验证关键词，但没有新增列表或详情证据；继续保持 `experimental`。
+  - 2026-08-22：按补充参考脚本接入校园 JSON 列表，在线 Smoke 完成 4 页/387 条、稳定 ID 和字段归一化；晋级 `supported`。离线响应已迁移到独立脱敏 fixture。
+- [x] **FPS-T008** 完成京东校园 Spike 与适配器门禁。（FPS-007）
+  - 2026-08-21：已完成匿名列表 Spike、运行时 Schema、脱敏样本、内联详情适配器、离线契约和 `jsessionid` 规范化测试；`smoke-20260821-jd-01` 发现 18 页返回 1751 条但含 4 条重复 `requirementId`，覆盖度安全降级为 `partial`，因此保持 `experimental`，未注册默认 Registry。
+  - 2026-08-21：同一显式在线回归中京东 Smoke 通过预期的 `partial` 门禁，未将重复 ID 误报为 `complete`。
+  - 2026-08-21：再次运行显式低频京东在线 Smoke，测试仍通过预期的 `partial` 门禁；重复 ID 问题尚未消失，继续保持 `experimental`。
+  - 2026-08-22：按校园脚本接入 `campus.jd.com/api/wx/position/page?type=present`，匿名返回 75 条、1 页完整数据；稳定 `publishId`、字段归一化和定向在线 Smoke 通过，晋级 `supported`。旧社招接口仍保持原状，不纳入本适配器。
+- [x] **FPS-T009** 完成阿里巴巴访问 Spike 和适配器门禁。（FPS-002,003）
+  - 2026-08-21：`smoke-20260821-alibaba-01` 复核 `/off-campus` 返回 HTTP 500，根页仅为空模板应用壳，未取得职位 DOM、稳定 ID 或分页证据；范围例外见 `FPS-EX-001`，保持 `blocked`，不创建适配器。
+- 2026-08-22：切换至当前校园实习入口 `campus-talent.alibaba.com/campus/position?batchId=100000560002`；匿名浏览器读取官网自身 `/position/search` 响应，完成 34 页/339 条、稳定 ID 唯一、字段归一化和 `complete` Smoke，晋级 `supported` 并启用默认 Registry。
+- [x] **FPS-T010** 完成百度校园路由 Spike 和适配器门禁。（FPS-002,003）
+  - 2026-08-21：`smoke-20260821-baidu-01` 确认 `/jobs/social` 为校园页、`/social-list` 返回 `need-login`，匿名列表请求被拒绝；范围例外见 `FPS-EX-002`，保持 `blocked`，不创建适配器。
+  - 2026-08-22：确认校招列表使用匿名 form-urlencoded JSON 协议；`smoke-20260822-baidu-01` 完成实习与应届 31 页/617 条（458+159），稳定 `postId` 全部唯一，coverage `complete`，晋级 `supported` 并默认启用。
+  - 2026-08-22：复现浏览器打开页面后跳转 `about:blank`；同时确认 `/jobs/list?recruitType=GRADUATE` 的 SSR 数据与公开脚本协议。列表接口要求 form-urlencoded 且 `pageSize<=20`，使用正确参数后可匿名返回 `INTERN` 458 条、`GRADUATE` 159 条；进入适配器和分页门禁实现。
+- [x] **FPS-T011** 完成得物权威入口/飞书关系 Spike 和适配器门禁；若 blocked，提交范围例外且本任务不计交付完成。（FPS-002,003）
+  - 2026-08-21：`smoke-20260821-dewu-01` 确认官方社招页、独立校园入口、589 个职位/59 页和实习专区；裸 HTTP 需要官网前端签名，浏览器全量分页与资源门禁未完成，保持 `experimental`，暂不创建适配器。
+  - 2026-08-21：后续匿名 HTTP GET 复核原入口返回 HTTP 404，未取得当前页面 DOM 或列表证据；需重新发现官方入口，继续保持 `experimental`。
+  - 2026-08-21：已知校园入口 `https://campus.dewu.com` 复核同样返回 HTTP 404，未取得校招/实习职位线索；不猜测其他入口，继续保持 `experimental`。
+  - 2026-08-22：`poizon.jobs.feishu.cn/578078/position/list` 匿名浏览器页面恢复正常，显示校招/实习筛选和职位详情链接；继续补充受控分页采集端口，不复制页面运行时签名。
+  - 2026-08-22：响应驱动采集验证 `count=6`、`limit=100`、1 页完整覆盖、稳定 ID、官方详情 URL 与字段归一化，晋级 `supported`。
+- [x] **FPS-T012** 完成华为目标运行环境 Spike 和适配器门禁。（FPS-002,003）
+  - 2026-08-21：`smoke-20260821-huawei-01` 确认入口 HTTP 200 但旧职位列表接口重定向到 `/cn` 返回 HTML，受控浏览器仍为 `ERR_BLOCKED_BY_CLIENT`；范围例外见 `FPS-EX-003`，保持 `blocked`，不创建适配器。
+- 2026-08-22：切换至当前校园实习入口 `career.huawei.com/cn/campus-recruitment-job-list?recruitmentType=INTERN`；匿名浏览器读取官网网关响应，完成 4 页/31 条、稳定 `jobId` 唯一、字段归一化和 `complete` Smoke，晋级 `supported` 并启用默认 Registry。
 - [x] **FPS-T013** 为来源目录生成支持矩阵和发布日期记录；仅对 supported 来源运行受控在线 Smoke，未通过门禁的来源不得注册到默认 Registry。（FPS-003,009,010）
   - 2026-08-20：腾讯 `smoke-20260820-tencent-01` 通过；其余来源按实际证据标记为 experimental/blocked。
-- [ ] **FPS-T014** 在首个确需浏览器的来源中实现共享受控 BrowserPool，并验证超时、取消、资源回收、熔断及不影响其他来源；若 time-boxed Spike 证明收益不足，则记录降级结论而不引入浏览器依赖。（FPS-006,011）
+- [x] **FPS-T014** 在首个确需浏览器的来源中实现共享受控 BrowserPool，并验证超时、取消、资源回收、熔断及不影响其他来源；若 time-boxed Spike 证明收益不足，则记录降级结论而不引入浏览器依赖。（FPS-006,011）
+  - 2026-08-21：在 `packages/sources/src/browser/` 实现无浏览器 SDK 依赖的共享池与 `SourcePageClient` 适配器；fake session 覆盖并发上限、队列取消、超时回收、按来源熔断/冷却和其他来源隔离，5 项测试通过。
+- [x] **FPS-T015** 扩展 `SourcePageClient` 为同会话结构化分页采集端口，接入字节/得物适配器和 Worker 装配；完成响应驱动分页、稳定 ID、字段归一化、脱敏契约和匿名 Smoke。（FPS-006..011）
+  - 2026-08-22：新增 Playwright/Edge 浏览器入口；官网 JS 自行生成运行时签名，采集端只读取同会话 200 响应，不保存 Cookie、CSRF 或签名；Worker/CLI 默认装配浏览器端口，缺少浏览器时分类为 `access_blocked`。
+- [x] **FPS-T016** 补齐阿里、字节、得物、华为浏览器来源的逐来源运行时响应 Schema、独立脱敏分页 fixture 和公共契约套件，替代当前共享弱字段解析与测试内嵌样本。（FPS-004,005,008）
+  - 2026-08-22：共享适配器在 discover/normalize 边界调用逐来源 Zod 记录 Schema；阿里、字节、得物、华为和小红书均加入独立脱敏 fixture、SHA-256、公共来源契约测试及 `parse_changed` 回归。分页响应外壳继续由浏览器基础设施按 response shape 校验。
+- [x] **FPS-T017** 为阿里、字节、得物、华为增加通过 Worker 浏览器装配单独运行的在线 Smoke；默认测试必须继续保持离线。（FPS-009,011）
+  - 2026-08-22：新增 Worker 侧 Playwright 在线测试，通过 `JOBHUNTER_BROWSER_ONLINE_SOURCE` 逐家选择；未显式选择时全部跳过，每次最多两页，验证匿名会话、分页响应、逐来源 Schema、稳定 ID、官方 URL 和归一化。
+  - 2026-08-22：显式选择 `dewu` 运行真实 Worker→Playwright→SourcePageClient 链路，在线 Smoke 通过（1 passed，其他 3 家按选择器跳过）；未运行四家批量或全量采集。

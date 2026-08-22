@@ -1,4 +1,6 @@
 dist
+.next
+apps/web/next-env.d.ts
 coverage
 var
 pnpm-lock.yaml

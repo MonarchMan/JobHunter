@@ -5,3 +5,4 @@ export * from './model.js';
 export * from './program.js';
 export * from './renderer.js';
 export * from './runtime-config.js';
+export * from './schema.js';

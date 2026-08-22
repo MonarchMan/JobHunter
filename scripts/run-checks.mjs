@@ -11,6 +11,7 @@ for (const check of checks) {
   const result = spawnSync(process.execPath, [pnpmEntry, 'run', check], {
     encoding: 'utf8',
     env: process.env,
+    shell: false,
     stdio: 'inherit',
   });
 

@@ -15,18 +15,20 @@ const datedExperience = {
   evidence: z.array(evidenceSchema),
 };
 
+export const candidatePreferencesSchema = z
+  .object({
+    locations: z.array(normalizedText),
+    companySizes: z.array(z.enum(['large', 'medium', 'other'])),
+    employmentTypes: z.array(normalizedText),
+    excludedTerms: z.array(normalizedText),
+    remoteAccepted: z.boolean().nullable(),
+  })
+  .readonly();
+
 export const candidateProfileSchema = z
   .object({
     targetRoles: z.array(normalizedText),
-    preferences: z
-      .object({
-        locations: z.array(normalizedText),
-        companySizes: z.array(z.enum(['large', 'medium', 'other'])),
-        employmentTypes: z.array(normalizedText),
-        excludedTerms: z.array(normalizedText),
-        remoteAccepted: z.boolean().nullable(),
-      })
-      .readonly(),
+    preferences: candidatePreferencesSchema,
     education: z.array(
       z
         .object({

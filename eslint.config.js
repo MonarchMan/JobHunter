@@ -3,7 +3,9 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/coverage/**', '**/var/**', '**/test/fixtures/**'] },
+  {
+    ignores: ['**/.next/**', '**/dist/**', '**/coverage/**', '**/var/**', '**/test/fixtures/**'],
+  },
   {
     files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
     ...eslint.configs.recommended,

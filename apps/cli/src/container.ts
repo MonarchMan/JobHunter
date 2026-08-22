@@ -1,5 +1,6 @@
 import {
   CandidateProfileService,
+  BackupService,
   createResumeProfileTaskHandler,
   createMatchProfileTaskHandler,
   createMatchRevisionTaskHandler,
@@ -33,6 +34,7 @@ import {
   openSqliteDatabase,
   sqliteFileDoctorCheck,
   SqliteAgentRunStore,
+  SqliteBackupOperations,
   SqliteArtifactStore,
   SqliteCandidateProfileRepository,
   SqliteSourceManagementRepository,
@@ -50,7 +52,11 @@ import { hashCanonical } from '@jobhunter/agent-core';
 import { OpenAiCompatibleModelClient } from '@jobhunter/llm';
 import { jobAdviceAgentDefinition } from '@jobhunter/matching';
 import { firstPartySourceCatalog } from '@jobhunter/sources';
-import { createProductionWorkerApplication, runWorkerProcess } from '@jobhunter/worker';
+import {
+  createPlaywrightSourcePageClient,
+  createProductionWorkerApplication,
+  runWorkerProcess,
+} from '@jobhunter/worker';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -100,6 +106,16 @@ export interface CliContainer {
     show(id: string): ReturnType<MatchWorkflowService['show']>;
     wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
   };
+  readonly backup?: {
+    create(destination: string): ReturnType<BackupService['create']>;
+    list(root: string): ReturnType<BackupService['list']>;
+    verify(directory: string): ReturnType<BackupService['verify']>;
+    restore(input: {
+      readonly backupDirectory: string;
+      readonly targetDataRoot?: string;
+      readonly confirmationToken?: string;
+    }): ReturnType<BackupService['restore']>;
+  };
   close(): Promise<void>;
 }
 
@@ -109,6 +125,7 @@ export function createLocalCliContainer(config: AppConfig): CliContainer {
   );
   const versions = { app: '0.1.0', schema: '0000', ruleset: 'v1', prompt: '1.0.0' };
   const ids = new SystemIdGenerator();
+  const backups = new BackupService(new SqliteBackupOperations(config.bootstrap.dataRoot.value));
   let database: SqliteDatabaseHandle | null = null;
   let services: {
     readonly sources: SourceManagementService;
@@ -285,6 +302,7 @@ export function createLocalCliContainer(config: AppConfig): CliContainer {
           createProductionWorkerApplication({
             dataRoot: config.bootstrap.dataRoot.value,
             pollIntervalMs: config.worker.pollIntervalMs.value,
+            pageClient: createPlaywrightSourcePageClient(),
             ...(config.model.baseUrl.value &&
             config.model.modelName.value &&
             config.model.apiKey.value
@@ -320,6 +338,17 @@ export function createLocalCliContainer(config: AppConfig): CliContainer {
       list: (input) => operational().matches.list(input),
       show: (id) => operational().matches.show(id),
       wait: (taskId, signal) => operational().wait.wait(parseId(taskId, 'Task'), signal),
+    },
+    backup: {
+      create: (destination) => backups.create(destination),
+      list: (root) => backups.list(root),
+      verify: (directory) => backups.verify(directory),
+      restore: (input) =>
+        backups.restore({
+          backupDirectory: input.backupDirectory,
+          targetDataRoot: input.targetDataRoot ?? config.bootstrap.dataRoot.value,
+          ...(input.confirmationToken ? { confirmationToken: input.confirmationToken } : {}),
+        }),
     },
     close: () => {
       database?.close();

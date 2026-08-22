@@ -4,6 +4,35 @@ import type { SourceErrorCategory } from './errors.js';
 import type { SourceHttpClient } from './http-client.js';
 
 /** Browser-backed implementations expose only a neutral snapshot, never Playwright objects. */
+export type SourcePageCollectionResponseShape = 'ats-job-posts' | 'alibaba-campus' | 'huawei-campus';
+
+export interface SourcePageCollectionRequest {
+  readonly sourceKey: string;
+  readonly requestId: string;
+  readonly url: string;
+  readonly allowedHosts: readonly string[];
+  readonly signal: AbortSignal;
+  readonly timeoutMs: number;
+  readonly maximumPages: number;
+  readonly maximumResponseBytes: number;
+  /** Official list endpoint path observed from the rendered page session. */
+  readonly listEndpointPath: string;
+  readonly responseShape: SourcePageCollectionResponseShape;
+}
+
+export interface SourcePageCollectionPage {
+  readonly page: number;
+  readonly url: string;
+  readonly records: readonly Record<string, unknown>[];
+  readonly total: number | null;
+  readonly capturedAt: number;
+}
+
+export interface SourcePageCollection {
+  readonly pages: readonly SourcePageCollectionPage[];
+  readonly coverage: 'complete' | 'partial' | 'unknown';
+}
+
 export interface SourcePageClient {
   snapshot(request: {
     readonly sourceKey: string;
@@ -14,6 +43,11 @@ export interface SourcePageClient {
     readonly timeoutMs: number;
     readonly maximumResponseBytes: number;
   }): Promise<{ readonly url: string; readonly html: string; readonly capturedAt: number }>;
+  /**
+   * Optional same-session structured collection. The implementation owns page
+   * navigation and normal browser execution; it returns records only.
+   */
+  readonly collect?: (request: SourcePageCollectionRequest) => Promise<SourcePageCollection>;
 }
 
 export const sourceMetadataSchema = z

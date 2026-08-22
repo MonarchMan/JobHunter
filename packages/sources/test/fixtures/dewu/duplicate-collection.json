@@ -1,0 +1,33 @@
+{
+  "coverage": "complete",
+  "pages": [
+    {
+      "page": 1,
+      "url": "https://poizon.jobs.feishu.cn/578078/position/list",
+      "total": 2,
+      "capturedAt": 1,
+      "records": [
+        {
+          "id": "dewu-fixture-1",
+          "title": "运营实习生",
+          "description": "参与运营工作。",
+          "detailUrl": "https://poizon.jobs.feishu.cn/578078/position/2001/detail"
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "url": "https://poizon.jobs.feishu.cn/578078/position/list?page=2",
+      "total": 2,
+      "capturedAt": 2,
+      "records": [
+        {
+          "id": "dewu-fixture-1",
+          "title": "运营实习生",
+          "description": "参与运营工作。",
+          "detailUrl": "https://poizon.jobs.feishu.cn/578078/position/2001/detail"
+        }
+      ]
+    }
+  ]
+}

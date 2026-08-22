@@ -1,0 +1,32 @@
+{
+  "data": {
+    "list": [
+      {
+        "jobUnionId": "3517164755",
+        "name": "HRBP（外派中东）",
+        "jobType": "3",
+        "jobStatus": "000",
+        "jobFamily": "职能类",
+        "jobFamilyGroup": "人力资源",
+        "cityList": [{ "code": null, "name": "利雅得" }],
+        "department": [{ "code": null, "name": "人力资源平台" }],
+        "workYear": "3年以上",
+        "desc": null,
+        "departmentIntro": null,
+        "jobDuty": "支持国际化团队的人才与组织发展。",
+        "jobRequirement": "本科及以上学历，具备人力资源相关经验。",
+        "precedence": null,
+        "highLight": "国际化团队协作环境。",
+        "firstPostTime": null,
+        "refreshTime": 1787238001000,
+        "expiredTime": null,
+        "jobSpecialCode": "5",
+        "jobSource": "1"
+      }
+    ],
+    "page": { "pageNo": 2, "pageSize": 2, "totalPage": 2, "totalCount": 3 },
+    "traceId": null
+  },
+  "status": 1,
+  "message": "成功"
+}

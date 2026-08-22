@@ -1,0 +1,49 @@
+{
+  "status": "ok",
+  "message": "success",
+  "data": {
+    "pageNum": 1,
+    "pageSize": 2,
+    "total": "2",
+    "list": [
+      {
+        "postId": "11111111-1111-4111-8111-111111111111",
+        "jobId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "name": "AI产品实习生（J100001）",
+        "orgName": "移动生态事业群",
+        "postType": "产品",
+        "publishDate": "2026-08-20",
+        "updateDate": "2026-08-21",
+        "recruitNum": "2",
+        "serviceCondition": "本科及以上学历在校生，对人工智能产品有浓厚兴趣。",
+        "workContent": "参与AI产品需求分析、方案设计和迭代。",
+        "workPlace": "北京市,上海市",
+        "workYears": "",
+        "education": "本科",
+        "projectType": "日常实习项目",
+        "projectTypeCode": "-1",
+        "bgShortName": "MEG",
+        "hotFlag": true
+      },
+      {
+        "postId": "22222222-2222-4222-8222-222222222222",
+        "jobId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "name": "软件研发实习生（J100002）",
+        "orgName": "智能云事业群",
+        "postType": "技术",
+        "publishDate": "2026-08-19",
+        "updateDate": "2026-08-20",
+        "recruitNum": "3",
+        "serviceCondition": "熟悉至少一种编程语言，具备良好的协作能力。",
+        "workContent": "参与核心服务研发与性能优化。",
+        "workPlace": "北京市",
+        "workYears": "",
+        "education": "本科",
+        "projectType": "日常实习项目",
+        "projectTypeCode": "-1",
+        "bgShortName": "ACG",
+        "hotFlag": false
+      }
+    ]
+  }
+}

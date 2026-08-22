@@ -82,4 +82,30 @@ describe('explicit online source health', () => {
     expect(discover).not.toHaveBeenCalled();
     expect(normalize).not.toHaveBeenCalled();
   });
+
+  it('reports an unregistered experimental source without dispatching network work', async () => {
+    const createContext = vi.fn();
+    const registry = new AdapterRegistry();
+    const service = new OnlineSourceHealthService({
+      registry,
+      createContext,
+      now: () => 100,
+    });
+    const unregistered = { ...source, adapterKey: 'blocked.source' };
+
+    await expect(service.check([unregistered], new AbortController().signal)).resolves.toEqual([
+      {
+        sourceId: source.id,
+        adapterKey: 'blocked.source',
+        health: {
+          status: 'unhealthy',
+          checkedAt: 100,
+          latencyMs: 0,
+          signals: [{ key: 'health-check', ok: false, diagnostic: '来源健康检查失败。' }],
+          errorCategory: 'invalid_config',
+        },
+      },
+    ]);
+    expect(createContext).not.toHaveBeenCalled();
+  });
 });

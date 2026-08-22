@@ -1,0 +1,90 @@
+import { notFound } from 'next/navigation.js';
+import type { ReactElement } from 'react';
+import { getWebContainer } from '../../../src/server/container.js';
+
+export const dynamic = 'force-dynamic';
+
+export default async function AgentRunPage({
+  params,
+}: Readonly<{ params: Promise<{ readonly id: string }> }>): Promise<ReactElement> {
+  const { id } = await params;
+  const container = await getWebContainer();
+  const run = container.services.diagnostics.getAgentRun(id);
+  if (!run) notFound();
+  return (
+    <main id="main-content" tabIndex={-1}>
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">AGENT TRACE</p>
+          <h1>{run.agentKey}</h1>
+        </div>
+        <a href="/tasks">返回任务</a>
+      </div>
+      <section className="panel">
+        <dl className="facts">
+          <div>
+            <dt>状态</dt>
+            <dd>{run.status}</dd>
+          </div>
+          <div>
+            <dt>Agent 版本</dt>
+            <dd>{run.agentVersion}</dd>
+          </div>
+          <div>
+            <dt>Prompt 版本</dt>
+            <dd>{run.promptVersion}</dd>
+          </div>
+          <div>
+            <dt>模型配置指纹</dt>
+            <dd>
+              <code>{run.modelConfigHash}</code>
+            </dd>
+          </div>
+          <div>
+            <dt>输入 / 输出 Token</dt>
+            <dd>
+              {run.inputTokens ?? '—'} / {run.outputTokens ?? '—'}
+            </dd>
+          </div>
+          <div>
+            <dt>价格版本</dt>
+            <dd>{run.pricingVersion ?? '—'}</dd>
+          </div>
+        </dl>
+        {run.errorSummary ? (
+          <p className="risk">
+            {run.errorCategory}: {run.errorSummary}
+          </p>
+        ) : null}
+      </section>
+      <section className="panel table-panel" aria-labelledby="tools-heading">
+        <h2 id="tools-heading">脱敏工具调用</h2>
+        <div className="table-scroll">
+          <table>
+            <caption className="sr-only">脱敏工具调用列表</caption>
+            <thead>
+              <tr>
+                <th scope="col">序号</th>
+                <th scope="col">工具</th>
+                <th scope="col">状态</th>
+                <th scope="col">耗时</th>
+                <th scope="col">错误</th>
+              </tr>
+            </thead>
+            <tbody>
+              {run.toolCalls.map((call) => (
+                <tr key={call.sequenceNumber}>
+                  <td>{call.sequenceNumber}</td>
+                  <td>{call.toolKey}</td>
+                  <td>{call.status}</td>
+                  <td>{call.durationMs === null ? '—' : `${String(call.durationMs)} ms`}</td>
+                  <td>{call.errorSummary ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  );
+}

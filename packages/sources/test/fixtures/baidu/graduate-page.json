@@ -1,0 +1,30 @@
+{
+  "status": "ok",
+  "message": "success",
+  "data": {
+    "pageNum": 1,
+    "pageSize": 1,
+    "total": "1",
+    "list": [
+      {
+        "postId": "33333333-3333-4333-8333-333333333333",
+        "jobId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+        "name": "算法工程师（J100003）",
+        "orgName": "基础模型研发部",
+        "postType": "技术",
+        "publishDate": "2026-08-18",
+        "updateDate": "2026-08-19",
+        "recruitNum": "5",
+        "serviceCondition": "本科及以上学历，具备机器学习基础。",
+        "workContent": "参与大模型算法研发和工程落地。",
+        "workPlace": "北京市,深圳市",
+        "workYears": "",
+        "education": "本科",
+        "projectType": "校招",
+        "projectTypeCode": "1",
+        "bgShortName": "BMU",
+        "hotFlag": true
+      }
+    ]
+  }
+}

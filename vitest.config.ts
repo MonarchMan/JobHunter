@@ -26,7 +26,10 @@ export default defineConfig({
       },
       {
         extends: true,
-        test: { name: 'online', include: ['packages/*/test/**/*.online.test.ts'] },
+        test: {
+          name: 'online',
+          include: ['packages/*/test/**/*.online.test.ts', 'apps/*/test/**/*.online.test.ts'],
+        },
       },
     ],
   },

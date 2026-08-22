@@ -1,6 +1,6 @@
 # 000 工程基础规格
 
-> 状态：In Progress
+> 状态：Implemented
 > 依赖：无
 
 ## 目标

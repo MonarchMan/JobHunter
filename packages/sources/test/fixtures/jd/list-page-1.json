@@ -1,0 +1,34 @@
+[
+  {
+    "requirementId": 221794,
+    "positionId": 221720,
+    "positionCode": "00878249",
+    "positionNameOpen": "渠道销售岗",
+    "positionName": "渠道销售岗",
+    "positionDeptName": "京东零售",
+    "jobType": "运营类",
+    "workCity": "北京市",
+    "workCityCode": "11",
+    "publishTime": 1787155200000,
+    "formatPublishTime": "2026-08-20",
+    "workContent": "负责B端渠道的销售与运营工作，制定并执行渠道拓展策略。",
+    "qualification": "大学本科及以上学历，市场营销、商务管理等相关专业优先。",
+    "jobTypeCode": "YUNGYUN"
+  },
+  {
+    "requirementId": 223015,
+    "positionId": 223015,
+    "positionCode": "00886306",
+    "positionNameOpen": "运输调度岗",
+    "positionName": "运输调度岗",
+    "positionDeptName": "京东物流",
+    "jobType": "运营类",
+    "workCity": "北京市",
+    "workCityCode": "11",
+    "publishTime": 1787155200000,
+    "formatPublishTime": "2026-08-20",
+    "workContent": "设计运输线路与司机排班方案，提升车辆使用效率与订单履约时效。",
+    "qualification": "具备运输调度或物流运营相关经验。",
+    "jobTypeCode": "YUNGYUN"
+  }
+]

@@ -1,8 +1,8 @@
 # 006 首批企业官网来源规格
 
-> 状态：In Progress
+> 状态：Implemented
 > 依赖：004, 005
-> 调研证据：[research.md](./research.md)
+> 调研证据：[research.md](./research.md)，范围例外：[scope-exceptions.md](./scope-exceptions.md)
 
 ## 目标
 

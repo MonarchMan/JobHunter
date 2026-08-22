@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "errorCode": 1000000,
+  "errorMsg": null,
+  "result": {
+    "list": [
+      {
+        "id": "8999575e-951d-43ad-b262-2abb1a920787",
+        "name": "HR实习生",
+        "code": "XZ0000030",
+        "workLocation": "上海市",
+        "workLocationName": "上海市",
+        "job": "general",
+        "jobName": "职能",
+        "releaseTime": 1786869350000,
+        "jobDuty": "1、维护和拓展公司招聘渠道，协助推进各项招聘活动；\n2、根据岗位需求进行简历开源、候选人沟通、邀约面试、面试接待等日常招聘工作。",
+        "labelList": [],
+        "recruitTypeName": "管培生",
+        "graduationYear": "2027"
+      },
+      {
+        "id": "c1fe33d8-c73e-46e5-9fae-8163c9d9b4ce",
+        "name": "校园大使（2027届校招）",
+        "code": "XZ0000617",
+        "workLocation": "/",
+        "workLocationName": "/",
+        "job": "general",
+        "jobName": "职能",
+        "releaseTime": 1785218163000,
+        "jobDuty": "1、雇主品牌推广官，传播校招资讯，解答求职疑问，积累传播运营思维。",
+        "labelList": [],
+        "recruitTypeName": "其他项目",
+        "graduationYear": "2027"
+      }
+    ],
+    "total": "2"
+  }
+}

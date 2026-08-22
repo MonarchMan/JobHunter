@@ -1,6 +1,6 @@
 # 011 本地 Web 管理台设计
 
-> 状态：Ready
+> 状态：Implemented
 
 ## 技术结构
 
@@ -32,6 +32,7 @@ apps/web/app/
 | `GET /api/tasks`、`GET /api/tasks/:id`                    | 任务查询                   |
 | `POST /api/tasks/:id/retry`、`POST /api/tasks/:id/cancel` | 任务操作                   |
 | `GET /api/agent-runs/:id`                                 | 脱敏 Agent 运行详情        |
+| `GET/POST /api/resumes/:id/deletion`                      | 删除影响预览/确认入队      |
 
 所有响应使用统一 envelope：`{ data, meta?, error? }`；错误包含稳定 code、用户可读 message 和 correlationId，不返回堆栈。
 
@@ -40,12 +41,12 @@ apps/web/app/
 - Dashboard：健康与待办摘要。
 - Jobs：左/顶部筛选、结果表、详情页；分数采用数字和文字，不只靠颜色；确定性 MatchResult 与版本化 MatchAdvice 分区展示，建议失败不影响分数。
 - Profile：版本选择、字段差异、偏好和锁定。
-- Sources：支持状态、计划、运行历史。
+- Sources：总页标题为“招聘来源”，通过“官网来源 / 招聘平台来源”二级菜单分组；官网来源展示支持状态、计划、运行历史，招聘平台来源在未接入时保留明确空状态。
 - Tasks/Agent Runs：诊断和重试。
 
 ## 数据与安全
 
-所有 mutation 使用 POST/PATCH，校验 Origin 为 loopback 且启用 SameSite Cookie 的轻量 CSRF token，即使首期无账户。服务端启动强制 host 为 127.0.0.1/::1/localhost。外链限定数据库中已验证的官方 HTTPS URL，并使用 `target=_blank rel="noopener noreferrer"`。
+所有 mutation 使用 POST/PATCH，先从只读 CSRF 端点取得随机 token，并同时以 `SameSite=Strict`、`HttpOnly` Cookie 和自定义请求头回传；服务端校验二者恒等、Origin/目标协议与端口一致且均为 loopback，即使首期无账户也拒绝跨站写入。服务端启动强制 host 为 127.0.0.1/::1/localhost。外链限定数据库中已验证的官方 HTTPS URL，并使用 `target=_blank rel="noopener noreferrer"`。敏感简历删除先返回稳定影响 hash 和数量，用户输入 `DELETE` 二次确认后只入队 Worker 任务；执行前再次计算影响，变化时要求重新预览。
 
 ## 更新策略
 

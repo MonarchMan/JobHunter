@@ -2,8 +2,16 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "composite": false,
-    "noEmit": true
+    "noEmit": true,
+    "jsx": "preserve",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"]
   },
-  "include": ["apps/**/*.ts", "packages/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"],
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "scripts/**/*.ts",
+    "vitest.config.ts"
+  ],
   "exclude": ["**/dist/**", "**/test/fixtures/**"]
 }

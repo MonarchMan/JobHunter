@@ -1,6 +1,6 @@
 # 010 CLI 规格
 
-> 状态：In Progress
+> 状态：Implemented
 > 依赖：002–009, 012
 
 ## 目标

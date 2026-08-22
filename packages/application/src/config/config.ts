@@ -110,7 +110,7 @@ export function resolveBootstrapConfig(input: {
   readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly cwd?: string;
 }): BootstrapConfig {
-  const cwd = resolve(input.cwd ?? process.cwd());
+  const cwd = resolve(/* turbopackIgnore: true */ input.cwd ?? process.cwd());
   const environment = input.environment ?? process.env;
   const dataRootChoice = choose(
     nonEmpty(input.cli?.dataRoot),

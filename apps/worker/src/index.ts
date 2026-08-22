@@ -5,14 +5,20 @@ import {
   createMatchProfileTaskHandler,
   createMatchRevisionTaskHandler,
   createResumeProfileTaskHandler,
+  createResumeDeletionTaskHandler,
+  createArtifactPurgeTaskHandler,
   createSourceSyncTaskHandler,
+  createSourceHealthTaskHandler,
   DefaultDerivationTaskFactory,
   DeterministicMatchingService,
   HandlerRegistry,
   JobSyncService,
   MatchingBatchService,
+  OnlineSourceHealthService,
   RetryPolicy,
   ScheduleService,
+  SourceHealthCheckService,
+  ResumeDeletionService,
   TaskService,
   WorkerEngine,
   type RandomSource,
@@ -29,14 +35,23 @@ import {
   SqliteCandidateProfileRepository,
   SqliteMatchingRepository,
   SqliteResumeDocumentRepository,
+  SqliteResumeDeletionRepository,
+  SqliteSourceHealthWriter,
+  SqliteSyncRepository,
   SqliteTaskRepository,
   SqliteUnitOfWork,
 } from '@jobhunter/db';
 import { SystemIdGenerator, utcInstant, type Clock, type IdGenerator } from '@jobhunter/domain';
 import { OpenAiCompatibleModelClient } from '@jobhunter/llm';
 import { jobAdviceAgentDefinition, jobUnderstandingAgentDefinition } from '@jobhunter/matching';
-import { AdapterRegistry, FetchSourceHttpClient } from '@jobhunter/source-core';
+import {
+  AdapterRegistry,
+  FetchSourceHttpClient,
+  type SourcePageClient,
+} from '@jobhunter/source-core';
 import { registerFirstPartyAdapters } from '@jobhunter/sources';
+
+export { createPlaywrightSourcePageClient } from './browser-source.js';
 
 export interface WorkerApplication {
   readonly engine: WorkerEngine;
@@ -99,6 +114,7 @@ export function createProductionWorkerApplication(input: {
     readonly apiKey: string;
     readonly model: string;
   };
+  readonly pageClient?: SourcePageClient;
 }): WorkerApplication {
   const database = openSqliteDatabase({ dataRoot: input.dataRoot });
   const ids = new SystemIdGenerator();
@@ -110,6 +126,7 @@ export function createProductionWorkerApplication(input: {
     registry: adapters,
     artifacts: new SqliteArtifactStore(database.client, input.dataRoot),
     http: new FetchSourceHttpClient(),
+    ...(input.pageClient ? { page: input.pageClient } : {}),
     clock,
     ids,
     derivationTasks: new DefaultDerivationTaskFactory(ids, jobUnderstandingAgentDefinition.version),
@@ -117,6 +134,32 @@ export function createProductionWorkerApplication(input: {
   });
   const registry = new HandlerRegistry();
   registry.register(createSourceSyncTaskHandler(sync));
+  const resumeDeletion = new ResumeDeletionService({
+    repository: new SqliteResumeDeletionRepository(database.client),
+    artifacts: new SqliteArtifactStore(database.client, input.dataRoot),
+    clock,
+  });
+  registry.register(createResumeDeletionTaskHandler(resumeDeletion));
+  registry.register(createArtifactPurgeTaskHandler(resumeDeletion));
+  const sourceHealth = new SourceHealthCheckService({
+    sources: new SqliteSyncRepository(database.client),
+    checker: new OnlineSourceHealthService({
+      registry: adapters,
+      createContext: (source, parsedConfig, signal) => ({
+        sourceId: source.id,
+        companyId: source.companyId,
+        requestId: `health-${String(clock.now())}`,
+        config: parsedConfig,
+        signal,
+        timeoutMs: source.syncPolicy.requestTimeoutMs,
+        http: new FetchSourceHttpClient(),
+        ...(input.pageClient ? { page: input.pageClient } : {}),
+        cursor: source.cursor,
+      }),
+    }),
+    writer: new SqliteSourceHealthWriter(database.client),
+  });
+  registry.register(createSourceHealthTaskHandler(sourceHealth));
   const profileRepository = new SqliteCandidateProfileRepository(database.client);
   const matchingRepository = new SqliteMatchingRepository(database.client);
   const deterministicMatching = new DeterministicMatchingService({

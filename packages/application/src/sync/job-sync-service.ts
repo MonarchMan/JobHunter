@@ -21,6 +21,7 @@ import {
   type DiscoveredJob,
   type DiscoveryEvent,
   type SourceHttpClient,
+  type SourcePageClient,
 } from '@jobhunter/source-core';
 import type { ArtifactStore } from '../ports/artifact-store.js';
 import type { UnitOfWork } from '../ports/unit-of-work.js';
@@ -125,6 +126,7 @@ export class JobSyncService {
   readonly #registry: AdapterRegistry;
   readonly #artifacts: ArtifactStore;
   readonly #http: SourceHttpClient;
+  readonly #page: SourcePageClient | undefined;
   readonly #clock: Clock;
   readonly #ids: IdGenerator;
   readonly #derivationTasks: DerivationTaskFactory;
@@ -137,6 +139,7 @@ export class JobSyncService {
     readonly registry: AdapterRegistry;
     readonly artifacts: ArtifactStore;
     readonly http: SourceHttpClient;
+    readonly page?: SourcePageClient;
     readonly clock: Clock;
     readonly ids: IdGenerator;
     readonly derivationTasks: DerivationTaskFactory;
@@ -146,6 +149,7 @@ export class JobSyncService {
     this.#registry = input.registry;
     this.#artifacts = input.artifacts;
     this.#http = input.http;
+    this.#page = input.page;
     this.#clock = input.clock;
     this.#ids = input.ids;
     this.#derivationTasks = input.derivationTasks;
@@ -480,6 +484,7 @@ export class JobSyncService {
         signal,
         timeoutMs: source.syncPolicy.requestTimeoutMs,
         http: this.#http,
+        ...(this.#page ? { page: this.#page } : {}),
         cursor: source.cursor,
       };
       for await (const event of registered.adapter.discover(context)) {

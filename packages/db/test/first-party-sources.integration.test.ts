@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { DefaultDerivationTaskFactory, JobSyncService } from '@jobhunter/application';
 import { parseId, utcInstant, type Clock, type UtcInstant } from '@jobhunter/domain';
 import {
@@ -7,6 +8,7 @@ import {
   type SourceHttpResponse,
 } from '@jobhunter/source-core';
 import {
+  createMeituanAdapter,
   createTencentAdapter,
   firstPartySourceCatalog,
   type FirstPartySourceSeed,
@@ -98,6 +100,67 @@ const fixtureHttp: SourceHttpClient = {
   },
 };
 
+async function meituanFixture(name: string): Promise<unknown> {
+  const text = await readFile(
+    new URL(`../../sources/test/fixtures/meituan/${name}`, import.meta.url),
+    'utf8',
+  );
+  return JSON.parse(text) as unknown;
+}
+
+function meituanSyncHttp(input: {
+  readonly listJob: unknown;
+  readonly detail: unknown;
+  readonly partial: boolean;
+}): SourceHttpClient {
+  return {
+    request<TBody>(request: SourceHttpRequest): Promise<SourceHttpResponse<TBody>> {
+      const url = new URL(request.url);
+      if (url.pathname.endsWith('/getJobList')) {
+        const body = JSON.parse(request.body ?? '{}') as { page?: { pageNo?: number } };
+        const pageNo = body.page?.pageNo ?? 1;
+        if (pageNo === 2 && input.partial) {
+          return Promise.resolve(
+            response(
+              {
+                data: {
+                  list: [],
+                  page: { pageNo: 2, pageSize: 1, totalPage: 2, totalCount: 2 },
+                },
+                status: 1,
+                message: '成功',
+              } as TBody,
+              request.url,
+            ),
+          );
+        }
+        return Promise.resolve(
+          response(
+            {
+              data: {
+                list: [input.listJob],
+                page: {
+                  pageNo: 1,
+                  pageSize: 1,
+                  totalPage: input.partial ? 2 : 1,
+                  totalCount: input.partial ? 2 : 1,
+                },
+              },
+              status: 1,
+              message: '成功',
+            } as TBody,
+            request.url,
+          ),
+        );
+      }
+      if (url.pathname.endsWith('/getJobDetail')) {
+        return Promise.resolve(response(input.detail as TBody, request.url));
+      }
+      return Promise.reject(new Error(`Unexpected Meituan fixture request: ${url.pathname}`));
+    },
+  };
+}
+
 describe('first-party source seed and sync', () => {
   it('seeds all companies idempotently without overriding runtime switches or health', async () => {
     const { handle } = await database();
@@ -163,5 +226,60 @@ describe('first-party source seed and sync', () => {
       title: 'Agent 开发工程师',
       status: 'active',
     });
+  });
+
+  it('runs the supported Meituan adapter and preserves jobs after a partial page', async () => {
+    const { root, handle } = await database();
+    seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 1 });
+    const meituan = firstPartySourceCatalog.find(
+      (record): record is FirstPartySourceSeed => record.company.slug === 'meituan',
+    );
+    expect(meituan).toBeDefined();
+    if (!meituan) return;
+
+    const [listPage, detail] = await Promise.all([
+      meituanFixture('list-page-1.json'),
+      meituanFixture('detail.json'),
+    ]);
+    const listJob = (listPage as { data: { list: readonly unknown[] } }).data.list[0];
+    expect(listJob).toBeDefined();
+    if (!listJob) return;
+
+    const ids = new SequentialIds();
+    const createService = (partial: boolean): JobSyncService => {
+      const registry = new AdapterRegistry();
+      registry.register(createMeituanAdapter());
+      return new JobSyncService({
+        uow: new SqliteUnitOfWork(handle.client),
+        registry,
+        artifacts: new SqliteArtifactStore(handle.client, root.path),
+        http: meituanSyncHttp({ listJob, detail, partial }),
+        clock: new FixedClock(),
+        ids,
+        derivationTasks: new DefaultDerivationTaskFactory(ids, 'enrich-v1'),
+        options: { normalizerVersion: 'normalize-v1' },
+      });
+    };
+    const sourceId = parseId(meituan.source.id, 'JobSource');
+
+    await expect(
+      createService(false).run({ sourceId, trigger: 'manual' }, new AbortController().signal),
+    ).resolves.toMatchObject({
+      kind: 'completed',
+      status: 'succeeded',
+      coverage: 'complete',
+      stats: { discovered: 1, created: 1 },
+    });
+    await expect(
+      createService(true).run({ sourceId, trigger: 'manual' }, new AbortController().signal),
+    ).resolves.toMatchObject({
+      kind: 'completed',
+      status: 'partial',
+      coverage: 'partial',
+      stats: { discovered: 1, unchanged: 1 },
+    });
+    expect(
+      handle.client.prepare("SELECT count(*) FROM jobs WHERE status = 'active'").pluck().get(),
+    ).toBe(1);
   });
 });

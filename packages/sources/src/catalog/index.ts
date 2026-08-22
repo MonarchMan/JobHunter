@@ -1,4 +1,15 @@
 import type { AdapterRegistry } from '@jobhunter/source-core';
+import { createBaiduAdapter } from '../baidu/index.js';
+import {
+  createAlibabaAdapter,
+  createByteDanceAdapter,
+  createDewuAdapter,
+  createHuaweiAdapter,
+  createXiaohongshuAdapter,
+} from '../scripted/index.js';
+import { createJdCampusAdapter } from '../jd-campus/index.js';
+import { createMeituanAdapter } from '../meituan/index.js';
+import { createPinduoduoAdapter } from '../pinduoduo/index.js';
 import { createTencentAdapter } from '../tencent/index.js';
 
 export type SourceSupportStatus = 'experimental' | 'supported' | 'blocked';
@@ -48,6 +59,8 @@ interface CatalogInput {
   readonly aliases?: readonly string[];
   readonly sizeTag: 'large' | 'medium';
   readonly entry: string;
+  readonly adapterKey: string;
+  readonly recruitmentType: 'social' | 'campus' | 'mixed';
   readonly supportStatus: SourceSupportStatus;
   readonly supportNote: string | null;
   readonly requestsPerMinute?: number;
@@ -60,6 +73,8 @@ const inputs: readonly CatalogInput[] = [
     aliases: ['Tencent'],
     sizeTag: 'large',
     entry: 'https://careers.tencent.com/search.html',
+    adapterKey: 'tencent.social',
+    recruitmentType: 'social',
     supportStatus: 'supported',
     supportNote: '公开匿名 JSON 列表与详情协议已于 2026-08-20 通过门禁。',
   },
@@ -68,18 +83,24 @@ const inputs: readonly CatalogInput[] = [
     name: '阿里巴巴',
     aliases: ['Alibaba'],
     sizeTag: 'large',
-    entry: 'https://talent.alibaba.com/off-campus',
-    supportStatus: 'blocked',
-    supportNote: '尚未取得当前社招公开职位与完整分页证据。',
+    entry: 'https://campus-talent.alibaba.com/campus/position?batchId=100000560002',
+    adapterKey: 'alibaba.campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote:
+      '匿名浏览器由官网自身脚本生成运行时请求；339 条职位、34 页分页、稳定 ID 和字段归一化已通过 Smoke。',
   },
   {
     slug: 'baidu',
     name: '百度',
     aliases: ['Baidu'],
     sizeTag: 'large',
-    entry: 'https://talent.baidu.com/jobs/social',
-    supportStatus: 'blocked',
-    supportNote: '社招路由与匿名职位集合尚未通过当日复核。',
+    entry: 'https://talent.baidu.com/jobs/list?recruitType=INTERN',
+    adapterKey: 'baidu.campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote:
+      '匿名校园 JSON 接口按实习优先采集；617 条职位、31 页分页、稳定 ID 和字段归一化已通过 Smoke。',
   },
   {
     slug: 'bytedance',
@@ -87,8 +108,11 @@ const inputs: readonly CatalogInput[] = [
     aliases: ['ByteDance'],
     sizeTag: 'large',
     entry: 'https://jobs.bytedance.com/experienced/position',
-    supportStatus: 'experimental',
-    supportNote: '公开搜索页可见，但验证码与分页完整性门禁未完成。',
+    adapterKey: 'bytedance.social',
+    recruitmentType: 'social',
+    supportStatus: 'supported',
+    supportNote:
+      '匿名浏览器由官网自身脚本生成动态签名；列表响应的 count/limit/offset 分页、稳定 ID、官方详情 URL 和字段归一化已通过 Smoke。',
   },
   {
     slug: 'pinduoduo',
@@ -96,8 +120,11 @@ const inputs: readonly CatalogInput[] = [
     aliases: ['PDD'],
     sizeTag: 'medium',
     entry: 'https://careers.pddglobalhr.com/jobs',
-    supportStatus: 'experimental',
-    supportNote: '页面可匿名查看，但列表请求要求风控 anti_content；项目不生成或规避该机制。',
+    adapterKey: 'pinduoduo.intern',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote:
+      '实习接口匿名返回 2 条职位，分页、稳定 ID 和实习字段归一化已通过 Smoke；社招接口仍不接入。',
   },
   {
     slug: 'meituan',
@@ -105,17 +132,22 @@ const inputs: readonly CatalogInput[] = [
     aliases: ['Meituan'],
     sizeTag: 'medium',
     entry: 'https://zhaopin.meituan.com/web/social',
-    supportStatus: 'experimental',
-    supportNote: '公开搜索页可见，列表、详情与分页协议门禁未完成。',
+    adapterKey: 'meituan.social',
+    recruitmentType: 'social',
+    supportStatus: 'supported',
+    supportNote: '公开 JSON 列表、详情、24 页全量分页和在线 Smoke 已于 2026-08-21 通过门禁。',
   },
   {
     slug: 'dewu',
     name: '得物',
     aliases: ['Dewu'],
     sizeTag: 'medium',
-    entry: 'https://careers.dewu.com/index/',
-    supportStatus: 'blocked',
-    supportNote: '官网入口与飞书招聘站的权威关系、匿名范围尚未验证。',
+    entry: 'https://poizon.jobs.feishu.cn/578078/position/list',
+    adapterKey: 'dewu.campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote:
+      '校招/实习匿名浏览器由官网自身脚本生成动态签名；列表响应 count/limit/offset、6 个稳定 ID、官方详情 URL 和字段归一化已通过 Smoke。',
   },
   {
     slug: 'xiaohongshu',
@@ -123,8 +155,10 @@ const inputs: readonly CatalogInput[] = [
     aliases: ['Xiaohongshu', 'RED'],
     sizeTag: 'medium',
     entry: 'https://job.xiaohongshu.com/social/position',
-    supportStatus: 'experimental',
-    supportNote: '公开页面可见，验证码停止路径与分页门禁未完成。',
+    adapterKey: 'xiaohongshu.campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote: '校招列表匿名分页、稳定 ID、字段归一化和在线 Smoke 已通过；默认低频串行。',
   },
   {
     slug: 'jd',
@@ -132,17 +166,22 @@ const inputs: readonly CatalogInput[] = [
     aliases: ['JD'],
     sizeTag: 'medium',
     entry: 'https://zhaopin.jd.com/web/job/job_info_list/3',
-    supportStatus: 'experimental',
-    supportNote: '已确认社招入口，但匿名分页与详情门禁未完成。',
+    adapterKey: 'jd.campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote:
+      '校园接口匿名返回 75 条职位，分页、稳定 publishId、岗位职责归一化和官方入口 URL 已通过 Smoke。',
   },
   {
     slug: 'huawei',
     name: '华为',
     aliases: ['Huawei'],
     sizeTag: 'medium',
-    entry: 'https://career.huawei.com/reccampportal/portal5/social-recruitment.html',
-    supportStatus: 'blocked',
-    supportNote: '目标运行环境被客户端策略拦截，未取得可交付的匿名协议证据。',
+    entry: 'https://career.huawei.com/cn/campus-recruitment-job-list?recruitmentType=INTERN',
+    adapterKey: 'huawei.campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote: '匿名实习页由官网脚本加载 31 条职位；4 页分页、稳定 ID 和字段归一化已通过 Smoke。',
   },
 ];
 
@@ -161,11 +200,18 @@ export const firstPartySourceCatalog: readonly FirstPartySourceSeed[] = inputs.m
       },
       source: {
         id: pair[1],
-        slug: `${input.slug}-social`,
-        adapterKey: `${input.slug}.social`,
-        recruitmentType: 'social',
+        slug: `${input.slug}-${input.recruitmentType}`,
+        adapterKey: input.adapterKey,
+        recruitmentType: input.recruitmentType,
         baseUrl: input.entry,
-        config: input.slug === 'tencent' ? { language: 'zh-cn', pageSize: 100 } : {},
+        config:
+          input.slug === 'tencent' ||
+          input.slug === 'meituan' ||
+          input.slug === 'xiaohongshu' ||
+          input.slug === 'jd' ||
+          input.slug === 'pinduoduo'
+            ? { pageSize: 100 }
+            : {},
         enabledByDefault: input.supportStatus === 'supported',
         supportStatus: input.supportStatus,
         supportNote: input.supportNote,
@@ -179,5 +225,14 @@ export const firstPartySourceCatalog: readonly FirstPartySourceSeed[] = inputs.m
 );
 
 export function registerFirstPartyAdapters(registry: AdapterRegistry): void {
+  registry.register(createAlibabaAdapter());
+  registry.register(createBaiduAdapter());
+  registry.register(createByteDanceAdapter());
+  registry.register(createDewuAdapter());
+  registry.register(createHuaweiAdapter());
+  registry.register(createJdCampusAdapter());
+  registry.register(createMeituanAdapter());
+  registry.register(createPinduoduoAdapter());
   registry.register(createTencentAdapter());
+  registry.register(createXiaohongshuAdapter());
 }

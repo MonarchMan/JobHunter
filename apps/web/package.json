@@ -3,18 +3,28 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsc -b",
+    "dev": "tsx src/server/main.ts",
+    "build": "next build",
+    "test:browser": "playwright test",
+    "start": "tsx src/server/main.ts --production",
     "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@jobhunter/application": "workspace:*",
+    "@jobhunter/db": "workspace:*",
+    "@jobhunter/domain": "workspace:*",
+    "next": "^16.3.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@jobhunter/testkit": "workspace:*",
+    "@playwright/test": "^1.62.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "tsx": "^4.21.0"
   }
 }

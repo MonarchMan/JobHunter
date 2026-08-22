@@ -27,6 +27,7 @@ export interface OpenDatabaseOptions {
   readonly databaseFileName?: string;
   readonly busyTimeoutMs?: number;
   readonly runMigrations?: boolean;
+  readonly migrationsFolder?: string;
 }
 
 export interface SqliteDatabaseHandle {
@@ -63,6 +64,10 @@ function validateOptions(options: OpenDatabaseOptions): Required<OpenDatabaseOpt
     databaseFileName,
     busyTimeoutMs,
     runMigrations: options.runMigrations ?? true,
+    migrationsFolder: path.resolve(
+      /* turbopackIgnore: true */
+      options.migrationsFolder ?? path.resolve(import.meta.dirname, '../migrations'),
+    ),
   };
 }
 
@@ -81,8 +86,7 @@ export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabase
 
     const db = drizzle(client);
     if (resolved.runMigrations) {
-      const migrationsFolder = path.resolve(import.meta.dirname, '../migrations');
-      migrate(db, { migrationsFolder });
+      migrate(db, { migrationsFolder: resolved.migrationsFolder });
     }
     assertDatabaseIntegrity(client);
     registerConnection(databasePath);

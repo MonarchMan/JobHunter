@@ -3,7 +3,10 @@ import type { ResumeFileReader } from '../ports/resume-documents.js';
 import type { EnqueueTaskResult } from '../tasks/model.js';
 import type { TaskService } from '../tasks/task-service.js';
 import type { CandidateProfileRecord } from '../ports/profiles.js';
-import type { CandidateProfileService } from './candidate-profile-service.js';
+import {
+  ProfileVersionConflictError,
+  type CandidateProfileService,
+} from './candidate-profile-service.js';
 import type {
   ProfileInspectionService,
   ProfileVersionInspection,
@@ -165,10 +168,18 @@ export class ProfileManagementService {
     return this.#inspection.history(profileId);
   }
 
-  public set(id: string, pointer: string, value: unknown): ProfileVersionInspection {
+  public set(
+    id: string,
+    pointer: string,
+    value: unknown,
+    expectedCurrentVersionId?: string,
+  ): ProfileVersionInspection {
     const profileId = this.#profileId(id);
     const current = this.#profiles.getCurrent(profileId);
     if (!current) throw new CandidateProfileNotFoundError(id);
+    if (expectedCurrentVersionId && current.id !== expectedCurrentVersionId) {
+      throw new ProfileVersionConflictError(current.id);
+    }
     this.#profiles.applyManualCorrection({
       profileId,
       expectedCurrentVersionId: current.id,
@@ -177,19 +188,35 @@ export class ProfileManagementService {
     return this.show(id);
   }
 
-  public lock(id: string, pointer: string): ProfileVersionInspection {
-    return this.#locks(id, pointer, true);
+  public lock(
+    id: string,
+    pointer: string,
+    expectedCurrentVersionId?: string,
+  ): ProfileVersionInspection {
+    return this.#locks(id, pointer, true, expectedCurrentVersionId);
   }
 
-  public unlock(id: string, pointer: string): ProfileVersionInspection {
-    return this.#locks(id, pointer, false);
+  public unlock(
+    id: string,
+    pointer: string,
+    expectedCurrentVersionId?: string,
+  ): ProfileVersionInspection {
+    return this.#locks(id, pointer, false, expectedCurrentVersionId);
   }
 
-  #locks(id: string, pointer: string, add: boolean): ProfileVersionInspection {
+  #locks(
+    id: string,
+    pointer: string,
+    add: boolean,
+    expectedCurrentVersionId?: string,
+  ): ProfileVersionInspection {
     pointerSegments(pointer);
     const profileId = this.#profileId(id);
     const current = this.#profiles.getCurrent(profileId);
     if (!current) throw new CandidateProfileNotFoundError(id);
+    if (expectedCurrentVersionId && current.id !== expectedCurrentVersionId) {
+      throw new ProfileVersionConflictError(current.id);
+    }
     const alreadyInState = add
       ? current.lockedPaths.includes(pointer)
       : !current.lockedPaths.includes(pointer);

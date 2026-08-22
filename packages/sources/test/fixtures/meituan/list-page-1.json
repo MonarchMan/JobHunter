@@ -1,0 +1,57 @@
+{
+  "data": {
+    "list": [
+      {
+        "jobUnionId": "4702437501",
+        "name": "大模型应用算法工程师（智能客服）",
+        "jobType": "3",
+        "jobStatus": "000",
+        "jobFamily": "技术类",
+        "jobFamilyGroup": "算法",
+        "cityList": [
+          { "code": null, "name": "北京市" },
+          { "code": null, "name": "上海市" }
+        ],
+        "department": [{ "code": null, "name": "核心本地商业-基础研发平台" }],
+        "workYear": null,
+        "desc": "",
+        "departmentIntro": null,
+        "jobDuty": "负责智能客服大模型和Agent核心能力建设。",
+        "jobRequirement": "计算机、人工智能、数学等相关专业硕士及以上学历。",
+        "precedence": null,
+        "highLight": "参与大模型前沿技术探索。",
+        "firstPostTime": 1787054202000,
+        "refreshTime": 1787239800000,
+        "expiredTime": null,
+        "jobSpecialCode": "5",
+        "jobSource": "1"
+      },
+      {
+        "jobUnionId": "4604300717",
+        "name": "小象超市-自有商品品质治理专家",
+        "jobType": "3",
+        "jobStatus": "000",
+        "jobFamily": "零售类",
+        "jobFamilyGroup": "供应链",
+        "cityList": [{ "code": null, "name": "北京市" }],
+        "department": [{ "code": null, "name": "食杂零售-小象事业部" }],
+        "workYear": "5年以上",
+        "desc": null,
+        "departmentIntro": null,
+        "jobDuty": "负责自营商品品质管理。",
+        "jobRequirement": "本科及以上学历，具备相关工作经验。",
+        "precedence": null,
+        "highLight": "端到端参与商品品质管理。",
+        "firstPostTime": null,
+        "refreshTime": 1787238061000,
+        "expiredTime": null,
+        "jobSpecialCode": "5",
+        "jobSource": "1"
+      }
+    ],
+    "page": { "pageNo": 1, "pageSize": 2, "totalPage": 2, "totalCount": 3 },
+    "traceId": null
+  },
+  "status": 1,
+  "message": "成功"
+}

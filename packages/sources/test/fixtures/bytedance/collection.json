@@ -1,0 +1,35 @@
+{
+  "coverage": "complete",
+  "pages": [
+    {
+      "page": 1,
+      "url": "https://jobs.bytedance.com/experienced/position",
+      "total": 2,
+      "capturedAt": 1,
+      "records": [
+        {
+          "id": "byte-fixture-1",
+          "title": "算法实习生",
+          "description": "参与推荐算法研发。",
+          "location": "北京",
+          "employmentType": "实习",
+          "detailUrl": "https://jobs.bytedance.com/position/1001/detail"
+        }
+      ]
+    },
+    {
+      "page": 2,
+      "url": "https://jobs.bytedance.com/experienced/position?page=2",
+      "total": 2,
+      "capturedAt": 2,
+      "records": [
+        {
+          "id": "byte-fixture-2",
+          "title": "产品实习生",
+          "description": "参与产品设计。",
+          "detailUrl": "https://jobs.bytedance.com/position/1002/detail"
+        }
+      ]
+    }
+  ]
+}
