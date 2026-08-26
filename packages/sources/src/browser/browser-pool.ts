@@ -253,7 +253,7 @@ export function createPooledSourcePageClient(
         sourceKey: request.sourceKey,
         requestId: request.requestId,
         signal: request.signal,
-        timeoutMs: request.timeoutMs,
+        timeoutMs: request.operationTimeoutMs ?? request.timeoutMs,
         execute: (page) => {
           if (!page.collect) {
             throw new SourceError(

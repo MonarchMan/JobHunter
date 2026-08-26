@@ -79,7 +79,7 @@ function publishedAt(value: string | null | undefined): ReturnType<typeof utcIns
   return Number.isSafeInteger(milliseconds) && milliseconds >= 0 ? utcInstant(milliseconds) : null;
 }
 
-function applyUrl(detail: TencentDetail): string {
+function applyUrl(detail: Pick<TencentDetail, 'PostId' | 'RecruitPostName'>): string {
   const url = new URL('https://careers.tencent.com/resume.html');
   url.searchParams.set('operType', '3');
   url.searchParams.set('postId', detail.PostId);
@@ -103,7 +103,7 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
       recruitmentType: 'social',
       canonicalEntryUrl: entryUrl,
       officialHosts: [...hosts],
-      capabilities: { detail: 'required', pagination: 'page', transport: 'json' },
+      capabilities: { detail: 'deferred', pagination: 'page', transport: 'json' },
       defaultRateLimit: { requestsPerMinute: 12, burst: 1 },
       externalIdFingerprintVersion: null,
     },
@@ -114,6 +114,8 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
       let expectedCount: number | null = null;
       const seen = new Set<string>();
       let coverage: 'complete' | 'partial' = 'complete';
+      let duplicateIds = 0;
+      let totalChanged = false;
 
       for (;;) {
         if (context.signal.aborted) {
@@ -134,11 +136,15 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
           'Tencent list response no longer matches the verified schema.',
         );
         expectedCount ??= parsed.Data.Count;
-        if (expectedCount !== parsed.Data.Count) coverage = 'partial';
+        if (expectedCount !== parsed.Data.Count) {
+          coverage = 'partial';
+          totalChanged = true;
+        }
 
         for (const raw of parsed.Data.Posts) {
           if (seen.has(raw.PostId)) {
             coverage = 'partial';
+            duplicateIds += 1;
             continue;
           }
           seen.add(raw.PostId);
@@ -169,6 +175,23 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
         cursor: null,
         pages: page,
         discoveredCount,
+        diagnostics: {
+          reason:
+            coverage === 'complete'
+              ? null
+              : totalChanged
+                ? 'pagination_total_changed'
+                : duplicateIds > 0
+                  ? 'duplicate_job_ids'
+                  : 'discovered_count_mismatch',
+          retryable: totalChanged,
+          expectedCount,
+          discoveredCount,
+          expectedPages: Math.ceil(expectedCount / context.config.pageSize),
+          fetchedPages: page,
+          duplicateIds,
+          totalChanged,
+        },
       };
     },
     async fetchDetail(job, context): Promise<TencentDetail> {
@@ -200,27 +223,32 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
           () => tencentListJobSchema.parse(input.discovered.raw),
           'Tencent discovered job no longer matches the verified schema.',
         );
-        const detail = parseSource(
-          () => tencentDetailSchema.parse(input.detail),
-          'Tencent detail is required for normalization.',
-        );
-        if (list.PostId !== detail.PostId || detail.PostId !== input.discovered.externalJobId) {
+        const detail = input.detail
+          ? parseSource(
+              () => tencentDetailSchema.parse(input.detail),
+              'Tencent detail response changed.',
+            )
+          : null;
+        if (
+          list.PostId !== input.discovered.externalJobId ||
+          (detail !== null && detail.PostId !== input.discovered.externalJobId)
+        ) {
           throw new SourceError(
             'parse_changed',
             'Tencent list/detail job identity does not match.',
           );
         }
         const description = [
-          `岗位职责\n${detail.Responsibility}`,
-          `岗位要求\n${detail.Requirement}`,
-          detail.DepartmentIntroduction ? `部门介绍\n${detail.DepartmentIntroduction}` : null,
+          `岗位职责\n${list.Responsibility}`,
+          detail ? `岗位要求\n${detail.Requirement}` : null,
+          detail?.DepartmentIntroduction ? `部门介绍\n${detail.DepartmentIntroduction}` : null,
         ]
           .filter((value): value is string => value !== null)
           .join('\n\n');
-        const taxonomy = normalizeJobTaxonomy(optionalText(detail.CategoryName));
+        const taxonomy = normalizeJobTaxonomy(optionalText(list.CategoryName));
         const recruitmentCategory =
           normalizeRecruitmentCategory(
-            `${detail.RecruitPostName}\n${detail.Responsibility}\n${detail.Requirement}`,
+            `${list.RecruitPostName}\n${list.Responsibility}\n${detail?.Requirement ?? ''}`,
           ) === 'internship'
             ? 'internship'
             : 'social';
@@ -228,20 +256,20 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
           job: parseNormalizedJob({
             companyId: context.companyId,
             sourceId: context.sourceId,
-            externalJobId: detail.PostId,
-            title: detail.RecruitPostName,
-            department: optionalText(detail.ComName, detail.BGName),
+            externalJobId: list.PostId,
+            title: list.RecruitPostName,
+            department: optionalText(list.ComName, list.BGName),
             jobFamily: taxonomy.jobFamily,
             jobSubfamily: taxonomy.jobSubfamily,
             recruitmentCategory,
-            locations: detail.LocationName ? [detail.LocationName] : [],
+            locations: list.LocationName ? [list.LocationName] : [],
             employmentType: recruitmentCategory === 'internship' ? '实习' : '全职',
-            experienceText: optionalText(detail.RequireWorkYearsName),
+            experienceText: optionalText(list.RequireWorkYearsName),
             educationText: null,
             description,
-            detailUrl: canonicalDetailUrl(detail.PostId),
-            applyUrl: applyUrl(detail),
-            publishedAt: publishedAt(detail.LastUpdateTime),
+            detailUrl: canonicalDetailUrl(list.PostId),
+            applyUrl: applyUrl(list),
+            publishedAt: publishedAt(list.LastUpdateTime),
           }),
           provenance: {
             title: '$.Data.RecruitPostName',
@@ -252,9 +280,9 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
             publishedAt: '$.Data.LastUpdateTime',
           },
           sourcePrivateJson: {
-            bgCode: detail.ComCode ?? null,
-            productName: detail.ProductName ?? null,
-            sourceType: detail.SourceID,
+            bgCode: list.ComCode ?? null,
+            productName: list.ProductName ?? null,
+            sourceType: list.SourceID,
           },
         };
       });

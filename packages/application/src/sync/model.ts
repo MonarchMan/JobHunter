@@ -1,4 +1,11 @@
-import type { CompanyId, JobSourceId, SyncRunId, TaskId, UtcInstant } from '@jobhunter/domain';
+import type {
+  CompanyId,
+  ContentHash,
+  JobSourceId,
+  SyncRunId,
+  TaskId,
+  UtcInstant,
+} from '@jobhunter/domain';
 import type { CurrentJobRecord } from '../ports/jobs.js';
 
 export type SyncTrigger = 'manual' | 'schedule' | 'retry';
@@ -89,12 +96,53 @@ export interface FinishSyncRunInput {
   readonly finishedAt: UtcInstant;
   readonly sourceHealth: 'healthy' | 'degraded' | 'unhealthy';
   readonly consecutiveFailures: number;
+  readonly coverageEvidence: unknown;
+}
+
+export interface CachedSourceJobDetail {
+  readonly detail: unknown;
+  readonly listContentHash: ContentHash;
+  readonly adapterVersion: string;
 }
 
 export interface SyncRepository {
   getSource(sourceId: JobSourceId): SyncSourceRecord | null;
   startRun(input: StartSyncRunInput): StartSyncRunResult;
   persistRawJob(input: PersistRawJobInput): PersistedRawJob;
+  getCachedJobDetail(
+    sourceId: JobSourceId,
+    externalJobId: string,
+    listContentHash: ContentHash,
+    adapterVersion: string,
+  ): CachedSourceJobDetail | null;
+  recordJobDetailSuccess(input: {
+    readonly sourceId: JobSourceId;
+    readonly externalJobId: string;
+    readonly listContentHash: ContentHash;
+    readonly adapterVersion: string;
+    readonly detail: unknown;
+    readonly fetchedAt: UtcInstant;
+  }): void;
+  recordJobDetailFailure(input: {
+    readonly sourceId: JobSourceId;
+    readonly externalJobId: string;
+    readonly listContentHash: ContentHash;
+    readonly adapterVersion: string;
+    readonly errorCategory: string;
+    readonly errorSummary: string;
+    readonly occurredAt: UtcInstant;
+  }): void;
+  recordItemFailure(input: {
+    readonly id: string;
+    readonly runId: SyncRunId;
+    readonly sourceId: JobSourceId;
+    readonly externalJobId: string;
+    readonly stage: 'normalize' | 'identity';
+    readonly errorCategory: string;
+    readonly errorSummary: string;
+    readonly rawRecordId: string;
+    readonly occurredAt: UtcInstant;
+  }): void;
   findUnseenJobs(
     sourceId: JobSourceId,
     runId: SyncRunId,

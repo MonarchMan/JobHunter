@@ -5,10 +5,7 @@ import type { SourceHttpClient } from './http-client.js';
 
 /** Browser-backed implementations expose only a neutral snapshot, never Playwright objects. */
 export type SourcePageCollectionResponseShape =
-  | 'ats-job-posts'
-  | 'alibaba-campus'
-  | 'huawei-campus'
-  | 'meituan-jobs';
+  'ats-job-posts' | 'alibaba-campus' | 'huawei-campus' | 'meituan-jobs';
 
 export interface SourcePageCollectionRequest {
   readonly sourceKey: string;
@@ -17,6 +14,8 @@ export interface SourcePageCollectionRequest {
   readonly allowedHosts: readonly string[];
   readonly signal: AbortSignal;
   readonly timeoutMs: number;
+  /** Whole-collection timeout; independent from a single navigation or JSON request timeout. */
+  readonly operationTimeoutMs?: number;
   readonly maximumPages: number;
   readonly maximumResponseBytes: number;
   /** Official list endpoint path observed from the rendered page session. */
@@ -35,6 +34,7 @@ export interface SourcePageCollectionPage {
 export interface SourcePageCollection {
   readonly pages: readonly SourcePageCollectionPage[];
   readonly coverage: 'complete' | 'partial' | 'unknown';
+  readonly diagnostics?: DiscoveryDiagnostics;
 }
 
 export interface SourcePageClient {
@@ -67,7 +67,7 @@ export const sourceMetadataSchema = z
     officialHosts: z.array(z.string().min(1)).min(1),
     capabilities: z
       .object({
-        detail: z.enum(['required', 'inline']),
+        detail: z.enum(['inline', 'deferred']),
         pagination: z.enum(['none', 'page', 'cursor']),
         transport: z.enum(['json', 'embedded_json', 'html', 'browser']),
       })
@@ -93,6 +93,17 @@ export type DiscoveredJob = z.infer<typeof discoveredJobSchema>;
 
 export type DiscoveryCoverage = 'complete' | 'partial' | 'unknown';
 
+export interface DiscoveryDiagnostics {
+  readonly reason: string | null;
+  readonly retryable: boolean;
+  readonly expectedCount?: number | null;
+  readonly discoveredCount?: number;
+  readonly expectedPages?: number | null;
+  readonly fetchedPages?: number;
+  readonly duplicateIds?: number;
+  readonly totalChanged?: boolean;
+}
+
 export type DiscoveryEvent =
   | { readonly type: 'job'; readonly job: DiscoveredJob }
   | {
@@ -106,6 +117,7 @@ export type DiscoveryEvent =
       readonly cursor: unknown;
       readonly pages: number;
       readonly discoveredCount: number;
+      readonly diagnostics?: DiscoveryDiagnostics;
     };
 
 export interface SourceRequestContext<TConfig> {

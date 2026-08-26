@@ -70,8 +70,8 @@ export function defineSourceContractSuite<TConfig, TDetail>(
         const metadata = sourceMetadataSchema.parse(adapter.metadata);
         canonicalizeOfficialUrl(metadata.canonicalEntryUrl, metadata.officialHosts);
         invariant(
-          metadata.capabilities.detail !== 'required' || Boolean(adapter.fetchDetail),
-          'Required-detail adapter must implement fetchDetail.',
+          metadata.capabilities.detail !== 'deferred' || Boolean(adapter.fetchDetail),
+          'Deferred-detail adapter must implement fetchDetail.',
         );
         return Promise.resolve();
       },

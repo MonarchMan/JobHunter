@@ -25,8 +25,8 @@ export interface SourceCatalogSeedRecord {
 const defaultSyncPolicy = {
   staleAfterMisses: 1,
   closeAfterMisses: 2,
-  degradedAfterFailures: 1,
-  unhealthyAfterFailures: 3,
+  degradedAfterFailures: 2,
+  unhealthyAfterFailures: 4,
   enrichNewRevisions: false,
   requestTimeoutMs: 15_000,
 } as const;
@@ -43,7 +43,7 @@ export function seedSourceCatalog(
   options: SeedSourceCatalogOptions = {},
 ): void {
   const now = options.now ?? Date.now();
-  const syncPolicyVersion = options.syncPolicyVersion ?? 'v1';
+  const syncPolicyVersion = options.syncPolicyVersion ?? 'v2';
   const syncPolicyJson = JSON.stringify(options.syncPolicy ?? defaultSyncPolicy);
   const insertCompany = database.prepare(
     `INSERT INTO companies

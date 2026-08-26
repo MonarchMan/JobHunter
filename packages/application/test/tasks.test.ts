@@ -102,6 +102,48 @@ describe('source.sync handler', () => {
       ),
     ).rejects.toMatchObject({ category: 'permanent' });
   });
+
+  it('retries a partial synchronization when coverage diagnostics are temporary', async () => {
+    const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
+    const handler = createSourceSyncTaskHandler({
+      run: () =>
+        Promise.resolve({
+          kind: 'completed',
+          runId,
+          status: 'partial',
+          coverage: 'partial',
+          stats: {
+            discovered: 1,
+            rawStored: 1,
+            created: 1,
+            unchanged: 0,
+            revised: 0,
+            restored: 0,
+            staled: 0,
+            closed: 0,
+            isolated: 0,
+            skippedNonDomestic: 0,
+            skippedUnknownRegion: 0,
+            skippedOutOfScope: 0,
+            followupEnqueued: 0,
+          },
+          errorCategory: 'temporary',
+          errorSummary: 'Pagination total changed.',
+        }),
+    });
+
+    await expect(
+      handler.execute(
+        {
+          signal: new AbortController().signal,
+          clock: { now: () => utcInstant(1) },
+          logger: silentLogger,
+          services: {},
+        },
+        { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'manual' },
+      ),
+    ).rejects.toMatchObject({ category: 'network_temporary' });
+  });
 });
 
 describe('HandlerRegistry', () => {

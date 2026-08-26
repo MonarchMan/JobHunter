@@ -9,10 +9,12 @@ import {
   createResumeProfileTaskHandler,
   createResumeDeletionTaskHandler,
   createArtifactPurgeTaskHandler,
+  createSourceJobDetailTaskHandler,
   createSourceSyncTaskHandler,
   createSourceHealthTaskHandler,
   DeterministicMatchingService,
   HandlerRegistry,
+  JobDetailService,
   JobSyncService,
   MatchingBatchService,
   OnlineSourceHealthService,
@@ -125,11 +127,13 @@ export function createProductionWorkerApplication(input: {
   const adapters = new AdapterRegistry();
   registerFirstPartyAdapters(adapters);
   const profileRepository = new SqliteCandidateProfileRepository(database.client);
+  const uow = new SqliteUnitOfWork(database.client);
+  const sourceHttp = new FetchSourceHttpClient();
   const sync = new JobSyncService({
-    uow: new SqliteUnitOfWork(database.client),
+    uow,
     registry: adapters,
     artifacts: new SqliteArtifactStore(database.client, input.dataRoot),
-    http: new FetchSourceHttpClient(),
+    http: sourceHttp,
     ...(input.pageClient ? { page: input.pageClient } : {}),
     clock,
     ids,
@@ -138,6 +142,19 @@ export function createProductionWorkerApplication(input: {
   });
   const registry = new HandlerRegistry();
   registry.register(createSourceSyncTaskHandler(sync));
+  registry.register(
+    createSourceJobDetailTaskHandler(
+      new JobDetailService({
+        uow,
+        registry: adapters,
+        http: sourceHttp,
+        ...(input.pageClient ? { page: input.pageClient } : {}),
+        clock,
+        ids,
+        normalizerVersion: 'normalize-v1',
+      }),
+    ),
+  );
   registry.register(
     createCleanupTaskHandler({
       cleanup: new CleanupService({

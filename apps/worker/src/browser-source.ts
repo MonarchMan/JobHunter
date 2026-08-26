@@ -137,12 +137,12 @@ async function browserListResponse(
   };
 }
 
-async function readListResponse(
+function readListResponse(
   response: BrowserListResponse,
   request: SourcePageCollectionRequest,
   expectedPage: number,
   expectedOffset: number,
-): Promise<BrowserListPage> {
+): BrowserListPage {
   // Job records are read from the official JSON response, never from rendered
   // job-card text. The browser is only the signed session that receives it.
   const query = new URL(response.url).searchParams;
@@ -254,7 +254,7 @@ async function waitForListResponse(
   browserDebug('template headers', Object.keys(template.headers));
   const parsed = await browserListResponse(response);
   return {
-    page: await readListResponse(parsed, request, expectedPage, expectedOffset),
+    page: readListResponse(parsed, request, expectedPage, expectedOffset),
     template,
   };
 }
@@ -321,9 +321,12 @@ async function requestJsonPage(
             : request.responseShape === 'meituan-jobs'
               ? {
                   ...template.body,
-                  page: { ...(isRecord(template.body.page) ? template.body.page : {}), pageNo: targetPage },
+                  page: {
+                    ...(isRecord(template.body.page) ? template.body.page : {}),
+                    pageNo: targetPage,
+                  },
                 }
-            : { ...template.body, curPage: targetPage },
+              : { ...template.body, curPage: targetPage },
       body: response.body,
     },
     request,
@@ -337,12 +340,13 @@ async function collectJsonPages(
   request: SourcePageCollectionRequest,
   options: BrowserSourceOptions,
 ): Promise<SourcePageCollection> {
-  const firstResponse = waitForListResponse(page, request, 1, 0, request.timeoutMs);
-  await page.goto(request.url, {
-    waitUntil: 'domcontentloaded',
-    timeout: options.navigationTimeoutMs ?? request.timeoutMs,
-  });
-  const firstCapture = await firstResponse;
+  const [firstCapture] = await Promise.all([
+    waitForListResponse(page, request, 1, 0, request.timeoutMs),
+    page.goto(request.url, {
+      waitUntil: 'domcontentloaded',
+      timeout: options.navigationTimeoutMs ?? request.timeoutMs,
+    }),
+  ]);
   const firstTemplate = firstCapture.template;
   // The campus landing page initially requests graduate + internship jobs.
   // Reuse the initialized anonymous session but narrow the JSON body to the
@@ -354,12 +358,18 @@ async function collectJsonPages(
   const pages = [];
   const maximumPages = Math.min(request.maximumPages, options.maximumPages ?? 1_000);
   let coverage: SourcePageCollection['coverage'] = 'complete';
+  let totalChanged = false;
+  let duplicateIds = 0;
+  const seenIds = new Set<string>();
   let current = first;
   const expectedPages = first.total === 0 ? 0 : Math.ceil(first.total / first.limit);
   for (let pageNumber = 1; pageNumber <= Math.min(expectedPages, maximumPages); pageNumber += 1) {
     if (request.signal.aborted)
       throw new SourceError('temporary', 'Browser collection was aborted.');
-    if (current.total !== first.total || current.limit !== first.limit) coverage = 'partial';
+    if (current.total !== first.total || current.limit !== first.limit) {
+      coverage = 'partial';
+      totalChanged = true;
+    }
     if (current.items.length > current.limit) coverage = 'partial';
     pages.push({
       page: pageNumber,
@@ -368,6 +378,11 @@ async function collectJsonPages(
         const rawId = raw.id ?? raw.jobId ?? raw.positionId ?? raw.publishId ?? raw.jobUnionId;
         const id = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : '';
         if (!id) throw new SourceError('parse_changed', 'Browser list record has no stable ID.');
+        if (seenIds.has(id)) {
+          coverage = 'partial';
+          duplicateIds += 1;
+        }
+        seenIds.add(id);
         const explicitUrl = [raw.detailUrl, raw.sourceUrl, raw.url, raw.positionUrl].find(
           (value): value is string => typeof value === 'string' && value.startsWith('https://'),
         );
@@ -394,7 +409,27 @@ async function collectJsonPages(
     }
   }
   if (pages.length < expectedPages) coverage = 'partial';
-  return { pages, coverage };
+  const truncated = pages.length < expectedPages;
+  return {
+    pages,
+    coverage,
+    diagnostics: {
+      reason: truncated
+        ? 'maximum_pages_reached'
+        : totalChanged
+          ? 'pagination_total_changed'
+          : duplicateIds > 0
+            ? 'duplicate_job_ids'
+            : null,
+      retryable: totalChanged,
+      expectedCount: first.total,
+      discoveredCount: seenIds.size,
+      expectedPages,
+      fetchedPages: pages.length,
+      duplicateIds,
+      totalChanged,
+    },
+  };
 }
 
 function createSessionFactory(

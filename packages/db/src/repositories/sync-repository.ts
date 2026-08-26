@@ -1,5 +1,6 @@
 import type {
   CurrentJobRecord,
+  CachedSourceJobDetail,
   FinishSyncRunInput,
   PersistedRawJob,
   PersistRawJobInput,
@@ -16,8 +17,10 @@ import {
   parseNormalizedJob,
   revisionNumber,
   utcInstant,
+  type ContentHash,
   type JobSourceId,
   type SyncRunId,
+  type UtcInstant,
 } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
@@ -188,6 +191,131 @@ export class SqliteSyncRepository implements SyncRepository {
     return { id: existing.id, deduplicated: true };
   }
 
+  public getCachedJobDetail(
+    sourceId: JobSourceId,
+    externalJobId: string,
+    listContentHash: ContentHash,
+    adapterVersion: string,
+  ): CachedSourceJobDetail | null {
+    const row = this.#client
+      .prepare(
+        `SELECT detail_json, list_content_hash, adapter_version
+         FROM source_job_details
+         WHERE source_id = ? AND external_job_id = ? AND status = 'succeeded'
+           AND adapter_version = ?`,
+      )
+      .get(sourceId, externalJobId, adapterVersion) as
+      | {
+          readonly detail_json: string;
+          readonly list_content_hash: string;
+          readonly adapter_version: string;
+        }
+      | undefined;
+    void listContentHash;
+    if (!row) return null;
+    return {
+      detail: JSON.parse(row.detail_json) as unknown,
+      listContentHash: parseContentHash(row.list_content_hash),
+      adapterVersion: row.adapter_version,
+    };
+  }
+
+  public recordJobDetailSuccess(input: {
+    readonly sourceId: JobSourceId;
+    readonly externalJobId: string;
+    readonly listContentHash: ContentHash;
+    readonly adapterVersion: string;
+    readonly detail: unknown;
+    readonly fetchedAt: UtcInstant;
+  }): void {
+    this.#client
+      .prepare(
+        `INSERT INTO source_job_details
+         (source_id, external_job_id, list_content_hash, adapter_version, status, detail_json,
+          error_category, error_summary, fetched_at, updated_at)
+         VALUES (?, ?, ?, ?, 'succeeded', ?, NULL, NULL, ?, ?)
+         ON CONFLICT(source_id, external_job_id) DO UPDATE SET
+           list_content_hash = excluded.list_content_hash,
+           adapter_version = excluded.adapter_version,
+           status = 'succeeded', detail_json = excluded.detail_json,
+           error_category = NULL, error_summary = NULL,
+           fetched_at = excluded.fetched_at, updated_at = excluded.updated_at`,
+      )
+      .run(
+        input.sourceId,
+        input.externalJobId,
+        input.listContentHash,
+        input.adapterVersion,
+        canonicalJson(input.detail),
+        input.fetchedAt,
+        input.fetchedAt,
+      );
+  }
+
+  public recordJobDetailFailure(input: {
+    readonly sourceId: JobSourceId;
+    readonly externalJobId: string;
+    readonly listContentHash: ContentHash;
+    readonly adapterVersion: string;
+    readonly errorCategory: string;
+    readonly errorSummary: string;
+    readonly occurredAt: UtcInstant;
+  }): void {
+    this.#client
+      .prepare(
+        `INSERT INTO source_job_details
+         (source_id, external_job_id, list_content_hash, adapter_version, status, detail_json,
+          error_category, error_summary, fetched_at, updated_at)
+         VALUES (?, ?, ?, ?, 'failed', NULL, ?, ?, NULL, ?)
+         ON CONFLICT(source_id, external_job_id) DO UPDATE SET
+           list_content_hash = excluded.list_content_hash,
+           adapter_version = excluded.adapter_version,
+           status = 'failed', detail_json = NULL,
+           error_category = excluded.error_category, error_summary = excluded.error_summary,
+           fetched_at = NULL, updated_at = excluded.updated_at`,
+      )
+      .run(
+        input.sourceId,
+        input.externalJobId,
+        input.listContentHash,
+        input.adapterVersion,
+        input.errorCategory,
+        input.errorSummary,
+        input.occurredAt,
+      );
+  }
+
+  public recordItemFailure(input: {
+    readonly id: string;
+    readonly runId: SyncRunId;
+    readonly sourceId: JobSourceId;
+    readonly externalJobId: string;
+    readonly stage: 'normalize' | 'identity';
+    readonly errorCategory: string;
+    readonly errorSummary: string;
+    readonly rawRecordId: string;
+    readonly occurredAt: UtcInstant;
+  }): void {
+    this.#client
+      .prepare(
+        `INSERT INTO sync_item_failures
+         (id, sync_run_id, source_id, external_job_id, stage, error_category,
+          error_summary, raw_record_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.id,
+        input.runId,
+        input.sourceId,
+        input.externalJobId,
+        input.stage,
+        input.errorCategory,
+        input.errorSummary,
+        input.rawRecordId,
+        input.occurredAt,
+      );
+  }
+
   public findUnseenJobs(
     sourceId: JobSourceId,
     runId: SyncRunId,
@@ -221,7 +349,7 @@ export class SqliteSyncRepository implements SyncRepository {
     const updated = this.#client
       .prepare(
         `UPDATE sync_runs SET status = ?, coverage = ?, cursor_out_json = ?, stats_json = ?,
-           error_category = ?, error_summary = ?, finished_at = ?
+           coverage_evidence_json = ?, error_category = ?, error_summary = ?, finished_at = ?
          WHERE id = ? AND source_id = ? AND status = 'running'`,
       )
       .run(
@@ -231,6 +359,7 @@ export class SqliteSyncRepository implements SyncRepository {
           ? canonicalJson(input.cursorOut)
           : null,
         canonicalJson(input.stats),
+        canonicalJson(input.coverageEvidence),
         input.errorCategory,
         input.errorSummary,
         input.finishedAt,

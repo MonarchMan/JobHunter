@@ -24,7 +24,7 @@ packages/sources/<source-key>/
 
 ## 契约
 
-`discover` 返回 `DiscoveryPageEvent | DiscoveredJob` 流，结束事件包含 coverage、cursor 和统计；异常退出由公共同步层视为 partial。适配器不保存游标。
+`discover` 返回 `DiscoveryPageEvent | DiscoveredJob` 流，结束事件包含 coverage、cursor、统计和覆盖诊断；异常退出由公共同步层视为 partial。适配器不保存游标。详情 capability 仅允许 `inline/deferred`：deferred 适配器的 `normalize({ detail: null })` 必须输出列表基础职位，`fetchDetail` 只由独立详情任务调用。
 
 公共 `SourceHttpClient` 统一 User-Agent 项目标识、超时、响应大小上限、基础限速挂钩和脱敏错误；不自动无限重定向。浏览器实现通过同一端口提供页面快照，不把 Playwright 类型暴露到 Adapter 接口。
 

@@ -14,8 +14,11 @@ export class AdapterRegistry {
   public register<TConfig, TDetail>(adapter: JobSourceAdapter<TConfig, TDetail>): void {
     const metadata = sourceMetadataSchema.parse(adapter.metadata);
     validateOfficialUrl(metadata.canonicalEntryUrl, metadata.officialHosts);
-    if (metadata.capabilities.detail === 'required' && !adapter.fetchDetail) {
-      throw new SourceError('invalid_config', `Adapter requires fetchDetail: ${metadata.key}`);
+    if (metadata.capabilities.detail === 'deferred' && !adapter.fetchDetail) {
+      throw new SourceError(
+        'invalid_config',
+        `Deferred-detail adapter requires fetchDetail: ${metadata.key}`,
+      );
     }
     if (metadata.capabilities.detail === 'inline' && adapter.fetchDetail) {
       throw new SourceError(

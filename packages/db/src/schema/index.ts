@@ -55,6 +55,10 @@ export const jobSources = sqliteTable(
     supportNote: text('support_note'),
     healthStatus: text('health_status').notNull(),
     consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    probeStatus: text('probe_status'),
+    lastProbeAt: epoch('last_probe_at'),
+    probeErrorCategory: text('probe_error_category'),
+    probeDiagnosticsJson: jsonText('probe_diagnostics_json').notNull().default('{}'),
     lastSuccessAt: epoch('last_success_at'),
     lastFailureAt: epoch('last_failure_at'),
     createdAt: epoch('created_at').notNull(),
@@ -99,6 +103,7 @@ export const syncRuns = sqliteTable(
     cursorInJson: jsonText('cursor_in_json'),
     cursorOutJson: jsonText('cursor_out_json'),
     statsJson: jsonText('stats_json').notNull().default('{}'),
+    coverageEvidenceJson: jsonText('coverage_evidence_json').notNull().default('{}'),
     errorCategory: text('error_category'),
     errorSummary: text('error_summary'),
     startedAt: epoch('started_at').notNull(),
@@ -169,6 +174,50 @@ export const rawJobRecords = sqliteTable(
       sql`${table.payloadJson} is not null or ${table.artifactId} is not null`,
     ),
   ],
+);
+
+export const sourceJobDetails = sqliteTable(
+  'source_job_details',
+  {
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => jobSources.id, { onDelete: 'cascade' }),
+    externalJobId: text('external_job_id').notNull(),
+    listContentHash: text('list_content_hash').notNull(),
+    adapterVersion: text('adapter_version').notNull(),
+    status: text().notNull(),
+    detailJson: jsonText('detail_json'),
+    errorCategory: text('error_category'),
+    errorSummary: text('error_summary'),
+    fetchedAt: epoch('fetched_at'),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sourceId, table.externalJobId] }),
+    check('source_job_details_status_check', sql`${table.status} in ('succeeded', 'failed')`),
+  ],
+);
+
+export const syncItemFailures = sqliteTable(
+  'sync_item_failures',
+  {
+    id: text().primaryKey(),
+    syncRunId: text('sync_run_id')
+      .notNull()
+      .references(() => syncRuns.id, { onDelete: 'cascade' }),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => jobSources.id, { onDelete: 'cascade' }),
+    externalJobId: text('external_job_id').notNull(),
+    stage: text().notNull(),
+    errorCategory: text('error_category').notNull(),
+    errorSummary: text('error_summary').notNull(),
+    rawRecordId: text('raw_record_id')
+      .notNull()
+      .references(() => rawJobRecords.id, { onDelete: 'restrict' }),
+    createdAt: epoch('created_at').notNull(),
+  },
+  (table) => [index('sync_item_failures_run_idx').on(table.syncRunId, table.createdAt)],
 );
 
 export const jobs = sqliteTable(

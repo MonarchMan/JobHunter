@@ -174,6 +174,55 @@ export class SqliteJobRepository implements JobRepository {
     this.recordObservation(input);
   }
 
+  public persistDetailRevision(input: Parameters<JobRepository['persistDetailRevision']>[0]): void {
+    const normalized = input.decision.normalized;
+    this.#client
+      .prepare(
+        `UPDATE jobs SET
+           company_id = ?, title = ?, department = ?, job_family = ?, job_subfamily = ?, locations_json = ?,
+           employment_type = ?, recruitment_category = ?, experience_text = ?, education_text = ?, description = ?,
+           detail_url = ?, apply_url = ?, published_at = ?, content_hash = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        normalized.companyId,
+        normalized.title,
+        normalized.department,
+        normalized.jobFamily,
+        normalized.jobSubfamily,
+        canonicalJson(normalized.locations),
+        normalized.employmentType,
+        normalized.recruitmentCategory,
+        normalized.experienceText,
+        normalized.educationText,
+        normalized.description,
+        normalized.detailUrl,
+        normalized.applyUrl,
+        normalized.publishedAt,
+        input.decision.contentHash,
+        input.occurredAt,
+        input.decision.jobId,
+      );
+    this.#client
+      .prepare(
+        `INSERT INTO job_revisions
+         (id, job_id, revision_no, content_hash, normalizer_version, snapshot_json,
+          change_set_json, raw_record_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.revisionId,
+        input.decision.jobId,
+        input.decision.revisionNumber,
+        input.decision.contentHash,
+        input.normalizerVersion,
+        canonicalJson(normalized),
+        canonicalJson(input.decision.changes),
+        input.rawRecordId,
+        input.occurredAt,
+      );
+  }
+
   public recordObservation(input: {
     readonly jobId: JobId;
     readonly syncRunId: SyncRunId;

@@ -473,12 +473,15 @@ sequenceDiagram
     E->>A: discover()
     loop 每个已发现职位
         A-->>E: RawJobInput
-        E->>A: normalize()
+        E->>A: 使用列表字段 normalize()
         A-->>E: NormalizedJob
-        E->>D: 保存原始记录（按哈希去重）
-        E->>D: 幂等 upsert Job
+        E->>E: 地域与画像 intake
+        E->>D: 仅保存接收职位并幂等 upsert Job
         E->>D: 必要时创建 JobRevision
         E->>D: 标记本轮已观察
+        opt 来源详情为 deferred
+            E->>D: 入队 source.job-detail
+        end
     end
     E->>D: 根据完整性证据处理缺失职位
     E->>D: 完成 SyncRun 与统计
@@ -486,6 +489,7 @@ sequenceDiagram
 
 同步完成后可产生后续任务：
 
+- 已接收且来源详情为 deferred：创建独立详情补全任务；详情失败不影响列表覆盖与来源健康。
 - 新职位或 JD 变化：创建语义增强任务。
 - 影响过滤或评分的字段变化：创建匹配重算任务。
 - 职位关闭：使活动匹配结果不可投递，但保留历史结果。

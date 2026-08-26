@@ -110,7 +110,7 @@ function createMeituanChannelAdapter(options: {
       canonicalEntryUrl: options.entryUrl,
       officialHosts: [...hosts],
       capabilities: {
-        detail: options.category === 'internship' ? 'inline' : 'required',
+        detail: options.category === 'internship' ? 'inline' : 'deferred',
         pagination: 'page',
         transport: options.category === 'internship' ? 'browser' : 'json',
       },
@@ -136,6 +136,7 @@ function createMeituanChannelAdapter(options: {
           maximumPages: 1_000,
           signal: context.signal,
           timeoutMs: context.timeoutMs,
+          operationTimeoutMs: 180_000,
           maximumResponseBytes: 2 * 1024 * 1024,
         });
         let discoveredCount = 0;
@@ -167,6 +168,15 @@ function createMeituanChannelAdapter(options: {
           cursor: null,
           pages: collection.pages.length,
           discoveredCount,
+          diagnostics: {
+            ...collection.diagnostics,
+            reason: collection.diagnostics?.reason ?? null,
+            retryable: collection.diagnostics?.retryable ?? false,
+            discoveredCount,
+            duplicateIds:
+              collection.diagnostics?.duplicateIds ??
+              collection.pages.reduce((count, page) => count + page.records.length, 0) - seen.size,
+          },
         };
         return;
       }
@@ -176,6 +186,8 @@ function createMeituanChannelAdapter(options: {
       let expectedPages: number | null = null;
       const seen = new Set<string>();
       let coverage: 'complete' | 'partial' = 'complete';
+      let duplicateIds = 0;
+      let totalChanged = false;
 
       for (;;) {
         if (context.signal.aborted) {
@@ -206,11 +218,13 @@ function createMeituanChannelAdapter(options: {
           pageInfo.pageNo !== page
         ) {
           coverage = 'partial';
+          totalChanged = true;
         }
 
         for (const raw of parsed.data.list) {
           if (seen.has(raw.jobUnionId)) {
             coverage = 'partial';
+            duplicateIds += 1;
             continue;
           }
           seen.add(raw.jobUnionId);
@@ -242,6 +256,23 @@ function createMeituanChannelAdapter(options: {
         cursor: null,
         pages: page,
         discoveredCount,
+        diagnostics: {
+          reason:
+            coverage === 'complete'
+              ? null
+              : totalChanged
+                ? 'pagination_total_changed'
+                : duplicateIds > 0
+                  ? 'duplicate_job_ids'
+                  : 'discovered_count_mismatch',
+          retryable: totalChanged,
+          expectedCount,
+          discoveredCount,
+          expectedPages,
+          fetchedPages: page,
+          duplicateIds,
+          totalChanged,
+        },
       };
     },
     ...(options.category === 'social'
@@ -282,11 +313,13 @@ function createMeituanChannelAdapter(options: {
         const detail = parseSource(
           () =>
             meituanJobSchema.parse(
-              options.category === 'internship' ? input.discovered.raw : input.detail,
+              options.category === 'internship' || input.detail === null
+                ? input.discovered.raw
+                : input.detail,
             ),
-          options.category === 'internship'
-            ? 'Meituan internship list record changed.'
-            : 'Meituan detail is required for normalization.',
+          input.detail === null
+            ? 'Meituan list record changed.'
+            : 'Meituan detail response changed.',
         );
         if (
           list.jobUnionId !== detail.jobUnionId ||
@@ -297,10 +330,7 @@ function createMeituanChannelAdapter(options: {
             'Meituan list/detail job identity does not match.',
           );
         }
-        const description = descriptions(detail);
-        if (!description) {
-          throw new SourceError('parse_changed', 'Meituan detail contains no usable description.');
-        }
+        const description = descriptions(detail) || `职位名称\n${detail.name}`;
         const taxonomy = normalizeJobTaxonomy(
           optionalText(detail.jobFamily, detail.jobFamilyGroup),
         );
@@ -373,7 +403,13 @@ function createMeituanChannelAdapter(options: {
             status: count > 0 ? 'healthy' : 'degraded',
             checkedAt: Date.now(),
             latencyMs: Date.now() - startedAt,
-            signals: [{ key: 'browser_json_intern_list', ok: count > 0, diagnostic: count > 0 ? null : 'Meituan returned no internship jobs.' }],
+            signals: [
+              {
+                key: 'browser_json_intern_list',
+                ok: count > 0,
+                diagnostic: count > 0 ? null : 'Meituan returned no internship jobs.',
+              },
+            ],
             errorCategory: null,
           };
         }

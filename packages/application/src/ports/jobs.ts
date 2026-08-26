@@ -45,6 +45,13 @@ export interface CurrentJobRecord {
 export interface JobRepository {
   findCurrent(identity: SourceJobIdentity): CurrentJobRecord | null;
   persistMutation(input: PersistJobMutation): void;
+  persistDetailRevision(input: {
+    readonly decision: Extract<JobMergeDecision, { readonly type: 'revise' }>;
+    readonly revisionId: string;
+    readonly rawRecordId: string;
+    readonly normalizerVersion: string;
+    readonly occurredAt: UtcInstant;
+  }): void;
   recordObservation(input: {
     readonly jobId: JobId;
     readonly syncRunId: SyncRunId;

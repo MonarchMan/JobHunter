@@ -1,6 +1,19 @@
 import { readFile } from 'node:fs/promises';
-import { JobSyncService, type JobSyncResult, type SyncTrigger } from '@jobhunter/application';
-import { parseId, parseNormalizedJob, utcInstant, type UtcInstant } from '@jobhunter/domain';
+import {
+  JobDetailService,
+  JobSyncService,
+  sourceJobDetailTaskPayloadSchema,
+  type JobDetailCommand,
+  type JobSyncResult,
+  type SyncTrigger,
+} from '@jobhunter/application';
+import {
+  parseContentHash,
+  parseId,
+  parseNormalizedJob,
+  utcInstant,
+  type UtcInstant,
+} from '@jobhunter/domain';
 import {
   AdapterRegistry,
   SourceError,
@@ -56,9 +69,14 @@ interface AdapterScenario {
   coverage: 'complete' | 'partial';
   cursor: string;
   throwAfter: number | null;
+  detailFailure: boolean;
+  detailFetches: number;
 }
 
-function fixtureAdapter(scenario: AdapterScenario): JobSourceAdapter<Record<string, never>, never> {
+function fixtureAdapter(
+  scenario: AdapterScenario,
+  deferredDetails = false,
+): JobSourceAdapter<Record<string, never>, { readonly description: string }> {
   return {
     metadata: {
       key: 'fixture.sync',
@@ -67,7 +85,11 @@ function fixtureAdapter(scenario: AdapterScenario): JobSourceAdapter<Record<stri
       recruitmentType: 'social',
       canonicalEntryUrl: 'https://careers.example.com/jobs',
       officialHosts: ['careers.example.com'],
-      capabilities: { detail: 'inline', pagination: 'page', transport: 'json' },
+      capabilities: {
+        detail: deferredDetails ? 'deferred' : 'inline',
+        pagination: 'page',
+        transport: 'json',
+      },
       defaultRateLimit: { requestsPerMinute: 60, burst: 2 },
       externalIdFingerprintVersion: null,
     },
@@ -98,6 +120,17 @@ function fixtureAdapter(scenario: AdapterScenario): JobSourceAdapter<Record<stri
         discoveredCount: count,
       };
     },
+    ...(deferredDetails
+      ? {
+          fetchDetail(job) {
+            scenario.detailFetches += 1;
+            if (scenario.detailFailure) {
+              return Promise.reject(new SourceError('temporary', 'Fixture detail failed.'));
+            }
+            return Promise.resolve({ description: `Detailed ${job.externalJobId}.` });
+          },
+        }
+      : {}),
     normalize(input, context) {
       const raw = input.discovered.raw as FixtureJob;
       if (raw.failNormalize) {
@@ -115,7 +148,7 @@ function fixtureAdapter(scenario: AdapterScenario): JobSourceAdapter<Record<stri
           employmentType: '全职',
           experienceText: null,
           educationText: null,
-          description: raw.description,
+          description: input.detail?.description ?? raw.description,
           detailUrl: `https://careers.example.com/jobs/${raw.id}`,
           applyUrl: `https://careers.example.com/jobs/${raw.id}/apply`,
           publishedAt: null,
@@ -165,6 +198,7 @@ async function setup(
   options: {
     readonly maximumInlineRawBytes?: number;
     readonly rejectAllJobs?: boolean;
+    readonly deferredDetails?: boolean;
   } = {},
 ): Promise<SyncFixture> {
   const root = await createTemporaryDataRoot('jobhunter-sync-');
@@ -207,9 +241,11 @@ async function setup(
     coverage: 'complete',
     cursor: 'cursor-1',
     throwAfter: null,
+    detailFailure: false,
+    detailFetches: 0,
   };
   const registry = new AdapterRegistry();
-  registry.register(fixtureAdapter(scenario));
+  registry.register(fixtureAdapter(scenario, options.deferredDetails));
   const uow = new SqliteUnitOfWork(handle.client);
   const service = new JobSyncService({
     uow,
@@ -254,6 +290,8 @@ function count(handle: SqliteDatabaseHandle, table: string): number {
     'raw_job_records',
     'tasks',
     'file_artifacts',
+    'source_job_details',
+    'sync_item_failures',
   ]);
   if (!allowed.has(table)) throw new TypeError('Unexpected fixture table.');
   return handle.client.prepare(`SELECT count(*) FROM ${table}`).pluck().get() as number;
@@ -277,7 +315,7 @@ describe('JobSyncService', () => {
   });
 
   it('keeps complete runs healthy when jobs are intentionally filtered out', async () => {
-    const fixture = await setup({ rejectAllJobs: true });
+    const fixture = await setup({ rejectAllJobs: true, deferredDetails: true });
     const result = await run(fixture);
     expect(result).toMatchObject({
       status: 'succeeded',
@@ -289,6 +327,64 @@ describe('JobSyncService', () => {
         .prepare('SELECT health_status, consecutive_failures FROM job_sources WHERE id = ?')
         .get(sourceId),
     ).toMatchObject({ health_status: 'healthy', consecutive_failures: 0 });
+    expect(count(fixture.handle, 'tasks')).toBe(0);
+  });
+
+  it('defers detail requests and keeps detail failures out of source health', async () => {
+    const fixture = await setup({ deferredDetails: true });
+    const result = await run(fixture);
+    expect(result).toMatchObject({
+      status: 'succeeded',
+      stats: { created: 3, followupEnqueued: 3 },
+    });
+    expect(fixture.scenario.detailFetches).toBe(0);
+    expect(count(fixture.handle, 'tasks')).toBe(3);
+
+    const rows = fixture.handle.client
+      .prepare("SELECT payload_json FROM tasks WHERE task_type = 'source.job-detail' ORDER BY id")
+      .all() as { readonly payload_json: string }[];
+    const registry = new AdapterRegistry();
+    registry.register(fixtureAdapter(fixture.scenario, true));
+    const details = new JobDetailService({
+      uow: fixture.uow,
+      registry,
+      http: unusedHttp,
+      clock: fixture.clock,
+      ids: fixture.ids,
+      normalizerVersion: 'normalize-v1',
+    });
+    const command = (index: number): JobDetailCommand => {
+      const row = rows[index];
+      if (!row) throw new Error('Deferred detail task is missing.');
+      const payload = sourceJobDetailTaskPayloadSchema.parse(JSON.parse(row.payload_json));
+      return {
+        sourceId: parseId(payload.sourceId, 'JobSource'),
+        runId: parseId(payload.runId, 'SyncRun'),
+        listContentHash: parseContentHash(payload.listContentHash),
+        adapterVersion: payload.adapterVersion,
+        discovered: payload.discovered,
+      };
+    };
+
+    await details.run(command(0), new AbortController().signal);
+    expect(count(fixture.handle, 'job_revisions')).toBe(4);
+    expect(count(fixture.handle, 'source_job_details')).toBe(1);
+
+    fixture.scenario.detailFailure = true;
+    await expect(details.run(command(1), new AbortController().signal)).rejects.toMatchObject({
+      category: 'temporary',
+    });
+    expect(
+      fixture.handle.client
+        .prepare('SELECT health_status, consecutive_failures FROM job_sources WHERE id = ?')
+        .get(sourceId),
+    ).toMatchObject({ health_status: 'healthy', consecutive_failures: 0 });
+    expect(
+      fixture.handle.client
+        .prepare("SELECT count(*) FROM source_job_details WHERE status = 'failed'")
+        .pluck()
+        .get(),
+    ).toBe(1);
   });
 
   it('streams a first run, replays idempotently and revises only changed content', async () => {
@@ -400,7 +496,7 @@ describe('JobSyncService', () => {
     fixture.scenario.jobs[0] = { ...failingJob, failNormalize: true };
     const result = await run(fixture);
     expect(result).toMatchObject({
-      status: 'partial',
+      status: 'succeeded',
       coverage: 'complete',
       stats: { isolated: 1, unchanged: 2 },
     });
@@ -410,6 +506,7 @@ describe('JobSyncService', () => {
         .get(),
     ).toMatchObject({ missing_count: 0, status: 'active' });
     expect(count(fixture.handle, 'job_observations')).toBe(6);
+    expect(count(fixture.handle, 'sync_item_failures')).toBe(1);
   });
 
   it('stores oversized redacted raw evidence as an artifact', async () => {

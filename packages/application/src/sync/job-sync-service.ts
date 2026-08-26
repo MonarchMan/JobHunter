@@ -271,50 +271,20 @@ export class JobSyncService {
         input.adapter.metadata.officialHosts,
       ),
     };
-    let detail: unknown = null;
-    try {
-      if (input.adapter.metadata.capabilities.detail === 'required') {
-        detail = await input.adapter.fetchDetail?.(job, {
-          sourceId: input.source.id,
-          companyId: input.source.companyId,
-          requestId: `${input.runId}:${job.externalJobId}:detail`,
-          config: input.config,
-          signal: input.signal,
-          timeoutMs: input.source.syncPolicy.requestTimeoutMs,
-          http: this.#http,
-        });
-      }
-    } catch (error) {
-      const prepared = await this.#prepareRaw(
-        {
-          discovered: job.raw,
-          detailError: isSourceError(error)
-            ? { category: error.category, diagnostic: error.safeDiagnostic }
-            : { category: 'temporary', diagnostic: 'Detail request failed.' },
-        },
-        observedAt,
-      );
-      const rawRecordId = this.#persistRaw({
-        sourceId: input.source.id,
-        runId: input.runId,
-        job,
-        prepared,
-        capturedAt: observedAt,
-      });
-      input.stats.rawStored += 1;
-      input.stats.isolated += 1;
-      this.#recordIsolated({
-        sourceId: input.source.id,
-        runId: input.runId,
-        job,
-        rawRecordId,
-        observedAt,
-        explicitNotFound: isSourceError(error) && error.category === 'not_found',
-        policyVersion: input.source.syncPolicyVersion,
-        stats: input.stats,
-      });
-      return;
-    }
+    const listContentHash = contentHash(job.raw);
+    const cachedDetail =
+      input.adapter.metadata.capabilities.detail === 'deferred'
+        ? this.#uow.run(({ sync }) =>
+            sync.getCachedJobDetail(
+              input.source.id,
+              job.externalJobId,
+              listContentHash,
+              input.adapter.metadata.version,
+            ),
+          )
+        : null;
+    const detailCacheIsCurrent = cachedDetail?.listContentHash === listContentHash;
+    const detail = cachedDetail?.detail ?? null;
 
     const prepared = await this.#prepareRaw({ discovered: job.raw, detail }, observedAt);
 
@@ -340,7 +310,7 @@ export class JobSyncService {
       ) {
         throw new SourceError('parse_changed', 'Adapter normalization changed source identity.');
       }
-    } catch {
+    } catch (error) {
       const rawRecordId = this.#persistRaw({
         sourceId: input.source.id,
         runId: input.runId,
@@ -350,6 +320,26 @@ export class JobSyncService {
       });
       input.stats.rawStored += 1;
       input.stats.isolated += 1;
+      this.#uow.run(({ sync }) => {
+        sync.recordItemFailure({
+          id: this.#ids.generate(),
+          runId: input.runId,
+          sourceId: input.source.id,
+          externalJobId: job.externalJobId,
+          stage:
+            isSourceError(error) && error.safeDiagnostic.includes('identity')
+              ? 'identity'
+              : 'normalize',
+          errorCategory: isSourceError(error) ? error.category : 'internal',
+          errorSummary: isSourceError(error)
+            ? error.safeDiagnostic
+            : error instanceof Error
+              ? error.message.slice(0, 240)
+              : 'Adapter normalization failed.',
+          rawRecordId,
+          occurredAt: observedAt,
+        });
+      });
       this.#recordIsolated({
         sourceId: input.source.id,
         runId: input.runId,
@@ -387,7 +377,7 @@ export class JobSyncService {
     });
     input.stats.rawStored += 1;
 
-    this.#uow.run(({ jobs }) => {
+    this.#uow.run(({ jobs, tasks }) => {
       const current = jobs.findCurrent({
         sourceId: input.source.id,
         externalJobId: job.externalJobId,
@@ -431,6 +421,34 @@ export class JobSyncService {
           evidence: { policyVersion: input.source.syncPolicyVersion, rawRecordId },
         });
         if (transition.event) input.stats.restored += 1;
+      }
+
+      if (
+        input.adapter.metadata.capabilities.detail === 'deferred' &&
+        !detailCacheIsCurrent &&
+        !job.externalJobId.startsWith('-')
+      ) {
+        const taskId = parseId(this.#ids.generate(), 'Task');
+        const enqueued = tasks.enqueue({
+          id: taskId,
+          taskType: 'source.job-detail',
+          payload: {
+            sourceId: input.source.id,
+            runId: input.runId,
+            listContentHash,
+            adapterVersion: input.adapter.metadata.version,
+            discovered: job,
+          },
+          priority: 0,
+          idempotencyKey: `source.job-detail:${input.source.id}:${job.externalJobId}:${listContentHash}:${input.adapter.metadata.version}`,
+          concurrencyKey: `source-detail:${input.source.id}:${job.externalJobId}`,
+          scheduleId: null,
+          retryOfTaskId: null,
+          maxAttempts: 3,
+          availableAt: observedAt,
+          createdAt: observedAt,
+        });
+        if (enqueued.kind === 'enqueued') input.stats.followupEnqueued += 1;
       }
     });
   }
@@ -553,10 +571,12 @@ export class JobSyncService {
       }
     }
 
+    const severeIsolationThreshold = Math.max(5, Math.ceil(stats.discovered * 0.05));
+    const severeIsolation = stats.isolated > severeIsolationThreshold;
     let status: 'succeeded' | 'partial' | 'failed' | 'cancelled';
     if (cancelled) status = 'cancelled';
     else if (runError && stats.discovered === 0) status = 'failed';
-    else if (runError || coverage !== 'complete' || stats.isolated > 0) status = 'partial';
+    else if (runError || coverage !== 'complete' || severeIsolation) status = 'partial';
     else status = 'succeeded';
 
     try {
@@ -566,29 +586,37 @@ export class JobSyncService {
       status = 'failed';
       coverage = 'partial';
     }
-    const failures = status === 'succeeded' ? 0 : source.consecutiveFailures + 1;
+    const listFailed = status === 'failed' || coverage !== 'complete';
+    const failures = listFailed ? source.consecutiveFailures + 1 : 0;
     const health =
       status === 'succeeded'
         ? 'healthy'
         : failures >= source.syncPolicy.unhealthyAfterFailures
           ? 'unhealthy'
           : 'degraded';
+    const completionDiagnostics = completion?.diagnostics ?? null;
     const errorCategory = cancelled
       ? 'cancelled'
       : isSourceError(runError)
         ? runError.category
         : runError
           ? 'internal'
-          : stats.isolated > 0
-            ? 'isolated_items'
-            : null;
+          : coverage !== 'complete'
+            ? completionDiagnostics?.retryable
+              ? 'temporary'
+              : 'partial_coverage'
+            : stats.isolated > 0
+              ? 'isolated_items'
+              : null;
     const errorSummary = isSourceError(runError)
       ? runError.safeDiagnostic
       : runError
         ? 'Sync pipeline failed.'
-        : stats.isolated > 0
-          ? 'One or more jobs were isolated.'
-          : null;
+        : coverage !== 'complete'
+          ? (completionDiagnostics?.reason ?? 'Source list coverage was incomplete.')
+          : stats.isolated > 0
+            ? 'One or more jobs were isolated.'
+            : null;
     const finalStats = immutableStats(stats);
     this.#uow.run(({ sync }) => {
       const finished = sync.finishRun({
@@ -603,6 +631,14 @@ export class JobSyncService {
         finishedAt: this.#clock.now(),
         sourceHealth: health,
         consecutiveFailures: failures,
+        coverageEvidence: completionDiagnostics ?? {
+          expectedCount: null,
+          discoveredCount: stats.discovered,
+          fetchedPages: completion?.pages ?? 0,
+          reason: runError ? 'pipeline_error' : null,
+          retryable:
+            isSourceError(runError) && ['temporary', 'rate_limited'].includes(runError.category),
+        },
       });
       if (!finished) throw new Error('Sync run could not be finalized.');
       sync.cleanupSeen(runId);

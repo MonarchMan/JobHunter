@@ -61,7 +61,11 @@ export function createSourceSyncTaskHandler(
       if (result.kind === 'conflict') {
         return { runId: result.runId, status: 'conflict', coverage: null };
       }
-      if (result.status === 'failed') {
+      if (
+        result.status === 'failed' ||
+        (result.status === 'partial' &&
+          (result.errorCategory === 'temporary' || result.errorCategory === 'rate_limited'))
+      ) {
         throw new TaskExecutionError(
           taskErrorCategory(result.errorCategory),
           result.errorSummary ?? 'Source synchronization failed.',
