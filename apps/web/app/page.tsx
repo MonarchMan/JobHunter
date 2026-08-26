@@ -2,16 +2,10 @@ import type { ReactElement } from 'react';
 import { DashboardHero } from './components/dashboard-hero.js';
 import { DashboardSteps } from './components/dashboard-steps.js';
 import { MetricCard } from './components/metric-card.js';
+import { labelStatus, syncRunStatusLabels } from './components/status-labels.js';
 import { getWebContainer } from '../src/server/container.js';
 
 export const dynamic = 'force-dynamic';
-
-function syncStatusLabel(status: string): string {
-  if (status === 'succeeded') return '同步成功';
-  if (status === 'failed') return '同步失败';
-  if (status === 'running') return '同步中';
-  return status;
-}
 
 export default async function DashboardPage(): Promise<ReactElement> {
   const container = await getWebContainer();
@@ -37,7 +31,7 @@ export default async function DashboardPage(): Promise<ReactElement> {
             value={dashboard.activeJobs}
             detail="当前可申请职位"
             href="/jobs"
-            tone="green"
+            tone="primary"
           />
           <MetricCard
             label="当前匹配"
@@ -58,7 +52,7 @@ export default async function DashboardPage(): Promise<ReactElement> {
             value={dashboard.tasks.pending}
             detail={`${String(dashboard.tasks.failed)} 个失败任务`}
             href="/tasks"
-            tone={dashboard.tasks.failed > 0 ? 'amber' : 'green'}
+            tone={dashboard.tasks.failed > 0 ? 'amber' : 'primary'}
           />
         </div>
       </section>
@@ -83,7 +77,7 @@ export default async function DashboardPage(): Promise<ReactElement> {
               <div>
                 <strong>{dashboard.latestSync.sourceName}</strong>
                 <p>
-                  {syncStatusLabel(dashboard.latestSync.status)} ·{' '}
+                  {labelStatus(syncRunStatusLabels, dashboard.latestSync.status)} ·{' '}
                   <time dateTime={dashboard.latestSync.finishedAt}>
                     {new Intl.DateTimeFormat('zh-CN', {
                       dateStyle: 'medium',

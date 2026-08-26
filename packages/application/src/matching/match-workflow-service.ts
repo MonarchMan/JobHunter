@@ -38,6 +38,12 @@ export interface MatchDetail {
   readonly advice: MatchAdviceRecord | null;
 }
 
+function nonEmptyToken(value: string | undefined): string | undefined {
+  const token = value?.trim();
+  if (!token) return undefined;
+  return token;
+}
+
 export class MatchWorkflowService {
   readonly #matching: MatchingRepository;
   readonly #profiles: CandidateProfileRepository;
@@ -59,15 +65,54 @@ export class MatchWorkflowService {
     this.#adviceSelector = input.adviceSelector ?? null;
   }
 
-  public run(profileId: string): EnqueueTaskResult {
-    const parsed = this.#profileId(profileId);
-    const current = this.#profiles.getCurrentVersion(parsed);
-    if (!current) throw new MatchProfileNotFoundError(profileId);
+  public runForJob(input: {
+    readonly jobId: string;
+    readonly profileVersionId?: string;
+    readonly idempotencyToken?: string;
+    readonly mode?: 'rules' | 'llm';
+  }): EnqueueTaskResult {
+    const jobId = parseId(input.jobId, 'Job');
+    const profile = input.profileVersionId
+      ? this.#profiles.getVersion(parseId(input.profileVersionId, 'ProfileVersion'))
+      : this.#currentProfileVersion();
+    if (!profile) throw new MatchProfileNotFoundError(input.profileVersionId ?? 'current');
+    const revision = this.#matching.getLatestRevisionForJob(jobId);
+    if (!revision) throw new MatchResultNotFoundError(input.jobId);
+    if (revision.jobStatus === 'closed') {
+      throw new TypeError('已关闭职位不能创建新的匹配任务。');
+    }
+    const token = nonEmptyToken(input.idempotencyToken) ?? this.#ids.generate();
     return this.#tasks.enqueue({
-      taskType: 'match.compute-profile',
-      payload: { profileVersionId: current.id },
-      idempotencyKey: `match.compute-profile:${current.id}:manual:${this.#ids.generate()}`,
+      taskType: 'match.score-job',
+      priority: 100,
+      payload: {
+        jobRevisionId: revision.id,
+        profileVersionId: profile.id,
+        mode: input.mode ?? 'rules',
+      },
+      idempotencyKey: `match.score-job:${input.mode ?? 'rules'}:${jobId}:${profile.id}:${token}`,
     });
+  }
+
+  public runForJobs(input: {
+    readonly jobIds: readonly string[];
+    readonly profileVersionId?: string;
+    readonly idempotencyToken?: string;
+    readonly mode: 'rules' | 'llm';
+  }): readonly EnqueueTaskResult[] {
+    if (input.jobIds.length === 0 || input.jobIds.length > 100) {
+      throw new TypeError('一次必须选择 1 到 100 个职位。');
+    }
+    const uniqueJobIds = [...new Set(input.jobIds)];
+    const batchToken = nonEmptyToken(input.idempotencyToken) ?? this.#ids.generate();
+    return uniqueJobIds.map((jobId) =>
+      this.runForJob({
+        jobId,
+        mode: input.mode,
+        ...(input.profileVersionId ? { profileVersionId: input.profileVersionId } : {}),
+        idempotencyToken: `${batchToken}:${jobId}`,
+      }),
+    );
   }
 
   public list(input: {
@@ -120,5 +165,10 @@ export class MatchWorkflowService {
     const profileId = parseId(id, 'CandidateProfile');
     if (!this.#profiles.getProfile(profileId)) throw new MatchProfileNotFoundError(id);
     return profileId;
+  }
+
+  #currentProfileVersion(): ReturnType<CandidateProfileRepository['getCurrentVersion']> {
+    const profile = this.#profiles.listProfiles()[0];
+    return profile ? this.#profiles.getCurrentVersion(profile.id) : null;
   }
 }

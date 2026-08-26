@@ -6,6 +6,7 @@ import {
   TaskExecutionError,
   TaskService,
   WorkerEngine,
+  nativeWorkerDelay,
   voidTaskOutputSchema,
   type EnqueueTaskResult,
   type TaskLogger,
@@ -168,6 +169,7 @@ describe('persistent task queue', () => {
     const secondQueue = new SqliteTaskRepository(secondHandle.client);
     const claims = [input.queue, secondQueue].map((queue, index) =>
       queue.claim({
+        taskType: 'source.sync',
         workerId: `worker-${String(index)}`,
         now: input.clock.now(),
         leaseDurationMsFor: () => 1_000,
@@ -183,6 +185,7 @@ describe('persistent task queue', () => {
     const { tasks } = services(input, registry);
     const queued = enqueueSync(tasks, 'recover');
     const first = input.queue.claim({
+      taskType: 'source.sync',
       workerId: 'crashed-worker',
       now: input.clock.now(),
       leaseDurationMsFor: () => 1_000,
@@ -192,6 +195,7 @@ describe('persistent task queue', () => {
     input.clock.advance(1_001);
     expect(input.queue.complete(queued.task.id, 'crashed-worker', input.clock.now())).toBe(false);
     const recovered = input.queue.claim({
+      taskType: 'source.sync',
       workerId: 'replacement-worker',
       now: input.clock.now(),
       leaseDurationMsFor: () => 1_000,
@@ -201,6 +205,7 @@ describe('persistent task queue', () => {
     input.clock.advance(1_001);
     expect(
       input.queue.claim({
+        taskType: 'source.sync',
         workerId: 'third-worker',
         now: input.clock.now(),
         leaseDurationMsFor: () => 1_000,
@@ -221,6 +226,7 @@ describe('persistent task queue', () => {
 
     const running = enqueueSync(tasks, 'cancel-running');
     input.queue.claim({
+      taskType: 'source.sync',
       workerId: 'worker-a',
       now: input.clock.now(),
       leaseDurationMsFor: () => 1_000,
@@ -238,6 +244,7 @@ describe('persistent task queue', () => {
 
     const succeeded = enqueueSync(tasks, 'success');
     input.queue.claim({
+      taskType: 'source.sync',
       workerId: 'worker-a',
       now: input.clock.now(),
       leaseDurationMsFor: () => 1_000,
@@ -252,6 +259,7 @@ describe('persistent task queue', () => {
     const { tasks } = services(input, registry);
     const failed = enqueueSync(tasks, 'failed');
     input.queue.claim({
+      taskType: 'source.sync',
       workerId: 'worker-a',
       now: input.clock.now(),
       leaseDurationMsFor: () => 1_000,
@@ -331,6 +339,159 @@ describe('scheduler', () => {
 });
 
 describe('worker execution', () => {
+  it('runs the configured number of consumers for one task type', async () => {
+    const input = await setup();
+    let started = 0;
+    let resolveBothStarted!: () => void;
+    let release!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      resolveBothStarted = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const registry = new HandlerRegistry();
+    registry.register({
+      taskType: 'fixture.concurrent',
+      payloadSchema: z.object({ id: z.string() }).strict(),
+      outputSchema: voidTaskOutputSchema,
+      defaultMaxAttempts: 1,
+      leaseDurationMs: 1_000,
+      execute(): Promise<void> {
+        started += 1;
+        if (started === 2) resolveBothStarted();
+        return released;
+      },
+    });
+    const tasks = new TaskService(
+      { queue: input.queue, clock: input.clock, ids: input.ids },
+      registry,
+    );
+    for (const id of ['first', 'second']) {
+      tasks.enqueue({
+        taskType: 'fixture.concurrent',
+        payload: { id },
+        idempotencyKey: `fixture.concurrent:${id}`,
+      });
+    }
+    const worker = new WorkerEngine({
+      queue: input.queue,
+      registry,
+      clock: input.clock,
+      retryPolicy: new RetryPolicy(new SeededRandom(42)),
+      scheduleService: new ScheduleService(
+        { queue: input.queue, clock: input.clock, ids: input.ids },
+        registry,
+      ),
+      workerDelay: nativeWorkerDelay,
+      options: {
+        workerId: 'worker-concurrent',
+        taskTypeConcurrency: { 'fixture.concurrent': 2 },
+        emptyPollMinimumMs: 1,
+        emptyPollMaximumMs: 5,
+        schedulerPollMs: 100,
+        shutdownGraceMs: 100,
+      },
+    });
+    const running = worker.run();
+    await bothStarted;
+    expect(started).toBe(2);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await worker.shutdown();
+    await running;
+  }, 10_000);
+
+  it('runs independent task-type claim loops without one blocked type starving another', async () => {
+    const input = await setup();
+    let releaseSource!: () => void;
+    let sourceStarted!: () => void;
+    let sourceFinished!: () => void;
+    let enrichFinished!: () => void;
+    const sourceStartedPromise = new Promise<void>((resolve) => {
+      sourceStarted = resolve;
+    });
+    const sourceRelease = new Promise<void>((resolve) => {
+      releaseSource = resolve;
+    });
+    const sourceFinishedPromise = new Promise<void>((resolve) => {
+      sourceFinished = resolve;
+    });
+    const enrichFinishedPromise = new Promise<void>((resolve) => {
+      enrichFinished = resolve;
+    });
+    const registry = new HandlerRegistry();
+    registry.register({
+      taskType: 'source.sync',
+      payloadSchema: z.object({ sourceId: z.string().min(1) }).strict(),
+      outputSchema: voidTaskOutputSchema,
+      defaultMaxAttempts: 1,
+      leaseDurationMs: 1_000,
+      async execute(): Promise<void> {
+        sourceStarted();
+        await sourceRelease;
+        sourceFinished();
+      },
+    });
+    registry.register({
+      taskType: 'job.enrich',
+      payloadSchema: z.object({ jobId: z.string().min(1) }).strict(),
+      outputSchema: voidTaskOutputSchema,
+      defaultMaxAttempts: 1,
+      leaseDurationMs: 1_000,
+      execute(): Promise<void> {
+        enrichFinished();
+        return Promise.resolve();
+      },
+    });
+    const tasks = new TaskService(
+      { queue: input.queue, clock: input.clock, ids: input.ids },
+      registry,
+    );
+    const sourceTask = tasks.enqueue({
+      taskType: 'source.sync',
+      payload: { sourceId: 'source-independent' },
+      idempotencyKey: 'independent-source',
+    });
+    const enrichTask = tasks.enqueue({
+      taskType: 'job.enrich',
+      payload: { jobId: 'job-independent' },
+      idempotencyKey: 'independent-job',
+    });
+    expect(sourceTask.kind).toBe('enqueued');
+    expect(enrichTask.kind).toBe('enqueued');
+
+    const worker = new WorkerEngine({
+      queue: input.queue,
+      registry,
+      clock: input.clock,
+      retryPolicy: new RetryPolicy(new SeededRandom(42), { baseDelayMs: 100, jitterRatio: 0 }),
+      scheduleService: new ScheduleService(
+        { queue: input.queue, clock: input.clock, ids: input.ids },
+        registry,
+      ),
+      workerDelay: nativeWorkerDelay,
+      options: {
+        workerId: 'worker-independent',
+        emptyPollMinimumMs: 1,
+        emptyPollMaximumMs: 5,
+        schedulerPollMs: 100,
+        shutdownGraceMs: 100,
+      },
+    });
+    const running = worker.run();
+    await sourceStartedPromise;
+    await enrichFinishedPromise;
+    expect(input.queue.get(enrichTask.task.id)?.status).toBe('succeeded');
+    expect(input.queue.get(sourceTask.task.id)?.status).toBe('running');
+    releaseSource();
+    await sourceFinishedPromise;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(input.queue.get(sourceTask.task.id)?.status).toBe('succeeded');
+    await worker.shutdown();
+    await running;
+  }, 10_000);
+
   it('respects Retry-After and does not retry a permanent error', async () => {
     const retryInput = await setup();
     const retryRegistry = registryWith({

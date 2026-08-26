@@ -56,7 +56,7 @@ const campusJobs = [
     title: 'AI 产品实习生',
     department: 'AI 产品部',
     jobFamily: '产品',
-    locations: ['北京'],
+    locations: ['北京', '北京市海淀区中关村软件园', '远程协作'],
     employmentType: '实习',
     experienceText: '在校生',
     educationText: '本科在读',
@@ -143,10 +143,10 @@ function insertJob(
     .prepare(
       `INSERT INTO jobs
        (id, company_id, source_id, external_job_id, title, department, job_family,
-        locations_json, employment_type, experience_text, education_text, description,
+        locations_json, employment_type, recruitment_category, experience_text, education_text, description,
         detail_url, apply_url, status, missing_count, content_hash, first_seen_at,
         last_seen_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, 1, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, 1, ?)`,
     )
     .run(
       input.id,
@@ -158,6 +158,7 @@ function insertJob(
       job.jobFamily,
       JSON.stringify(job.locations),
       job.employmentType,
+      'internship',
       job.experienceText,
       job.educationText,
       job.description,
@@ -198,7 +199,7 @@ function insertJob(
       input.id,
       'c'.repeat(64),
       JSON.stringify(job),
-      JSON.stringify({ title: { to: job.title } }),
+      JSON.stringify([]),
       input.rawId,
       input.updatedAt,
     );
@@ -372,18 +373,16 @@ await seedFixture(dataRoot);
 const require = createRequire(import.meta.url);
 const nextBin = require.resolve('next/dist/bin/next');
 const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
-const child = spawn(
-  process.execPath,
-  [nextBin, 'dev', '--hostname', '127.0.0.1', '--port', '3210'],
-  {
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      JOBHUNTER_DATA_ROOT: dataRoot,
-      JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
-    },
+const port = process.env.PLAYWRIGHT_FIXTURE_PORT ?? '3210';
+const child = spawn(process.execPath, [nextBin, 'dev', '--hostname', '127.0.0.1', '--port', port], {
+  stdio: 'inherit',
+  env: {
+    ...process.env,
+    JOBHUNTER_DATA_ROOT: dataRoot,
+    JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
+    NEXT_DIST_DIR: '.next-browser-fixture',
   },
-);
+});
 
 let cleaned = false;
 const cleanup = async (): Promise<void> => {

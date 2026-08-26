@@ -1,8 +1,26 @@
+import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
+import {
+  agentRunStatusLabels,
+  labelStatus,
+  taskTypeLabels,
+  taskStatusLabels,
+} from '../components/status-labels.js';
+import { PageHeader } from '../components/page-header.js';
+import { TruncatedText } from '../components/truncated-text.js';
+import { Pagination } from '../components/pagination.js';
 import { getWebContainer } from '../../src/server/container.js';
+import {
+  firstSearchParameter,
+  pageHref,
+  type SearchParameterSource,
+} from '../../src/server/job-query.js';
 import { TaskActions } from './task-actions.js';
+import { TaskAutoRefresh } from './task-auto-refresh.js';
+import { AgentRunDetailsDialog, TaskDetailsDialog } from './diagnostic-details.js';
 
 export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: '任务与 Agent 运行' };
 
 function time(value: string | null): string {
   return value
@@ -12,20 +30,71 @@ function time(value: string | null): string {
     : '—';
 }
 
-export default async function TasksPage(): Promise<ReactElement> {
+function positivePage(source: SearchParameterSource, name: string): number {
+  const value = Number(firstSearchParameter(source, name) ?? '1');
+  return Number.isSafeInteger(value) && value > 0 ? value : 1;
+}
+
+interface TasksPageProperties {
+  readonly searchParams: Promise<SearchParameterSource>;
+}
+
+export default async function TasksPage({
+  searchParams,
+}: TasksPageProperties): Promise<ReactElement> {
+  const parameters = await searchParams;
+  const status = firstSearchParameter(parameters, 'status');
+  const taskType = firstSearchParameter(parameters, 'type');
+  const taskPage = positivePage(parameters, 'taskPage');
+  const agentPage = positivePage(parameters, 'agentPage');
   const container = await getWebContainer();
-  const diagnostics = container.services.diagnostics.list();
+  const diagnostics = container.services.diagnostics.list({
+    ...(status && ['pending', 'running', 'failed', 'succeeded', 'cancelled'].includes(status)
+      ? { status: status as 'pending' | 'running' | 'failed' | 'succeeded' | 'cancelled' }
+      : {}),
+    ...(taskType ? { taskType } : {}),
+    taskPage,
+    agentPage,
+  });
   return (
     <main id="main-content" tabIndex={-1}>
-      <div className="page-heading">
+      <PageHeader eyebrow="OPERATIONS" title="任务与 Agent 运行">
         <div>
-          <p className="eyebrow">OPERATIONS</p>
-          <h1>任务与 Agent 运行</h1>
+          <p>诊断视图不会显示任务载荷或模型原始内容。</p>
+          <TaskAutoRefresh />
         </div>
-        <p>活动任务每 3 秒刷新。诊断视图不会显示任务载荷或模型原始内容。</p>
-      </div>
+      </PageHeader>
 
-      <section className="panel table-panel" aria-labelledby="task-heading">
+      <form className="task-filters" action="/tasks" method="get" aria-label="任务筛选" noValidate>
+        <label>
+          状态
+          <select name="status" defaultValue={status ?? ''}>
+            <option value="">全部状态</option>
+            <option value="pending">待处理</option>
+            <option value="running">运行中</option>
+            <option value="failed">失败</option>
+            <option value="succeeded">已完成</option>
+            <option value="cancelled">已取消</option>
+          </select>
+        </label>
+        <label>
+          类型
+          <select name="type" defaultValue={taskType ?? ''}>
+            <option value="">全部类型</option>
+            {Object.entries(taskTypeLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="submit">应用筛选</button>
+        <a className="button-secondary" href="/tasks">
+          清除
+        </a>
+      </form>
+
+      <section className="panel table-panel task-section" aria-labelledby="task-heading">
         <h2 id="task-heading">后台任务</h2>
         <div className="table-scroll">
           <table>
@@ -52,20 +121,31 @@ export default async function TasksPage(): Promise<ReactElement> {
                 diagnostics.tasks.map((task) => (
                   <tr key={task.id}>
                     <td>
-                      <code>{task.taskType}</code>
-                      <small>{task.id}</small>
+                      <strong>
+                        <TaskDetailsDialog task={task} />
+                      </strong>
+                      <small>{taskTypeLabels[task.taskType] ?? task.taskType}</small>
+                      <small>
+                        <code>{task.id.slice(0, 8)}…</code>
+                      </small>
                     </td>
                     <td>
-                      <span className={`status status-${task.status}`}>{task.status}</span>
+                      <span className={`status status-${task.status}`}>
+                        {labelStatus(taskStatusLabels, task.status)}
+                      </span>
                       {task.cancelRequested ? <small>等待 Worker 取消</small> : null}
                     </td>
                     <td>
                       {task.attemptCount} / {task.maxAttempts}
                     </td>
                     <td>
-                      {task.errorCategory
-                        ? `${task.errorCategory}: ${task.errorSummary ?? '无错误摘要'}`
-                        : '—'}
+                      <TruncatedText
+                        value={
+                          task.errorCategory
+                            ? `${task.errorCategory}: ${task.errorSummary ?? '无错误摘要'}`
+                            : '—'
+                        }
+                      />
                     </td>
                     <td>
                       {time(task.startedAt)}
@@ -80,9 +160,36 @@ export default async function TasksPage(): Promise<ReactElement> {
             </tbody>
           </table>
         </div>
+        <div className="task-cards" aria-label="后台任务卡片列表">
+          {diagnostics.tasks.map((task) => (
+            <article className="task-card" key={task.id}>
+              <div className="task-card-heading">
+                <strong>
+                  <TaskDetailsDialog task={task} />
+                </strong>
+                <span className={`status status-${task.status}`}>
+                  {labelStatus(taskStatusLabels, task.status)}
+                </span>
+              </div>
+              <code>{task.id.slice(0, 8)}…</code>
+              <p>
+                {task.errorCategory
+                  ? `${task.errorCategory}: ${task.errorSummary ?? '无错误摘要'}`
+                  : '暂无错误'}
+              </p>
+              <TaskActions taskId={task.id} status={task.status} />
+            </article>
+          ))}
+        </div>
+        <Pagination
+          currentPage={diagnostics.taskPagination.current}
+          totalPages={diagnostics.taskPagination.totalPages}
+          label="后台任务分页"
+          createHref={(page) => `/tasks${pageHref(parameters, 'taskPage', page)}`}
+        />
       </section>
 
-      <section className="panel table-panel" aria-labelledby="agent-heading">
+      <section className="panel table-panel agent-section" aria-labelledby="agent-heading">
         <h2 id="agent-heading">Agent 运行</h2>
         <div className="table-scroll">
           <table>
@@ -109,10 +216,12 @@ export default async function TasksPage(): Promise<ReactElement> {
                 diagnostics.agentRuns.map((run) => (
                   <tr key={run.id}>
                     <td>
-                      <a href={`/agent-runs/${run.id}`}>{run.agentKey}</a>
+                      <AgentRunDetailsDialog run={run} />
                     </td>
                     <td>
-                      <span className={`status status-${run.status}`}>{run.status}</span>
+                      <span className={`status status-${run.status}`}>
+                        {labelStatus(agentRunStatusLabels, run.status)}
+                      </span>
                       {run.errorCategory ? <small>{run.errorCategory}</small> : null}
                     </td>
                     <td>
@@ -134,6 +243,28 @@ export default async function TasksPage(): Promise<ReactElement> {
             </tbody>
           </table>
         </div>
+        <div className="agent-cards" aria-label="Agent 运行卡片列表">
+          {diagnostics.agentRuns.map((run) => (
+            <article className="task-card" key={run.id}>
+              <div className="task-card-heading">
+                <AgentRunDetailsDialog run={run} />
+                <span className={`status status-${run.status}`}>
+                  {labelStatus(agentRunStatusLabels, run.status)}
+                </span>
+              </div>
+              <p>
+                版本 Agent {run.agentVersion} · {time(run.startedAt)}
+              </p>
+              <small>{run.errorCategory ?? '暂无错误'}</small>
+            </article>
+          ))}
+        </div>
+        <Pagination
+          currentPage={diagnostics.agentPagination.current}
+          totalPages={diagnostics.agentPagination.totalPages}
+          label="Agent 运行分页"
+          createHref={(page) => `/tasks${pageHref(parameters, 'agentPage', page)}`}
+        />
       </section>
     </main>
   );

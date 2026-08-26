@@ -8,6 +8,7 @@ import type {
 } from '@jobhunter/domain';
 
 export type JobQuerySort = 'updated_desc' | 'published_desc' | 'score_desc';
+export type RecruitmentCategory = 'internship' | 'campus' | 'social';
 
 export interface JobQueryFilter {
   readonly search?: string;
@@ -15,9 +16,13 @@ export interface JobQueryFilter {
   readonly statuses?: readonly JobStatus[];
   readonly locations?: readonly string[];
   readonly jobFamilies?: readonly string[];
+  readonly jobSubfamilies?: readonly string[];
+  readonly recruitmentCategory?: RecruitmentCategory;
   readonly minimumScore?: number;
   readonly profileVersionId?: ProfileVersionId;
   readonly sort?: JobQuerySort;
+  readonly page?: number;
+  readonly pageSize?: number;
   readonly cursor?: string;
   readonly limit?: number;
 }
@@ -29,6 +34,8 @@ export interface JobListItem {
   readonly title: string;
   readonly department: string | null;
   readonly jobFamily: string | null;
+  readonly jobSubfamily: string | null;
+  readonly recruitmentCategory: RecruitmentCategory | null;
   readonly locations: readonly string[];
   readonly status: JobStatus;
   readonly detailUrl: string;
@@ -42,6 +49,7 @@ export interface JobDetail extends JobListItem {
   readonly sourceId: JobSourceId;
   readonly externalJobId: string;
   readonly employmentType: string | null;
+  readonly recruitmentCategory: 'internship' | 'campus' | 'social' | null;
   readonly experienceText: string | null;
   readonly educationText: string | null;
   readonly description: string;
@@ -53,6 +61,9 @@ export interface JobDetail extends JobListItem {
 export interface JobQueryPage {
   readonly items: readonly JobListItem[];
   readonly nextCursor: string | null;
+  readonly total?: number;
+  readonly page?: number;
+  readonly pageSize?: number;
 }
 
 export interface JobQueryRepository {

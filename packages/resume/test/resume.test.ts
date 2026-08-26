@@ -19,7 +19,7 @@ describe('resume media detection and deterministic parsing', () => {
     );
     expect(detectResumeMediaType(bytes)).toMatchObject({
       mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      byteSize: 23_821,
+      byteSize: 23_708,
     });
     const parsed = await parseResumeText(
       bytes,

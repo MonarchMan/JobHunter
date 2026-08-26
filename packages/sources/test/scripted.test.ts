@@ -72,9 +72,11 @@ describe('script-reference source adapters', () => {
     ).resolves.toMatchObject({
       job: {
         externalJobId: 'ali-fixture-1',
-        title: '算法实习生',
+        title: '算法工程师-多模态大模型（T-Star Lab 日常实习）',
         locations: ['杭州市'],
         description: '参与算法项目。',
+        recruitmentCategory: 'internship',
+        employmentType: '实习',
       },
     });
   });
@@ -109,6 +111,8 @@ describe('script-reference source adapters', () => {
         title: '软件开发实习生',
         locations: ['东莞', '深圳'],
         description: '参与软件研发。\n\n本科在读。',
+        recruitmentCategory: 'internship',
+        employmentType: '实习',
       },
     });
   });
@@ -161,6 +165,7 @@ describe('script-reference source adapters', () => {
       job: {
         externalJobId: 'byte-fixture-1',
         title: '算法实习生',
+        recruitmentCategory: 'internship',
         detailUrl: 'https://jobs.bytedance.com/position/1001/detail',
         applyUrl: 'https://jobs.bytedance.com/position/1001/detail',
       },
@@ -261,6 +266,7 @@ describe('script-reference source adapters', () => {
         externalJobId: 'red-fixture-1',
         title: '内容运营实习生',
         locations: ['上海'],
+        recruitmentCategory: 'internship',
       },
     });
   });

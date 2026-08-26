@@ -56,6 +56,8 @@ node apps/cli/dist/main.js init
 node apps/cli/dist/main.js doctor
 ```
 
+初始化会幂等执行以下后台准备工作：如果存在 `docs/resumes/agent简历 - 新.docx`，将其导入并创建画像提取任务；为启用的十个官网来源创建职位同步任务；建立每日来源刷新和每周清理计划。真正的解析、官网请求和匹配由 Worker 异步执行。
+
 如果 `pnpm exec jh` 尚未建立命令链接，也可以先运行：
 
 ```powershell
@@ -65,7 +67,7 @@ pnpm --filter @jobhunter/cli build
 
 ## 启动项目
 
-推荐打开三个终端窗口。
+开发时只需启动 Web 管理台；Web 启动器会自动拉起一个独立的 Worker 子进程。Worker 与 Next.js 使用相同的本地配置和数据库，但各自承担后台任务与页面服务。
 
 ### 1. 启动 Web 管理台
 
@@ -95,7 +97,7 @@ pnpm --filter @jobhunter/web dev
 
 Web 服务默认只允许绑定 loopback 地址；不建议将它直接暴露到局域网或公网。
 
-### 2. 启动 Worker
+### 单独启动 Worker（可选）
 
 Worker 负责执行职位同步、简历画像、匹配等耗时任务：
 
@@ -103,7 +105,11 @@ Worker 负责执行职位同步、简历画像、匹配等耗时任务：
 node apps/cli/dist/main.js worker start
 ```
 
-Web 管理台只负责查看数据和提交任务，不会在 Web 进程中执行后台同步。启动 Worker 后，可以在 Web 的“来源”页面发起同步。
+正常使用 Web 时不需要手动执行这一步；只有在不启动 Web、需要单独运行后台队列，或进行 Worker 调试时，才使用 CLI 启动 Worker。不要在 Web 已运行时再启动第二个 Worker，以免多个进程同时领取任务。
+
+启动 Web 后，可以直接在 Web 的“来源”页面发起同步，任务会由自动拉起的 Worker 异步执行。
+
+Web 的“个人资料”页面也支持直接导入 PDF、DOCX 简历。上传后页面立即返回后台任务状态；请保持 Worker 运行，等待画像提取和岗位匹配完成。
 
 ### 3. 手动同步招聘来源
 

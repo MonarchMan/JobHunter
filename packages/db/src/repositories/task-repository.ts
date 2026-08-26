@@ -70,6 +70,7 @@ interface QueueSummaryRow {
 }
 
 interface ClaimTaskInput {
+  readonly taskType: string;
   readonly workerId: string;
   readonly now: UtcInstant;
   readonly leaseDurationMsFor: (taskType: string) => number;
@@ -143,6 +144,7 @@ const SCHEDULE_COLUMNS = `
 export class SqliteTaskRepository implements TaskQueue {
   readonly #client: Database.Database;
   readonly #claimTransaction: (input: {
+    readonly taskType: string;
     readonly workerId: string;
     readonly now: UtcInstant;
     readonly leaseDurationMsFor: (taskType: string) => number;
@@ -271,14 +273,42 @@ export class SqliteTaskRepository implements TaskQueue {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
       throw new TypeError('Task list limit is invalid.');
     }
+    const offset = filter.offset ?? 0;
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new TypeError('Task list offset is invalid.');
+    }
     const rows = this.#client
       .prepare(
         `SELECT ${TASK_COLUMNS} FROM tasks
          ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
-         ORDER BY created_at DESC, id ASC LIMIT ?`,
+         ORDER BY created_at DESC, id ASC LIMIT ? OFFSET ?`,
       )
-      .all(...parameters, limit) as TaskRow[];
+      .all(...parameters, limit, offset) as TaskRow[];
     return rows.map(taskFromRow);
+  }
+
+  public count(filter: Omit<TaskListFilter, 'limit' | 'offset'>): number {
+    const conditions: string[] = [];
+    const parameters: unknown[] = [];
+    if (filter.statuses && filter.statuses.length > 0) {
+      const valid = new Set<TaskStatus>(['pending', 'running', 'succeeded', 'failed', 'cancelled']);
+      if (filter.statuses.some((status) => !valid.has(status))) {
+        throw new TypeError('Task status filter is invalid.');
+      }
+      conditions.push(`status IN (${filter.statuses.map(() => '?').join(', ')})`);
+      parameters.push(...filter.statuses);
+    }
+    if (filter.taskType) {
+      conditions.push('task_type = ?');
+      parameters.push(filter.taskType);
+    }
+    const row = this.#client
+      .prepare<unknown[], { readonly total: number }>(
+        `SELECT COUNT(*) AS total FROM tasks
+         ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}`,
+      )
+      .get(...parameters) as { readonly total: number };
+    return row.total;
   }
 
   public summary(now: UtcInstant): TaskQueueSummary {
@@ -348,6 +378,7 @@ export class SqliteTaskRepository implements TaskQueue {
   }
 
   #claimInside(input: {
+    readonly taskType: string;
     readonly workerId: string;
     readonly now: UtcInstant;
     readonly leaseDurationMsFor: (taskType: string) => number;
@@ -356,10 +387,11 @@ export class SqliteTaskRepository implements TaskQueue {
     const candidate = this.#client
       .prepare(
         `SELECT id, task_type FROM tasks
-         WHERE status = 'pending' AND available_at <= ?
+         WHERE task_type = ? AND status = 'pending' AND available_at <= ?
          ORDER BY priority DESC, available_at ASC, created_at ASC, id ASC LIMIT 1`,
       )
-      .get(input.now) as { readonly id: string; readonly task_type: string } | undefined;
+      .get(input.taskType, input.now) as
+      { readonly id: string; readonly task_type: string } | undefined;
     if (!candidate) return null;
     const leaseDurationMs = input.leaseDurationMsFor(candidate.task_type);
     if (!Number.isSafeInteger(leaseDurationMs) || leaseDurationMs < 1_000) {
@@ -379,6 +411,7 @@ export class SqliteTaskRepository implements TaskQueue {
   }
 
   public claim(input: {
+    readonly taskType: string;
     readonly workerId: string;
     readonly now: UtcInstant;
     readonly leaseDurationMsFor: (taskType: string) => number;

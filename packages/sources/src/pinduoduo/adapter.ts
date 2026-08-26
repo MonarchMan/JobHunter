@@ -1,4 +1,6 @@
 import { parseNormalizedJob, utcInstant } from '@jobhunter/domain';
+import { normalizeJobTaxonomy } from '../job-taxonomy.js';
+import { normalizeRecruitmentCategory } from '../recruitment-category.js';
 import {
   SourceError,
   canonicalizeOfficialUrl,
@@ -161,6 +163,7 @@ export function createPinduoduoAdapter(): JobSourceAdapter<PinduoduoConfig, neve
           () => pinduoduoJobSchema.parse(input.discovered.raw),
           'Pinduoduo discovered job no longer matches the verified schema.',
         );
+        const taxonomy = normalizeJobTaxonomy(job.jobName ?? job.job);
         return {
           job: parseNormalizedJob({
             companyId: context.companyId,
@@ -168,7 +171,9 @@ export function createPinduoduoAdapter(): JobSourceAdapter<PinduoduoConfig, neve
             externalJobId: job.id,
             title: job.name,
             department: null,
-            jobFamily: job.jobName ?? job.job ?? null,
+            jobFamily: taxonomy.jobFamily,
+            jobSubfamily: taxonomy.jobSubfamily,
+            recruitmentCategory: normalizeRecruitmentCategory('实习'),
             locations: locations(job),
             employmentType: '实习',
             experienceText: null,

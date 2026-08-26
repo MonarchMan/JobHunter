@@ -1,6 +1,6 @@
 import { parseId } from '@jobhunter/domain';
 import { z } from 'zod';
-import type { TaskHandler } from '../tasks/model.js';
+import type { TaskErrorCategory, TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
 import type { JobSyncService } from './job-sync-service.js';
 
@@ -18,6 +18,27 @@ export const sourceSyncTaskOutputSchema = z
     coverage: z.enum(['complete', 'partial', 'unknown']).nullable(),
   })
   .strict();
+
+function taskErrorCategory(sourceCategory: string | null): TaskErrorCategory {
+  switch (sourceCategory) {
+    case 'temporary':
+      return 'network_temporary';
+    case 'rate_limited':
+      return 'rate_limited';
+    case 'invalid_config':
+      return 'invalid_config';
+    case 'parse_changed':
+      return 'parse_changed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'access_blocked':
+    case 'not_found':
+    case 'isolated_items':
+    case 'internal':
+    default:
+      return 'permanent';
+  }
+}
 
 export function createSourceSyncTaskHandler(
   service: Pick<JobSyncService, 'run'>,
@@ -41,7 +62,10 @@ export function createSourceSyncTaskHandler(
         return { runId: result.runId, status: 'conflict', coverage: null };
       }
       if (result.status === 'failed') {
-        throw new TaskExecutionError('permanent', 'Source synchronization failed.');
+        throw new TaskExecutionError(
+          taskErrorCategory(result.errorCategory),
+          result.errorSummary ?? 'Source synchronization failed.',
+        );
       }
       if (result.status === 'cancelled') {
         throw new TaskExecutionError('cancelled', 'Source synchronization was cancelled.');

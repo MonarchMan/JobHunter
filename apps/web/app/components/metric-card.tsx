@@ -5,13 +5,13 @@ export function MetricCard({
   value,
   detail,
   href,
-  tone = 'green',
+  tone = 'primary',
 }: Readonly<{
   label: string;
   value: ReactNode;
   detail: string;
   href: string;
-  tone?: 'green' | 'blue' | 'amber' | 'violet';
+  tone?: 'primary' | 'blue' | 'amber' | 'violet';
 }>): ReactElement {
   return (
     <a className={`metric-card metric-${tone}`} href={href}>

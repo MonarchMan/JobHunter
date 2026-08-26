@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { JobStatus } from '../../components/job-status.js';
 import { getWebContainer } from '../../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../../src/server/job-query.js';
+import { JobScoreAction } from '../../components/job-score-action.js';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,8 @@ export default async function JobDetailPage({
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const profile = firstSearchParameter(query, 'profile');
   const container = await getWebContainer();
+  const currentProfileVersionId =
+    profile ?? container.services.webProfiles.list()[0]?.currentVersionId ?? undefined;
   let job: ReturnType<typeof container.services.webJobDetails.get>;
   try {
     job = container.services.webJobDetails.get(id, profile);
@@ -52,7 +55,7 @@ export default async function JobDetailPage({
         <div>
           <p className="eyebrow">{job.companyName}</p>
           <h1>{job.title}</h1>
-          <p>{[job.department, job.jobFamily, ...job.locations].filter(Boolean).join(' · ')}</p>
+          <p>{[job.department, job.jobSubfamily, ...job.locations].filter(Boolean).join(' · ')}</p>
         </div>
         <div className="detail-actions">
           <JobStatus status={job.status} />
@@ -72,6 +75,7 @@ export default async function JobDetailPage({
           >
             官网详情 ↗
           </a>
+          <JobScoreAction jobIds={[job.id]} profileVersionId={currentProfileVersionId} showHint />
         </div>
       </header>
       <section className="detail-grid">
@@ -134,7 +138,7 @@ export default async function JobDetailPage({
         {job.matches.length === 0 ? (
           <div className="empty-state">
             <h3>尚无匹配结果</h3>
-            <p>请先为当前画像执行匹配。</p>
+            <p>请先为当前个人资料执行匹配。</p>
           </div>
         ) : (
           job.matches.map((match) => (
@@ -146,7 +150,7 @@ export default async function JobDetailPage({
                     {match.filterStatus} · 规则集 {match.rulesetVersion}
                   </span>
                 </div>
-                <small>画像版本 {match.profileVersionId}</small>
+                <small>个人资料版本 {match.profileVersionId}</small>
               </header>
               <div className="score-grid">
                 {match.components.map((component) => (

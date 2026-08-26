@@ -41,6 +41,7 @@ export interface AppConfig {
   readonly worker: {
     readonly pollIntervalMs: SourcedValue<number>;
     readonly maxConcurrentNetworkTasks: SourcedValue<number>;
+    readonly taskTypeConcurrency: SourcedValue<Readonly<Record<string, number>>>;
   };
   readonly model: {
     readonly provider: SourcedValue<string | null>;
@@ -56,6 +57,7 @@ export interface ConfigOverrides {
   readonly logLevel?: string;
   readonly workerPollIntervalMs?: number;
   readonly maxConcurrentNetworkTasks?: number;
+  readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
   readonly modelProvider?: string;
   readonly modelBaseUrl?: string;
   readonly modelName?: string;
@@ -69,6 +71,9 @@ const localConfigSchema = z
       .object({
         pollIntervalMs: z.number().int().min(100).max(60_000).optional(),
         maxConcurrentNetworkTasks: z.number().int().min(1).max(32).optional(),
+        taskTypeConcurrency: z
+          .record(z.string().trim().min(1), z.number().int().min(1).max(32))
+          .optional(),
       })
       .strict()
       .optional(),
@@ -103,6 +108,23 @@ function environmentInteger(value: string | undefined, name: string): number | u
   const parsed = Number(text);
   if (!Number.isSafeInteger(parsed)) throw new TypeError(`${name} must be an integer.`);
   return parsed;
+}
+
+function environmentConcurrency(
+  value: string | undefined,
+): Readonly<Record<string, number>> | undefined {
+  const text = nonEmpty(value);
+  if (text === undefined) return undefined;
+  try {
+    return z
+      .record(z.string().trim().min(1), z.number().int().min(1).max(32))
+      .parse(JSON.parse(text));
+  } catch (error) {
+    throw new TypeError(
+      'task type concurrency must be a JSON object with integer values from 1 to 32.',
+      { cause: error },
+    );
+  }
 }
 
 export function resolveBootstrapConfig(input: {
@@ -178,6 +200,12 @@ export function resolveAppConfig(input: {
     file.worker?.maxConcurrentNetworkTasks,
     4,
   );
+  const taskTypeConcurrency = choose(
+    input.cli?.taskTypeConcurrency,
+    environmentConcurrency(environment.JOBHUNTER_TASK_TYPE_CONCURRENCY),
+    file.worker?.taskTypeConcurrency,
+    {},
+  );
   return {
     bootstrap: input.bootstrap,
     logLevel: { ...logLevel, value: parsedLogLevel },
@@ -190,6 +218,7 @@ export function resolveAppConfig(input: {
         ...maxConcurrentNetworkTasks,
         value: z.number().int().min(1).max(32).parse(maxConcurrentNetworkTasks.value),
       },
+      taskTypeConcurrency,
     },
     model: {
       provider: choose(

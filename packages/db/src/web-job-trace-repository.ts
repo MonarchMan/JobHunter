@@ -23,6 +23,27 @@ interface MatchRow {
   readonly advice_task_status: string | null;
 }
 
+const storedChangeSetSchema = z.union([
+  z.record(z.string(), z.unknown()),
+  z.array(
+    z
+      .object({
+        field: z.string(),
+        before: z.unknown(),
+        after: z.unknown(),
+      })
+      .strict(),
+  ),
+]);
+
+function parseChanges(source: string): Record<string, unknown> {
+  const changeSet = storedChangeSetSchema.parse(JSON.parse(source) as unknown);
+  if (!Array.isArray(changeSet)) return changeSet;
+  return Object.fromEntries(
+    changeSet.map((change) => [change.field, { before: change.before, after: change.after }]),
+  );
+}
+
 function advice(row: MatchRow): WebJobDetail['matches'][number]['advice'] {
   if (row.advice_json) {
     return {
@@ -82,9 +103,7 @@ export class SqliteWebJobTraceRepository implements WebJobTraceRepository {
       revisions: revisions.map((row) => ({
         id: row.id,
         revisionNumber: row.revision_no,
-        changes: z
-          .record(z.string(), z.unknown())
-          .parse(JSON.parse(row.change_set_json) as unknown),
+        changes: parseChanges(row.change_set_json),
         createdAt: new Date(row.created_at).toISOString(),
       })),
       matches: matches.map((row) => ({

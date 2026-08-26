@@ -1,15 +1,21 @@
+import { canonicalJobSubfamilies } from '@jobhunter/domain';
+import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
-import { JobStatus } from '../components/job-status.js';
+import { Pagination } from '../components/pagination.js';
+import { JobsRefresh } from './jobs-refresh.js';
+import { PageHeader } from '../components/page-header.js';
+import { JobsTable } from './jobs-table.js';
+import { CompanyCombobox } from '../components/company-combobox.js';
 import { getWebContainer } from '../../src/server/container.js';
 import {
-  firstPageHref,
   firstSearchParameter,
-  nextPageHref,
+  pageHref,
   parseWebJobQuery,
   type SearchParameterSource,
 } from '../../src/server/job-query.js';
 
 export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: '职位' };
 
 interface JobsPageProperties {
   readonly searchParams: Promise<SearchParameterSource>;
@@ -23,87 +29,141 @@ export default async function JobsPage({
   searchParams,
 }: JobsPageProperties): Promise<ReactElement> {
   const parameters = await searchParams;
-  const query = parseWebJobQuery(parameters);
+  const hasFilters =
+    ['q', 'company', 'location', 'subfamily', 'status', 'sort', 'minScore', 'profile'].some(
+      (name) => Boolean(firstSearchParameter(parameters, name)),
+    ) || Boolean(firstSearchParameter(parameters, 'category'));
   const container = await getWebContainer();
+  const companies = container.services.webSources.list();
+  const profiles = container.services.webProfiles.list();
+  const defaultProfileId = profiles[0]?.currentVersionId;
+  const query = parseWebJobQuery(
+    firstSearchParameter(parameters, 'profile') || !defaultProfileId
+      ? parameters
+      : { ...parameters, profile: defaultProfileId },
+  );
   const page = container.services.webJobs.list(query);
   return (
-    <main id="main-content" tabIndex={-1}>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">OPPORTUNITIES</p>
-          <h1>职位列表</h1>
-        </div>
-        <p>默认隐藏已关闭职位。筛选条件会保存在当前 URL 中。</p>
+    <main id="main-content" className="jobs-page" tabIndex={-1}>
+      <PageHeader
+        eyebrow="OPPORTUNITIES"
+        title="职位列表"
+        description="默认隐藏已关闭职位。筛选条件会保存在当前 URL 中。"
+      />
+      <details className="job-filter-panel" open={hasFilters}>
+        <summary>筛选职位{hasFilters ? ' · 已设置条件' : ''}</summary>
+        <form className="filters" action="/jobs" method="get" aria-label="职位筛选" noValidate>
+          <label>
+            招聘类别
+            <select
+              name="category"
+              defaultValue={fieldValue(parameters, 'category') || 'internship'}
+            >
+              <option value="internship">实习</option>
+              <option value="campus">校招</option>
+              <option value="social">社招</option>
+            </select>
+          </label>
+          <label>
+            关键词
+            <input
+              name="q"
+              defaultValue={fieldValue(parameters, 'q')}
+              placeholder="Agent、大模型应用…"
+            />
+          </label>
+          <label>
+            公司
+            <CompanyCombobox
+              companies={companies.map((company) => company.companyName)}
+              defaultValue={fieldValue(parameters, 'company')}
+            />
+          </label>
+          <label>
+            地点
+            <input
+              name="location"
+              defaultValue={fieldValue(parameters, 'location')}
+              placeholder="北京,深圳"
+            />
+          </label>
+          <label>
+            职位类别
+            <select name="subfamily" defaultValue={fieldValue(parameters, 'subfamily')}>
+              <option value="">全部类别</option>
+              {canonicalJobSubfamilies.map((subfamily) => (
+                <option key={subfamily} value={subfamily}>
+                  {subfamily}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            状态
+            <select name="status" defaultValue={fieldValue(parameters, 'status')}>
+              <option value="">在招和待确认</option>
+              <option value="active">仅在招</option>
+              <option value="stale">仅待确认</option>
+              <option value="closed">仅已关闭</option>
+              <option value="active,stale,closed">全部状态</option>
+            </select>
+          </label>
+          <label>
+            排序
+            <select name="sort" defaultValue={fieldValue(parameters, 'sort') || 'updated_desc'}>
+              <option value="updated_desc">最近更新</option>
+              <option value="published_desc">最近发布</option>
+              <option value="score_desc">匹配分数</option>
+            </select>
+          </label>
+          <label>
+            最低分
+            <input
+              name="minScore"
+              type="number"
+              min="0"
+              max="100"
+              defaultValue={fieldValue(parameters, 'minScore')}
+            />
+          </label>
+          <label>
+            个人资料版本
+            <select
+              name="profile"
+              defaultValue={
+                fieldValue(parameters, 'profile')
+                  ? fieldValue(parameters, 'profile')
+                  : (defaultProfileId ?? '')
+              }
+            >
+              <option value="">不使用资料匹配</option>
+              {profiles
+                .filter((profile) => profile.currentVersionId !== null)
+                .map((profile) => (
+                  <option key={profile.id} value={profile.currentVersionId ?? ''}>
+                    {profile.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <button type="submit">应用筛选</button>
+          <a className="button-secondary" href="/jobs">
+            清除
+          </a>
+        </form>
+      </details>
+      <div className="jobs-result-toolbar">
+        <p className="result-summary" aria-live="polite">
+          当前类别：
+          {fieldValue(parameters, 'category') === 'campus'
+            ? '校招'
+            : fieldValue(parameters, 'category') === 'social'
+              ? '社招'
+              : '实习'}{' '}
+          · 共 {page.page.total} 个职位
+        </p>
+        <JobsRefresh />
       </div>
-      <form className="filters" action="/jobs" method="get" aria-label="职位筛选">
-        <label>
-          关键词
-          <input
-            name="q"
-            defaultValue={fieldValue(parameters, 'q')}
-            placeholder="Agent、大模型应用…"
-          />
-        </label>
-        <label>
-          公司
-          <input
-            name="company"
-            defaultValue={fieldValue(parameters, 'company')}
-            placeholder="腾讯,字节"
-          />
-        </label>
-        <label>
-          地点
-          <input
-            name="location"
-            defaultValue={fieldValue(parameters, 'location')}
-            placeholder="北京,深圳"
-          />
-        </label>
-        <label>
-          职位族
-          <input name="family" defaultValue={fieldValue(parameters, 'family')} placeholder="研发" />
-        </label>
-        <label>
-          状态
-          <select name="status" defaultValue={fieldValue(parameters, 'status')}>
-            <option value="">在招和待确认</option>
-            <option value="active">仅在招</option>
-            <option value="stale">仅待确认</option>
-            <option value="closed">仅已关闭</option>
-            <option value="active,stale,closed">全部状态</option>
-          </select>
-        </label>
-        <label>
-          排序
-          <select name="sort" defaultValue={fieldValue(parameters, 'sort') || 'updated_desc'}>
-            <option value="updated_desc">最近更新</option>
-            <option value="published_desc">最近发布</option>
-            <option value="score_desc">匹配分数</option>
-          </select>
-        </label>
-        <label>
-          最低分
-          <input
-            name="minScore"
-            type="number"
-            min="0"
-            max="100"
-            defaultValue={fieldValue(parameters, 'minScore')}
-          />
-        </label>
-        <label>
-          画像版本 ID
-          <input name="profile" defaultValue={fieldValue(parameters, 'profile')} />
-        </label>
-        <button type="submit">应用筛选</button>
-        <a className="button-secondary" href="/jobs">
-          清除
-        </a>
-      </form>
-      <p className="result-summary" aria-live="polite">
-        本页 {page.items.length} 个职位
-      </p>
       {page.items.length === 0 ? (
         <section className="empty-state page-empty-state" aria-labelledby="jobs-empty-title">
           <span className="empty-state-icon" aria-hidden="true">
@@ -121,57 +181,16 @@ export default async function JobsPage({
           </div>
         </section>
       ) : (
-        <div className="table-scroll">
-          <table>
-            <caption className="sr-only">可投递职位列表</caption>
-            <thead>
-              <tr>
-                <th scope="col">职位</th>
-                <th scope="col">公司</th>
-                <th scope="col">地点</th>
-                <th scope="col">状态</th>
-                <th scope="col">匹配分</th>
-                <th scope="col">更新时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {page.items.map((job) => (
-                <tr key={job.id} className={job.status === 'stale' ? 'row-stale' : undefined}>
-                  <td>
-                    <a className="job-link" href={`/jobs/${job.id}`}>
-                      {job.title}
-                    </a>
-                    <span>{job.department ?? job.jobFamily ?? '部门未注明'}</span>
-                  </td>
-                  <td>{job.companyName}</td>
-                  <td>{job.locations.join('、') || '未注明'}</td>
-                  <td>
-                    <JobStatus status={job.status} />
-                  </td>
-                  <td>{job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`}</td>
-                  <td>
-                    <time dateTime={job.updatedAt}>
-                      {new Intl.DateTimeFormat('zh-CN').format(new Date(job.updatedAt))}
-                    </time>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <JobsTable jobs={page.items} profileVersionId={query.profileVersionId} />
+        </>
       )}
-      <nav className="pagination" aria-label="职位分页">
-        {fieldValue(parameters, 'cursor') ? (
-          <a href={firstPageHref(parameters)}>返回第一页</a>
-        ) : (
-          <span />
-        )}
-        {page.nextCursor ? (
-          <a href={nextPageHref(parameters, page.nextCursor)}>下一页</a>
-        ) : (
-          <span>已经到底</span>
-        )}
-      </nav>
+      <Pagination
+        currentPage={page.page.current}
+        totalPages={page.page.totalPages}
+        label="职位分页"
+        createHref={(pageNumber) => `/jobs${pageHref(parameters, 'page', pageNumber)}`}
+      />
     </main>
   );
 }

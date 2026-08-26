@@ -81,6 +81,12 @@
 
 - 阿里巴巴校园实习入口 `https://campus-talent.alibaba.com/campus/position?batchId=100000560002` 可由匿名浏览器正常渲染；官网自身请求 `POST /position/search` 返回 `content.datas` 与 `content.totalCount`。按 `pageIndex/pageSize` 驱动 34 页，得到 339 条、339 个唯一稳定 `id`，coverage 为 `complete`。
 - 华为校园实习入口 `https://career.huawei.com/cn/campus-recruitment-job-list?recruitmentType=INTERN` 可由匿名浏览器正常渲染；官网自身网关请求返回 `data.result` 与 `data.pageVO`。按 `curPage/pageSize` 驱动 4 页，得到 31 条、31 个唯一稳定 `jobId`，coverage 为 `complete`。
+
+## 2026-08-23 实习来源补充复核
+
+- 腾讯 `join.qq.com` 的 `getProjectMapping` 返回应届实习 mapping 2、日常实习 mapping 104 和青云实习 mapping 20；`searchPosition` 使用 `projectMappingIdList/pageIndex/pageSize`，当前总数 426，详情由 `getJobDetailsByPostId` 匿名返回。定向同步经入口策略后保存 72 条。
+- 美团校园页的官方前端将 `jobType=1` 定义为应届、`jobType=2` 定义为实习。裸 HTTP 受 403 限制；受控浏览器只初始化匿名会话，随后在同页面上下文把列表 JSON 请求固定为 code 2，按 `totalCount/pageSize` 直接分页。两页 Smoke 通过，定向同步保存 222 条。
+- 字节校招权威入口为 `https://jobs.bytedance.com/campus/position`。裸 HTTP 曾返回 404，但该结果不代表浏览器入口失效；正常匿名 Edge 会话返回 200，标题为“字节跳动校园招聘”。官网首个列表 JSON 使用 `portal_type=3`，当前 `count=7444`；`job_subject_list` 明确包含日常实习、ByteIntern、前沿技术领域人才实习招聘与 Seed 大模型人才实习招聘，职位记录通过 `recruit_type.name` 区分实习/校招。后续分页只修改 offset 并按 `ceil(count/limit)` 计算，不使用 DOM。
 - 两个来源均未复制 Cookie、CSRF、动态签名或登录状态；页面出现验证码、登录或访问验证时仍按 `access_blocked` 降级。
 
 ### JD 与拼多多脚本复核（2026-08-22）

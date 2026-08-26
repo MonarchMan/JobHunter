@@ -97,11 +97,43 @@ describe('Web profile management', () => {
         });
         expect(preferences.current.extracted.preferences.locations).toEqual(['北京']);
 
+        const replaced = container.services.webProfiles.mutate({
+          kind: 'replace',
+          profileId,
+          expectedVersionId: preferences.current.id,
+          profile: {
+            ...preferences.current.effective,
+            basicInfo: {
+              name: '候选人',
+              phone: '13800000000',
+              email: 'candidate@example.com',
+              location: '上海',
+              website: 'https://example.com',
+            },
+            works: [{ name: 'Agent 作品', description: '在线演示', url: 'https://example.com' }],
+            competitions: [{ name: '创新竞赛', award: '一等奖', date: '2026-06' }],
+            certificates: [{ name: '云计算证书', issuer: '测试机构', date: '2026-05' }],
+            languages: [{ name: '英语', proficiency: 'CET-6' }],
+            professionalSkills: '熟练使用 TypeScript 与 React。',
+            selfEvaluation: '重视交付质量。',
+          },
+        });
+        expect(replaced.current).toMatchObject({
+          versionNumber: 3,
+          effective: {
+            basicInfo: { name: '候选人' },
+            works: [{ name: 'Agent 作品' }],
+            languages: [{ name: '英语', proficiency: 'CET-6' }],
+            professionalSkills: '熟练使用 TypeScript 与 React。',
+            selfEvaluation: '重视交付质量。',
+          },
+        });
+
         expect(() =>
           container.services.webProfiles.mutate({
             kind: 'lock',
             profileId,
-            expectedVersionId: original.current.id,
+            expectedVersionId: preferences.current.id,
             pointer: '/preferences/locations',
           }),
         ).toThrow(ProfileVersionConflictError);
@@ -109,7 +141,7 @@ describe('Web profile management', () => {
         const locked = container.services.webProfiles.mutate({
           kind: 'lock',
           profileId,
-          expectedVersionId: preferences.current.id,
+          expectedVersionId: replaced.current.id,
           pointer: '/preferences/locations',
         });
         expect(locked.current.lockedPaths).toEqual(['/preferences/locations']);
@@ -122,7 +154,7 @@ describe('Web profile management', () => {
           value: ['大模型应用工程师'],
         });
         expect(corrected.current.effective.targetRoles).toEqual(['大模型应用工程师']);
-        expect(corrected.versions.map((version) => version.versionNumber)).toEqual([4, 3, 2, 1]);
+        expect(corrected.versions.map((version) => version.versionNumber)).toEqual([5, 4, 3, 2, 1]);
       } finally {
         container.close();
       }

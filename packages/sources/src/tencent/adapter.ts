@@ -1,4 +1,6 @@
 import { parseNormalizedJob, utcInstant } from '@jobhunter/domain';
+import { normalizeJobTaxonomy } from '../job-taxonomy.js';
+import { normalizeRecruitmentCategory } from '../recruitment-category.js';
 import {
   SourceError,
   canonicalizeOfficialUrl,
@@ -215,6 +217,13 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
         ]
           .filter((value): value is string => value !== null)
           .join('\n\n');
+        const taxonomy = normalizeJobTaxonomy(optionalText(detail.CategoryName));
+        const recruitmentCategory =
+          normalizeRecruitmentCategory(
+            `${detail.RecruitPostName}\n${detail.Responsibility}\n${detail.Requirement}`,
+          ) === 'internship'
+            ? 'internship'
+            : 'social';
         return {
           job: parseNormalizedJob({
             companyId: context.companyId,
@@ -222,9 +231,11 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
             externalJobId: detail.PostId,
             title: detail.RecruitPostName,
             department: optionalText(detail.ComName, detail.BGName),
-            jobFamily: optionalText(detail.CategoryName),
+            jobFamily: taxonomy.jobFamily,
+            jobSubfamily: taxonomy.jobSubfamily,
+            recruitmentCategory,
             locations: detail.LocationName ? [detail.LocationName] : [],
-            employmentType: '全职',
+            employmentType: recruitmentCategory === 'internship' ? '实习' : '全职',
             experienceText: optionalText(detail.RequireWorkYearsName),
             educationText: null,
             description,

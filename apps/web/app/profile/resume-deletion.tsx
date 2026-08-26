@@ -36,7 +36,7 @@ export function ResumeDeletion({
     }
   };
 
-  const confirm = async (): Promise<void> => {
+  const submitDeletion = async (): Promise<void> => {
     if (!impact || confirmation !== 'DELETE') return;
     setBusy(true);
     setFeedback(null);
@@ -100,7 +100,7 @@ export function ResumeDeletion({
             type="button"
             className="button-danger"
             disabled={busy || confirmation !== 'DELETE'}
-            onClick={() => void confirm()}
+            onClick={() => void submitDeletion()}
           >
             确认并创建删除任务
           </button>

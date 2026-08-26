@@ -6,7 +6,7 @@ export const huaweiCampusJobSchema = z
     jobId: z.union([z.string().min(1), z.number().int()]),
     jobName: z.string().min(1),
     jobAddress: z.string().nullable().optional(),
-    jobDesc: z.string().min(1),
+    jobDesc: z.string().min(1).nullable().optional(),
     jobRequire: z.string().nullable().optional(),
     categoryName: z.string().nullable().optional(),
     deptName: z.string().nullable().optional(),

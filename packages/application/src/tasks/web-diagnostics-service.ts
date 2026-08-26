@@ -2,6 +2,7 @@ import { parseId } from '@jobhunter/domain';
 import {
   webAgentRunDetailSchema,
   webDiagnosticsSchema,
+  webPagination,
   webTaskAcceptedSchema,
   webTaskMutationSchema,
   webTaskSchema,
@@ -16,7 +17,10 @@ import type { TaskRecord } from './model.js';
 import type { TaskService } from './task-service.js';
 
 export interface WebDiagnosticsRepository {
-  listAgentRuns(limit: number): readonly WebAgentRunSummary[];
+  listAgentRuns(input: { readonly limit: number; readonly offset: number }): {
+    readonly items: readonly WebAgentRunSummary[];
+    readonly total: number;
+  };
   getAgentRun(id: string): WebAgentRunDetail | null;
 }
 
@@ -59,10 +63,40 @@ export class WebDiagnosticsService {
     this.#repository = input.repository;
   }
 
-  public list(): WebDiagnostics {
+  public list(
+    input: {
+      readonly status?: TaskRecord['status'];
+      readonly taskType?: string;
+      readonly taskPage?: number;
+      readonly agentPage?: number;
+      readonly pageSize?: number;
+    } = {},
+  ): WebDiagnostics {
+    const pageSize = input.pageSize ?? 25;
+    const taskPage = input.taskPage ?? 1;
+    const agentPage = input.agentPage ?? 1;
+    const taskFilter = {
+      ...(input.status ? { statuses: [input.status] } : {}),
+      ...(input.taskType ? { taskType: input.taskType } : {}),
+    };
+    const taskTotal = this.#tasks.count(taskFilter);
+    const taskPagination = webPagination(taskTotal, taskPage, pageSize);
+    const agentPageResult = this.#repository.listAgentRuns({
+      limit: pageSize,
+      offset: (agentPage - 1) * pageSize,
+    });
+    const agentPagination = webPagination(agentPageResult.total, agentPage, pageSize);
     return webDiagnosticsSchema.parse({
-      tasks: this.#tasks.list({ limit: 100 }).map(presentTask),
-      agentRuns: this.#repository.listAgentRuns(100),
+      tasks: this.#tasks
+        .list({
+          ...taskFilter,
+          limit: pageSize,
+          offset: (taskPagination.current - 1) * pageSize,
+        })
+        .map(presentTask),
+      taskPagination,
+      agentRuns: agentPageResult.items,
+      agentPagination,
     });
   }
 

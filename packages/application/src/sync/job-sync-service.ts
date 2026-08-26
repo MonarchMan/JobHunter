@@ -5,6 +5,7 @@ import {
   decideJobMerge,
   decideMissingTransition,
   decideObservedTransition,
+  canonicalizeJobTaxonomy,
   parseId,
   type Clock,
   type IdGenerator,
@@ -21,17 +22,14 @@ import {
   type DiscoveredJob,
   type DiscoveryEvent,
   type SourceHttpClient,
+  type NormalizedSourceJob,
   type SourcePageClient,
 } from '@jobhunter/source-core';
 import type { ArtifactStore } from '../ports/artifact-store.js';
 import type { UnitOfWork } from '../ports/unit-of-work.js';
-import type {
-  DerivationTaskFactory,
-  SyncCoverage,
-  SyncRunStats,
-  SyncSourceRecord,
-  SyncTrigger,
-} from './model.js';
+import type { SyncCoverage, SyncRunStats, SyncSourceRecord, SyncTrigger } from './model.js';
+import type { JobIntakePolicy } from './job-intake-policy.js';
+import { classifyJobRegion } from './region-policy.js';
 
 interface MutableSyncRunStats {
   discovered: number;
@@ -43,6 +41,9 @@ interface MutableSyncRunStats {
   staled: number;
   closed: number;
   isolated: number;
+  skippedNonDomestic: number;
+  skippedUnknownRegion: number;
+  skippedOutOfScope: number;
   followupEnqueued: number;
 }
 
@@ -54,6 +55,8 @@ export type JobSyncResult =
       readonly status: 'succeeded' | 'partial' | 'failed' | 'cancelled';
       readonly coverage: SyncCoverage;
       readonly stats: SyncRunStats;
+      readonly errorCategory: string | null;
+      readonly errorSummary: string | null;
     };
 
 export interface JobSyncServiceOptions {
@@ -106,6 +109,9 @@ function emptyStats(): MutableSyncRunStats {
     staled: 0,
     closed: 0,
     isolated: 0,
+    skippedNonDomestic: 0,
+    skippedUnknownRegion: 0,
+    skippedOutOfScope: 0,
     followupEnqueued: 0,
   };
 }
@@ -115,7 +121,14 @@ function immutableStats(stats: MutableSyncRunStats): SyncRunStats {
 }
 
 function assertStats(stats: MutableSyncRunStats): void {
-  const outcomes = stats.created + stats.unchanged + stats.revised + stats.isolated;
+  const outcomes =
+    stats.created +
+    stats.unchanged +
+    stats.revised +
+    stats.isolated +
+    stats.skippedNonDomestic +
+    stats.skippedUnknownRegion +
+    stats.skippedOutOfScope;
   if (outcomes !== stats.discovered || Object.values(stats).some((value) => value < 0)) {
     throw new Error('Sync statistics invariant failed.');
   }
@@ -129,10 +142,10 @@ export class JobSyncService {
   readonly #page: SourcePageClient | undefined;
   readonly #clock: Clock;
   readonly #ids: IdGenerator;
-  readonly #derivationTasks: DerivationTaskFactory;
   readonly #normalizerVersion: string;
   readonly #maximumInlineRawBytes: number;
   readonly #unseenBatchSize: number;
+  readonly #jobIntakePolicy: JobIntakePolicy | undefined;
 
   public constructor(input: {
     readonly uow: UnitOfWork;
@@ -142,7 +155,7 @@ export class JobSyncService {
     readonly page?: SourcePageClient;
     readonly clock: Clock;
     readonly ids: IdGenerator;
-    readonly derivationTasks: DerivationTaskFactory;
+    readonly jobIntakePolicy?: JobIntakePolicy;
     readonly options: JobSyncServiceOptions;
   }) {
     this.#uow = input.uow;
@@ -152,10 +165,10 @@ export class JobSyncService {
     this.#page = input.page;
     this.#clock = input.clock;
     this.#ids = input.ids;
-    this.#derivationTasks = input.derivationTasks;
     this.#normalizerVersion = input.options.normalizerVersion;
     this.#maximumInlineRawBytes = input.options.maximumInlineRawBytes ?? 128 * 1024;
     this.#unseenBatchSize = input.options.unseenBatchSize ?? 100;
+    this.#jobIntakePolicy = input.jobIntakePolicy;
   }
 
   async #prepareRaw(value: unknown, capturedAt: UtcInstant): Promise<PreparedRaw> {
@@ -304,21 +317,22 @@ export class JobSyncService {
     }
 
     const prepared = await this.#prepareRaw({ discovered: job.raw, detail }, observedAt);
-    const rawRecordId = this.#persistRaw({
-      sourceId: input.source.id,
-      runId: input.runId,
-      job,
-      prepared,
-      capturedAt: observedAt,
-    });
-    input.stats.rawStored += 1;
 
-    let normalized;
+    let normalized: NormalizedSourceJob;
     try {
-      normalized = await input.adapter.normalize(
+      const normalizedSourceJob = await input.adapter.normalize(
         { discovered: job, detail },
         { sourceId: input.source.id, companyId: input.source.companyId, config: input.config },
       );
+      const taxonomy = canonicalizeJobTaxonomy(normalizedSourceJob.job);
+      normalized = {
+        ...normalizedSourceJob,
+        job: {
+          ...normalizedSourceJob.job,
+          jobFamily: taxonomy.jobFamily,
+          jobSubfamily: taxonomy.jobSubfamily,
+        },
+      };
       if (
         normalized.job.sourceId !== input.source.id ||
         normalized.job.companyId !== input.source.companyId ||
@@ -327,6 +341,14 @@ export class JobSyncService {
         throw new SourceError('parse_changed', 'Adapter normalization changed source identity.');
       }
     } catch {
+      const rawRecordId = this.#persistRaw({
+        sourceId: input.source.id,
+        runId: input.runId,
+        job,
+        prepared,
+        capturedAt: observedAt,
+      });
+      input.stats.rawStored += 1;
       input.stats.isolated += 1;
       this.#recordIsolated({
         sourceId: input.source.id,
@@ -341,7 +363,31 @@ export class JobSyncService {
       return;
     }
 
-    this.#uow.run(({ jobs, tasks }) => {
+    const region = classifyJobRegion(normalized.job.locations);
+    if (region === 'non_domestic') {
+      input.stats.skippedNonDomestic += 1;
+      return;
+    }
+    if (region === 'unknown') {
+      input.stats.skippedUnknownRegion += 1;
+      return;
+    }
+
+    if (this.#jobIntakePolicy && !this.#jobIntakePolicy.accepts(normalized.job)) {
+      input.stats.skippedOutOfScope += 1;
+      return;
+    }
+
+    const rawRecordId = this.#persistRaw({
+      sourceId: input.source.id,
+      runId: input.runId,
+      job,
+      prepared,
+      capturedAt: observedAt,
+    });
+    input.stats.rawStored += 1;
+
+    this.#uow.run(({ jobs }) => {
       const current = jobs.findCurrent({
         sourceId: input.source.id,
         externalJobId: job.externalJobId,
@@ -385,25 +431,6 @@ export class JobSyncService {
           evidence: { policyVersion: input.source.syncPolicyVersion, rawRecordId },
         });
         if (transition.event) input.stats.restored += 1;
-      }
-
-      if (revisionId) {
-        for (const followup of this.#derivationTasks.forRevision({
-          revisionId,
-          enrich: input.source.syncPolicy.enrichNewRevisions,
-        })) {
-          const result = tasks.enqueue({
-            ...followup,
-            priority: 0,
-            concurrencyKey: null,
-            scheduleId: null,
-            retryOfTaskId: null,
-            maxAttempts: followup.taskType === 'job.enrich' ? 5 : 3,
-            availableAt: observedAt,
-            createdAt: observedAt,
-          });
-          if (result.kind === 'enqueued') input.stats.followupEnqueued += 1;
-        }
       }
     });
   }
@@ -580,6 +607,14 @@ export class JobSyncService {
       if (!finished) throw new Error('Sync run could not be finalized.');
       sync.cleanupSeen(runId);
     });
-    return { kind: 'completed', runId, status, coverage, stats: finalStats };
+    return {
+      kind: 'completed',
+      runId,
+      status,
+      coverage,
+      stats: finalStats,
+      errorCategory,
+      errorSummary,
+    };
   }
 }

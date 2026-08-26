@@ -64,11 +64,22 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     this.#client = client;
   }
 
-  public listAgentRuns(limit: number): readonly WebAgentRunSummary[] {
+  public listAgentRuns(input: { readonly limit: number; readonly offset: number }): {
+    readonly items: readonly WebAgentRunSummary[];
+    readonly total: number;
+  } {
+    const count = this.#client.prepare('SELECT COUNT(*) AS total FROM agent_runs').get() as {
+      readonly total: number;
+    };
+    const requestedPage = Math.floor(input.offset / input.limit) + 1;
+    const totalPages = Math.max(1, Math.ceil(count.total / input.limit));
+    const offset = (Math.min(requestedPage, totalPages) - 1) * input.limit;
     const rows = this.#client
-      .prepare(`SELECT ${columns} FROM agent_runs ORDER BY started_at DESC, id ASC LIMIT ?`)
-      .all(limit) as AgentRunRow[];
-    return rows.map(summary);
+      .prepare(
+        `SELECT ${columns} FROM agent_runs ORDER BY started_at DESC, id ASC LIMIT ? OFFSET ?`,
+      )
+      .all(input.limit, offset) as AgentRunRow[];
+    return { items: rows.map(summary), total: count.total };
   }
 
   public getAgentRun(id: string): WebAgentRunDetail | null {

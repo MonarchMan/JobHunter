@@ -1,7 +1,7 @@
 # 011 本地 Web 管理台任务
 
 > 状态：Implemented
-> 显式覆盖：WEB-001, WEB-002, WEB-003, WEB-004, WEB-005, WEB-006, WEB-007, WEB-008, WEB-009, WEB-010, WEB-Q01, WEB-Q02, WEB-Q03, WEB-Q04
+> 显式覆盖：WEB-001, WEB-002, WEB-003, WEB-004, WEB-005, WEB-006, WEB-007, WEB-008, WEB-009, WEB-010, WEB-011, WEB-012, WEB-013, WEB-014, WEB-015, WEB-Q01, WEB-Q02, WEB-Q03, WEB-Q04
 
 - [x] **WEB-T001** 建立 Next.js 入口、loopback 启动约束、应用容器和共享 DTO。（WEB-010, WEB-Q01）
 - [x] **WEB-T002** 实现布局、导航、Dashboard 健康摘要和错误边界。（WEB-001）
@@ -13,3 +13,8 @@
 - [x] **WEB-T008** 实现危险操作预览、确认和 CSRF/Origin 检查。（WEB-009）
 - [x] **WEB-T009** 完成响应式、键盘、语义和 axe 检查。（WEB-Q02,03）
 - [x] **WEB-T010** 使用 FakeAdapter/FakeModel 完成核心 Playwright E2E。（WEB-Q04）
+- [x] **WEB-T011** 增加系统设置页、读取/修改 API 和职位理解开关。（WEB-011）
+- [x] **WEB-T012** 为职位、任务、Agent、来源和画像版本列表补充统一数字页码契约与总数查询；首页和末页始终保留，任务与 Agent 独立分页。（WEB-002, WEB-012）
+- [x] **WEB-T013** Web 启动器拉起独立 Worker 子进程，并实现异常退出联动、终止信号转发和启动冒烟验证。（WEB-013）
+- [x] **WEB-T014** 为任务和 Agent 运行列表增加点击详情弹窗；失败任务和 Agent 运行展示脱敏详细原因。（WEB-014）
+- [x] **WEB-T015** 将官网来源按公司聚合为一卡多渠道，并只呈现已接入渠道的切换与独立操作。（WEB-015）

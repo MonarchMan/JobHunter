@@ -43,6 +43,32 @@ function seedSource(dataRoot: string): void {
 }
 
 describe('Web source management', () => {
+  it('reads and updates system settings without removing existing work', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-web-settings-');
+    try {
+      const bootstrap = resolveBootstrapConfig({
+        cli: { dataRoot: root.path },
+        environment: {},
+        cwd: root.path,
+      });
+      const container = createLocalWebContainer(
+        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
+      );
+      try {
+        expect(container.services.settings.get()).toEqual({
+          jobUnderstanding: { enabled: false },
+        });
+        expect(container.services.settings.update({ jobUnderstandingEnabled: true })).toEqual({
+          jobUnderstanding: { enabled: true },
+        });
+      } finally {
+        container.close();
+      }
+    } finally {
+      await root.cleanup();
+    }
+  });
+
   it('projects source state and persists idempotent actions and schedules', async () => {
     const root = await createTemporaryDataRoot('jobhunter-web-sources-');
     try {

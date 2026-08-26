@@ -78,6 +78,29 @@ describe('OpenAI-compatible model client', () => {
     expect(JSON.stringify(client.metadata)).not.toContain('test-secret');
   });
 
+  it('disables DeepSeek v4 reasoning so structured extraction can finish promptly', async () => {
+    let body: Record<string, unknown> | undefined;
+    const client = new OpenAiCompatibleModelClient({
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: 'test-secret',
+      model: 'deepseek-v4-flash',
+      fetchImplementation: (_input, init) => {
+        body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }],
+            }),
+            { status: 200 },
+          ),
+        );
+      },
+    });
+
+    await client.complete(request, new AbortController().signal);
+    expect(body?.thinking).toEqual({ type: 'disabled' });
+  });
+
   it('classifies authentication and rate-limit responses safely', async () => {
     const create = (status: number): OpenAiCompatibleModelClient =>
       new OpenAiCompatibleModelClient({

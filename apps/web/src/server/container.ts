@@ -3,12 +3,13 @@ import {
   DashboardQueryService,
   createJobAdviceTaskHandler,
   createJobUnderstandingTaskHandler,
-  createMatchProfileTaskHandler,
   createMatchRevisionTaskHandler,
+  createManualJobScoreTaskHandler,
   createResumeProfileTaskHandler,
   createResumeDeletionTaskHandler,
   createSourceSyncTaskHandler,
   createSourceHealthTaskHandler,
+  createCleanupTaskHandler,
   HandlerRegistry,
   JobQueryService,
   MatchWorkflowService,
@@ -16,12 +17,15 @@ import {
   ProfileManagementService,
   ScheduleService,
   SourceManagementService,
+  SystemSettingsService,
   TaskService,
   WebJobQueryService,
   WebJobDetailService,
   WebProfileService,
   WebResumeDeletionService,
   ResumeDeletionService,
+  ResumeImportService,
+  ResumeProfileWorkflow,
   WebSourceService,
   WebDiagnosticsService,
   type AppConfig,
@@ -41,6 +45,9 @@ import {
   SqliteWebDiagnosticsRepository,
   SqliteArtifactStore,
   SqliteResumeDeletionRepository,
+  SqliteResumeDocumentRepository,
+  SqliteSettingsStore,
+  NodeResumeFileReader,
 } from '@jobhunter/db/web';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
 import path from 'node:path';
@@ -58,7 +65,9 @@ export interface WebApplicationServices {
   readonly webSources: WebSourceService;
   readonly diagnostics: WebDiagnosticsService;
   readonly resumeDeletion: WebResumeDeletionService;
+  readonly resumes: ResumeProfileWorkflow;
   readonly matches: MatchWorkflowService;
+  readonly settings: SystemSettingsService;
 }
 
 export interface WebApplicationContainer {
@@ -81,6 +90,10 @@ export function createLocalWebContainer(
   try {
     const ids = new SystemIdGenerator();
     const clock = { now: () => utcInstant(Date.now()) };
+    const settings = new SystemSettingsService({
+      repository: new SqliteSettingsStore(database.client),
+      clock,
+    });
     const registry = new HandlerRegistry();
     const resumeDeletion = new ResumeDeletionService({
       repository: new SqliteResumeDeletionRepository(database.client),
@@ -97,12 +110,22 @@ export function createLocalWebContainer(
         check: () => Promise.reject(new Error('Web process cannot execute health checks.')),
       }),
     );
+    registry.register(createCleanupTaskHandler({ unavailable: true }));
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
     registry.register(createResumeDeletionTaskHandler(resumeDeletion));
-    registry.register(createJobUnderstandingTaskHandler({ unavailable: true }));
-    registry.register(createJobAdviceTaskHandler({ unavailable: true }));
-    registry.register(createMatchRevisionTaskHandler(null));
-    registry.register(createMatchProfileTaskHandler(null));
+    const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
+    const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
+    const matchingHandler = createMatchRevisionTaskHandler(null);
+    registry.register(understandingHandler);
+    registry.register(adviceHandler);
+    registry.register(matchingHandler);
+    registry.register(
+      createManualJobScoreTaskHandler({
+        understanding: understandingHandler,
+        matching: matchingHandler,
+        advice: adviceHandler,
+      }),
+    );
 
     const queue = new SqliteTaskRepository(database.client);
     const tasks = new TaskService({ queue, clock, ids }, registry);
@@ -111,6 +134,17 @@ export function createLocalWebContainer(
       repository: profileRepository,
       clock,
       ids,
+    });
+    const resumes = new ResumeProfileWorkflow({
+      files: new NodeResumeFileReader(),
+      imports: new ResumeImportService({
+        artifacts: new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value),
+        documents: new SqliteResumeDocumentRepository(database.client),
+        clock,
+        ids,
+      }),
+      profiles: candidateProfiles,
+      tasks,
     });
     const jobRepository = new SqliteJobQueryRepository(database.client);
     const profileInspection = new ProfileInspectionService({
@@ -151,6 +185,7 @@ export function createLocalWebContainer(
         repository: new SqliteWebDiagnosticsRepository(database.client),
       }),
       resumeDeletion: new WebResumeDeletionService({ deletion: resumeDeletion, tasks }),
+      resumes,
       tasks,
       profiles,
       webProfiles: new WebProfileService({
@@ -164,6 +199,7 @@ export function createLocalWebContainer(
         tasks,
         ids,
       }),
+      settings,
     };
     return {
       services,

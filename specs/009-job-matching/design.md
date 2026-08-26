@@ -25,6 +25,8 @@ Worker 的 match Handler 读取不可变输入，在事务外执行：
 
 JobAdviceAgent 输入只包含有效画像必要字段、职位要求、分项与证据；输出通过 Schema 后新增 MatchAdvice 并引用 AgentRun。建议失败只保留 AgentRun，不修改 MatchResult。
 
+Web 和 CLI 统一提交 `match.score-job` 用户意图任务。规则模式直接以标准化职位字段计算；LLM 模式在同一可重试任务内顺序调用既有 JobUnderstanding、确定性匹配和 JobAdvice 能力。批量操作只是在应用边界为用户明确勾选的职位逐条入队，不引入全量扫描或后台自动触发。
+
 ## 当前结果
 
 “当前匹配”由当前 ProfileVersion、Job 最新 Revision、活动 JobUnderstanding 配置对应的成功 enrichment（没有则 none）和 active Ruleset 共同确定，不使用可变 `is_current` 标记写入 MatchResult。查询优先 enrichment-aware 结果，不存在时回退基础结果；当前建议同样按活动 JobAdvice 配置选择成功 MatchAdvice。旧结果和旧建议按版本显式查询。

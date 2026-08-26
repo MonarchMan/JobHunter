@@ -99,6 +99,7 @@ export interface TaskListFilter {
   readonly statuses?: readonly TaskStatus[];
   readonly taskType?: string;
   readonly limit?: number;
+  readonly offset?: number;
 }
 
 export interface TaskQueueSummary {
@@ -157,8 +158,10 @@ export interface TaskQueue {
   enqueue(input: PersistedTaskInput): EnqueueTaskResult;
   get(taskId: TaskId): TaskRecord | null;
   list(filter: TaskListFilter): readonly TaskRecord[];
+  count(filter: Omit<TaskListFilter, 'limit' | 'offset'>): number;
   summary(now: UtcInstant): TaskQueueSummary;
   claim(input: {
+    readonly taskType: string;
     readonly workerId: string;
     readonly now: UtcInstant;
     readonly leaseDurationMsFor: (taskType: string) => number;

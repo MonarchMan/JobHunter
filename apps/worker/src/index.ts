@@ -1,15 +1,16 @@
 import {
   CandidateProfileService,
+  CleanupService,
   createJobAdviceTaskHandler,
   createJobUnderstandingTaskHandler,
-  createMatchProfileTaskHandler,
+  createCleanupTaskHandler,
   createMatchRevisionTaskHandler,
+  createManualJobScoreTaskHandler,
   createResumeProfileTaskHandler,
   createResumeDeletionTaskHandler,
   createArtifactPurgeTaskHandler,
   createSourceSyncTaskHandler,
   createSourceHealthTaskHandler,
-  DefaultDerivationTaskFactory,
   DeterministicMatchingService,
   HandlerRegistry,
   JobSyncService,
@@ -18,8 +19,8 @@ import {
   RetryPolicy,
   ScheduleService,
   SourceHealthCheckService,
+  ProfileJobIntakePolicy,
   ResumeDeletionService,
-  TaskService,
   WorkerEngine,
   type RandomSource,
   type TaskLogger,
@@ -31,8 +32,10 @@ import {
   defaultMatchRulesetId,
   openSqliteDatabase,
   SqliteArtifactStore,
+  DataRootCleanupFileStore,
   SqliteAgentRunStore,
   SqliteCandidateProfileRepository,
+  SqliteCleanupRepository,
   SqliteMatchingRepository,
   SqliteResumeDocumentRepository,
   SqliteResumeDeletionRepository,
@@ -43,7 +46,6 @@ import {
 } from '@jobhunter/db';
 import { SystemIdGenerator, utcInstant, type Clock, type IdGenerator } from '@jobhunter/domain';
 import { OpenAiCompatibleModelClient } from '@jobhunter/llm';
-import { jobAdviceAgentDefinition, jobUnderstandingAgentDefinition } from '@jobhunter/matching';
 import {
   AdapterRegistry,
   FetchSourceHttpClient,
@@ -108,6 +110,7 @@ export function createProductionWorkerApplication(input: {
   readonly dataRoot: string;
   readonly workerId?: string;
   readonly pollIntervalMs?: number;
+  readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
   readonly logger?: TaskLogger;
   readonly model?: {
     readonly baseUrl: string;
@@ -121,6 +124,7 @@ export function createProductionWorkerApplication(input: {
   const clock = systemClock;
   const adapters = new AdapterRegistry();
   registerFirstPartyAdapters(adapters);
+  const profileRepository = new SqliteCandidateProfileRepository(database.client);
   const sync = new JobSyncService({
     uow: new SqliteUnitOfWork(database.client),
     registry: adapters,
@@ -129,11 +133,19 @@ export function createProductionWorkerApplication(input: {
     ...(input.pageClient ? { page: input.pageClient } : {}),
     clock,
     ids,
-    derivationTasks: new DefaultDerivationTaskFactory(ids, jobUnderstandingAgentDefinition.version),
+    jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
     options: { normalizerVersion: 'normalize-v1' },
   });
   const registry = new HandlerRegistry();
   registry.register(createSourceSyncTaskHandler(sync));
+  registry.register(
+    createCleanupTaskHandler({
+      cleanup: new CleanupService({
+        repository: new SqliteCleanupRepository(database.client),
+        files: new DataRootCleanupFileStore(input.dataRoot),
+      }),
+    }),
+  );
   const resumeDeletion = new ResumeDeletionService({
     repository: new SqliteResumeDeletionRepository(database.client),
     artifacts: new SqliteArtifactStore(database.client, input.dataRoot),
@@ -160,7 +172,6 @@ export function createProductionWorkerApplication(input: {
     writer: new SqliteSourceHealthWriter(database.client),
   });
   registry.register(createSourceHealthTaskHandler(sourceHealth));
-  const profileRepository = new SqliteCandidateProfileRepository(database.client);
   const matchingRepository = new SqliteMatchingRepository(database.client);
   const deterministicMatching = new DeterministicMatchingService({
     matching: matchingRepository,
@@ -169,21 +180,13 @@ export function createProductionWorkerApplication(input: {
     ids,
   });
   deterministicMatching.ensureRulesetV1({ id: defaultMatchRulesetId });
-  let runtimeTasks: TaskService | null = null;
   const batches = new MatchingBatchService({
-    matching: matchingRepository,
     calculator: deterministicMatching,
-    onMatch: (match) => {
-      if (!input.model || match.filterStatus === 'excluded' || match.totalScore < 60) return;
-      runtimeTasks?.enqueue({
-        taskType: 'match.advise',
-        payload: { matchResultId: match.id, adviceVersion: jobAdviceAgentDefinition.version },
-        idempotencyKey: `match.advise:${match.id}:${jobAdviceAgentDefinition.version}`,
-      });
-    },
   });
-  registry.register(createMatchRevisionTaskHandler(batches));
-  registry.register(createMatchProfileTaskHandler(batches));
+  const matchingHandler = createMatchRevisionTaskHandler(batches);
+  registry.register(matchingHandler);
+  let understandingHandler: ReturnType<typeof createJobUnderstandingTaskHandler>;
+  let adviceHandler: ReturnType<typeof createJobAdviceTaskHandler>;
   if (input.model) {
     const profiles = new CandidateProfileService({
       repository: profileRepository,
@@ -203,40 +206,36 @@ export function createProductionWorkerApplication(input: {
         profiles,
       }),
     );
-    registry.register(
-      createJobUnderstandingTaskHandler({
-        runner,
-        matching: matchingRepository,
-        clock,
-        ids,
-        onEnrichmentStored: (enrichment) => {
-          runtimeTasks?.enqueue({
-            taskType: 'match.compute-revision',
-            payload: {
-              jobRevisionId: enrichment.jobRevisionId,
-              jobEnrichmentId: enrichment.id,
-            },
-            idempotencyKey: `match.enriched:${enrichment.jobRevisionId}:${enrichment.id}`,
-          });
-        },
-      }),
-    );
-    registry.register(
-      createJobAdviceTaskHandler({
-        runner,
-        matching: matchingRepository,
-        profiles: profileRepository,
-        clock,
-        ids,
-      }),
-    );
+    understandingHandler = createJobUnderstandingTaskHandler({
+      runner,
+      matching: matchingRepository,
+      clock,
+      ids,
+    });
+    adviceHandler = createJobAdviceTaskHandler({
+      runner,
+      matching: matchingRepository,
+      profiles: profileRepository,
+      clock,
+      ids,
+    });
+    registry.register(understandingHandler);
+    registry.register(adviceHandler);
   } else {
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
-    registry.register(createJobUnderstandingTaskHandler({ unavailable: true }));
-    registry.register(createJobAdviceTaskHandler({ unavailable: true }));
+    understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
+    adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
+    registry.register(understandingHandler);
+    registry.register(adviceHandler);
   }
+  registry.register(
+    createManualJobScoreTaskHandler({
+      understanding: understandingHandler,
+      matching: matchingHandler,
+      advice: adviceHandler,
+    }),
+  );
   const queue = new SqliteTaskRepository(database.client);
-  runtimeTasks = new TaskService({ queue, clock, ids }, registry);
   const scheduleService = new ScheduleService({ queue, clock, ids }, registry);
   const engine = new WorkerEngine({
     queue,
@@ -249,6 +248,7 @@ export function createProductionWorkerApplication(input: {
       emptyPollMinimumMs: input.pollIntervalMs ?? 1_000,
       emptyPollMaximumMs: Math.max(input.pollIntervalMs ?? 1_000, 10_000),
       schedulerPollMs: input.pollIntervalMs ?? 1_000,
+      taskTypeConcurrency: input.taskTypeConcurrency ?? {},
     },
     ...(input.logger ? { logger: input.logger } : {}),
   });

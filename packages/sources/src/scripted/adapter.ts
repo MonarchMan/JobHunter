@@ -1,4 +1,6 @@
 import { parseNormalizedJob, utcInstant } from '@jobhunter/domain';
+import { normalizeJobTaxonomy } from '../job-taxonomy.js';
+import { normalizeRecruitmentCategory } from '../recruitment-category.js';
 import {
   SourceError,
   canonicalizeOfficialUrl,
@@ -52,6 +54,38 @@ function firstText(record: RecordValue, keys: readonly string[]): string | null 
     if (value) return value;
   }
   return null;
+}
+
+function recruitmentCategoryFor(
+  record: RecordValue,
+  fallback: ScriptedAdapterDefinition['recruitmentType'],
+) {
+  const explicit = firstText(record, [
+    'employmentType',
+    'recruitTypeName',
+    'recruitmentType',
+    'projectType',
+    'projectName',
+  ]);
+  const semanticText = [
+    explicit,
+    firstText(record, ['title', 'name', 'positionName', 'positionNameOpen', 'jobName']),
+    firstText(record, [
+      'description',
+      'workContent',
+      'jobDuty',
+      'jobDesc',
+      'requirement',
+      'qualification',
+    ]),
+  ]
+    .filter((value): value is string => value !== null)
+    .join('\n');
+
+  // A record-level internship signal is stronger than a campus/social source
+  // descriptor. This covers provider labels such as 日常实习 and 暑期实习.
+  if (normalizeRecruitmentCategory(semanticText) === 'internship') return 'internship';
+  return normalizeRecruitmentCategory(explicit ?? fallback);
 }
 
 function findArray(value: unknown, depth = 0): RecordValue[] | null {
@@ -233,7 +267,9 @@ function browserRequest(
     listEndpointPath: definition.browser?.listEndpointPath ?? '',
     responseShape: definition.browser?.responseShape ?? 'ats-job-posts',
     signal: context.signal,
-    timeoutMs: context.timeoutMs,
+    // Browser collection covers navigation plus pagination. The ordinary
+    // per-request timeout is too short for a multi-page rendered list.
+    timeoutMs: Math.max(context.timeoutMs, 120_000),
     maximumPages: 1_000,
     maximumResponseBytes: 2 * 1024 * 1024,
   };
@@ -421,6 +457,10 @@ export function createScriptedAdapter(
           input.discovered.sourceUrl,
           definition.hosts,
         );
+        const taxonomy = normalizeJobTaxonomy(
+          firstText(raw, ['jobFamily', 'jobDirection', 'jobCategory', 'jobType']),
+        );
+        const recruitmentCategory = recruitmentCategoryFor(raw, definition.recruitmentType);
         return {
           job: parseNormalizedJob({
             companyId: context.companyId,
@@ -428,11 +468,19 @@ export function createScriptedAdapter(
             externalJobId: id,
             title: jobTitle,
             department: firstText(raw, ['department', 'positionDept', 'positionDeptName']),
-            jobFamily: firstText(raw, ['jobFamily', 'jobDirection', 'jobCategory', 'jobType']),
+            jobFamily: taxonomy.jobFamily,
+            jobSubfamily: taxonomy.jobSubfamily,
+            recruitmentCategory,
             locations: locations(raw),
             employmentType:
               firstText(raw, ['employmentType', 'recruitTypeName']) ??
-              (definition.recruitmentType === 'campus' ? '校招/实习' : null),
+              (recruitmentCategory === 'internship'
+                ? '实习'
+                : recruitmentCategory === 'campus'
+                  ? '校招'
+                  : recruitmentCategory === 'social'
+                    ? '全职'
+                    : null),
             experienceText: firstText(raw, ['experience', 'workYears']),
             educationText: firstText(raw, ['education', 'degree']),
             description: jobDescription,

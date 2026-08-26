@@ -39,6 +39,10 @@ export class HandlerRegistry {
     return this.#handlers.has(taskType);
   }
 
+  public taskTypes(): readonly string[] {
+    return [...this.#handlers.keys()];
+  }
+
   public parsePayload(taskType: string, payload: unknown): unknown {
     return this.get(taskType).payloadSchema.parse(payload);
   }

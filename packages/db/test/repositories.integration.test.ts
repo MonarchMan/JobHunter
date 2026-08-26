@@ -206,8 +206,11 @@ describe('SqliteSettingsStore', () => {
   it('accepts only allowlisted, schema-valid, non-sensitive settings', async () => {
     const handle = await setup();
     const settings = new SqliteSettingsStore(handle.client);
+    expect(settings.get('matching.jobUnderstanding')).toEqual({ enabled: false });
     settings.set('ui.jobList', { pageSize: 50, sort: 'updated_desc' }, utcInstant(1));
     expect(settings.get('ui.jobList')).toEqual({ pageSize: 50, sort: 'updated_desc' });
+    settings.set('matching.jobUnderstanding', { enabled: true }, utcInstant(2));
+    expect(settings.get('matching.jobUnderstanding')).toEqual({ enabled: true });
     expect(() => {
       settings.set('model.apiKey', { value: 'secret' }, utcInstant(2));
     }).toThrow(/not allowlisted/);

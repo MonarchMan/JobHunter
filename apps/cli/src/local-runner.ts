@@ -15,7 +15,9 @@ export async function runLocalCli(input: {
     const config = await loadRuntimeConfig(input);
     return await runCli({
       argv: input.argv,
-      container: createLocalCliContainer(config),
+      container: createLocalCliContainer(config, {
+        ...(input.cwd ? { workspaceRoot: input.cwd } : {}),
+      }),
       io: input.io,
     });
   } catch {

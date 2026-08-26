@@ -14,7 +14,7 @@ export function DashboardHero(): ReactElement {
         <p>从简历画像到官网职位同步，把每一次求职行动集中在一个清晰的工作台里。</p>
         <div className="hero-actions">
           <a className="button-primary button-large" href="/profile">
-            建立我的画像 <span aria-hidden="true">→</span>
+            建立个人资料 <span aria-hidden="true">→</span>
           </a>
           <a className="button-quiet" href="/jobs">
             浏览职位 <span aria-hidden="true">↗</span>

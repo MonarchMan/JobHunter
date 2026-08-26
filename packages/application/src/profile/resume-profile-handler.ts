@@ -43,9 +43,6 @@ export function createResumeProfileTaskHandler(
         readonly runner: AgentRunner;
         readonly documents: ResumeDocumentRepository;
         readonly profiles: CandidateProfileService;
-        readonly onProfileVersionStored?: (
-          version: ReturnType<CandidateProfileService['applyExtraction']>,
-        ) => void;
       }
     | { readonly unavailable: true },
 ): TaskHandler<
@@ -90,7 +87,6 @@ export function createResumeProfileTaskHandler(
           agentRunId: result.run.id,
           extracted: toCandidateProfile(facts, preferences),
         });
-        input.onProfileVersionStored?.(version);
         return {
           agentRunId: result.run.id,
           profileVersionId: version.id,

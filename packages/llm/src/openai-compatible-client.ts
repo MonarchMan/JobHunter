@@ -82,6 +82,14 @@ function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
   };
 }
 
+function shouldDisableDeepSeekThinking(baseUrl: string, model: string): boolean {
+  try {
+    return new URL(baseUrl).hostname === 'api.deepseek.com' && model.startsWith('deepseek-v4');
+  } catch {
+    return false;
+  }
+}
+
 async function responseError(response: Response): Promise<ModelClientError> {
   const status = response.status;
   if (status === 401 || status === 403)
@@ -165,6 +173,9 @@ export class OpenAiCompatibleModelClient implements ModelClient {
         model: this.#config.model,
         messages,
         max_tokens: request.maxOutputTokens,
+        ...(shouldDisableDeepSeekThinking(this.#config.baseUrl, this.#config.model)
+          ? { thinking: { type: 'disabled' as const } }
+          : {}),
         ...(request.tools.length === 0
           ? {}
           : {

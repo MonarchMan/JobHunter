@@ -11,7 +11,10 @@ export * from './meituan/index.js';
 export * from './pinduoduo/index.js';
 export * from './scripted/index.js';
 export * from './tencent/index.js';
+export * from './tencent-campus/index.js';
 export * from './xiaohongshu/schemas.js';
+export * from './job-taxonomy.js';
+export * from './recruitment-category.js';
 
 /** Public package identifier used by composition smoke tests. */
 export const packageId = '@jobhunter/sources' as const;

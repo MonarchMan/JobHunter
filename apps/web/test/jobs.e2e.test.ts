@@ -30,10 +30,10 @@ function seedJobs(dataRoot: string): void {
     const insert = database.client.prepare(
       `INSERT INTO jobs
        (id, company_id, source_id, external_job_id, title, department, job_family,
-        locations_json, description, detail_url, apply_url, status, missing_count,
+        recruitment_category, locations_json, description, detail_url, apply_url, status, missing_count,
         content_hash, first_seen_at, last_seen_at, created_at, updated_at)
        VALUES (?, '018f0000-0000-7000-8000-000000000101',
-        '018f0000-0000-7000-8000-000000000201', ?, ?, '大模型平台', '研发', ?, ?, ?, ?,
+        '018f0000-0000-7000-8000-000000000201', ?, ?, '大模型平台', '研发', 'internship', ?, ?, ?, ?,
         ?, 0, ?, 1, 1, 1, ?)`,
     );
     insert.run(
@@ -100,7 +100,7 @@ function seedJobs(dataRoot: string): void {
           change_set_json, raw_record_id, created_at)
          VALUES ('018f0000-0000-7000-8000-000000000503',
           '018f0000-0000-7000-8000-000000000401', 1, 'revision-hash', 'v1', '{}',
-          '{"title":{"to":"Agent 开发工程师"}}',
+          '[]',
           '018f0000-0000-7000-8000-000000000502', 2)`,
       )
       .run();
@@ -195,7 +195,7 @@ describe('Web job listing', () => {
         expect(detail).toMatchObject({
           detailUrl: 'https://careers.tencent.com/job/1',
           applyUrl: 'https://careers.tencent.com/apply/1',
-          revisions: [{ revisionNumber: 1 }],
+          revisions: [{ revisionNumber: 1, changes: {} }],
           matches: [
             {
               totalScore: 78,

@@ -60,6 +60,11 @@ export const defaultSettingsRegistry = new SettingsRegistry([
       })
       .strict(),
   },
+  {
+    key: 'matching.jobUnderstanding',
+    schemaVersion: '1',
+    schema: z.object({ enabled: z.boolean() }).strict(),
+  },
 ]);
 
 interface SettingRow {

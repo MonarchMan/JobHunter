@@ -1,9 +1,12 @@
 import {
   CandidateProfileService,
   BackupService,
+  createCleanupTaskHandler,
   createResumeProfileTaskHandler,
-  createMatchProfileTaskHandler,
   createMatchRevisionTaskHandler,
+  createManualJobScoreTaskHandler,
+  createJobUnderstandingTaskHandler,
+  createJobAdviceTaskHandler,
   dataRootCheck,
   InitializationService,
   modelConfigurationCheck,
@@ -20,6 +23,7 @@ import {
   ProfileManagementService,
   ResumeImportService,
   ResumeProfileWorkflow,
+  ScheduleService,
   SourceManagementService,
   TaskService,
   TaskWaitService,
@@ -99,7 +103,9 @@ export interface CliContainer {
     unlock(id: string, pointer: string): ReturnType<ProfileManagementService['unlock']>;
   };
   readonly match?: {
-    run(profileId: string): ReturnType<MatchWorkflowService['run']>;
+    scoreForJob(
+      input: Parameters<MatchWorkflowService['runForJob']>[0],
+    ): ReturnType<MatchWorkflowService['runForJob']>;
     list(
       input: Parameters<MatchWorkflowService['list']>[0],
     ): ReturnType<MatchWorkflowService['list']>;
@@ -119,12 +125,18 @@ export interface CliContainer {
   close(): Promise<void>;
 }
 
-export function createLocalCliContainer(config: AppConfig): CliContainer {
+export function createLocalCliContainer(
+  config: AppConfig,
+  options: { readonly workspaceRoot?: string } = {},
+): CliContainer {
   const initialization = new InitializationService(
     new SqliteSystemInitializer(firstPartySourceCatalog),
   );
   const versions = { app: '0.1.0', schema: '0000', ruleset: 'v1', prompt: '1.0.0' };
   const ids = new SystemIdGenerator();
+  const workspaceRoot = path.resolve(
+    process.env.JOBHUNTER_WORKSPACE_ROOT ?? options.workspaceRoot ?? process.cwd(),
+  );
   const backups = new BackupService(new SqliteBackupOperations(config.bootstrap.dataRoot.value));
   let database: SqliteDatabaseHandle | null = null;
   let services: {
@@ -136,6 +148,7 @@ export function createLocalCliContainer(config: AppConfig): CliContainer {
     readonly resumes: ResumeProfileWorkflow;
     readonly profiles: ProfileManagementService;
     readonly matches: MatchWorkflowService;
+    readonly schedules: ScheduleService;
   } | null = null;
   const operational = (): NonNullable<typeof services> => {
     if (services) return services;
@@ -156,10 +169,26 @@ export function createLocalCliContainer(config: AppConfig): CliContainer {
           Promise.reject(new Error('CLI process does not execute source synchronization.')),
       }),
     );
+    registry.register(createCleanupTaskHandler({ unavailable: true }));
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
-    registry.register(createMatchRevisionTaskHandler(null));
-    registry.register(createMatchProfileTaskHandler(null));
+    const matchingHandler = createMatchRevisionTaskHandler(null);
+    const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
+    const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
+    registry.register(matchingHandler);
+    registry.register(understandingHandler);
+    registry.register(adviceHandler);
+    registry.register(
+      createManualJobScoreTaskHandler({
+        understanding: understandingHandler,
+        matching: matchingHandler,
+        advice: adviceHandler,
+      }),
+    );
     const tasks = new TaskService(
+      { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
+      registry,
+    );
+    const schedules = new ScheduleService(
       { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
       registry,
     );
@@ -236,21 +265,76 @@ export function createLocalCliContainer(config: AppConfig): CliContainer {
       wait: new TaskWaitService(tasks, {
         wait: (milliseconds, signal) => setTimeout(milliseconds, undefined, { signal }),
       }),
+      schedules,
     };
     return services;
   };
   return {
     version: { get: () => ({ ...versions, node: process.versions.node }) },
     initialize: {
-      run: () =>
-        initialization.initialize({
+      run: async () => {
+        const initialized = await initialization.initialize({
           dataRoot: config.bootstrap.dataRoot.value,
           configPath: config.bootstrap.configPath.value,
           defaultConfig: {
             logLevel: 'info',
-            worker: { pollIntervalMs: 1_000, maxConcurrentNetworkTasks: 4 },
+            worker: {
+              pollIntervalMs: 1_000,
+              maxConcurrentNetworkTasks: 4,
+              taskTypeConcurrency: {},
+            },
           },
-        }),
+        });
+        const runtime = operational();
+        const defaultResumePath = path.join(
+          workspaceRoot,
+          'docs',
+          'resumes',
+          'agent简历 - 新.docx',
+        );
+        let defaultResumeTaskId: string | null = null;
+        if (existsSync(defaultResumePath)) {
+          const imported = await runtime.resumes.import({
+            path: defaultResumePath,
+            signal: new AbortController().signal,
+          });
+          defaultResumeTaskId = imported.task?.id ?? null;
+        }
+        const sourceSyncTasks = runtime.sources.enqueueSync({
+          sourceIds: 'all',
+          idempotencyToken: 'bootstrap-initialization-v1',
+        });
+        let schedules = 0;
+        for (const source of runtime.sources.list().filter((candidate) => candidate.enabled)) {
+          runtime.schedules.upsert({
+            id: source.id,
+            scheduleKey: `source.sync:${source.id}`,
+            taskType: 'source.sync',
+            payload: { sourceId: source.id, trigger: 'schedule' },
+            cronExpression: '0 3 * * *',
+            timezone: 'Asia/Shanghai',
+            enabled: true,
+          });
+          schedules += 1;
+        }
+        runtime.schedules.upsert({
+          id: '018f0000-0000-7000-8000-000000000401',
+          scheduleKey: 'maintenance.cleanup:weekly',
+          taskType: 'maintenance.cleanup',
+          payload: { rawRecordsDays: 30, observationsDays: 90, failedAgentRunsDays: 30 },
+          cronExpression: '0 4 * * 0',
+          timezone: 'Asia/Shanghai',
+          enabled: true,
+        });
+        return {
+          ...initialized,
+          bootstrap: {
+            defaultResumeTaskId,
+            sourceSyncTaskIds: sourceSyncTasks.map((result) => result.task.id),
+            schedules: schedules + 1,
+          },
+        };
+      },
     },
     doctor: {
       run: () =>
@@ -302,6 +386,7 @@ export function createLocalCliContainer(config: AppConfig): CliContainer {
           createProductionWorkerApplication({
             dataRoot: config.bootstrap.dataRoot.value,
             pollIntervalMs: config.worker.pollIntervalMs.value,
+            taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
             pageClient: createPlaywrightSourcePageClient(),
             ...(config.model.baseUrl.value &&
             config.model.modelName.value &&
@@ -334,7 +419,7 @@ export function createLocalCliContainer(config: AppConfig): CliContainer {
       unlock: (id, pointer) => operational().profiles.unlock(id, pointer),
     },
     match: {
-      run: (profileId) => operational().matches.run(profileId),
+      scoreForJob: (input) => operational().matches.runForJob(input),
       list: (input) => operational().matches.list(input),
       show: (id) => operational().matches.show(id),
       wait: (taskId, signal) => operational().wait.wait(parseId(taskId, 'Task'), signal),

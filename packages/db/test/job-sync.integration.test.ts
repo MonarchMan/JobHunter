@@ -1,10 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import {
-  DefaultDerivationTaskFactory,
-  JobSyncService,
-  type JobSyncResult,
-  type SyncTrigger,
-} from '@jobhunter/application';
+import { JobSyncService, type JobSyncResult, type SyncTrigger } from '@jobhunter/application';
 import { parseId, parseNormalizedJob, utcInstant, type UtcInstant } from '@jobhunter/domain';
 import {
   AdapterRegistry,
@@ -167,7 +162,10 @@ interface SyncFixture {
 }
 
 async function setup(
-  options: { readonly maximumInlineRawBytes?: number } = {},
+  options: {
+    readonly maximumInlineRawBytes?: number;
+    readonly rejectAllJobs?: boolean;
+  } = {},
 ): Promise<SyncFixture> {
   const root = await createTemporaryDataRoot('jobhunter-sync-');
   const handle = openSqliteDatabase({ dataRoot: root.path });
@@ -220,7 +218,14 @@ async function setup(
     http: unusedHttp,
     clock,
     ids,
-    derivationTasks: new DefaultDerivationTaskFactory(ids, 'enrich-v1'),
+    ...(options.rejectAllJobs
+      ? {
+          jobIntakePolicy: {
+            allowedJobFamilies: () => [],
+            accepts: () => false,
+          },
+        }
+      : {}),
     options: {
       normalizerVersion: 'normalize-v1',
       ...(options.maximumInlineRawBytes === undefined
@@ -255,6 +260,37 @@ function count(handle: SqliteDatabaseHandle, table: string): number {
 }
 
 describe('JobSyncService', () => {
+  it('does not enqueue matching or model tasks during synchronization', async () => {
+    const fixture = await setup();
+    const result = await run(fixture);
+    expect(result).toMatchObject({
+      status: 'succeeded',
+      stats: { discovered: 3, created: 3, followupEnqueued: 0 },
+    });
+    expect(
+      fixture.handle.client
+        .prepare("SELECT count(*) FROM tasks WHERE task_type = 'job.enrich'")
+        .pluck()
+        .get(),
+    ).toBe(0);
+    expect(fixture.handle.client.prepare('SELECT count(*) FROM tasks').pluck().get()).toBe(0);
+  });
+
+  it('keeps complete runs healthy when jobs are intentionally filtered out', async () => {
+    const fixture = await setup({ rejectAllJobs: true });
+    const result = await run(fixture);
+    expect(result).toMatchObject({
+      status: 'succeeded',
+      coverage: 'complete',
+      stats: { discovered: 3, skippedOutOfScope: 3, created: 0 },
+    });
+    expect(
+      fixture.handle.client
+        .prepare('SELECT health_status, consecutive_failures FROM job_sources WHERE id = ?')
+        .get(sourceId),
+    ).toMatchObject({ health_status: 'healthy', consecutive_failures: 0 });
+  });
+
   it('streams a first run, replays idempotently and revises only changed content', async () => {
     const fixture = await setup();
     const first = await run(fixture);
@@ -262,12 +298,12 @@ describe('JobSyncService', () => {
       kind: 'completed',
       status: 'succeeded',
       coverage: 'complete',
-      stats: { discovered: 3, created: 3, rawStored: 3, followupEnqueued: 6 },
+      stats: { discovered: 3, created: 3, rawStored: 3, followupEnqueued: 0 },
     });
     expect(count(fixture.handle, 'jobs')).toBe(3);
     expect(count(fixture.handle, 'job_revisions')).toBe(3);
     expect(count(fixture.handle, 'job_observations')).toBe(3);
-    expect(count(fixture.handle, 'tasks')).toBe(6);
+    expect(count(fixture.handle, 'tasks')).toBe(0);
 
     const replay = await run(fixture, 'schedule');
     expect(replay).toMatchObject({
@@ -276,7 +312,7 @@ describe('JobSyncService', () => {
     });
     expect(count(fixture.handle, 'job_revisions')).toBe(3);
     expect(count(fixture.handle, 'job_observations')).toBe(6);
-    expect(count(fixture.handle, 'tasks')).toBe(6);
+    expect(count(fixture.handle, 'tasks')).toBe(0);
 
     const changedJob = fixture.scenario.jobs[1];
     if (!changedJob) throw new Error('Changed fixture job is missing.');
@@ -287,10 +323,10 @@ describe('JobSyncService', () => {
     const changed = await run(fixture);
     expect(changed).toMatchObject({
       status: 'succeeded',
-      stats: { unchanged: 2, revised: 1, followupEnqueued: 2 },
+      stats: { unchanged: 2, revised: 1, followupEnqueued: 0 },
     });
     expect(count(fixture.handle, 'job_revisions')).toBe(4);
-    expect(count(fixture.handle, 'tasks')).toBe(8);
+    expect(count(fixture.handle, 'tasks')).toBe(0);
   });
 
   it('does not increase missing counts after pagination failure or cancellation', async () => {
@@ -423,5 +459,32 @@ describe('JobSyncService', () => {
       }),
     );
     await expect(run(fixture)).resolves.toEqual({ kind: 'conflict', runId: existingRunId });
+  });
+
+  it('recovers an orphaned run after the worker lease recovery window', async () => {
+    const fixture = await setup();
+    const existingRunId = parseId(fixture.ids.generate(), 'SyncRun');
+    fixture.uow.run(({ sync }) =>
+      sync.startRun({
+        id: existingRunId,
+        sourceId,
+        trigger: 'manual',
+        coverage: 'unknown',
+        adapterVersion: '1.0.0',
+        normalizerVersion: 'normalize-v1',
+        syncPolicyVersion: 'v1',
+        sourceConfigHash: '0'.repeat(64),
+        cursorIn: null,
+        startedAt: fixture.clock.now(),
+      }),
+    );
+    fixture.clock.advance(16 * 60_000);
+
+    await expect(run(fixture)).resolves.toMatchObject({ kind: 'completed', status: 'succeeded' });
+    expect(
+      fixture.handle.client
+        .prepare('SELECT status, error_category FROM sync_runs WHERE id = ?')
+        .get(existingRunId),
+    ).toMatchObject({ status: 'cancelled', error_category: 'orphaned_run' });
   });
 });

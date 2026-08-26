@@ -4,7 +4,11 @@ import type { SourceErrorCategory } from './errors.js';
 import type { SourceHttpClient } from './http-client.js';
 
 /** Browser-backed implementations expose only a neutral snapshot, never Playwright objects. */
-export type SourcePageCollectionResponseShape = 'ats-job-posts' | 'alibaba-campus' | 'huawei-campus';
+export type SourcePageCollectionResponseShape =
+  | 'ats-job-posts'
+  | 'alibaba-campus'
+  | 'huawei-campus'
+  | 'meituan-jobs';
 
 export interface SourcePageCollectionRequest {
   readonly sourceKey: string;

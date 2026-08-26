@@ -51,12 +51,14 @@ export const normalizedJobSchema = z
     title: requiredInlineText,
     department: optionalInlineText,
     jobFamily: optionalInlineText,
+    jobSubfamily: z.preprocess(inlineText, z.string().min(1).nullable().default(null)),
     locations: z
       .array(requiredInlineText)
       .transform((locations) =>
         [...new Set(locations)].toSorted((left, right) => left.localeCompare(right)),
       ),
     employmentType: optionalInlineText,
+    recruitmentCategory: z.enum(['internship', 'campus', 'social']).nullable().default(null),
     experienceText: optionalInlineText,
     educationText: optionalInlineText,
     description: descriptionText,

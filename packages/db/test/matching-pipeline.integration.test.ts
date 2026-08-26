@@ -271,6 +271,35 @@ async function setup(): Promise<{
 }
 
 describe('matching persistence pipeline', () => {
+  it('pre-filters job revisions by target roles and excluded terms before calculation', async () => {
+    const fixture = await setup();
+
+    expect(
+      fixture.matching.listLatestRevisionIdsPage({
+        afterId: null,
+        limit: 10,
+        statuses: ['active', 'stale'],
+        targetRoles: ['Agent开发'],
+      }),
+    ).toEqual([revisionId]);
+    expect(
+      fixture.matching.listLatestRevisionIdsPage({
+        afterId: null,
+        limit: 10,
+        statuses: ['active', 'stale'],
+        targetRoles: ['大模型算法'],
+      }),
+    ).toEqual([]);
+    expect(
+      fixture.matching.listLatestRevisionIdsPage({
+        afterId: null,
+        limit: 10,
+        statuses: ['active', 'stale'],
+        excludedTerms: ['Agent开发'],
+      }),
+    ).toEqual([]);
+  });
+
   it('runs the complete deterministic path without constructing a model client', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
@@ -283,8 +312,9 @@ describe('matching persistence pipeline', () => {
       handler.execute(fixture.context, {
         jobRevisionId: revisionId,
         jobEnrichmentId: null,
+        profileVersionId,
       }),
-    ).resolves.toEqual({ processedInputs: 1, createdResults: 1, existingResults: 0 });
+    ).resolves.toMatchObject({ processedInputs: 1, createdResults: 1, existingResults: 0 });
     expect(new CurrentMatchQueryService(fixture.matching).list({ profileId }).items).toMatchObject([
       {
         jobId,
@@ -451,21 +481,6 @@ describe('matching persistence pipeline', () => {
       }).current(enriched.match.id),
     ).toBeNull();
 
-    const profileBatch = await new MatchingBatchService({
-      matching: fixture.matching,
-      calculator: service,
-      pageSize: 1,
-    }).forProfile({
-      profileVersionId,
-      signal: new AbortController().signal,
-    });
-
-    expect(profileBatch).toEqual({
-      processedInputs: 2,
-      createdResults: 0,
-      existingResults: 2,
-    });
-
     fixture.handle.client.prepare("UPDATE jobs SET status = 'stale' WHERE id = ?").run(jobId);
     expect(currentMatches.list({ profileId }).items).toEqual([]);
     expect(currentMatches.list({ profileId, includeStale: true }).items).toHaveLength(1);
@@ -474,62 +489,37 @@ describe('matching persistence pipeline', () => {
     expect(currentMatches.list({ profileId, includeClosed: true }).items).toHaveLength(1);
   });
 
-  it('pages revision batches, converges on replay, and honors cancellation', async () => {
+  it('scores only the explicitly selected profile and job revision', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
     service.ensureRulesetV1({ id: rulesetId });
-    const secondProfileVersionId = parseId(
-      '018f0000-0000-7000-8000-00000000d008',
-      'ProfileVersion',
-    );
-    const secondProfileId = parseId('018f0000-0000-7000-8000-00000000d009', 'CandidateProfile');
-    fixture.handle.client
-      .prepare(
-        `INSERT INTO candidate_profiles (id, name, created_at, updated_at)
-         VALUES (?, 'Second Candidate', 1, 1)`,
-      )
-      .run(secondProfileId);
-    fixture.handle.client
-      .prepare(
-        `INSERT INTO profile_versions
-         (id, profile_id, version_no, resume_document_id, agent_run_id, extracted_json,
-          effective_json, locked_paths_json, content_hash, is_current, created_at)
-         VALUES (?, ?, 1, NULL, NULL, ?, ?, '[]', ?, 1, 1)`,
-      )
-      .run(
-        secondProfileVersionId,
-        secondProfileId,
-        canonicalJson(profile),
-        canonicalJson(profile),
-        'd'.repeat(64),
-      );
-
     const batches = new MatchingBatchService({
-      matching: fixture.matching,
       calculator: service,
-      pageSize: 1,
     });
     const input = {
       jobRevisionId: revisionId,
       jobEnrichmentId: null,
+      profileVersionId,
       signal: new AbortController().signal,
     } as const;
 
-    await expect(batches.forRevision(input)).resolves.toEqual({
-      processedInputs: 2,
-      createdResults: 2,
+    await expect(batches.forRevision(input)).resolves.toMatchObject({
+      processedInputs: 1,
+      createdResults: 1,
       existingResults: 0,
     });
-    await expect(batches.forRevision(input)).resolves.toEqual({
-      processedInputs: 2,
+    await expect(batches.forRevision(input)).resolves.toMatchObject({
+      processedInputs: 1,
       createdResults: 0,
-      existingResults: 2,
+      existingResults: 1,
     });
 
     const controller = new AbortController();
     controller.abort();
     await expect(
       batches.forRevision({ ...input, signal: controller.signal }),
-    ).rejects.toMatchObject({ name: 'AbortError' });
+    ).rejects.toMatchObject({
+      name: 'AbortError',
+    });
   });
 });

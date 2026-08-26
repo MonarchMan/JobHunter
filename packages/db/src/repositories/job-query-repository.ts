@@ -22,9 +22,13 @@ const filterSchema = z
       .optional(),
     locations: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
     jobFamilies: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
+    jobSubfamilies: z.array(z.string().trim().min(1).max(100)).max(100).optional(),
+    recruitmentCategory: z.enum(['internship', 'campus', 'social']).optional(),
     minimumScore: z.number().min(0).max(100).optional(),
     profileVersionId: id.optional(),
     sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('updated_desc'),
+    page: z.number().int().positive().optional(),
+    pageSize: z.number().int().min(1).max(100).optional(),
     cursor: z.string().max(1_000).optional(),
     limit: z.number().int().min(1).max(100).default(50),
   })
@@ -44,6 +48,8 @@ interface JobQueryRow {
   readonly title: string;
   readonly department: string | null;
   readonly job_family: string | null;
+  readonly job_subfamily: string | null;
+  readonly recruitment_category: 'internship' | 'campus' | 'social' | null;
   readonly locations_json: string;
   readonly status: 'active' | 'stale' | 'closed';
   readonly detail_url: string;
@@ -130,8 +136,20 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       innerParameters.push(...filter.locations);
     }
     if (filter.jobFamilies && filter.jobFamilies.length > 0) {
-      innerConditions.push(`j.job_family IN (${placeholders(filter.jobFamilies.length)})`);
-      innerParameters.push(...filter.jobFamilies);
+      innerConditions.push(
+        `lower(COALESCE(j.job_family, '')) IN (${placeholders(filter.jobFamilies.length)})`,
+      );
+      innerParameters.push(...filter.jobFamilies.map((value) => value.toLowerCase()));
+    }
+    if (filter.jobSubfamilies && filter.jobSubfamilies.length > 0) {
+      innerConditions.push(
+        `lower(COALESCE(j.job_subfamily, '')) IN (${placeholders(filter.jobSubfamilies.length)})`,
+      );
+      innerParameters.push(...filter.jobSubfamilies.map((value) => value.toLowerCase()));
+    }
+    if (filter.recruitmentCategory) {
+      innerConditions.push('j.recruitment_category = ?');
+      innerParameters.push(filter.recruitmentCategory);
     }
 
     const sort = filter.sort;
@@ -153,24 +171,46 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       outerParameters.push(cursor.sortValue, cursor.sortValue, cursor.id);
     }
 
-    const sql = `
-      SELECT query.*, ${sortExpression} AS sort_value
+    const baseSql = `
       FROM (
         SELECT j.id, j.company_id, company.name AS company_name, j.title, j.department,
-               j.job_family, j.locations_json,
+               j.job_family, j.job_subfamily, j.recruitment_category, j.locations_json,
                j.status, j.detail_url, j.apply_url, j.published_at, j.updated_at,
                ${scoreExpression} AS score
         FROM jobs j
         JOIN companies company ON company.id = j.company_id
         ${innerConditions.length > 0 ? `WHERE ${innerConditions.join(' AND ')}` : ''}
       ) query
-      ${outerConditions.length > 0 ? `WHERE ${outerConditions.join(' AND ')}` : ''}
+      ${outerConditions.length > 0 ? `WHERE ${outerConditions.join(' AND ')}` : ''}`;
+    const paged = filter.page !== undefined && !filter.cursor;
+    const requestedPage = filter.page ?? 1;
+    const pageSize = filter.pageSize ?? filter.limit;
+    const total = paged
+      ? (this.#client
+          .prepare<unknown[], { readonly total: number }>(`SELECT COUNT(*) AS total ${baseSql}`)
+          .get(...selectParameters, ...innerParameters, ...outerParameters)?.total ?? 0)
+      : undefined;
+    const page =
+      paged && total !== undefined
+        ? Math.min(requestedPage, Math.max(1, Math.ceil(total / (pageSize ?? 1))))
+        : requestedPage;
+    const sql = `
+      SELECT query.*, ${sortExpression} AS sort_value
+      ${baseSql}
       ORDER BY sort_value DESC, id ASC
-      LIMIT ?`;
+      LIMIT ?${paged ? ' OFFSET ?' : ''}`;
+    const limit = pageSize ?? filter.limit;
+    const queryLimit = limit + (paged ? 1 : 1);
     const rows = this.#client
       .prepare<unknown[], JobQueryRow>(sql)
-      .all(...selectParameters, ...innerParameters, ...outerParameters, filter.limit + 1);
-    const pageRows = rows.slice(0, filter.limit);
+      .all(
+        ...selectParameters,
+        ...innerParameters,
+        ...outerParameters,
+        queryLimit,
+        ...(paged ? [(page - 1) * limit] : []),
+      );
+    const pageRows = rows.slice(0, limit);
     const items: JobListItem[] = pageRows.map((row) => ({
       id: parseId(row.id, 'Job'),
       companyId: parseId(row.company_id, 'Company'),
@@ -178,6 +218,8 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       title: row.title,
       department: row.department,
       jobFamily: row.job_family,
+      jobSubfamily: row.job_subfamily,
+      recruitmentCategory: row.recruitment_category,
       locations: z.array(z.string()).parse(JSON.parse(row.locations_json) as unknown),
       status: row.status,
       detailUrl: row.detail_url,
@@ -190,9 +232,10 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     return {
       items,
       nextCursor:
-        rows.length > filter.limit && last
+        rows.length > limit && last
           ? encodeCursor({ sortValue: last.sort_value, id: last.id })
           : null,
+      ...(paged && total !== undefined ? { total, page, pageSize: limit } : {}),
     };
   }
 
@@ -210,8 +253,8 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       .prepare<unknown[], JobDetailRow>(
         `
         SELECT j.id, j.company_id, company.name AS company_name, j.source_id,
-               j.external_job_id, j.title, j.department, j.job_family, j.locations_json,
-               j.employment_type, j.experience_text, j.education_text, j.description,
+               j.external_job_id, j.title, j.department, j.job_family, j.job_subfamily, j.locations_json,
+               j.employment_type, j.recruitment_category, j.experience_text, j.education_text, j.description,
                j.status, j.detail_url, j.apply_url, j.published_at, j.updated_at,
                j.first_seen_at, j.last_seen_at, j.closed_at,
                ${scoreExpression} AS score, j.updated_at AS sort_value
@@ -230,8 +273,10 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       title: row.title,
       department: row.department,
       jobFamily: row.job_family,
+      jobSubfamily: row.job_subfamily,
       locations: z.array(z.string()).parse(JSON.parse(row.locations_json) as unknown),
       employmentType: row.employment_type,
+      recruitmentCategory: row.recruitment_category,
       experienceText: row.experience_text,
       educationText: row.education_text,
       description: row.description,

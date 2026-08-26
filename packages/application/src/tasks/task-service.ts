@@ -84,6 +84,10 @@ export class TaskService {
     return this.#queue.list(filter);
   }
 
+  public count(filter: Omit<TaskListFilter, 'limit' | 'offset'> = {}): number {
+    return this.#queue.count(filter);
+  }
+
   public summary(): TaskQueueSummary {
     return this.#queue.summary(this.#dependencies.clock.now());
   }

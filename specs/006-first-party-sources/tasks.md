@@ -1,7 +1,7 @@
 # 006 首批企业官网来源任务
 
 > 状态：Implemented
-> 显式覆盖：FPS-001, FPS-002, FPS-003, FPS-004, FPS-005, FPS-006, FPS-007, FPS-008, FPS-009, FPS-010, FPS-011
+> 显式覆盖：FPS-001, FPS-002, FPS-003, FPS-004, FPS-005, FPS-006, FPS-007, FPS-008, FPS-009, FPS-010, FPS-011, FPS-012, FPS-013, FPS-014
 
 - [x] **FPS-T001** 建立来源目录模板、README 模板、support status 与公司/来源幂等 seed。（FPS-001,003）
 - [x] **FPS-T002** 完成腾讯 Spike、固定样本、适配器、契约和同步集成测试。（FPS-002..010）
@@ -54,5 +54,12 @@
 - [x] **FPS-T016** 补齐阿里、字节、得物、华为浏览器来源的逐来源运行时响应 Schema、独立脱敏分页 fixture 和公共契约套件，替代当前共享弱字段解析与测试内嵌样本。（FPS-004,005,008）
   - 2026-08-22：共享适配器在 discover/normalize 边界调用逐来源 Zod 记录 Schema；阿里、字节、得物、华为和小红书均加入独立脱敏 fixture、SHA-256、公共来源契约测试及 `parse_changed` 回归。分页响应外壳继续由浏览器基础设施按 response shape 校验。
 - [x] **FPS-T017** 为阿里、字节、得物、华为增加通过 Worker 浏览器装配单独运行的在线 Smoke；默认测试必须继续保持离线。（FPS-009,011）
+- [x] **FPS-T018** 审计十家官网招聘类别映射，修复阿里“日常实习”及其他记录级实习被来源级 campus/social 默认值覆盖的问题，并增加固定样本断言。（FPS-005,013）
+  - 2026-08-23：scripted 来源改为记录级实习语义优先；阿里日常实习、华为 INTERN、字节/得物/小红书标题实习均归 `internship`，百度、拼多多、京东实习常量映射保持不变；迁移同步修复既有数据。
+- [x] **FPS-T019** 将目录扩展为公司 1:N 来源，补齐缺失的校招/实习 source slug、稳定 ID、adapter key 与幂等 seed；实习优先。（FPS-001,012）
+  - 2026-08-23：新增 `tencent-intern`、`meituan-intern` 与 `bytedance-intern` 稳定来源。补充使用正常匿名浏览器复核用户确认的字节校园入口，纠正裸 HTTP 404 的错误结论；该来源接入独立 `bytedance.campus` 适配器并晋级 supported。
+- [x] **FPS-T020** 对新增实习来源完成官方 JSON 协议 Spike、定向在线 Smoke 和支持门禁；浏览器来源严格使用首请求初始化加响应驱动 JSON 分页。（FPS-002..010,012,014）
+  - 2026-08-23：腾讯校园 JSON 返回 426 条实习职位，列表与详情协议通过定向验证；同步经简历/地域入口策略后入库 72 条。美团校园页只初始化匿名会话，后续将 JSON 请求体固定为 `jobType=2` 并按 `totalCount/pageSize` 分页，两页在线 Smoke 通过；定向同步入库 222 条。两者均晋级 supported 并启用。
+  - 2026-08-23：字节校园入口 `jobs.bytedance.com/campus/position` 在正常浏览器会话中返回 200；首个 JSON 请求使用 `portal_type=3`，当前 count=7444，项目筛选包含日常实习、ByteIntern、Seed 大模型人才实习招聘。两页响应驱动 JSON Smoke 通过，首条记录归一化为 internship。
   - 2026-08-22：新增 Worker 侧 Playwright 在线测试，通过 `JOBHUNTER_BROWSER_ONLINE_SOURCE` 逐家选择；未显式选择时全部跳过，每次最多两页，验证匿名会话、分页响应、逐来源 Schema、稳定 ID、官方 URL 和归一化。
   - 2026-08-22：显式选择 `dewu` 运行真实 Worker→Playwright→SourcePageClient 链路，在线 Smoke 通过（1 passed，其他 3 家按选择器跳过）；未运行四家批量或全量采集。

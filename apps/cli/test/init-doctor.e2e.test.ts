@@ -63,10 +63,36 @@ describe('init and doctor commands', () => {
         cwd: root.path,
       });
       expect(firstExit).toBe(0);
-      expect(JSON.parse(firstOutput.stdout.join(''))).toMatchObject({
+      const initialized = JSON.parse(firstOutput.stdout.join('')) as {
+        readonly data: {
+          readonly dataRoot: string;
+          readonly configCreated: boolean;
+          readonly companies: number;
+          readonly sources: number;
+          readonly bootstrap: {
+            readonly defaultResumeTaskId: string | null;
+            readonly sourceSyncTaskIds: readonly string[];
+            readonly schedules: number;
+          };
+        };
+      };
+      expect(initialized).toMatchObject({
         ok: true,
-        data: { dataRoot, configCreated: true, companies: 10, sources: 10 },
+        data: {
+          dataRoot,
+          configCreated: true,
+          companies: 10,
+          sources: 13,
+          bootstrap: {
+            defaultResumeTaskId: null,
+            schedules: 14,
+          },
+        },
       });
+      expect(initialized.data.bootstrap.sourceSyncTaskIds).toHaveLength(13);
+      expect(
+        initialized.data.bootstrap.sourceSyncTaskIds.every((id) => typeof id === 'string'),
+      ).toBe(true);
 
       const configPath = path.join(dataRoot, 'config.json');
       await writeFile(configPath, '{"logLevel":"error"}\n');
@@ -80,7 +106,7 @@ describe('init and doctor commands', () => {
         }),
       ).toBe(0);
       expect(JSON.parse(secondOutput.stdout.join(''))).toMatchObject({
-        data: { configCreated: false, companies: 10, sources: 10 },
+        data: { configCreated: false, companies: 10, sources: 13 },
       });
       await expect(readFile(configPath, 'utf8')).resolves.toBe('{"logLevel":"error"}\n');
 

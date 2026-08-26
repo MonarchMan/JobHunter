@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="字节跳动">
+  <rect width="64" height="64" rx="14" fill="#17191f"/>
+  <path d="M18 19h8v26h-8zm20 0h8v26h-8zM29 25h6v14h-6z" fill="#fff"/>
+  <path d="M15 15h34v4H15zm0 30h34v4H15z" fill="#4e5fbb"/>
+</svg>

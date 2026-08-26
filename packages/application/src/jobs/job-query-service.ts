@@ -30,9 +30,13 @@ export interface JobSearchInput {
   readonly statuses?: readonly JobStatus[];
   readonly locations?: readonly string[];
   readonly jobFamilies?: readonly string[];
+  readonly jobSubfamilies?: readonly string[];
+  readonly recruitmentCategory?: 'internship' | 'campus' | 'social';
   readonly minimumScore?: number;
   readonly profileVersionId?: string;
   readonly sort?: JobQuerySort;
+  readonly page?: number;
+  readonly pageSize?: number;
   readonly cursor?: string;
   readonly limit?: number;
 }
@@ -78,11 +82,15 @@ export class JobQueryService {
       statuses: input.statuses ?? ['active', 'stale'],
       ...(input.locations ? { locations: input.locations } : {}),
       ...(input.jobFamilies ? { jobFamilies: input.jobFamilies } : {}),
+      ...(input.jobSubfamilies ? { jobSubfamilies: input.jobSubfamilies } : {}),
+      ...(input.recruitmentCategory ? { recruitmentCategory: input.recruitmentCategory } : {}),
       ...(input.minimumScore === undefined ? {} : { minimumScore: input.minimumScore }),
       ...(input.profileVersionId
         ? { profileVersionId: parseId(input.profileVersionId, 'ProfileVersion') }
         : {}),
       ...(input.sort ? { sort: input.sort } : {}),
+      ...(input.page === undefined ? {} : { page: input.page }),
+      ...(input.pageSize === undefined ? {} : { pageSize: input.pageSize }),
       ...(input.cursor ? { cursor: input.cursor } : {}),
       ...(input.limit === undefined ? {} : { limit: input.limit }),
     };

@@ -29,8 +29,8 @@ jh worker start
 # 同步官网并等待结果
 jh source sync tencent-social --wait
 
-# 对画像当前版本运行确定性匹配
-jh match run <profileId> --wait
+# 为单个具体职位运行确定性匹配
+jh match score <jobId> --wait
 jh match list <profileId> --include-stale --limit 20
 jh match show <matchResultId>
 
@@ -38,7 +38,7 @@ jh match show <matchResultId>
 jh job export "exports/职位.csv" --format csv --bom
 ```
 
-`source sync`、简历画像提取和 `match run` 默认只入队。只有显式提供 `--wait` 才轮询；等待期间按 Ctrl+C 只停止本地等待，不会取消后台任务。
+`source sync`、简历画像提取和 `match score` 默认只入队。只有显式提供 `--wait` 才轮询；等待期间按 Ctrl+C 只停止本地等待，不会取消后台任务。系统不会提供或执行全量职位批量匹配。
 
 ## 画像人工维护
 

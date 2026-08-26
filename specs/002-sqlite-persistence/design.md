@@ -24,6 +24,13 @@ packages/db/
 
 `DbSession` 是应用层事务端口的实现。应用层通过 `UnitOfWork.run(fn)` 获得绑定同一连接的 Repository 集合；回调必须是同步数据库阶段，不接受外部 Promise。
 
+### 系统设置
+
+`application_settings` 继续由 `SqliteSettingsStore` 实现。设置 key 必须先在 Registry
+中声明并通过 Zod Schema 校验；应用层只依赖设置 Repository 端口，不直接依赖 SQLite。
+`matching.jobUnderstanding` 的默认值和迁移值均为 `{ "enabled": false }`。同步 Worker
+在每次同步开始时读取该设置，作为是否创建 `job.enrich` 任务的全局最终开关。
+
 ## 初始化
 
 连接顺序：解析绝对 data root → 创建目录 → 打开库 → 设置 PRAGMA → 检查 SQLite/FTS5 → 执行迁移 → foreign_key_check。busy timeout 默认 5000ms，可配置。

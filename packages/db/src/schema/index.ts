@@ -185,8 +185,10 @@ export const jobs = sqliteTable(
     title: text().notNull(),
     department: text(),
     jobFamily: text('job_family'),
+    jobSubfamily: text('job_subfamily'),
     locationsJson: jsonText('locations_json').notNull().default('[]'),
     employmentType: text('employment_type'),
+    recruitmentCategory: text('recruitment_category'),
     experienceText: text('experience_text'),
     educationText: text('education_text'),
     description: text().notNull(),
@@ -499,7 +501,13 @@ export const tasks = sqliteTable(
     finishedAt: epoch('finished_at'),
   },
   (table) => [
-    index('tasks_claim_idx').on(table.status, table.availableAt, table.priority, table.createdAt),
+    index('tasks_claim_idx').on(
+      table.taskType,
+      table.status,
+      table.availableAt,
+      table.priority,
+      table.createdAt,
+    ),
     index('tasks_recovery_idx').on(table.status, table.leaseExpiresAt),
     uniqueIndex('tasks_active_concurrency_idx')
       .on(table.concurrencyKey)

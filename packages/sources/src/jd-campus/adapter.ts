@@ -1,4 +1,6 @@
 import { parseNormalizedJob, utcInstant } from '@jobhunter/domain';
+import { normalizeJobTaxonomy } from '../job-taxonomy.js';
+import { normalizeRecruitmentCategory } from '../recruitment-category.js';
 import {
   SourceError,
   canonicalizeOfficialUrl,
@@ -188,6 +190,7 @@ export function createJdCampusAdapter(): JobSourceAdapter<JdCampusConfig, never>
           () => jdCampusJobSchema.parse(input.discovered.raw),
           'JD campus discovered job no longer matches the verified schema.',
         );
+        const taxonomy = normalizeJobTaxonomy(job.jobDirection ?? job.jobCategory);
         return {
           job: parseNormalizedJob({
             companyId: context.companyId,
@@ -195,7 +198,9 @@ export function createJdCampusAdapter(): JobSourceAdapter<JdCampusConfig, never>
             externalJobId: String(job.publishId),
             title: title(job),
             department: job.positionDept ?? null,
-            jobFamily: job.jobDirection ?? job.jobCategory ?? null,
+            jobFamily: taxonomy.jobFamily,
+            jobSubfamily: taxonomy.jobSubfamily,
+            recruitmentCategory: normalizeRecruitmentCategory('实习'),
             locations: locations(job),
             employmentType: '实习',
             experienceText: job.workYears ?? null,

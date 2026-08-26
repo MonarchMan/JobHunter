@@ -24,6 +24,7 @@ function commaValues(value: string | undefined): string[] | undefined {
 export function parseWebJobQuery(source: SearchParameterSource): WebJobQuery {
   const minimumScoreText = firstSearchParameter(source, 'minScore');
   const limitText = firstSearchParameter(source, 'limit');
+  const pageText = firstSearchParameter(source, 'page');
   return webJobQuerySchema.parse({
     ...(firstSearchParameter(source, 'q') ? { search: firstSearchParameter(source, 'q') } : {}),
     ...(commaValues(firstSearchParameter(source, 'company'))
@@ -35,14 +36,18 @@ export function parseWebJobQuery(source: SearchParameterSource): WebJobQuery {
     ...(commaValues(firstSearchParameter(source, 'location'))
       ? { locations: commaValues(firstSearchParameter(source, 'location')) }
       : {}),
-    ...(commaValues(firstSearchParameter(source, 'family'))
-      ? { jobFamilies: commaValues(firstSearchParameter(source, 'family')) }
+    ...(commaValues(firstSearchParameter(source, 'subfamily'))
+      ? { jobSubfamilies: commaValues(firstSearchParameter(source, 'subfamily')) }
+      : {}),
+    ...(firstSearchParameter(source, 'category')
+      ? { recruitmentCategory: firstSearchParameter(source, 'category') }
       : {}),
     ...(minimumScoreText ? { minimumScore: Number(minimumScoreText) } : {}),
     ...(firstSearchParameter(source, 'profile')
       ? { profileVersionId: firstSearchParameter(source, 'profile') }
       : {}),
     ...(firstSearchParameter(source, 'sort') ? { sort: firstSearchParameter(source, 'sort') } : {}),
+    ...(pageText ? { page: Number(pageText) } : {}),
     ...(firstSearchParameter(source, 'cursor')
       ? { cursor: firstSearchParameter(source, 'cursor') }
       : {}),
@@ -72,4 +77,19 @@ export function firstPageHref(source: SearchParameterSource): string {
   }
   const query = parameters.toString();
   return query ? `/jobs?${query}` : '/jobs';
+}
+
+export function pageHref(
+  source: SearchParameterSource,
+  pageParameter: string,
+  page: number,
+): string {
+  const parameters = new URLSearchParams();
+  for (const [key, raw] of Object.entries(source)) {
+    const value = typeof raw === 'string' || raw === undefined ? raw : raw[0];
+    if (value && key !== 'cursor' && key !== pageParameter) parameters.set(key, value);
+  }
+  if (page > 1) parameters.set(pageParameter, String(page));
+  const query = parameters.toString();
+  return query ? `?${query}` : '';
 }

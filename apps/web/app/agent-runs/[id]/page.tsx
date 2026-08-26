@@ -1,5 +1,12 @@
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
+import {
+  agentRunStatusLabels,
+  labelStatus,
+  taskStatusLabels,
+} from '../../components/status-labels.js';
+import { PageHeader } from '../../components/page-header.js';
+import { TruncatedText } from '../../components/truncated-text.js';
 import { getWebContainer } from '../../../src/server/container.js';
 
 export const dynamic = 'force-dynamic';
@@ -13,18 +20,18 @@ export default async function AgentRunPage({
   if (!run) notFound();
   return (
     <main id="main-content" tabIndex={-1}>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">AGENT TRACE</p>
-          <h1>{run.agentKey}</h1>
-        </div>
+      <PageHeader eyebrow="AGENT TRACE" title={run.agentKey}>
         <a href="/tasks">返回任务</a>
-      </div>
+      </PageHeader>
       <section className="panel">
         <dl className="facts">
           <div>
             <dt>状态</dt>
-            <dd>{run.status}</dd>
+            <dd>
+              <span className={`status status-${run.status}`}>
+                {labelStatus(agentRunStatusLabels, run.status)}
+              </span>
+            </dd>
           </div>
           <div>
             <dt>Agent 版本</dt>
@@ -75,10 +82,18 @@ export default async function AgentRunPage({
               {run.toolCalls.map((call) => (
                 <tr key={call.sequenceNumber}>
                   <td>{call.sequenceNumber}</td>
-                  <td>{call.toolKey}</td>
-                  <td>{call.status}</td>
+                  <td>
+                    <TruncatedText value={call.toolKey} />
+                  </td>
+                  <td>
+                    <span className={`status status-${call.status}`}>
+                      {labelStatus(taskStatusLabels, call.status)}
+                    </span>
+                  </td>
                   <td>{call.durationMs === null ? '—' : `${String(call.durationMs)} ms`}</td>
-                  <td>{call.errorSummary ?? '—'}</td>
+                  <td>
+                    <TruncatedText value={call.errorSummary ?? '—'} />
+                  </td>
                 </tr>
               ))}
             </tbody>

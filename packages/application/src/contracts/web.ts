@@ -56,6 +56,26 @@ export const webTaskAcceptedSchema = z
 
 export type WebTaskAccepted = z.infer<typeof webTaskAcceptedSchema>;
 
+export const webResumeImportResultSchema = z
+  .object({
+    document: z
+      .object({
+        id: z.uuid(),
+        mediaType: z.string().min(1),
+        parseStatus: z.enum(['parsed', 'needs_ocr', 'failed']),
+        parserVersion: z.string().nullable(),
+        errorSummary: z.string().nullable(),
+        createdAt: z.number().int().nonnegative(),
+      })
+      .strict(),
+    deduplicated: z.boolean(),
+    profileId: z.uuid(),
+    task: webTaskAcceptedSchema.nullable(),
+  })
+  .strict();
+
+export type WebResumeImportResult = z.infer<typeof webResumeImportResultSchema>;
+
 export const webDashboardSchema = z
   .object({
     activeJobs: z.number().int().nonnegative(),
@@ -76,6 +96,27 @@ export const webDashboardSchema = z
 
 export type WebDashboard = z.infer<typeof webDashboardSchema>;
 
+export const webPaginationSchema = z
+  .object({
+    current: z.number().int().positive(),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().positive(),
+    pageSize: z.number().int().positive(),
+  })
+  .strict();
+
+export type WebPagination = z.infer<typeof webPaginationSchema>;
+
+export function webPagination(total: number, current: number, pageSize: number): WebPagination {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  return webPaginationSchema.parse({
+    current: Math.min(Math.max(current, 1), totalPages),
+    total,
+    totalPages,
+    pageSize,
+  });
+}
+
 export const webJobQuerySchema = z
   .object({
     search: z.string().trim().min(1).max(200).optional(),
@@ -85,16 +126,33 @@ export const webJobQuerySchema = z
       .max(3)
       .optional(),
     locations: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
-    jobFamilies: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+    jobSubfamilies: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+    recruitmentCategory: z.enum(['internship', 'campus', 'social']).default('internship'),
     minimumScore: z.number().min(0).max(100).optional(),
     profileVersionId: z.uuid().optional(),
     sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('updated_desc'),
+    page: z.number().int().positive().default(1),
+    pageSize: z.number().int().min(1).max(100).default(25),
     cursor: z.string().max(1_000).optional(),
-    limit: z.number().int().min(1).max(100).default(25),
+    limit: z.number().int().min(1).max(100).optional(),
   })
   .strict();
 
 export type WebJobQuery = z.infer<typeof webJobQuerySchema>;
+
+export const webJobMatchMutationSchema = z
+  .object({
+    profileVersionId: z.uuid().optional(),
+    idempotencyToken: z.string().trim().min(8).max(200),
+    mode: z.enum(['rules', 'llm']).default('rules'),
+  })
+  .strict();
+
+export type WebJobMatchMutation = z.infer<typeof webJobMatchMutationSchema>;
+
+export const webJobBulkMatchMutationSchema = webJobMatchMutationSchema
+  .extend({ jobIds: z.array(z.uuid()).min(1).max(100) })
+  .strict();
 
 export const webJobListItemSchema = z
   .object({
@@ -104,6 +162,8 @@ export const webJobListItemSchema = z
     title: z.string(),
     department: z.string().nullable(),
     jobFamily: z.string().nullable(),
+    jobSubfamily: z.string().nullable(),
+    recruitmentCategory: z.enum(['internship', 'campus', 'social']).nullable(),
     locations: z.array(z.string()),
     status: z.enum(['active', 'stale', 'closed']),
     detailUrl: z.url({ protocol: /^https$/ }),
@@ -119,6 +179,9 @@ export type WebJobListItem = z.infer<typeof webJobListItemSchema>;
 export const webJobPageSchema = z
   .object({
     items: z.array(webJobListItemSchema),
+    page: webPaginationSchema,
+    hasPreviousPage: z.boolean(),
+    hasNextPage: z.boolean(),
     nextCursor: z.string().nullable(),
   })
   .strict();
@@ -156,6 +219,7 @@ export const webJobDetailSchema = webJobListItemSchema
     sourceId: z.uuid(),
     externalJobId: z.string(),
     employmentType: z.string().nullable(),
+    recruitmentCategory: z.enum(['internship', 'campus', 'social']).nullable(),
     experienceText: z.string().nullable(),
     educationText: z.string().nullable(),
     description: z.string(),
@@ -213,6 +277,14 @@ export type WebProfileDetail = z.infer<typeof webProfileDetailSchema>;
 export const webProfileMutationSchema = z.discriminatedUnion('kind', [
   z
     .object({
+      kind: z.literal('replace'),
+      profileId: z.uuid(),
+      expectedVersionId: z.uuid(),
+      profile: candidateProfileSchema,
+    })
+    .strict(),
+  z
+    .object({
       kind: z.literal('set'),
       profileId: z.uuid(),
       expectedVersionId: z.uuid(),
@@ -256,9 +328,16 @@ const webSourceRunSchema = z
 export const webSourceSchema = z
   .object({
     id: z.uuid(),
+    companyId: z.uuid(),
     companyName: z.string(),
+    officialUrl: z.url({ protocol: /^https$/ }),
     slug: z.string(),
     adapterKey: z.string(),
+    recruitmentType: z.enum(['social', 'campus', 'mixed']),
+    recruitmentChannels: z
+      .array(z.enum(['internship', 'campus', 'social']))
+      .min(1)
+      .max(3),
     enabled: z.boolean(),
     supportStatus: z.enum(['experimental', 'supported', 'blocked']),
     healthStatus: z.enum(['unknown', 'healthy', 'degraded', 'unhealthy']),
@@ -301,6 +380,26 @@ export const webSourceMutationSchema = z.discriminatedUnion('kind', [
 ]);
 
 export type WebSourceMutation = z.infer<typeof webSourceMutationSchema>;
+
+export const webSettingsSchema = z
+  .object({
+    jobUnderstanding: z
+      .object({
+        enabled: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type WebSettings = z.infer<typeof webSettingsSchema>;
+
+export const webSettingsMutationSchema = z
+  .object({
+    jobUnderstandingEnabled: z.boolean(),
+  })
+  .strict();
+
+export type WebSettingsMutation = z.infer<typeof webSettingsMutationSchema>;
 
 const webTaskStatusSchema = z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled']);
 
@@ -363,7 +462,12 @@ export type WebAgentRunSummary = z.infer<typeof webAgentRunSummarySchema>;
 export type WebAgentRunDetail = z.infer<typeof webAgentRunDetailSchema>;
 
 export const webDiagnosticsSchema = z
-  .object({ tasks: z.array(webTaskSchema), agentRuns: z.array(webAgentRunSummarySchema) })
+  .object({
+    tasks: z.array(webTaskSchema),
+    taskPagination: webPaginationSchema,
+    agentRuns: z.array(webAgentRunSummarySchema),
+    agentPagination: webPaginationSchema,
+  })
   .strict();
 
 export type WebDiagnostics = z.infer<typeof webDiagnosticsSchema>;

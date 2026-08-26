@@ -1,4 +1,6 @@
 import { parseNormalizedJob, utcInstant } from '@jobhunter/domain';
+import { normalizeJobTaxonomy } from '../job-taxonomy.js';
+import { normalizeRecruitmentCategory } from '../recruitment-category.js';
 import {
   SourceError,
   canonicalizeOfficialUrl,
@@ -219,6 +221,7 @@ export function createBaiduAdapter(): JobSourceAdapter<BaiduConfig, never> {
           'Baidu discovered job no longer matches the verified schema.',
         );
         const officialUrl = jobUrl(job.recruitType, job.postId);
+        const taxonomy = normalizeJobTaxonomy(job.postType);
         return {
           job: parseNormalizedJob({
             companyId: context.companyId,
@@ -226,7 +229,11 @@ export function createBaiduAdapter(): JobSourceAdapter<BaiduConfig, never> {
             externalJobId: job.postId,
             title: job.name,
             department: optionalText(job.orgName, job.bgShortName),
-            jobFamily: optionalText(job.postType),
+            jobFamily: taxonomy.jobFamily,
+            jobSubfamily: taxonomy.jobSubfamily,
+            recruitmentCategory: normalizeRecruitmentCategory(
+              job.recruitType === 'INTERN' ? '实习' : '校招',
+            ),
             locations: locations(job.workPlace),
             employmentType: job.recruitType === 'INTERN' ? '实习' : '校招',
             experienceText: optionalText(job.workYears),

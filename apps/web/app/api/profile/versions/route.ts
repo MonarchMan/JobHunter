@@ -17,7 +17,7 @@ export async function GET(request: Request): Promise<Response> {
     const container = await getWebContainer();
     return dataResponse({ versions: container.services.webProfiles.get(profileId).versions });
   } catch (error) {
-    if (error instanceof CandidateProfileNotFoundError) return notFoundResponse('画像不存在。');
+    if (error instanceof CandidateProfileNotFoundError) return notFoundResponse('个人资料不存在。');
     if (error instanceof ZodError || error instanceof TypeError) return badRequestResponse();
     return errorResponse(error);
   }

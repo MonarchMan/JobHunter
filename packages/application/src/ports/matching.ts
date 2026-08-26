@@ -106,6 +106,7 @@ export interface CurrentMatchPage {
 
 export interface MatchingRepository {
   getRevision(id: JobRevisionId): MatchingJobRevisionRecord | null;
+  getLatestRevisionForJob(jobId: JobId): MatchingJobRevisionRecord | null;
   getCompanyContext(companyId: CompanyId): MatchingCompanyContext;
   getEnrichment(id: JobEnrichmentId): JobEnrichmentRecord | null;
   getLatestEnrichmentForRevision(jobRevisionId: JobRevisionId): JobEnrichmentRecord | null;
@@ -129,6 +130,8 @@ export interface MatchingRepository {
     readonly afterId: string | null;
     readonly limit: number;
     readonly statuses: readonly JobStatus[];
+    readonly targetRoles?: readonly string[];
+    readonly excludedTerms?: readonly string[];
   }): readonly JobRevisionId[];
   listCurrentMatches(query: CurrentMatchQuery): CurrentMatchPage;
 }

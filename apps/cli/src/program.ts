@@ -15,7 +15,7 @@ interface JobOptions {
   readonly company?: string;
   readonly status?: string;
   readonly location?: string;
-  readonly family?: string;
+  readonly category?: string;
   readonly minScore?: string;
   readonly profile?: string;
   readonly sort?: string;
@@ -45,7 +45,10 @@ const helpExamples: Readonly<Record<string, readonly string[]>> = {
   'profile set': ['jh profile set <profileId> /preferences/locations "[\\"北京\\"]"'],
   'profile lock': ['jh profile lock <profileId> /preferences/locations'],
   'profile unlock': ['jh profile unlock <profileId> /preferences/locations'],
-  'match run': ['jh match run <profileId> --wait'],
+  'match score': [
+    'jh match score <jobId> --wait',
+    'jh match score <jobId> --profile <profileVersionId>',
+  ],
   'match list': ['jh match list <profileId> --include-stale --limit 20'],
   'match show': ['jh match show <matchResultId>'],
   'backup create': ['jh backup create "D:\\JobHunter Backups\\backup-001"'],
@@ -90,7 +93,7 @@ function jobFilter(options: JobOptions): Parameters<NonNullable<CliContainer['jo
   const statuses = commaValues(options.status);
   const companies = commaValues(options.company);
   const locations = commaValues(options.location);
-  const jobFamilies = commaValues(options.family);
+  const jobSubfamilies = commaValues(options.category);
   if (statuses?.some((status) => !['active', 'stale', 'closed'].includes(status)))
     throw new CliError({
       code: 'USAGE_ERROR',
@@ -137,7 +140,7 @@ function jobFilter(options: JobOptions): Parameters<NonNullable<CliContainer['jo
     ...(companies ? { companies } : {}),
     ...(statuses ? { statuses: statuses as ('active' | 'stale' | 'closed')[] } : {}),
     ...(locations ? { locations } : {}),
-    ...(jobFamilies ? { jobFamilies } : {}),
+    ...(jobSubfamilies ? { jobSubfamilies } : {}),
     ...(minimumScore === undefined ? {} : { minimumScore }),
     ...(options.profile ? { profileVersionId: options.profile } : {}),
     ...(options.sort
@@ -154,7 +157,7 @@ function addJobFilterOptions(command: Command, includePagination = true): Comman
     .option('--company <selectors>', '公司 ID、slug、名称或别名，逗号分隔')
     .option('--status <statuses>', 'active、stale、closed，逗号分隔；默认 active,stale')
     .option('--location <locations>', '地点，逗号分隔')
-    .option('--family <families>', '职位族，逗号分隔')
+    .option('--category <categories>', '细分职位类别，逗号分隔，例如：算法、后端')
     .option('--min-score <number>', '最低匹配分 0..100，要求 --profile')
     .option('--profile <profileVersionId>', '用于分数查询的画像版本 ID')
     .option('--sort <sort>', 'updated_desc、published_desc、score_desc', 'updated_desc');
@@ -716,13 +719,14 @@ export function createProgram(input: {
       });
   }
 
-  const match = program.command('match').description('运行和查看确定性职位匹配');
+  const match = program.command('match').description('查看匹配结果，或为单个职位手动评分');
   match
-    .command('run')
-    .description('为画像当前版本提交全部 active/stale 职位匹配任务')
-    .argument('<profileId>')
+    .command('score')
+    .description('仅为一个具体职位提交匹配评分任务')
+    .argument('<jobId>')
+    .option('--profile <profileVersionId>', '指定画像版本；默认当前画像版本')
     .option('--wait', '等待任务结束；Ctrl+C 不取消后台任务')
-    .action(async (profileId: string, options: { wait?: boolean }) => {
+    .action(async (jobId: string, options: { profile?: string; wait?: boolean }) => {
       if (!input.container.match)
         throw new CliError({
           code: 'CONFIGURATION_ERROR',
@@ -730,7 +734,10 @@ export function createProgram(input: {
           exitCode: cliExitCode.usage,
         });
       const matchService = input.container.match;
-      const queued = matchService.run(profileId);
+      const queued = matchService.scoreForJob({
+        jobId,
+        ...(options.profile ? { profileVersionId: options.profile } : {}),
+      });
       const waited = options.wait
         ? await waitForTask({
             wait: (taskId, signal) => matchService.wait(taskId, signal),
@@ -751,7 +758,7 @@ export function createProgram(input: {
     });
   match
     .command('list')
-    .description('按分数、时效和职位 ID 稳定分页显示当前匹配')
+    .description('按分数、时效和职位 ID 稳定分页显示已手动评分的职位')
     .argument('<profileId>')
     .option('--include-excluded', '包含被硬规则排除的职位')
     .option('--include-stale', '包含 stale 职位')
@@ -987,7 +994,7 @@ export function createProgram(input: {
             `${detail.title}（${detail.companyName}）`,
             `状态：${detail.status}  分数：${detail.score === null ? '-' : String(detail.score)}`,
             `地点：${detail.locations.join('、') || '-'}`,
-            `部门/职位族：${detail.department ?? '-'} / ${detail.jobFamily ?? '-'}`,
+            `部门/职位类别：${detail.department ?? '-'} / ${detail.jobSubfamily ?? detail.jobFamily ?? '-'}`,
             `经验/学历：${detail.experienceText ?? '-'} / ${detail.educationText ?? '-'}`,
             '',
             detail.description,
@@ -1067,6 +1074,12 @@ export function createProgram(input: {
           `数据库：${initialized.databasePath}`,
           `配置：${initialized.configPath}${initialized.configCreated ? '（已创建）' : '（已保留）'}`,
           `来源：${String(initialized.sources)}，公司：${String(initialized.companies)}`,
+          ...(initialized.bootstrap
+            ? [
+                `初始化任务：来源同步 ${String(initialized.bootstrap.sourceSyncTaskIds.length)} 个，默认简历画像 ${initialized.bootstrap.defaultResumeTaskId ?? '未创建'}`,
+                `默认计划：${String(initialized.bootstrap.schedules)} 个`,
+              ]
+            : []),
           '下一步：运行 jh doctor，然后启动 jh worker start。',
         ].join('\n'),
       });

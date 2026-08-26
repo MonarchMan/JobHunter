@@ -1,0 +1,31 @@
+UPDATE jobs
+SET job_subfamily = CASE
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%产品经理%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%产品策划%' THEN '产品经理'
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%后端%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%服务端%' THEN '后端'
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%前端%' THEN '前端'
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%算法%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%人工智能%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%机器学习%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%深度学习%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%大模型%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%模型%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%推荐%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%agent%' THEN '算法'
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%客户端%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%移动端%' THEN '客户端'
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%测试%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%质量%' THEN '测试'
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%数据分析%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%商业分析%' THEN '数据分析'
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%交互设计%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%用户体验%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%ux%' THEN '交互设计'
+  WHEN lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%视觉设计%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%视觉实习生%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%用户界面%'
+    OR lower(coalesce(title, '') || ' ' || coalesce(department, '')) LIKE '%ui%' THEN '视觉设计'
+  ELSE NULL
+END
+WHERE job_family = '研发';

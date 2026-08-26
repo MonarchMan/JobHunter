@@ -5,6 +5,11 @@ export interface InitializationResult {
   readonly configCreated: boolean;
   readonly companies: number;
   readonly sources: number;
+  readonly bootstrap?: {
+    readonly defaultResumeTaskId: string | null;
+    readonly sourceSyncTaskIds: readonly string[];
+    readonly schedules: number;
+  };
 }
 
 export interface SystemInitializer {

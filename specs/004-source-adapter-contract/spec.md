@@ -25,6 +25,7 @@
 - **SRC-008**：错误必须分类为 temporary、rate_limited、not_found、access_blocked、parse_changed、invalid_config。
 - **SRC-009**：healthCheck 必须以最小请求验证入口和关键解析信号，不执行完整同步。
 - **SRC-010**：每个适配器必须通过公共契约测试及脱敏固定样本测试。
+- **SRC-011**：适配器在 normalize 边界必须将外部职位类别映射为内部大标签；可识别的岗位方向同时输出小标签，无法识别的大标签归入“其他”。
 
 ## 质量与合规需求
 

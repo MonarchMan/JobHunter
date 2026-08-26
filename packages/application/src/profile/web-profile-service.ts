@@ -64,6 +64,9 @@ export class WebProfileService {
   public mutate(input: WebProfileMutation): WebProfileDetail {
     const mutation = webProfileMutationSchema.parse(input);
     switch (mutation.kind) {
+      case 'replace':
+        this.#management.replace(mutation.profileId, mutation.profile, mutation.expectedVersionId);
+        break;
       case 'set':
         this.#management.set(
           mutation.profileId,

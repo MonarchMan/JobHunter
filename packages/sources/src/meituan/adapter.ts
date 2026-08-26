@@ -1,4 +1,6 @@
 import { parseNormalizedJob, utcInstant } from '@jobhunter/domain';
+import { normalizeJobTaxonomy } from '../job-taxonomy.js';
+import { normalizeRecruitmentCategory } from '../recruitment-category.js';
 import {
   SourceError,
   canonicalizeOfficialUrl,
@@ -38,7 +40,7 @@ function requestHeaders(referer: string): Readonly<Record<string, string>> {
   };
 }
 
-function listBody(config: MeituanConfig, page: number): string {
+function listBody(config: MeituanConfig, page: number, jobTypeCodes: readonly string[]): string {
   return JSON.stringify({
     page: { pageNo: page, pageSize: config.pageSize },
     jobShareType: config.jobShareType,
@@ -46,7 +48,7 @@ function listBody(config: MeituanConfig, page: number): string {
     cityList: [],
     department: [],
     jfJgList: [],
-    jobType: [{ code: '3', subCode: [] }],
+    jobType: jobTypeCodes.map((code) => ({ code, subCode: [] })),
     typeCode: [],
     specialCode: [],
     u_query_id: null,
@@ -93,21 +95,81 @@ function descriptions(detail: MeituanDetail): string {
     .join('\n\n');
 }
 
-export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanDetail> {
+function createMeituanChannelAdapter(options: {
+  readonly key: 'meituan.social' | 'meituan.intern';
+  readonly entryUrl: string;
+  readonly jobTypeCodes: readonly string[];
+  readonly category: 'social' | 'internship';
+}): JobSourceAdapter<MeituanConfig, MeituanDetail> {
   return {
     metadata: {
-      key: 'meituan.social',
+      key: options.key,
       version: '1.0.0',
       company: { slug: 'meituan', name: '美团' },
-      recruitmentType: 'social',
-      canonicalEntryUrl: entryUrl,
+      recruitmentType: options.category === 'social' ? 'social' : 'campus',
+      canonicalEntryUrl: options.entryUrl,
       officialHosts: [...hosts],
-      capabilities: { detail: 'required', pagination: 'page', transport: 'json' },
+      capabilities: {
+        detail: options.category === 'internship' ? 'inline' : 'required',
+        pagination: 'page',
+        transport: options.category === 'internship' ? 'browser' : 'json',
+      },
       defaultRateLimit: { requestsPerMinute: 12, burst: 1 },
       externalIdFingerprintVersion: null,
     },
     configSchema: meituanConfigSchema,
     async *discover(context): AsyncIterable<DiscoveryEvent> {
+      if (options.category === 'internship') {
+        if (!context.page?.collect) {
+          throw new SourceError(
+            'access_blocked',
+            'Meituan internship source requires an anonymous browser collection session.',
+          );
+        }
+        const collection = await context.page.collect({
+          sourceKey: options.key,
+          requestId: context.requestId,
+          url: options.entryUrl,
+          allowedHosts: hosts,
+          listEndpointPath: '/api/official/job/getJobList',
+          responseShape: 'meituan-jobs',
+          maximumPages: 1_000,
+          signal: context.signal,
+          timeoutMs: context.timeoutMs,
+          maximumResponseBytes: 2 * 1024 * 1024,
+        });
+        let discoveredCount = 0;
+        const seen = new Set<string>();
+        let coverage = collection.coverage;
+        for (const collectedPage of collection.pages) {
+          for (const value of collectedPage.records) {
+            const raw = meituanJobSchema.parse(value);
+            if (seen.has(raw.jobUnionId)) {
+              coverage = 'partial';
+              continue;
+            }
+            seen.add(raw.jobUnionId);
+            discoveredCount += 1;
+            yield {
+              type: 'job',
+              job: {
+                externalJobId: raw.jobUnionId,
+                sourceUrl: canonicalJobUrl('/web/position/detail', raw.jobUnionId),
+                raw,
+              },
+            };
+          }
+          yield { type: 'page', page: collectedPage.page, discoveredCount };
+        }
+        yield {
+          type: 'complete',
+          coverage,
+          cursor: null,
+          pages: collection.pages.length,
+          discoveredCount,
+        };
+        return;
+      }
       let page = 1;
       let discoveredCount = 0;
       let expectedCount: number | null = null;
@@ -120,14 +182,14 @@ export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanD
           throw new SourceError('temporary', 'Meituan discovery was aborted.');
         }
         const response = await context.http.request({
-          sourceKey: 'meituan.social',
+          sourceKey: options.key,
           requestId: context.requestId,
           url: listEndpoint,
           allowedHosts: hosts,
           signal: context.signal,
           method: 'POST',
-          headers: requestHeaders(entryUrl),
-          body: listBody(context.config, page),
+          headers: requestHeaders(options.entryUrl),
+          body: listBody(context.config, page, options.jobTypeCodes),
           responseType: 'json',
           timeoutMs: context.timeoutMs,
         });
@@ -182,31 +244,35 @@ export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanD
         discoveredCount,
       };
     },
-    async fetchDetail(job, context): Promise<MeituanDetail> {
-      const response = await context.http.request({
-        sourceKey: 'meituan.social',
-        requestId: context.requestId,
-        url: detailEndpoint,
-        allowedHosts: hosts,
-        signal: context.signal,
-        method: 'POST',
-        headers: requestHeaders(job.sourceUrl),
-        body: detailBody(job.externalJobId, context.config),
-        responseType: 'json',
-        timeoutMs: context.timeoutMs,
-      });
-      const parsed = parseSource(
-        () => meituanDetailResponseSchema.parse(response.body),
-        'Meituan detail response no longer matches the verified schema.',
-      );
-      if (parsed.data.jobUnionId !== job.externalJobId) {
-        throw new SourceError(
-          'parse_changed',
-          'Meituan detail returned a different stable job ID.',
-        );
-      }
-      return parsed.data;
-    },
+    ...(options.category === 'social'
+      ? {
+          async fetchDetail(job, context): Promise<MeituanDetail> {
+            const response = await context.http.request({
+              sourceKey: options.key,
+              requestId: context.requestId,
+              url: detailEndpoint,
+              allowedHosts: hosts,
+              signal: context.signal,
+              method: 'POST',
+              headers: requestHeaders(job.sourceUrl),
+              body: detailBody(job.externalJobId, context.config),
+              responseType: 'json',
+              timeoutMs: context.timeoutMs,
+            });
+            const parsed = parseSource(
+              () => meituanDetailResponseSchema.parse(response.body),
+              'Meituan detail response no longer matches the verified schema.',
+            );
+            if (parsed.data.jobUnionId !== job.externalJobId) {
+              throw new SourceError(
+                'parse_changed',
+                'Meituan detail returned a different stable job ID.',
+              );
+            }
+            return parsed.data;
+          },
+        }
+      : {}),
     normalize(input, context) {
       return Promise.resolve().then(() => {
         const list = parseSource(
@@ -214,8 +280,13 @@ export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanD
           'Meituan discovered job no longer matches the verified schema.',
         );
         const detail = parseSource(
-          () => meituanJobSchema.parse(input.detail),
-          'Meituan detail is required for normalization.',
+          () =>
+            meituanJobSchema.parse(
+              options.category === 'internship' ? input.discovered.raw : input.detail,
+            ),
+          options.category === 'internship'
+            ? 'Meituan internship list record changed.'
+            : 'Meituan detail is required for normalization.',
         );
         if (
           list.jobUnionId !== detail.jobUnionId ||
@@ -230,6 +301,9 @@ export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanD
         if (!description) {
           throw new SourceError('parse_changed', 'Meituan detail contains no usable description.');
         }
+        const taxonomy = normalizeJobTaxonomy(
+          optionalText(detail.jobFamily, detail.jobFamilyGroup),
+        );
         return {
           job: parseNormalizedJob({
             companyId: context.companyId,
@@ -237,9 +311,16 @@ export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanD
             externalJobId: detail.jobUnionId,
             title: detail.name,
             department: optionalText(detail.department[0]?.name),
-            jobFamily: optionalText(detail.jobFamily, detail.jobFamilyGroup),
+            jobFamily: taxonomy.jobFamily,
+            jobSubfamily: taxonomy.jobSubfamily,
+            recruitmentCategory:
+              options.category === 'internship'
+                ? 'internship'
+                : normalizeRecruitmentCategory(`${detail.name}\n${description}`) === 'internship'
+                  ? 'internship'
+                  : 'social',
             locations: detail.cityList.map((city) => city.name),
-            employmentType: detail.jobType === '3' ? '全职' : null,
+            employmentType: options.category === 'internship' ? '实习' : '全职',
             experienceText: optionalText(detail.workYear),
             educationText: null,
             description,
@@ -268,15 +349,43 @@ export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanD
     async healthCheck(context): Promise<SourceHealth> {
       const startedAt = Date.now();
       try {
+        if (options.category === 'internship') {
+          if (!context.page?.collect) {
+            throw new SourceError(
+              'access_blocked',
+              'Meituan internship source requires an anonymous browser collection session.',
+            );
+          }
+          const collection = await context.page.collect({
+            sourceKey: options.key,
+            requestId: context.requestId,
+            url: options.entryUrl,
+            allowedHosts: hosts,
+            listEndpointPath: '/api/official/job/getJobList',
+            responseShape: 'meituan-jobs',
+            maximumPages: 1,
+            signal: context.signal,
+            timeoutMs: context.timeoutMs,
+            maximumResponseBytes: 2 * 1024 * 1024,
+          });
+          const count = collection.pages.reduce((sum, page) => sum + page.records.length, 0);
+          return {
+            status: count > 0 ? 'healthy' : 'degraded',
+            checkedAt: Date.now(),
+            latencyMs: Date.now() - startedAt,
+            signals: [{ key: 'browser_json_intern_list', ok: count > 0, diagnostic: count > 0 ? null : 'Meituan returned no internship jobs.' }],
+            errorCategory: null,
+          };
+        }
         const response = await context.http.request({
-          sourceKey: 'meituan.social',
+          sourceKey: options.key,
           requestId: context.requestId,
           url: listEndpoint,
           allowedHosts: hosts,
           signal: context.signal,
           method: 'POST',
-          headers: requestHeaders(entryUrl),
-          body: listBody({ ...context.config, pageSize: 1 }, 1),
+          headers: requestHeaders(options.entryUrl),
+          body: listBody({ ...context.config, pageSize: 1 }, 1, options.jobTypeCodes),
           responseType: 'json',
           timeoutMs: context.timeoutMs,
         });
@@ -318,4 +427,22 @@ export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanD
       }
     },
   };
+}
+
+export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanDetail> {
+  return createMeituanChannelAdapter({
+    key: 'meituan.social',
+    entryUrl,
+    jobTypeCodes: ['3'],
+    category: 'social',
+  });
+}
+
+export function createMeituanInternAdapter(): JobSourceAdapter<MeituanConfig, MeituanDetail> {
+  return createMeituanChannelAdapter({
+    key: 'meituan.intern',
+    entryUrl: 'https://zhaopin.meituan.com/web/campus',
+    jobTypeCodes: ['2'],
+    category: 'internship',
+  });
 }

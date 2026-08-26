@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 
 interface ActionResponse {
@@ -17,16 +17,6 @@ export function TaskActions({
   const [retryToken] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (status !== 'pending' && status !== 'running') return;
-    const timer = window.setInterval(() => {
-      router.refresh();
-    }, 3000);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [router, status]);
 
   const act = async (action: 'retry' | 'cancel'): Promise<void> => {
     setBusy(true);

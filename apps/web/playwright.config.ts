@@ -6,7 +6,7 @@ export default defineConfig({
   workers: 1,
   reporter: 'line',
   use: {
-    baseURL: 'http://127.0.0.1:3210',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3210',
     trace: 'retain-on-failure',
     ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
       ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } }
@@ -16,8 +16,11 @@ export default defineConfig({
   },
   webServer: {
     command: `"${process.execPath}" node_modules/tsx/dist/cli.mjs test/browser/fixture-server.ts`,
-    url: 'http://127.0.0.1:3210/api/dashboard',
-    reuseExistingServer: false,
+    url: `${process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:3210'}/api/dashboard`,
+    reuseExistingServer: true,
+    env: {
+      PLAYWRIGHT_FIXTURE_PORT: process.env.PLAYWRIGHT_FIXTURE_PORT ?? '3210',
+    },
     timeout: 30_000,
   },
 });

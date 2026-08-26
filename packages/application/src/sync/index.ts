@@ -6,3 +6,4 @@ export * from './source-health-handler.js';
 export * from './source-health-service.js';
 export * from './web-source-service.js';
 export * from './model.js';
+export * from './job-intake-policy.js';

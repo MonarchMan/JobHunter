@@ -1,0 +1,26 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": ["apps/web/app"],
+  "locale": "zh-CN",
+  "canonicalMap": "UX-CONTRACT.md",
+  "requiredCapabilities": [
+    "Table Selection",
+    "Select/Listbox",
+    "Date",
+    "Form",
+    "Scrollbar",
+    "Toast",
+    "CRUD"
+  ],
+  "ownership": {
+    "Select/Listbox": "native",
+    "Date": "native"
+  },
+  "requiredCommands": ["typecheck", "build", "browser", "docs"],
+  "commands": {
+    "typecheck": "pnpm --filter @jobhunter/web typecheck",
+    "build": "pnpm --filter @jobhunter/web build",
+    "browser": "pnpm --filter @jobhunter/web test:browser",
+    "docs": "pnpm docs:check"
+  }
+}

@@ -24,6 +24,7 @@ export interface WorkerEngineOptions {
   readonly schedulerPollMs?: number;
   readonly shutdownGraceMs?: number;
   readonly services?: Readonly<Record<string, unknown>>;
+  readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
 }
 
 const silentLogger: TaskLogger = {
@@ -81,27 +82,41 @@ export class WorkerEngine implements TaskCancellationNotifier {
       schedulerPollMs: input.options.schedulerPollMs ?? 1_000,
       shutdownGraceMs: input.options.shutdownGraceMs ?? 10_000,
       services: input.options.services ?? {},
+      taskTypeConcurrency: input.options.taskTypeConcurrency ?? {},
     };
     if (!this.#options.workerId.trim()) throw new TypeError('Worker ID must not be empty.');
+    for (const [taskType, concurrency] of Object.entries(this.#options.taskTypeConcurrency)) {
+      if (!taskType.trim()) throw new TypeError('Task type concurrency key must not be empty.');
+      if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 32) {
+        throw new TypeError(`Invalid task type concurrency for ${taskType}.`);
+      }
+    }
   }
 
-  public async runOnce(): Promise<boolean> {
+  public async runOnce(taskType?: string): Promise<boolean> {
     if (this.#stopping) return false;
-    const task = this.#queue.claim({
-      workerId: this.#options.workerId,
-      now: this.#clock.now(),
-      leaseDurationMsFor: (taskType) =>
-        this.#registry.has(taskType) ? this.#registry.get(taskType).leaseDurationMs : 120_000,
-    });
-    if (!task) return false;
-    const execution = this.#execute(task);
-    this.#inFlight.add(execution);
-    try {
-      await execution;
-    } finally {
-      this.#inFlight.delete(execution);
+    const queues = taskType ? [taskType] : this.#registry.taskTypes();
+    for (const queueType of queues) {
+      const task = this.#queue.claim({
+        taskType: queueType,
+        workerId: this.#options.workerId,
+        now: this.#clock.now(),
+        leaseDurationMsFor: (claimedType) =>
+          this.#registry.has(claimedType)
+            ? this.#registry.get(claimedType).leaseDurationMs
+            : 120_000,
+      });
+      if (!task) continue;
+      const execution = this.#execute(task);
+      this.#inFlight.add(execution);
+      try {
+        await execution;
+      } finally {
+        this.#inFlight.delete(execution);
+      }
+      return true;
     }
-    return true;
+    return false;
   }
 
   async #execute(task: TaskRecord): Promise<void> {
@@ -243,16 +258,25 @@ export class WorkerEngine implements TaskCancellationNotifier {
     signal?.addEventListener('abort', shutdown, { once: true });
     if (signal?.aborted) await this.shutdown();
     try {
-      await Promise.all([this.#runClaimLoop(), this.#runSchedulerLoop()]);
+      await Promise.all([
+        this.#runSchedulerLoop(),
+        ...this.#registry
+          .taskTypes()
+          .flatMap((taskType) =>
+            Array.from({ length: this.#options.taskTypeConcurrency[taskType] ?? 1 }, () =>
+              this.#runClaimLoop(taskType),
+            ),
+          ),
+      ]);
     } finally {
       signal?.removeEventListener('abort', shutdown);
     }
   }
 
-  async #runClaimLoop(): Promise<void> {
+  async #runClaimLoop(taskType: string): Promise<void> {
     let emptyDelay = this.#options.emptyPollMinimumMs;
     while (!this.#stopping) {
-      const claimed = await this.runOnce();
+      const claimed = await this.runOnce(taskType);
       if (claimed) {
         emptyDelay = this.#options.emptyPollMinimumMs;
         continue;

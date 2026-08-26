@@ -22,6 +22,8 @@ import {
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
+const ORPHANED_RUN_RECOVERY_MS = 15 * 60_000;
+
 const syncPolicySchema: z.ZodType<SourceSyncPolicy> = z
   .object({
     staleAfterMisses: z.number().int().min(1),
@@ -112,6 +114,16 @@ export class SqliteSyncRepository implements SyncRepository {
   }
 
   public startRun(input: StartSyncRunInput): StartSyncRunResult {
+    this.#client
+      .prepare(
+        `UPDATE sync_runs
+         SET status = 'cancelled', coverage = CASE WHEN coverage = 'complete' THEN 'partial' ELSE coverage END,
+             error_category = 'orphaned_run',
+             error_summary = 'The worker stopped before this synchronization could finish.',
+             finished_at = ?
+         WHERE source_id = ? AND status = 'running' AND started_at <= ?`,
+      )
+      .run(input.startedAt, input.sourceId, input.startedAt - ORPHANED_RUN_RECOVERY_MS);
     try {
       this.#client
         .prepare(

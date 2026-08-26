@@ -1,10 +1,17 @@
+import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../src/server/container.js';
+import { PageHeader } from '../components/page-header.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { ProfileEditor } from './profile-editor.js';
 import { ResumeDeletion } from './resume-deletion.js';
+import { ResumeImport } from './resume-import.js';
+import { Pagination } from '../components/pagination.js';
+import { webPagination } from '@jobhunter/application/web';
+import { ResumeEditor } from './resume-editor.js';
 
 export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: '个人资料' };
 
 interface ProfilePageProperties {
   readonly searchParams: Promise<SearchParameterSource>;
@@ -16,28 +23,61 @@ export default async function ProfilePage({
   const query = await searchParams;
   const container = await getWebContainer();
   const profiles = container.services.webProfiles.list();
+  const requestedVersionPage = Number(firstSearchParameter(query, 'page') ?? '1');
+  const versionPageNumber =
+    Number.isSafeInteger(requestedVersionPage) && requestedVersionPage > 0
+      ? requestedVersionPage
+      : 1;
   const selectedId = firstSearchParameter(query, 'profile') ?? profiles[0]?.id;
   if (!selectedId) {
     return (
       <main id="main-content" tabIndex={-1}>
-        <p className="eyebrow">PROFILE</p>
-        <h1>候选人画像</h1>
-        <section className="empty-state">
-          <h2>尚无画像</h2>
-          <p>请先使用 CLI 导入简历并等待画像提取任务完成。</p>
+        <PageHeader eyebrow="PERSONAL PROFILE" title="个人资料" />
+        <ResumeImport />
+        <section className="empty-state page-empty-state" aria-labelledby="profile-empty-title">
+          <span className="empty-state-icon" aria-hidden="true">
+            ◎
+          </span>
+          <h2 id="profile-empty-title">尚无个人资料</h2>
+          <p>导入简历后，后台会提取个人资料并生成可匹配的求职意向。</p>
+          <div className="inline-actions">
+            <a className="button-primary" href="/">
+              返回工作台
+            </a>
+            <a className="button-secondary" href="/jobs">
+              先浏览职位
+            </a>
+          </div>
+        </section>
+      </main>
+    );
+  }
+  const selectedProfile = profiles.find((profile) => profile.id === selectedId);
+  if (!selectedProfile?.currentVersionId) {
+    return (
+      <main id="main-content" tabIndex={-1}>
+        <PageHeader eyebrow="PERSONAL PROFILE" title="个人资料" />
+        {selectedProfile ? <ResumeImport profileId={selectedProfile.id} /> : <ResumeImport />}
+        <section className="empty-state page-empty-state" aria-labelledby="profile-pending-title">
+          <span className="empty-state-icon" aria-hidden="true">
+            ◌
+          </span>
+          <h2 id="profile-pending-title">个人资料正在生成</h2>
+          <p>简历已保存，等待 Worker 完成后台提取任务后刷新此页面。</p>
         </section>
       </main>
     );
   }
   const detail = container.services.webProfiles.get(selectedId);
+  const versionPagination = webPagination(detail.versions.length, versionPageNumber, 10);
+  const visibleVersions = detail.versions.slice(
+    (versionPagination.current - 1) * versionPagination.pageSize,
+    versionPagination.current * versionPagination.pageSize,
+  );
   return (
     <main id="main-content" tabIndex={-1}>
-      <div className="page-heading">
-        <div>
-          <p className="eyebrow">PROFILE</p>
-          <h1>候选人画像</h1>
-        </div>
-        <form action="/profile" method="get">
+      <PageHeader eyebrow="PERSONAL PROFILE" title="个人资料">
+        <form action="/profile" method="get" noValidate>
           <label>
             选择画像
             <select name="profile" defaultValue={selectedId}>
@@ -50,7 +90,13 @@ export default async function ProfilePage({
           </label>
           <button type="submit">查看</button>
         </form>
-      </div>
+      </PageHeader>
+      <ResumeImport profileId={detail.profile.id} />
+      <ResumeEditor
+        profileId={detail.profile.id}
+        versionId={detail.current.id}
+        profile={detail.current.effective}
+      />
       <section className="profile-overview">
         <article className="panel-block">
           <p className="eyebrow">CURRENT VERSION</p>
@@ -88,7 +134,7 @@ export default async function ProfilePage({
           <p className="eyebrow">VERSION HISTORY</p>
           <h2>历史版本</h2>
           <ol className="version-list">
-            {detail.versions.map((version) => (
+            {visibleVersions.map((version) => (
               <li key={version.id}>
                 <strong>版本 {version.versionNumber}</strong>
                 <time dateTime={version.createdAt}>
@@ -98,23 +144,35 @@ export default async function ProfilePage({
               </li>
             ))}
           </ol>
+          <Pagination
+            currentPage={versionPagination.current}
+            totalPages={versionPagination.totalPages}
+            label="画像版本分页"
+            createHref={(page) => {
+              const parameters = new URLSearchParams({ profile: selectedId, page: String(page) });
+              return `/profile?${parameters.toString()}`;
+            }}
+          />
         </article>
       </section>
       <section className="comparison-grid" aria-label="提取值与有效值">
-        <details className="panel-block" open>
-          <summary>原提取值</summary>
+        <details className="panel-block developer-details">
+          <summary>开发者详情：原提取值 JSON</summary>
           <pre tabIndex={0} aria-label="原提取值 JSON">
             {JSON.stringify(detail.current.extracted, null, 2)}
           </pre>
         </details>
-        <details className="panel-block" open>
-          <summary>当前有效值</summary>
+        <details className="panel-block developer-details">
+          <summary>开发者详情：当前有效值 JSON</summary>
           <pre tabIndex={0} aria-label="当前有效值 JSON">
             {JSON.stringify(detail.current.effective, null, 2)}
           </pre>
         </details>
       </section>
-      <ProfileEditor detail={detail} />
+      <details className="panel-block developer-details profile-advanced-tools">
+        <summary>高级维护：字段锁定与 JSON 修正</summary>
+        <ProfileEditor detail={detail} />
+      </details>
       {detail.current.resumeDocumentId ? (
         <ResumeDeletion resumeDocumentId={detail.current.resumeDocumentId} />
       ) : null}

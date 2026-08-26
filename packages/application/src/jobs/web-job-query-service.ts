@@ -1,4 +1,5 @@
 import {
+  webPagination,
   webJobPageSchema,
   webJobQuerySchema,
   type WebJobPage,
@@ -17,16 +18,23 @@ export class WebJobQueryService {
     const query = webJobQuerySchema.parse(input);
     const page = this.#jobs.list({
       sort: query.sort,
-      limit: query.limit,
+      page: query.page,
+      pageSize: query.limit ?? query.pageSize,
       ...(query.search ? { search: query.search } : {}),
       ...(query.companies ? { companies: query.companies } : {}),
       ...(query.statuses ? { statuses: query.statuses } : {}),
       ...(query.locations ? { locations: query.locations } : {}),
-      ...(query.jobFamilies ? { jobFamilies: query.jobFamilies } : {}),
+      ...(query.jobSubfamilies ? { jobSubfamilies: query.jobSubfamilies } : {}),
+      recruitmentCategory: query.recruitmentCategory,
       ...(query.minimumScore === undefined ? {} : { minimumScore: query.minimumScore }),
       ...(query.profileVersionId ? { profileVersionId: query.profileVersionId } : {}),
       ...(query.cursor ? { cursor: query.cursor } : {}),
     });
+    const pagination = webPagination(
+      page.total ?? page.items.length,
+      page.page ?? query.page,
+      page.pageSize ?? query.limit ?? query.pageSize,
+    );
     return webJobPageSchema.parse({
       items: page.items.map((job) => ({
         ...job,
@@ -34,6 +42,12 @@ export class WebJobQueryService {
         updatedAt: new Date(job.updatedAt).toISOString(),
       })),
       nextCursor: page.nextCursor,
+      page: pagination,
+      hasPreviousPage: pagination.current > 1,
+      hasNextPage:
+        page.total === undefined
+          ? page.nextCursor !== null
+          : pagination.current < pagination.totalPages,
     });
   }
 }

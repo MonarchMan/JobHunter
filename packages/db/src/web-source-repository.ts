@@ -9,9 +9,12 @@ import { z } from 'zod';
 
 interface SourceRow {
   readonly id: string;
+  readonly company_id: string;
   readonly company_name: string;
+  readonly base_url: string;
   readonly slug: string;
   readonly adapter_key: string;
+  readonly recruitment_type: WebSource['recruitmentType'];
   readonly enabled: number;
   readonly support_status: WebSource['supportStatus'];
   readonly health_status: WebSource['healthStatus'];
@@ -33,8 +36,9 @@ interface SourceRow {
 }
 
 const selection = `
-  SELECT source.id, company.name AS company_name, source.slug, source.adapter_key,
-         source.enabled, source.support_status, source.health_status,
+  SELECT source.id, source.company_id, company.name AS company_name, source.base_url,
+         source.slug, source.adapter_key,
+         source.recruitment_type, source.enabled, source.support_status, source.health_status,
          source.consecutive_failures, source.last_success_at, source.last_failure_at,
          run.id AS run_id, run.status AS run_status, run.coverage, run.stats_json,
          run.error_category, run.error_summary, run.started_at, run.finished_at,
@@ -52,12 +56,41 @@ function instant(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
 }
 
+function recruitmentChannels(
+  adapterKey: string,
+  recruitmentType: WebSource['recruitmentType'],
+): WebSource['recruitmentChannels'] {
+  const explicit: Readonly<Record<string, WebSource['recruitmentChannels']>> = {
+    'alibaba.campus': ['internship', 'campus'],
+    'dewu.campus': ['internship', 'campus'],
+    'baidu.campus': ['internship'],
+    'bytedance.campus': ['internship'],
+    'huawei.campus': ['internship'],
+    'meituan.intern': ['internship'],
+    'pinduoduo.intern': ['internship'],
+    'tencent.intern': ['internship'],
+  };
+  const known = explicit[adapterKey];
+  if (known) return known;
+  if (adapterKey.endsWith('.social')) return ['social'];
+  if (adapterKey.endsWith('.intern')) return ['internship'];
+  return recruitmentType === 'social'
+    ? ['social']
+    : recruitmentType === 'campus'
+      ? ['campus']
+      : ['campus', 'social'];
+}
+
 function source(row: SourceRow): WebSource {
   return webSourceSchema.parse({
     id: row.id,
+    companyId: row.company_id,
     companyName: row.company_name,
+    officialUrl: row.base_url,
     slug: row.slug,
     adapterKey: row.adapter_key,
+    recruitmentType: row.recruitment_type,
+    recruitmentChannels: recruitmentChannels(row.adapter_key, row.recruitment_type),
     enabled: row.enabled === 1,
     supportStatus: row.support_status,
     healthStatus: row.health_status,

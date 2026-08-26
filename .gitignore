@@ -1,8 +1,14 @@
 node_modules/
 .next/
+.next*/
 dist/
 coverage/
 *.tsbuildinfo
+*.map
+*.log
+logs/
+cache/
+.cache/
 .env
 .env.*
 !.env.example

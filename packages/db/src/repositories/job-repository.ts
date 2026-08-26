@@ -78,11 +78,11 @@ export class SqliteJobRepository implements JobRepository {
       this.#client
         .prepare(
           `INSERT INTO jobs
-           (id, company_id, source_id, external_job_id, title, department, job_family,
-            locations_json, employment_type, experience_text, education_text, description,
+           (id, company_id, source_id, external_job_id, title, department, job_family, job_subfamily,
+            locations_json, employment_type, recruitment_category, experience_text, education_text, description,
             detail_url, apply_url, published_at, status, missing_count, content_hash,
             first_seen_at, last_seen_at, closed_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, ?, NULL, ?, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', 0, ?, ?, ?, NULL, ?, ?)`,
         )
         .run(
           input.jobId,
@@ -92,8 +92,10 @@ export class SqliteJobRepository implements JobRepository {
           normalized.title,
           normalized.department,
           normalized.jobFamily,
+          normalized.jobSubfamily,
           canonicalJson(normalized.locations),
           normalized.employmentType,
+          normalized.recruitmentCategory,
           normalized.experienceText,
           normalized.educationText,
           normalized.description,
@@ -123,8 +125,8 @@ export class SqliteJobRepository implements JobRepository {
       this.#client
         .prepare(
           `UPDATE jobs SET
-             company_id = ?, title = ?, department = ?, job_family = ?, locations_json = ?,
-             employment_type = ?, experience_text = ?, education_text = ?, description = ?,
+             company_id = ?, title = ?, department = ?, job_family = ?, job_subfamily = ?, locations_json = ?,
+             employment_type = ?, recruitment_category = ?, experience_text = ?, education_text = ?, description = ?,
              detail_url = ?, apply_url = ?, published_at = ?, content_hash = ?,
              last_seen_at = ?, updated_at = ?
            WHERE id = ?`,
@@ -134,8 +136,10 @@ export class SqliteJobRepository implements JobRepository {
           normalized.title,
           normalized.department,
           normalized.jobFamily,
+          normalized.jobSubfamily,
           canonicalJson(normalized.locations),
           normalized.employmentType,
+          normalized.recruitmentCategory,
           normalized.experienceText,
           normalized.educationText,
           normalized.description,

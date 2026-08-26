@@ -4,7 +4,10 @@ import { SiteNav } from './components/site-nav.js';
 import './styles.css';
 
 export const metadata: Metadata = {
-  title: 'JobHunter',
+  title: {
+    default: '工作台 — JobHunter',
+    template: '%s — JobHunter',
+  },
   description: '个人求职 Agent 本地管理台',
 };
 

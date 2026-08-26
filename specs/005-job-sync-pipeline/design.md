@@ -31,7 +31,9 @@ Adapter 结束时提供 coverage，但应用层只在以下证据同时成立时
 
 详情或 normalize 失败时，若 discover 阶段已有稳定 externalJobId 且数据库存在对应 Job，流水线保存 RawJobRecord 和 Observation，但不更新 Job/Revision；这不会破坏“未出现”判断。若失败项身份不可靠、列表页本身解析失败或无法证明分页完整，coverage 强制降为 partial/unknown。错误数量阈值只用于决定是否继续收集诊断，不得用于把存在未归属失败项的运行提升为 complete。
 
-健康状态根据连续运行结果更新：成功清零 failures；partial 增加退化计数；failed 增加失败计数；达到策略阈值转 degraded/unhealthy。
+健康状态根据采集完整性和真实处理错误更新：成功清零 failures；partial 增加退化计数；failed 增加失败计数；达到策略阈值转 degraded/unhealthy。意向外、非境内和地域不明职位已在边界处被正常识别并过滤，只记录统计，不改变 coverage、运行状态或来源健康。
+
+同一来源的运行互斥由 `sync_runs` 唯一索引保证。创建运行时，仓储先将早于 15 分钟恢复窗口的 running 记录结束为 cancelled/orphaned_run，再尝试插入新运行；窗口内的 running 记录仍返回 conflict。孤儿运行属于进程中断而非来源故障，因此不累计来源失败次数。恢复窗口大于来源同步任务的默认 10 分钟租约，既避免活跃任务被抢占，也防止进程崩溃留下永久锁。
 
 ## 后续任务顺序
 
@@ -39,7 +41,7 @@ Adapter 结束时提供 coverage，但应用层只在以下证据同时成立时
 
 ## 可观测性
 
-按 runId 聚合 discovered、rawStored、created、unchanged、revised、restored、staled、closed、isolated、followupEnqueued。最终必须满足可推导计数等式，否则运行标记 failed/internal_invariant。
+按 runId 聚合 discovered、rawStored、created、unchanged、revised、restored、staled、closed、isolated、skippedOutOfScope、followupEnqueued。职位理解和匹配不属于同步后续任务，`followupEnqueued` 必须保持为 0；最终必须满足可推导计数等式，否则运行标记 failed/internal_invariant。
 
 ## 测试
 

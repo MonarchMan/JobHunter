@@ -14,6 +14,7 @@ import {
   parseId,
   parseNormalizedJob,
   utcInstant,
+  type JobId,
 } from '@jobhunter/domain';
 import {
   parseDeterministicMatchOutput,
@@ -184,6 +185,26 @@ export class SqliteMatchingRepository implements MatchingRepository {
          FROM job_revisions r JOIN jobs j ON j.id = r.job_id WHERE r.id = ?`,
       )
       .get(id) as RevisionRow | undefined;
+    return row
+      ? {
+          id: parseId(row.id, 'JobRevision'),
+          jobId: parseId(row.job_id, 'Job'),
+          jobStatus: row.status,
+          normalized: parseNormalizedJob(JSON.parse(row.snapshot_json) as unknown),
+          createdAt: utcInstant(row.created_at),
+          lastSeenAt: utcInstant(row.last_seen_at),
+        }
+      : null;
+  }
+
+  public getLatestRevisionForJob(jobId: JobId): MatchingJobRevisionRecord | null {
+    const row = this.#client
+      .prepare(
+        `SELECT r.id, r.job_id, j.status, r.snapshot_json, r.created_at, j.last_seen_at
+         FROM job_revisions r JOIN jobs j ON j.id = r.job_id
+         WHERE r.job_id = ? ORDER BY r.revision_no DESC LIMIT 1`,
+      )
+      .get(jobId) as RevisionRow | undefined;
     return row
       ? {
           id: parseId(row.id, 'JobRevision'),
@@ -419,6 +440,21 @@ export class SqliteMatchingRepository implements MatchingRepository {
     }
     if (input.statuses.length === 0) return [];
     const statusPlaceholders = input.statuses.map(() => '?').join(', ');
+    const normalizeKeyword = (value: string): string =>
+      value.trim().replaceAll(/\s+/gu, '').toLocaleLowerCase();
+    const targetRoles = (input.targetRoles ?? []).map(normalizeKeyword).filter(Boolean);
+    const excludedTerms = (input.excludedTerms ?? []).map(normalizeKeyword).filter(Boolean);
+    const searchable = `lower(replace(replace(replace(replace(
+      coalesce(j.title, '') || ' ' || coalesce(j.department, '') || ' ' ||
+      coalesce(j.job_family, '') || ' ' || coalesce(j.description, '') || ' ' ||
+      coalesce(j.experience_text, '') || ' ' || coalesce(j.education_text, ''),
+      ' ', ''), char(9), ''), char(10), ''), char(13), ''))`;
+    const targetRoleCondition = targetRoles.length
+      ? `AND (${targetRoles.map(() => `instr(${searchable}, ?) > 0`).join(' OR ')})`
+      : '';
+    const excludedTermCondition = excludedTerms.length
+      ? `AND NOT (${excludedTerms.map(() => `instr(${searchable}, ?) > 0`).join(' OR ')})`
+      : '';
     const rows = this.#client
       .prepare(
         `SELECT r.id
@@ -429,10 +465,19 @@ export class SqliteMatchingRepository implements MatchingRepository {
              SELECT 1 FROM job_revisions newer
              WHERE newer.job_id = r.job_id AND newer.revision_no > r.revision_no
            )
+           ${targetRoleCondition}
+           ${excludedTermCondition}
            AND (? IS NULL OR r.id > ?)
-         ORDER BY r.id ASC LIMIT ?`,
+           ORDER BY r.id ASC LIMIT ?`,
       )
-      .all(...input.statuses, input.afterId, input.afterId, input.limit) as {
+      .all(
+        ...input.statuses,
+        ...targetRoles,
+        ...excludedTerms,
+        input.afterId,
+        input.afterId,
+        input.limit,
+      ) as {
       readonly id: string;
     }[];
     return rows.map((row) => parseId(row.id, 'JobRevision'));

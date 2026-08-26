@@ -14,7 +14,7 @@ Handler 定义 payload/output Schema、默认 maxAttempts、lease duration 和 `
 
 ## 循环
 
-Scheduler 与 ClaimLoop 独立运行。领取后在事务外执行 Handler；成功/失败更新使用 `WHERE id=? AND lease_owner=? AND status='running'`，租约丢失时不得覆盖新持有者结果。
+Scheduler 与 ClaimLoop 独立运行。每个已注册 task type 按 `taskTypeConcurrency` 配置启动一个或多个消费槽位，每个槽位拥有独立 ClaimLoop，并在领取 SQL 中固定 `task_type`；未配置类型默认启动一个槽位。领取后在事务外执行 Handler，因此某一类型的积压或慢任务不会占用其他类型的领取循环。成功/失败更新使用 `WHERE id=? AND lease_owner=? AND status='running'`，租约丢失时不得覆盖新持有者结果。多槽位仍受持久化 `concurrency_key` 约束，不能并行执行互斥任务。
 
 Cron 解析使用 `cron-parser` 和 IANA timezone；计算结果统一转换为 UTC epoch milliseconds 后持久化。夏令时重复/跳过时以库的时区语义为准，并用 occurrence UTC 时间参与幂等键。
 

@@ -36,6 +36,9 @@ export interface SyncRunStats {
   readonly staled: number;
   readonly closed: number;
   readonly isolated: number;
+  readonly skippedNonDomestic: number;
+  readonly skippedUnknownRegion: number;
+  readonly skippedOutOfScope: number;
   readonly followupEnqueued: number;
 }
 
@@ -103,7 +106,7 @@ export interface SyncRepository {
 }
 
 export interface DerivationTaskFactory {
-  forRevision(input: { readonly revisionId: string; readonly enrich: boolean }): readonly {
+  forRevision(input: { readonly revisionId: string }): readonly {
     readonly id: TaskId;
     readonly taskType: string;
     readonly payload: unknown;

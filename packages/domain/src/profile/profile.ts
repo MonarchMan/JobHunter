@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const normalizedText = z.string().trim().min(1);
+const optionalText = normalizedText.nullable();
 const evidenceSchema = z
   .object({
     source: z.enum(['resume', 'manual']),
@@ -27,6 +28,16 @@ export const candidatePreferencesSchema = z
 
 export const candidateProfileSchema = z
   .object({
+    basicInfo: z
+      .object({
+        name: optionalText,
+        phone: optionalText,
+        email: optionalText,
+        location: optionalText,
+        website: optionalText,
+      })
+      .readonly()
+      .default({ name: null, phone: null, email: null, location: null, website: null }),
     targetRoles: z.array(normalizedText),
     preferences: candidatePreferencesSchema,
     education: z.array(
@@ -59,6 +70,24 @@ export const candidateProfileSchema = z
         })
         .readonly(),
     ),
+    works: z
+      .array(
+        z.object({ name: normalizedText, description: optionalText, url: optionalText }).readonly(),
+      )
+      .default([]),
+    competitions: z
+      .array(z.object({ name: normalizedText, award: optionalText, date: optionalText }).readonly())
+      .default([]),
+    certificates: z
+      .array(
+        z.object({ name: normalizedText, issuer: optionalText, date: optionalText }).readonly(),
+      )
+      .default([]),
+    languages: z
+      .array(z.object({ name: normalizedText, proficiency: optionalText }).readonly())
+      .default([]),
+    professionalSkills: optionalText.default(null),
+    selfEvaluation: optionalText.default(null),
     skills: z.array(
       z
         .object({

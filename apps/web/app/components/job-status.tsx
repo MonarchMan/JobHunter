@@ -1,7 +1,8 @@
 import type { ReactElement } from 'react';
+import { jobStatusLabels } from './status-labels.js';
 
-const labels = { active: '在招', stale: '待确认', closed: '已关闭' } as const;
-
-export function JobStatus({ status }: Readonly<{ status: keyof typeof labels }>): ReactElement {
-  return <span className={`status status-${status}`}>{labels[status]}</span>;
+export function JobStatus({
+  status,
+}: Readonly<{ status: keyof typeof jobStatusLabels }>): ReactElement {
+  return <span className={`status status-${status}`}>{jobStatusLabels[status]}</span>;
 }

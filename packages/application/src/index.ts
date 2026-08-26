@@ -8,3 +8,4 @@ export * from './sync/index.js';
 export * from './tasks/index.js';
 export * from './contracts/index.js';
 export * from './dashboard/index.js';
+export * from './settings/index.js';

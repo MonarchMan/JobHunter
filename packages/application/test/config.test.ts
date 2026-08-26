@@ -33,16 +33,41 @@ describe('two-stage configuration', () => {
       },
       file: {
         logLevel: 'error',
-        worker: { pollIntervalMs: 3000, maxConcurrentNetworkTasks: 7 },
+        worker: {
+          pollIntervalMs: 3000,
+          maxConcurrentNetworkTasks: 7,
+          taskTypeConcurrency: { 'source.sync': 2 },
+        },
       },
     });
     expect(config.logLevel).toEqual({ value: 'debug', source: 'cli' });
     expect(config.worker.pollIntervalMs).toEqual({ value: 2500, source: 'environment' });
     expect(config.worker.maxConcurrentNetworkTasks).toEqual({ value: 7, source: 'file' });
+    expect(config.worker.taskTypeConcurrency).toEqual({
+      value: { 'source.sync': 2 },
+      source: 'file',
+    });
     expect(config.model.provider).toEqual({ value: 'test-provider', source: 'environment' });
     expect(config.model.baseUrl.value).toBe('https://models.example.test/v1');
     expect(config.model.modelName.value).toBe('test-model');
     expect(config.model.apiKey.value?.reveal()).toBe('secret-value');
+  });
+
+  it('accepts per-task-type concurrency from the environment', () => {
+    const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
+    const config = resolveAppConfig({
+      bootstrap,
+      environment: {
+        JOBHUNTER_TASK_TYPE_CONCURRENCY: JSON.stringify({
+          'source.sync': 2,
+          'match.advise': 4,
+        }),
+      },
+    });
+    expect(config.worker.taskTypeConcurrency).toEqual({
+      value: { 'source.sync': 2, 'match.advise': 4 },
+      source: 'environment',
+    });
   });
 
   it('accepts personal OpenAI-compatible aliases without exposing the secret', () => {

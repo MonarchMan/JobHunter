@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { DefaultDerivationTaskFactory, JobSyncService } from '@jobhunter/application';
+import { JobSyncService } from '@jobhunter/application';
 import { parseId, utcInstant, type Clock, type UtcInstant } from '@jobhunter/domain';
 import {
   AdapterRegistry,
@@ -174,7 +174,7 @@ describe('first-party source seed and sync', () => {
     seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 2 });
 
     expect(handle.client.prepare('SELECT count(*) FROM companies').pluck().get()).toBe(10);
-    expect(handle.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(10);
+    expect(handle.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(13);
     expect(
       handle.client
         .prepare(
@@ -209,7 +209,6 @@ describe('first-party source seed and sync', () => {
       http: fixtureHttp,
       clock: new FixedClock(),
       ids,
-      derivationTasks: new DefaultDerivationTaskFactory(ids, 'enrich-v1'),
       options: { normalizerVersion: 'normalize-v1' },
     });
     const sourceId = parseId(tencent.source.id, 'JobSource');
@@ -220,7 +219,7 @@ describe('first-party source seed and sync', () => {
       kind: 'completed',
       status: 'succeeded',
       coverage: 'complete',
-      stats: { discovered: 1, created: 1, followupEnqueued: 2 },
+      stats: { discovered: 1, created: 1, followupEnqueued: 0 },
     });
     expect(handle.client.prepare('SELECT title, status FROM jobs').get()).toEqual({
       title: 'Agent 开发工程师',
@@ -256,7 +255,6 @@ describe('first-party source seed and sync', () => {
         http: meituanSyncHttp({ listJob, detail, partial }),
         clock: new FixedClock(),
         ids,
-        derivationTasks: new DefaultDerivationTaskFactory(ids, 'enrich-v1'),
         options: { normalizerVersion: 'normalize-v1' },
       });
     };

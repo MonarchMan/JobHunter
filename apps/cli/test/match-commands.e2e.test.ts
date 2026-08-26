@@ -145,14 +145,21 @@ describe('match commands', () => {
     try {
       expect((await command(dataRoot, ['init'])).exitCode).toBe(0);
       seedMatchingInputs(dataRoot);
-      const queued = await command(dataRoot, ['match', 'run', ids.profile]);
+      const queued = await command(dataRoot, ['match', 'score', ids.job]);
       expect(queued.exitCode).toBe(0);
       const taskId = (queued.body as { readonly data: { readonly task: { readonly id: string } } })
         .data.task.id;
 
       const worker = createProductionWorkerApplication({ dataRoot, workerId: 'match-e2e' });
       try {
-        await expect(worker.engine.runOnce()).resolves.toBe(true);
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          await worker.engine.runOnce('match.score-job');
+          const current = await command(dataRoot, ['task', 'show', taskId]);
+          const status = (
+            current.body as { readonly data?: { readonly task?: { readonly status?: string } } }
+          ).data?.task?.status;
+          if (status === 'succeeded' || status === 'failed' || status === 'cancelled') break;
+        }
       } finally {
         await worker.close();
       }

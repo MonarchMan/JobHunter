@@ -5,3 +5,4 @@ coverage
 var
 pnpm-lock.yaml
 docs/resumes
+packages/sources/**/script.js

@@ -1,4 +1,6 @@
 import { parseNormalizedJob, utcInstant } from '@jobhunter/domain';
+import { normalizeJobTaxonomy } from '../job-taxonomy.js';
+import { normalizeRecruitmentCategory } from '../recruitment-category.js';
 import {
   SourceError,
   canonicalizeOfficialUrl,
@@ -199,6 +201,7 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
         );
         const text = description(job);
         if (!text) throw new SourceError('parse_changed', 'JD job contains no usable description.');
+        const taxonomy = normalizeJobTaxonomy(optionalText(job.jobType));
         return {
           job: parseNormalizedJob({
             companyId: context.companyId,
@@ -206,7 +209,9 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
             externalJobId: String(job.requirementId),
             title: job.positionNameOpen,
             department: optionalText(job.positionDeptName),
-            jobFamily: optionalText(job.jobType),
+            jobFamily: taxonomy.jobFamily,
+            jobSubfamily: taxonomy.jobSubfamily,
+            recruitmentCategory: normalizeRecruitmentCategory('社招'),
             locations: locations(job.workCity),
             employmentType: null,
             experienceText: null,

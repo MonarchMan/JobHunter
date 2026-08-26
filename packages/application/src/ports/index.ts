@@ -7,3 +7,4 @@ export * from './source-management.js';
 export * from './resume-deletion.js';
 export * from './profiles.js';
 export * from './unit-of-work.js';
+export * from './settings.js';

@@ -171,7 +171,7 @@ erDiagram
 | `external_job_id` | TEXT    | NOT NULL                 | 来源稳定 ID 或适配器指纹    |
 | `title`           | TEXT    | NOT NULL                 | 标准化标题                  |
 | `department`      | TEXT    | NULL                     | 部门                        |
-| `job_family`      | TEXT    | NULL                     | 职位族                      |
+| `job_family`      | TEXT    | NULL                     | 规范职位大类                |
 | `locations_json`  | TEXT    | NOT NULL DEFAULT `'[]'`  | 地点集合                    |
 | `employment_type` | TEXT    | NULL                     | 工作性质                    |
 | `experience_text` | TEXT    | NULL                     | 原始/标准化年限表达         |

@@ -27,7 +27,7 @@ const defaultSyncPolicy = {
   closeAfterMisses: 2,
   degradedAfterFailures: 1,
   unhealthyAfterFailures: 3,
-  enrichNewRevisions: true,
+  enrichNewRevisions: false,
   requestTimeoutMs: 15_000,
 } as const;
 

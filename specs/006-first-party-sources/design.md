@@ -32,15 +32,17 @@ packages/sources/
 
 公司与来源 seed 通过幂等初始化用例写入。默认只启用通过 supported 门禁的来源；experimental/blocked 默认禁用自动计划但允许手动 health check。enabled、support status 与运行 health 不得互相推导覆盖。
 
+来源目录按“公司 1:N 招聘渠道”建模，同一 company ID 下每个社招、校招、实习渠道拥有稳定且唯一的 source ID、slug 和 adapter key。来源若同时返回校招与实习，适配器必须使用响应字段、项目标识以及标题/描述中的实习语义做记录级归一化；`internship` 优先于 source descriptor 的 `campus` 回退值。只请求 `INTERN` 的来源直接以常量归一化为 `internship`。
+
 ## 技术策略
 
-严格按 JSON → 页面结构化数据 → HTML → 受控浏览器降级。浏览器适配器复用单一受控 BrowserPool，禁止每个职位启动浏览器；BrowserPool 负责上下文隔离、并发上限、超时、AbortSignal、页面回收和连续失败熔断。浏览器只使用当前匿名上下文执行官网公开脚本，不注入伪造风控值、不保存登录 Cookie、不处理验证码。所有来源默认低频、带抖动串行请求；实际值由 Spike 记录。
+职位数据只接受官网 JSON。普通 HTTP 不可用时，由受控浏览器初始化匿名会话并捕获首个官方 JSON 请求；后续分页直接复用同一会话的 JSON 请求模板，只修改响应协议定义的 offset/page 字段。禁止读取职位 DOM、从 DOM 推断总数或点击 DOM 翻页。浏览器适配器复用单一受控 BrowserPool，禁止每个职位启动浏览器；BrowserPool 负责上下文隔离、并发上限、超时、AbortSignal、页面回收和连续失败熔断。浏览器只使用当前匿名上下文执行官网公开脚本，不保存登录 Cookie、不处理验证码。所有来源默认低频、带抖动串行请求；实际值由 Spike 记录。
 
 浏览器能力属于可选基础设施。未安装浏览器运行时、会话频繁失效或采集成本超出来源 Spike 的时间预算时，适配器返回可分类错误并保持 `experimental/blocked`，Registry 跳过其自动同步，其他任务照常运行。
 
 ### 浏览器渲染采集端口（2026-08-22）
 
-字节和得物的官网页面能够在匿名浏览器中由官网自身脚本生成请求参数并渲染职位，但裸 HTTP 列表请求依赖运行时签名。因此来源不得复制签名，而是通过 `SourcePageClient.collect` 使用同一匿名页面会话完成：打开入口、等待官网自身列表请求返回，读取响应中的 `job_post_list/count/limit/offset`，按 `ceil(count / limit)` 计算覆盖范围，并驱动官网分页控件让页面运行时继续生成下一页请求，最后返回脱敏的页面记录与 coverage。
+字节和得物的官网页面能够在匿名浏览器中由官网自身脚本初始化请求上下文，但裸 HTTP 列表请求依赖运行时签名。因此来源不得复制签名，也不得解析职位 DOM 或点击 DOM 分页；`SourcePageClient.collect` 使用同一匿名页面会话打开入口并等待首个 JSON 列表请求，保存其会话 Cookie、必要请求头、请求体和签名 URL，读取响应中的 `job_post_list/count/limit/offset`，按 `ceil(count / limit)` 计算覆盖范围，再在同一页面上下文中直接发起后续 JSON 请求，仅修改 `offset`（或对应的页码字段），最后返回脱敏的页面记录与 coverage。
 
 `SourcePageClient.collect` 只返回普通 JSON 记录和分页证据，不暴露 Playwright/Page、Cookie、Storage、请求头或签名。实现层负责页面超时、取消、并发限制、资源回收和连续失败熔断；遇到登录、验证码或访问验证立即返回 `access_blocked`。来源适配器只负责把记录映射为 `DiscoveredJob` 和规范职位，不能自行生成或持久化动态令牌。
 

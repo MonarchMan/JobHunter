@@ -1,8 +1,8 @@
 # Worker、任务队列与并发设计
 
 > 状态：Accepted
-> 版本：1.1.0
-> 日期：2026-08-19
+> 版本：1.2.0
+> 日期：2026-08-24
 
 ## 1. 运行模型
 
@@ -11,7 +11,7 @@
 Worker 内部包含：
 
 - `SchedulerLoop`：将到期计划转为持久化任务。
-- `ClaimLoop`：领取到期任务。
+- `ClaimLoop`：每个任务类型按配置启动一个或多个消费槽位，领取该类型的到期任务。
 - `HandlerRegistry`：按 `task_type` 查找处理器与 payload Schema。
 - `LeaseHeartbeat`：长任务续租。
 - `RetryPolicy`：按错误类别决定重试时间。
@@ -52,6 +52,7 @@ stateDiagram-v2
 - 默认租约：120 秒。
 - 心跳间隔：30 秒。
 - 空队列轮询：1 秒到 10 秒指数回退，入队可通过进程内信号提前唤醒。
+- 每类队列消费并发度：通过 `worker.taskTypeConcurrency` 配置，未配置类型默认 1；每个槽位是独立异步领取循环。
 
 这些值是配置默认值，不是领域常量。
 

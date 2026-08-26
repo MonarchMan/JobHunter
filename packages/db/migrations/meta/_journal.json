@@ -8,6 +8,76 @@
       "when": 1787151600000,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787151700000,
+      "tag": "0001_job_subfamily",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787151800000,
+      "tag": "0002_recruitment_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787151900000,
+      "tag": "0003_backfill_recruitment_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787152000000,
+      "tag": "0004_close_known_non_domestic_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787152100000,
+      "tag": "0005_disable_source_job_understanding",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787152200000,
+      "tag": "0006_seed_job_understanding_setting",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787152300000,
+      "tag": "0007_resume_driven_intake_cleanup",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787152400000,
+      "tag": "0008_refine_job_subfamily",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787415000000,
+      "tag": "0009_task_type_queue_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787461200000,
+      "tag": "0010_repair_internship_categories",
+      "breakpoints": true
     }
   ]
 }

@@ -27,7 +27,7 @@ export async function GET(request: Request): Promise<Response> {
       detail: selected ? container.services.webProfiles.get(selected) : null,
     });
   } catch (error) {
-    if (error instanceof CandidateProfileNotFoundError) return notFoundResponse('画像不存在。');
+    if (error instanceof CandidateProfileNotFoundError) return notFoundResponse('个人资料不存在。');
     if (error instanceof ZodError || error instanceof TypeError) return badRequestResponse();
     return errorResponse(error);
   }
@@ -45,9 +45,9 @@ export async function PATCH(request: Request): Promise<Response> {
         currentVersionId: error.currentVersionId,
       });
     }
-    if (error instanceof CandidateProfileNotFoundError) return notFoundResponse('画像不存在。');
+    if (error instanceof CandidateProfileNotFoundError) return notFoundResponse('个人资料不存在。');
     if (error instanceof ZodError || error instanceof TypeError)
-      return badRequestResponse('画像修改内容无效。');
+      return badRequestResponse('个人资料修改内容无效。');
     return errorResponse(error);
   }
 }

@@ -32,6 +32,7 @@ export interface ResumeWorkflowImportResult {
   readonly deduplicated: boolean;
   readonly profileId: CandidateProfileId;
   readonly task: EnqueueTaskResult['task'] | null;
+  readonly taskDeduplicated: boolean;
 }
 
 export class ResumeProfileWorkflow {
@@ -61,10 +62,24 @@ export class ResumeProfileWorkflow {
     readonly profileName?: string;
     readonly signal: AbortSignal;
   }): Promise<ResumeWorkflowImportResult> {
-    const imported = await this.#imports.import(
-      await this.#files.read(input.path, this.#maximumFileBytes),
-      input.signal,
-    );
+    return this.importBytes({
+      bytes: await this.#files.read(input.path, this.#maximumFileBytes),
+      ...(input.profileId ? { profileId: input.profileId } : {}),
+      ...(input.profileName ? { profileName: input.profileName } : {}),
+      signal: input.signal,
+    });
+  }
+
+  public async importBytes(input: {
+    readonly bytes: Uint8Array;
+    readonly profileId?: string;
+    readonly profileName?: string;
+    readonly signal: AbortSignal;
+  }): Promise<ResumeWorkflowImportResult> {
+    if (input.bytes.byteLength > this.#maximumFileBytes) {
+      throw new TypeError('Resume file exceeds the size limit.');
+    }
+    const imported = await this.#imports.import(input.bytes, input.signal);
     const profile = input.profileId
       ? this.#requiredProfile(input.profileId)
       : (this.#profiles.listProfiles()[0] ??
@@ -74,6 +89,7 @@ export class ResumeProfileWorkflow {
       imported.document.parseStatus === 'parsed'
         ? this.#tasks.enqueue({
             taskType: 'resume.profile.extract',
+            priority: 100,
             payload: {
               profileId: profile.id,
               resumeDocumentId: imported.document.id,
@@ -94,6 +110,7 @@ export class ResumeProfileWorkflow {
       deduplicated: imported.deduplicated,
       profileId: profile.id,
       task: queued?.task ?? null,
+      taskDeduplicated: queued ? queued.kind !== 'enqueued' : false,
     };
   }
 
@@ -184,6 +201,25 @@ export class ProfileManagementService {
       profileId,
       expectedCurrentVersionId: current.id,
       patch: setPointer(current.effective, pointer, value),
+    });
+    return this.show(id);
+  }
+
+  public replace(
+    id: string,
+    profile: CandidateProfileData,
+    expectedCurrentVersionId: string,
+  ): ProfileVersionInspection {
+    const profileId = this.#profileId(id);
+    const current = this.#profiles.getCurrent(profileId);
+    if (!current) throw new CandidateProfileNotFoundError(id);
+    if (current.id !== expectedCurrentVersionId) {
+      throw new ProfileVersionConflictError(current.id);
+    }
+    this.#profiles.applyManualCorrection({
+      profileId,
+      expectedCurrentVersionId: current.id,
+      patch: structuredClone(profile),
     });
     return this.show(id);
   }

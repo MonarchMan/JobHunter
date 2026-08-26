@@ -59,7 +59,10 @@ describe('source and task commands', () => {
       expect(taskId).toMatch(/^[0-9a-f-]{36}$/u);
 
       const tasks = await command(dataRoot, ['task', 'list', '--status', 'pending']);
-      expect(tasks.body).toMatchObject({ ok: true, data: { tasks: [{ id: taskId }] } });
+      expect(tasks.body).toMatchObject({ ok: true });
+      const pendingTasks = (tasks.body as { data?: { tasks?: readonly { id: string }[] } }).data
+        ?.tasks;
+      expect(pendingTasks?.some((task) => task.id === taskId)).toBe(true);
       expect((await command(dataRoot, ['task', 'show', taskId ?? 'missing'])).exitCode).toBe(0);
       expect((await command(dataRoot, ['task', 'cancel', taskId ?? 'missing'])).body).toMatchObject(
         {

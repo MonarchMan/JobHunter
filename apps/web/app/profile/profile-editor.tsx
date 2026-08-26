@@ -42,13 +42,13 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
         body: JSON.stringify(mutation),
       });
       const body = (await response.json()) as ApiFailure;
-      if (!response.ok) throw new Error(body.error?.message ?? '画像修改失败。');
-      setFeedback({ kind: 'success', text: '已创建新的画像版本，正在刷新。' });
+      if (!response.ok) throw new Error(body.error?.message ?? '个人资料修改失败。');
+      setFeedback({ kind: 'success', text: '已创建新的个人资料版本，正在刷新。' });
       window.location.reload();
     } catch (error) {
       setFeedback({
         kind: 'error',
-        text: error instanceof Error ? error.message : '画像修改失败。',
+        text: error instanceof Error ? error.message : '个人资料修改失败。',
       });
     } finally {
       setSubmitting(false);
@@ -108,7 +108,7 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
         </p>
       ) : null}
       <div className="editor-grid">
-        <form className="panel-block form-stack" onSubmit={savePreferences}>
+        <form className="panel-block form-stack" onSubmit={savePreferences} noValidate>
           <h3>求职偏好</h3>
           <label>
             目标地点（逗号分隔）
@@ -163,7 +163,7 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
             保存偏好
           </button>
         </form>
-        <form className="panel-block form-stack" onSubmit={correction}>
+        <form className="panel-block form-stack" onSubmit={correction} noValidate>
           <h3>字段修正</h3>
           <label>
             JSON Pointer
@@ -178,6 +178,7 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
           <label>
             JSON 值
             <textarea
+              className="resize-none"
               value={jsonValue}
               onChange={(event) => {
                 setJsonValue(event.target.value);

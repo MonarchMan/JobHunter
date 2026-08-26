@@ -3,14 +3,16 @@ import { createBaiduAdapter } from '../baidu/index.js';
 import {
   createAlibabaAdapter,
   createByteDanceAdapter,
+  createByteDanceCampusAdapter,
   createDewuAdapter,
   createHuaweiAdapter,
   createXiaohongshuAdapter,
 } from '../scripted/index.js';
 import { createJdCampusAdapter } from '../jd-campus/index.js';
-import { createMeituanAdapter } from '../meituan/index.js';
+import { createMeituanAdapter, createMeituanInternAdapter } from '../meituan/index.js';
 import { createPinduoduoAdapter } from '../pinduoduo/index.js';
 import { createTencentAdapter } from '../tencent/index.js';
+import { createTencentInternAdapter } from '../tencent-campus/index.js';
 
 export type SourceSupportStatus = 'experimental' | 'supported' | 'blocked';
 
@@ -43,10 +45,13 @@ export interface FirstPartySourceSeed {
 const ids = [
   ['018f0000-0000-7000-8000-000000000101', '018f0000-0000-7000-8000-000000000201'],
   ['018f0000-0000-7000-8000-000000000102', '018f0000-0000-7000-8000-000000000202'],
+  ['018f0000-0000-7000-8000-000000000101', '018f0000-0000-7000-8000-000000000211'],
   ['018f0000-0000-7000-8000-000000000103', '018f0000-0000-7000-8000-000000000203'],
   ['018f0000-0000-7000-8000-000000000104', '018f0000-0000-7000-8000-000000000204'],
+  ['018f0000-0000-7000-8000-000000000104', '018f0000-0000-7000-8000-000000000213'],
   ['018f0000-0000-7000-8000-000000000105', '018f0000-0000-7000-8000-000000000205'],
   ['018f0000-0000-7000-8000-000000000106', '018f0000-0000-7000-8000-000000000206'],
+  ['018f0000-0000-7000-8000-000000000106', '018f0000-0000-7000-8000-000000000212'],
   ['018f0000-0000-7000-8000-000000000107', '018f0000-0000-7000-8000-000000000207'],
   ['018f0000-0000-7000-8000-000000000108', '018f0000-0000-7000-8000-000000000208'],
   ['018f0000-0000-7000-8000-000000000109', '018f0000-0000-7000-8000-000000000209'],
@@ -55,6 +60,8 @@ const ids = [
 
 interface CatalogInput {
   readonly slug: string;
+  /** Keeps the stable source selector when the supported channel broadens. */
+  readonly sourceSlug?: string;
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly sizeTag: 'large' | 'medium';
@@ -69,12 +76,13 @@ interface CatalogInput {
 const inputs: readonly CatalogInput[] = [
   {
     slug: 'tencent',
+    sourceSlug: 'tencent-social',
     name: '腾讯',
     aliases: ['Tencent'],
     sizeTag: 'large',
     entry: 'https://careers.tencent.com/search.html',
     adapterKey: 'tencent.social',
-    recruitmentType: 'social',
+    recruitmentType: 'mixed',
     supportStatus: 'supported',
     supportNote: '公开匿名 JSON 列表与详情协议已于 2026-08-20 通过门禁。',
   },
@@ -89,6 +97,19 @@ const inputs: readonly CatalogInput[] = [
     supportStatus: 'supported',
     supportNote:
       '匿名浏览器由官网自身脚本生成运行时请求；339 条职位、34 页分页、稳定 ID 和字段归一化已通过 Smoke。',
+  },
+  {
+    slug: 'tencent',
+    sourceSlug: 'tencent-intern',
+    name: '腾讯',
+    aliases: ['Tencent'],
+    sizeTag: 'large',
+    entry: 'https://join.qq.com/post.html',
+    adapterKey: 'tencent.intern',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote:
+      '校园官网匿名 JSON 协议按应届实习、日常实习及青云实习项目筛选；列表 count/pageIndex/pageSize 与详情响应已于 2026-08-23 验证。',
   },
   {
     slug: 'baidu',
@@ -115,6 +136,19 @@ const inputs: readonly CatalogInput[] = [
       '匿名浏览器由官网自身脚本生成动态签名；列表响应的 count/limit/offset 分页、稳定 ID、官方详情 URL 和字段归一化已通过 Smoke。',
   },
   {
+    slug: 'bytedance',
+    sourceSlug: 'bytedance-intern',
+    name: '字节跳动',
+    aliases: ['ByteDance'],
+    sizeTag: 'large',
+    entry: 'https://jobs.bytedance.com/campus/position',
+    adapterKey: 'bytedance.campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote:
+      '正常匿名浏览器访问校园入口返回 200；portal_type=3 的官方 JSON 当前返回 7444 条，包含日常实习、ByteIntern 与大模型人才实习项目。',
+  },
+  {
     slug: 'pinduoduo',
     name: '拼多多',
     aliases: ['PDD'],
@@ -128,14 +162,28 @@ const inputs: readonly CatalogInput[] = [
   },
   {
     slug: 'meituan',
+    sourceSlug: 'meituan-social',
     name: '美团',
     aliases: ['Meituan'],
     sizeTag: 'medium',
     entry: 'https://zhaopin.meituan.com/web/social',
     adapterKey: 'meituan.social',
-    recruitmentType: 'social',
+    recruitmentType: 'mixed',
     supportStatus: 'supported',
     supportNote: '公开 JSON 列表、详情、24 页全量分页和在线 Smoke 已于 2026-08-21 通过门禁。',
+  },
+  {
+    slug: 'meituan',
+    sourceSlug: 'meituan-intern',
+    name: '美团',
+    aliases: ['Meituan'],
+    sizeTag: 'medium',
+    entry: 'https://zhaopin.meituan.com/web/campus',
+    adapterKey: 'meituan.intern',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    supportNote:
+      '校园页初始化匿名会话后按 jobType=2 直接请求官方 JSON；totalCount/pageSize 响应驱动分页与两页在线 Smoke 已于 2026-08-23 通过。',
   },
   {
     slug: 'dewu',
@@ -200,7 +248,7 @@ export const firstPartySourceCatalog: readonly FirstPartySourceSeed[] = inputs.m
       },
       source: {
         id: pair[1],
-        slug: `${input.slug}-${input.recruitmentType}`,
+        slug: input.sourceSlug ?? `${input.slug}-${input.recruitmentType}`,
         adapterKey: input.adapterKey,
         recruitmentType: input.recruitmentType,
         baseUrl: input.entry,
@@ -228,11 +276,14 @@ export function registerFirstPartyAdapters(registry: AdapterRegistry): void {
   registry.register(createAlibabaAdapter());
   registry.register(createBaiduAdapter());
   registry.register(createByteDanceAdapter());
+  registry.register(createByteDanceCampusAdapter());
   registry.register(createDewuAdapter());
   registry.register(createHuaweiAdapter());
   registry.register(createJdCampusAdapter());
   registry.register(createMeituanAdapter());
+  registry.register(createMeituanInternAdapter());
   registry.register(createPinduoduoAdapter());
   registry.register(createTencentAdapter());
+  registry.register(createTencentInternAdapter());
   registry.register(createXiaohongshuAdapter());
 }

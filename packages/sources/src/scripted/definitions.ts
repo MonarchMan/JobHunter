@@ -100,6 +100,49 @@ export const bytedanceDefinition: ScriptedAdapterDefinition = {
   },
 };
 
+export const bytedanceCampusDefinition: ScriptedAdapterDefinition = {
+  ...bytedanceDefinition,
+  key: 'bytedance.campus',
+  recruitmentType: 'campus',
+  entryUrl: 'https://jobs.bytedance.com/campus/position?limit=100',
+  request: ({ config, page, requestId, signal, timeoutMs }) => {
+    const offset = (page - 1) * config.pageSize;
+    return jsonRequest({
+      sourceKey: 'bytedance.campus',
+      requestId,
+      url: appendQuery('https://jobs.bytedance.com/api/v1/search/job/posts', {
+        keyword: config.keyword,
+        limit: config.pageSize,
+        offset,
+        portal_type: 3,
+        portal_entrance: config.portalEntrance,
+        _signature: config.signature ?? undefined,
+      }),
+      hosts: ['jobs.bytedance.com'],
+      signal,
+      body: {
+        keyword: config.keyword,
+        limit: config.pageSize,
+        offset,
+        job_category_id_list: [],
+        tag_id_list: [],
+        location_code_list: [],
+        subject_id_list: [],
+        recruitment_id_list: [],
+        portal_type: 3,
+        job_function_id_list: [],
+        storefront_id_list: [],
+        portal_entrance: config.portalEntrance,
+      },
+      headers: {
+        origin: 'https://jobs.bytedance.com',
+        referer: 'https://jobs.bytedance.com/campus/position',
+      },
+      timeoutMs,
+    });
+  },
+};
+
 export const dewuDefinition: ScriptedAdapterDefinition = {
   key: 'dewu.campus',
   company: { slug: 'dewu', name: '得物' },
@@ -228,6 +271,8 @@ export const createAlibabaAdapter = (): JobSourceAdapter<ScriptedConfig, never> 
   createScriptedAdapter(alibabaDefinition);
 export const createByteDanceAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(bytedanceDefinition);
+export const createByteDanceCampusAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
+  createScriptedAdapter(bytedanceCampusDefinition);
 export const createDewuAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(dewuDefinition);
 export const createHuaweiAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
