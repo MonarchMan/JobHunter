@@ -22,9 +22,11 @@ exports/
 *.db-shm
 *.db-wal
 fixtures/private/
-docs/resumes/*.pdf
-docs/resumes/*.docx
-docs/resumes/*.txt
+# 简历
+docs/resumes/
 eval-results/
 playwright-report/
 test-results/
+
+# 脚本示例
+script.js
