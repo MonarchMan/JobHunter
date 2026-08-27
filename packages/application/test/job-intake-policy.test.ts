@@ -87,5 +87,33 @@ describe('ProfileJobIntakePolicy', () => {
     const policy = new ProfileJobIntakePolicy(repository(false));
     expect(policy.allowedJobFamilies()).toEqual([]);
     expect(policy.accepts({ jobFamily: '研发' })).toBe(false);
+    expect(policy.isReady()).toBe(false);
+  });
+
+  it('requires an explicit target role even when the profile has R&D domains', () => {
+    const emptyTargetVersion: ProfileVersionRecord = {
+      ...version,
+      extracted: parseCandidateProfile({
+        ...version.extracted,
+        targetRoles: [],
+        domains: ['人工智能', '后端开发'],
+      }),
+      effective: parseCandidateProfile({
+        ...version.effective,
+        targetRoles: [],
+        domains: ['人工智能', '后端开发'],
+      }),
+    };
+    const profiles = repository(true);
+    const policy = new ProfileJobIntakePolicy({
+      ...profiles,
+      getCurrentVersion: () => emptyTargetVersion,
+      getVersion: () => emptyTargetVersion,
+      listVersions: () => [emptyTargetVersion],
+    });
+
+    expect(policy.allowedJobFamilies()).toEqual([]);
+    expect(policy.isReady()).toBe(false);
+    expect(policy.accepts({ jobFamily: '研发' })).toBe(false);
   });
 });

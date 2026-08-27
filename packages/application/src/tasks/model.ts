@@ -18,6 +18,7 @@ export interface RuntimeSchema<TValue> {
 }
 
 export interface TaskLogFields {
+  readonly [key: string]: unknown;
   readonly taskId?: string;
   readonly taskType?: string;
   readonly attempt?: number;
@@ -25,6 +26,7 @@ export interface TaskLogFields {
   readonly durationMs?: number;
   readonly result?: string;
   readonly errorCategory?: TaskErrorCategory;
+  readonly error?: unknown;
 }
 
 export interface TaskLogger {

@@ -1,10 +1,16 @@
 'use client';
 
-import type { CandidateProfileData } from '@jobhunter/domain';
+import {
+  canonicalJobFamilies,
+  normalizeJobTaxonomy,
+  type CandidateProfileData,
+} from '@jobhunter/domain';
 import type { ReactElement, ReactNode, SyntheticEvent } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import { SelectField } from '../components/select-field.js';
+import { ResumePolish } from './resume-polish.js';
 import styles from './resume-editor.module.css';
 
 function classNames(...names: readonly (string | false | undefined)[]): string {
@@ -28,48 +34,99 @@ const meaningful = (value: string | null | undefined): value is string =>
   filled(value) && !value.startsWith('待填写');
 const dateInputValue = (value: string | null): string =>
   value && /^\d{4}-\d{2}$/.test(value) ? `${value}-01` : (value ?? '');
+const selectableJobFamilies = canonicalJobFamilies.filter((family) => family !== '其他');
+const targetRoleOptions = [
+  { value: '', label: '请选择职位大类' },
+  ...selectableJobFamilies.map((family) => ({ value: family, label: family })),
+];
+const remoteAcceptedOptions = [
+  { value: 'unknown', label: '未设置' },
+  { value: 'true', label: '接受' },
+  { value: 'false', label: '不接受' },
+];
+const managementExperienceOptions = [
+  { value: 'unknown', label: '未设置' },
+  { value: 'true', label: '有' },
+  { value: 'false', label: '无' },
+];
+const resumeSections = [
+  ['resume-basic', '基本信息'],
+  ['resume-intention', '求职意向'],
+  ['resume-education', '教育经历'],
+  ['resume-work', '工作经历'],
+  ['resume-projects', '项目经历'],
+  ['resume-works', '作品'],
+  ['resume-competitions', '竞赛'],
+  ['resume-certificates', '证书'],
+  ['resume-languages', '语言能力'],
+  ['resume-skills', '专业技能'],
+  ['resume-evaluation', '自我评价'],
+] as const;
+type ResumeSectionId = (typeof resumeSections)[number][0];
 
 function cleanDraft(profile: Draft): Draft {
   return {
     ...profile,
-    education: profile.education.filter((item) =>
-      [item.institution, item.degree, item.field, item.startDate, item.endDate].some(filled),
-    ),
-    workExperience: profile.workExperience.filter(
-      (item) =>
-        meaningful(item.organization) ||
-        meaningful(item.title) ||
-        item.highlights.some(filled) ||
-        filled(item.startDate) ||
-        filled(item.endDate),
-    ),
-    projects: profile.projects.filter(
-      (item) =>
-        meaningful(item.name) ||
-        filled(item.role) ||
-        item.highlights.some(filled) ||
-        filled(item.startDate) ||
-        filled(item.endDate),
-    ),
-    works: profile.works.filter(
-      (item) => meaningful(item.name) || filled(item.description) || filled(item.url),
-    ),
-    competitions: profile.competitions.filter(
-      (item) => meaningful(item.name) || filled(item.award) || filled(item.date),
-    ),
-    certificates: profile.certificates.filter(
-      (item) => meaningful(item.name) || filled(item.issuer) || filled(item.date),
-    ),
-    languages: profile.languages.filter(
-      (item) => meaningful(item.name) || filled(item.proficiency),
-    ),
+    education: profile.education
+      .filter((item) =>
+        [item.institution, item.degree, item.field, item.startDate, item.endDate].some(filled),
+      )
+      .map((item) => ({
+        ...item,
+        startDate: text(item.startDate ?? ''),
+        endDate: text(item.endDate ?? ''),
+      })),
+    workExperience: profile.workExperience
+      .filter(
+        (item) =>
+          meaningful(item.organization) ||
+          meaningful(item.title) ||
+          item.highlights.some(filled) ||
+          filled(item.startDate) ||
+          filled(item.endDate),
+      )
+      .map((item) => ({
+        ...item,
+        title: filled(item.title) ? item.title : '待填写职位',
+        startDate: text(item.startDate ?? ''),
+        endDate: text(item.endDate ?? ''),
+      })),
+    projects: profile.projects
+      .filter(
+        (item) =>
+          meaningful(item.name) ||
+          filled(item.role) ||
+          item.highlights.some(filled) ||
+          filled(item.startDate) ||
+          filled(item.endDate),
+      )
+      .map((item) => ({
+        ...item,
+        name: filled(item.name) ? item.name : '待填写项目',
+        startDate: text(item.startDate ?? ''),
+        endDate: text(item.endDate ?? ''),
+      })),
+    works: profile.works
+      .filter((item) => meaningful(item.name) || filled(item.description) || filled(item.url))
+      .map((item) => ({ ...item, name: filled(item.name) ? item.name : '待填写作品' })),
+    competitions: profile.competitions
+      .filter((item) => meaningful(item.name) || filled(item.award) || filled(item.date))
+      .map((item) => ({ ...item, name: filled(item.name) ? item.name : '待填写竞赛' })),
+    certificates: profile.certificates
+      .filter((item) => meaningful(item.name) || filled(item.issuer) || filled(item.date))
+      .map((item) => ({ ...item, name: filled(item.name) ? item.name : '待填写证书' })),
+    languages: profile.languages
+      .filter((item) => meaningful(item.name) || filled(item.proficiency))
+      .map((item) => ({ ...item, name: filled(item.name) ? item.name : '待填写语言' })),
     skills: profile.skills.filter((item) => meaningful(item.name)),
   };
 }
 
 function prepareDraft(profile: Draft): Draft {
+  const targetFamily = normalizeJobTaxonomy(profile.targetRoles[0]).jobFamily;
   return {
     ...profile,
+    targetRoles: targetFamily === '其他' ? [] : [targetFamily],
     education: profile.education.map((item) => ({
       ...item,
       startDate: dateInputValue(item.startDate),
@@ -112,6 +169,63 @@ function EditorSection({
       </header>
       {children}
     </section>
+  );
+}
+
+function ResumeSectionNavigation({
+  activeSection,
+  collapsed,
+  onActiveSectionChange,
+  onCollapsedChange,
+}: Readonly<{
+  activeSection: ResumeSectionId;
+  collapsed: boolean;
+  onActiveSectionChange: (section: ResumeSectionId) => void;
+  onCollapsedChange: (collapsed: boolean) => void;
+}>): ReactElement {
+  return (
+    <nav
+      className={styles['resume-edit-outline']}
+      data-resume-edit-outline
+      aria-label="在线简历章节"
+    >
+      <div className={styles['resume-edit-outline-heading']}>
+        <strong>章节目录</strong>
+        <button
+          type="button"
+          className={styles['resume-edit-outline-toggle']}
+          aria-controls="resume-section-links"
+          aria-expanded={!collapsed}
+          aria-label={collapsed ? '展开章节目录' : '收起章节目录'}
+          onClick={() => {
+            onCollapsedChange(!collapsed);
+          }}
+        >
+          {collapsed ? '展开' : '收起'}
+        </button>
+      </div>
+      <div
+        id="resume-section-links"
+        className={styles['resume-edit-outline-links']}
+        hidden={collapsed}
+      >
+        {resumeSections.map(([href, label]) => (
+          <a
+            key={href}
+            href={`#${href}`}
+            aria-current={activeSection === href ? 'location' : undefined}
+            onClick={(event) => {
+              event.preventDefault();
+              window.history.pushState(null, '', `#${href}`);
+              document.getElementById(href)?.scrollIntoView({ block: 'start' });
+              onActiveSectionChange(href);
+            }}
+          >
+            {label}
+          </a>
+        ))}
+      </div>
+    </nav>
   );
 }
 
@@ -493,6 +607,8 @@ export function ResumeEditor({
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [activeSection, setActiveSection] = useState<ResumeSectionId>('resume-basic');
+  const [outlineCollapsed, setOutlineCollapsed] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(
     null,
   );
@@ -513,6 +629,38 @@ export function ResumeEditor({
       window.removeEventListener('beforeunload', beforeUnload);
     };
   }, [dirty]);
+
+  useEffect(() => {
+    let frame = 0;
+    const updateActiveSection = (): void => {
+      frame = 0;
+      const firstSection = document.getElementById(resumeSections[0][0]);
+      const scrollMargin = firstSection
+        ? Number.parseFloat(window.getComputedStyle(firstSection).scrollMarginTop) || 0
+        : 0;
+      const marker = Math.min(window.innerHeight - 1, scrollMargin + 1);
+      let currentSection: ResumeSectionId = resumeSections[0][0];
+      for (const [section] of resumeSections) {
+        const element = document.getElementById(section);
+        if (!element || element.getBoundingClientRect().top > marker) break;
+        currentSection = section;
+      }
+      setActiveSection((current) => (current === currentSection ? current : currentSection));
+    };
+    const scheduleUpdate = (): void => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateActiveSection);
+    };
+
+    updateActiveSection();
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+    return () => {
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
 
   const updateArray = <K extends keyof Draft>(key: K, value: Draft[K]): void => {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -568,436 +716,454 @@ export function ResumeEditor({
         </div>
         <span className="status status-succeeded">可编辑</span>
       </header>
-      <nav
-        className={styles['resume-edit-outline']}
-        data-resume-edit-outline
-        aria-label="在线简历章节"
+      <ResumePolish
+        profileId={profileId}
+        versionId={versionId}
+        draft={draft}
+        hasUnsavedChanges={dirty}
+        onApply={(result, sections) => {
+          setDraft((current) => ({
+            ...current,
+            workExperience:
+              sections.includes('workExperience') && result.workExperience
+                ? current.workExperience.map((item, index) => ({
+                    ...item,
+                    highlights: result.workExperience?.[index] ?? item.highlights,
+                  }))
+                : current.workExperience,
+            projects:
+              sections.includes('projects') && result.projects
+                ? current.projects.map((item, index) => ({
+                    ...item,
+                    highlights: result.projects?.[index] ?? item.highlights,
+                  }))
+                : current.projects,
+          }));
+          setSaved(false);
+        }}
+      />
+      <div
+        className={classNames(
+          styles['resume-editor-layout'],
+          outlineCollapsed && styles['is-outline-collapsed'],
+        )}
       >
-        {(
-          [
-            ['resume-basic', '基本信息'],
-            ['resume-intention', '求职意向'],
-            ['resume-education', '教育经历'],
-            ['resume-work', '工作经历'],
-            ['resume-projects', '项目经历'],
-            ['resume-works', '作品'],
-            ['resume-competitions', '竞赛'],
-            ['resume-certificates', '证书'],
-            ['resume-languages', '语言能力'],
-            ['resume-skills', '专业技能'],
-            ['resume-evaluation', '自我评价'],
-          ] as const
-        ).map(([href, label]) => (
-          <a key={href} href={`#${href}`}>
-            {label}
-          </a>
-        ))}
-      </nav>
+        <ResumeSectionNavigation
+          activeSection={activeSection}
+          collapsed={outlineCollapsed}
+          onActiveSectionChange={setActiveSection}
+          onCollapsedChange={setOutlineCollapsed}
+        />
 
-      <div className={styles['resume-edit-document']}>
-        <EditorSection
-          id="resume-basic"
-          title="基本信息"
-          description="用于简历抬头和联系，请确认信息准确。"
-        >
-          <div className={styles['resume-field-grid']}>
-            <Field
-              label="姓名"
-              value={draft.basicInfo.name}
-              onChange={(name) => {
-                setDraft((current) => ({ ...current, basicInfo: { ...current.basicInfo, name } }));
-              }}
-              placeholder="请输入姓名"
-            />
-            <Field
-              label="手机号码"
-              type="tel"
-              value={draft.basicInfo.phone}
-              onChange={(phone) => {
-                setDraft((current) => ({ ...current, basicInfo: { ...current.basicInfo, phone } }));
-              }}
-            />
-            <Field
-              label="邮箱"
-              type="email"
-              value={draft.basicInfo.email}
-              onChange={(email) => {
-                setDraft((current) => ({ ...current, basicInfo: { ...current.basicInfo, email } }));
-              }}
-            />
-            <Field
-              label="所在城市"
-              value={draft.basicInfo.location}
-              onChange={(location) => {
-                setDraft((current) => ({
-                  ...current,
-                  basicInfo: { ...current.basicInfo, location },
-                }));
-              }}
-            />
-            <Field
-              label="个人主页"
-              type="url"
-              value={draft.basicInfo.website}
-              onChange={(website) => {
-                setDraft((current) => ({
-                  ...current,
-                  basicInfo: { ...current.basicInfo, website },
-                }));
-              }}
-            />
-          </div>
-        </EditorSection>
-
-        <EditorSection
-          id="resume-intention"
-          title="求职意向"
-          description="用于职位筛选和匹配排序。"
-        >
-          <div className={styles['resume-field-grid']}>
-            <label>
-              目标岗位
-              <input
-                value={draft.targetRoles.join('，')}
-                onChange={(event) => {
-                  updateArray('targetRoles', list(event.currentTarget.value));
-                }}
-                placeholder="多个岗位用逗号分隔"
-              />
-            </label>
-            <label>
-              期望地点
-              <input
-                value={draft.preferences.locations.join('，')}
-                onChange={(event) => {
-                  setDraft((current) => ({
-                    ...current,
-                    preferences: {
-                      ...current.preferences,
-                      locations: list(event.currentTarget.value),
-                    },
-                  }));
-                }}
-              />
-            </label>
-            <label>
-              用工类型
-              <input
-                value={draft.preferences.employmentTypes.join('，')}
-                onChange={(event) => {
-                  setDraft((current) => ({
-                    ...current,
-                    preferences: {
-                      ...current.preferences,
-                      employmentTypes: list(event.currentTarget.value),
-                    },
-                  }));
-                }}
-              />
-            </label>
-            <label>
-              排除关键词
-              <input
-                value={draft.preferences.excludedTerms.join('，')}
-                onChange={(event) => {
-                  setDraft((current) => ({
-                    ...current,
-                    preferences: {
-                      ...current.preferences,
-                      excludedTerms: list(event.currentTarget.value),
-                    },
-                  }));
-                }}
-              />
-            </label>
-            <label>
-              接受远程
-              <select
-                value={
-                  draft.preferences.remoteAccepted === null
-                    ? 'unknown'
-                    : String(draft.preferences.remoteAccepted)
-                }
-                onChange={(event) => {
-                  setDraft((current) => ({
-                    ...current,
-                    preferences: {
-                      ...current.preferences,
-                      remoteAccepted:
-                        event.currentTarget.value === 'unknown'
-                          ? null
-                          : event.currentTarget.value === 'true',
-                    },
-                  }));
-                }}
-              >
-                <option value="unknown">未设置</option>
-                <option value="true">接受</option>
-                <option value="false">不接受</option>
-              </select>
-            </label>
-            <label>
-              经验年限
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                value={draft.yearsOfExperience ?? ''}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  updateArray('yearsOfExperience', value ? Number(value) : null);
-                }}
-              />
-            </label>
-            <label>
-              管理经验
-              <select
-                value={
-                  draft.managementExperience === null
-                    ? 'unknown'
-                    : String(draft.managementExperience)
-                }
-                onChange={(event) => {
-                  updateArray(
-                    'managementExperience',
-                    event.currentTarget.value === 'unknown'
-                      ? null
-                      : event.currentTarget.value === 'true',
-                  );
-                }}
-              >
-                <option value="unknown">未设置</option>
-                <option value="true">有</option>
-                <option value="false">无</option>
-              </select>
-            </label>
-            <fieldset
-              className={classNames(styles['resume-checkbox-group'], styles['resume-wide-field'])}
-            >
-              <legend>期望公司规模</legend>
-              {(
-                [
-                  ['large', '大型企业'],
-                  ['medium', '中型企业'],
-                  ['other', '其他规模'],
-                ] as const
-              ).map(([value, label]) => (
-                <label key={value}>
-                  <input
-                    type="checkbox"
-                    checked={draft.preferences.companySizes.includes(value)}
-                    onChange={(event) => {
-                      setDraft((current) => ({
-                        ...current,
-                        preferences: {
-                          ...current.preferences,
-                          companySizes: event.currentTarget.checked
-                            ? [...current.preferences.companySizes, value]
-                            : current.preferences.companySizes.filter((item) => item !== value),
-                        },
-                      }));
-                    }}
-                  />
-                  {label}
-                </label>
-              ))}
-            </fieldset>
-          </div>
-        </EditorSection>
-
-        <EditorSection
-          id="resume-education"
-          title="教育经历"
-          description="按时间倒序填写学校、学历与专业。"
-        >
-          <Repeater
-            title="教育经历"
-            count={draft.education.length}
-            onAdd={() => {
-              updateArray('education', [
-                ...draft.education,
-                {
-                  institution: null,
-                  degree: null,
-                  field: null,
-                  startDate: null,
-                  endDate: null,
-                  evidence: emptyEvidence(),
-                },
-              ]);
-            }}
+        <div className={styles['resume-edit-document']} data-resume-edit-document>
+          <EditorSection
+            id="resume-basic"
+            title="基本信息"
+            description="用于简历抬头和联系，请确认信息准确。"
           >
-            {draft.education.map((item, index) => (
-              <div className={styles['resume-edit-entry']} key={index}>
-                <span>{String(index + 1).padStart(2, '0')}</span>
-                <div className={styles['resume-field-grid']}>
-                  <Field
-                    label="学校"
-                    value={item.institution}
-                    onChange={(institution) => {
-                      const next = [...draft.education];
-                      next[index] = { ...item, institution };
-                      updateArray('education', next);
-                    }}
-                  />
-                  <Field
-                    label="学历"
-                    value={item.degree}
-                    onChange={(degree) => {
-                      const next = [...draft.education];
-                      next[index] = { ...item, degree };
-                      updateArray('education', next);
-                    }}
-                  />
-                  <Field
-                    label="专业"
-                    value={item.field}
-                    onChange={(field) => {
-                      const next = [...draft.education];
-                      next[index] = { ...item, field };
-                      updateArray('education', next);
-                    }}
-                  />
-                  <DateRangeField
-                    start={item.startDate}
-                    end={item.endDate}
-                    onStartChange={(startDate) => {
-                      const next = [...draft.education];
-                      next[index] = { ...item, startDate };
-                      updateArray('education', next);
-                    }}
-                    onEndChange={(endDate) => {
-                      const next = [...draft.education];
-                      next[index] = { ...item, endDate };
-                      updateArray('education', next);
-                    }}
-                  />
-                </div>
-                <RemoveButton
-                  label={`第 ${String(index + 1)} 段教育经历`}
-                  onRemove={() => {
+            <div className={styles['resume-field-grid']}>
+              <Field
+                label="姓名"
+                value={draft.basicInfo.name}
+                onChange={(name) => {
+                  setDraft((current) => ({
+                    ...current,
+                    basicInfo: { ...current.basicInfo, name },
+                  }));
+                }}
+                placeholder="请输入姓名"
+              />
+              <Field
+                label="手机号码"
+                type="tel"
+                value={draft.basicInfo.phone}
+                onChange={(phone) => {
+                  setDraft((current) => ({
+                    ...current,
+                    basicInfo: { ...current.basicInfo, phone },
+                  }));
+                }}
+              />
+              <Field
+                label="邮箱"
+                type="email"
+                value={draft.basicInfo.email}
+                onChange={(email) => {
+                  setDraft((current) => ({
+                    ...current,
+                    basicInfo: { ...current.basicInfo, email },
+                  }));
+                }}
+              />
+              <Field
+                label="所在城市"
+                value={draft.basicInfo.location}
+                onChange={(location) => {
+                  setDraft((current) => ({
+                    ...current,
+                    basicInfo: { ...current.basicInfo, location },
+                  }));
+                }}
+              />
+              <Field
+                label="个人主页"
+                type="url"
+                value={draft.basicInfo.website}
+                onChange={(website) => {
+                  setDraft((current) => ({
+                    ...current,
+                    basicInfo: { ...current.basicInfo, website },
+                  }));
+                }}
+              />
+            </div>
+          </EditorSection>
+
+          <EditorSection
+            id="resume-intention"
+            title="求职意向"
+            description="用于职位筛选和匹配排序。"
+          >
+            <div className={styles['resume-field-grid']}>
+              <label>
+                目标岗位
+                <SelectField
+                  name="targetRole"
+                  label="目标岗位"
+                  options={targetRoleOptions}
+                  value={draft.targetRoles[0] ?? ''}
+                  onValueChange={(value) => {
+                    updateArray('targetRoles', value ? [value] : []);
+                  }}
+                />
+              </label>
+              <label>
+                期望地点
+                <input
+                  value={draft.preferences.locations.join('，')}
+                  onChange={(event) => {
+                    setDraft((current) => ({
+                      ...current,
+                      preferences: {
+                        ...current.preferences,
+                        locations: list(event.currentTarget.value),
+                      },
+                    }));
+                  }}
+                />
+              </label>
+              <label>
+                用工类型
+                <input
+                  value={draft.preferences.employmentTypes.join('，')}
+                  onChange={(event) => {
+                    setDraft((current) => ({
+                      ...current,
+                      preferences: {
+                        ...current.preferences,
+                        employmentTypes: list(event.currentTarget.value),
+                      },
+                    }));
+                  }}
+                />
+              </label>
+              <label>
+                排除关键词
+                <input
+                  value={draft.preferences.excludedTerms.join('，')}
+                  onChange={(event) => {
+                    setDraft((current) => ({
+                      ...current,
+                      preferences: {
+                        ...current.preferences,
+                        excludedTerms: list(event.currentTarget.value),
+                      },
+                    }));
+                  }}
+                />
+              </label>
+              <label>
+                接受远程
+                <SelectField
+                  name="remoteAccepted"
+                  label="接受远程"
+                  options={remoteAcceptedOptions}
+                  value={
+                    draft.preferences.remoteAccepted === null
+                      ? 'unknown'
+                      : String(draft.preferences.remoteAccepted)
+                  }
+                  onValueChange={(value) => {
+                    setDraft((current) => ({
+                      ...current,
+                      preferences: {
+                        ...current.preferences,
+                        remoteAccepted: value === 'unknown' ? null : value === 'true',
+                      },
+                    }));
+                  }}
+                />
+              </label>
+              <label>
+                经验年限
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={draft.yearsOfExperience ?? ''}
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    updateArray('yearsOfExperience', value ? Number(value) : null);
+                  }}
+                />
+              </label>
+              <label>
+                管理经验
+                <SelectField
+                  name="managementExperience"
+                  label="管理经验"
+                  options={managementExperienceOptions}
+                  value={
+                    draft.managementExperience === null
+                      ? 'unknown'
+                      : String(draft.managementExperience)
+                  }
+                  onValueChange={(value) => {
                     updateArray(
-                      'education',
-                      draft.education.filter((_, position) => position !== index),
+                      'managementExperience',
+                      value === 'unknown' ? null : value === 'true',
                     );
                   }}
                 />
-              </div>
-            ))}
-          </Repeater>
-        </EditorSection>
+              </label>
+              <fieldset
+                className={classNames(styles['resume-checkbox-group'], styles['resume-wide-field'])}
+              >
+                <legend>期望公司规模</legend>
+                {(
+                  [
+                    ['large', '大型企业'],
+                    ['medium', '中型企业'],
+                    ['other', '其他规模'],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value}>
+                    <input
+                      type="checkbox"
+                      checked={draft.preferences.companySizes.includes(value)}
+                      onChange={(event) => {
+                        setDraft((current) => ({
+                          ...current,
+                          preferences: {
+                            ...current.preferences,
+                            companySizes: event.currentTarget.checked
+                              ? [...current.preferences.companySizes, value]
+                              : current.preferences.companySizes.filter((item) => item !== value),
+                          },
+                        }));
+                      }}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+            </div>
+          </EditorSection>
 
-        <ExperienceEditor
-          id="resume-work"
-          title="实习与工作经历"
-          description="突出职责、产出与可量化结果。"
-          entries={draft.workExperience}
-          onChange={(value) => {
-            updateArray('workExperience', value);
-          }}
-        />
-        <ProjectEditor
-          entries={draft.projects}
-          onChange={(value) => {
-            updateArray('projects', value);
-          }}
-        />
-        <SimpleRepeater
-          id="resume-works"
-          title="作品"
-          description="填写作品、代码仓库或可公开访问的成果。"
-          itemLabel="作品"
-          items={draft.works}
-          fields={[
-            ['name', '作品名称'],
-            ['description', '作品说明'],
-            ['url', '作品链接'],
-          ]}
-          onChange={(value) => {
-            updateArray('works', value as Draft['works']);
-          }}
-        />
-        <SimpleRepeater
-          id="resume-competitions"
-          title="竞赛"
-          description="记录竞赛名称、奖项和时间。"
-          itemLabel="竞赛"
-          items={draft.competitions}
-          fields={[
-            ['name', '竞赛名称'],
-            ['award', '奖项'],
-            ['date', '获奖时间'],
-          ]}
-          onChange={(value) => {
-            updateArray('competitions', value as Draft['competitions']);
-          }}
-        />
-        <SimpleRepeater
-          id="resume-certificates"
-          title="证书"
-          description="记录职业、技术或语言类证书。"
-          itemLabel="证书"
-          items={draft.certificates}
-          fields={[
-            ['name', '证书名称'],
-            ['issuer', '颁发机构'],
-            ['date', '取得时间'],
-          ]}
-          onChange={(value) => {
-            updateArray('certificates', value as Draft['certificates']);
-          }}
-        />
-        <SimpleRepeater
-          id="resume-languages"
-          title="语言能力"
-          description="填写语言及听说读写水平或考试成绩。"
-          itemLabel="语言"
-          items={draft.languages}
-          fields={[
-            ['name', '语言'],
-            ['proficiency', '熟练程度 / 成绩'],
-          ]}
-          onChange={(value) => {
-            updateArray('languages', value as Draft['languages']);
-          }}
-        />
+          <EditorSection
+            id="resume-education"
+            title="教育经历"
+            description="按时间倒序填写学校、学历与专业。"
+          >
+            <Repeater
+              title="教育经历"
+              count={draft.education.length}
+              onAdd={() => {
+                updateArray('education', [
+                  ...draft.education,
+                  {
+                    institution: null,
+                    degree: null,
+                    field: null,
+                    startDate: null,
+                    endDate: null,
+                    evidence: emptyEvidence(),
+                  },
+                ]);
+              }}
+            >
+              {draft.education.map((item, index) => (
+                <div className={styles['resume-edit-entry']} key={index}>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  <div className={styles['resume-field-grid']}>
+                    <Field
+                      label="学校"
+                      value={item.institution}
+                      onChange={(institution) => {
+                        const next = [...draft.education];
+                        next[index] = { ...item, institution };
+                        updateArray('education', next);
+                      }}
+                    />
+                    <Field
+                      label="学历"
+                      value={item.degree}
+                      onChange={(degree) => {
+                        const next = [...draft.education];
+                        next[index] = { ...item, degree };
+                        updateArray('education', next);
+                      }}
+                    />
+                    <Field
+                      label="专业"
+                      value={item.field}
+                      onChange={(field) => {
+                        const next = [...draft.education];
+                        next[index] = { ...item, field };
+                        updateArray('education', next);
+                      }}
+                    />
+                    <DateRangeField
+                      start={item.startDate}
+                      end={item.endDate}
+                      onStartChange={(startDate) => {
+                        const next = [...draft.education];
+                        next[index] = { ...item, startDate };
+                        updateArray('education', next);
+                      }}
+                      onEndChange={(endDate) => {
+                        const next = [...draft.education];
+                        next[index] = { ...item, endDate };
+                        updateArray('education', next);
+                      }}
+                    />
+                  </div>
+                  <RemoveButton
+                    label={`第 ${String(index + 1)} 段教育经历`}
+                    onRemove={() => {
+                      updateArray(
+                        'education',
+                        draft.education.filter((_, position) => position !== index),
+                      );
+                    }}
+                  />
+                </div>
+              ))}
+            </Repeater>
+          </EditorSection>
 
-        <EditorSection
-          id="resume-skills"
-          title="专业技能"
-          description="用一段连贯文字说明技术栈、工具、专业领域和掌握程度。"
-        >
-          <label>
-            专业技能
-            <textarea
-              className={classNames('resize-none', styles['resume-professional-skills'])}
-              rows={8}
-              value={draft.professionalSkills ?? ''}
-              onChange={(event) => {
-                updateArray('professionalSkills', text(event.currentTarget.value));
-              }}
-              placeholder="例如：熟练使用 TypeScript 与 React，具备大模型应用、Agent 工作流和评测体系建设经验……"
-            />
-          </label>
-        </EditorSection>
-        <EditorSection
-          id="resume-evaluation"
-          title="自我评价"
-          description="用简洁事实总结优势、方向与工作方式。"
-        >
-          <label>
-            自我评价
-            <textarea
-              className="resize-none"
-              rows={7}
-              value={draft.selfEvaluation ?? ''}
-              onChange={(event) => {
-                updateArray('selfEvaluation', text(event.currentTarget.value));
-              }}
-              placeholder="建议控制在 200–400 字"
-            />
-          </label>
-        </EditorSection>
+          <ExperienceEditor
+            id="resume-work"
+            title="实习与工作经历"
+            description="突出职责、产出与可量化结果。"
+            entries={draft.workExperience}
+            onChange={(value) => {
+              updateArray('workExperience', value);
+            }}
+          />
+          <ProjectEditor
+            entries={draft.projects}
+            onChange={(value) => {
+              updateArray('projects', value);
+            }}
+          />
+          <SimpleRepeater
+            id="resume-works"
+            title="作品"
+            description="填写作品、代码仓库或可公开访问的成果。"
+            itemLabel="作品"
+            items={draft.works}
+            fields={[
+              ['name', '作品名称'],
+              ['description', '作品说明'],
+              ['url', '作品链接'],
+            ]}
+            onChange={(value) => {
+              updateArray('works', value as Draft['works']);
+            }}
+          />
+          <SimpleRepeater
+            id="resume-competitions"
+            title="竞赛"
+            description="记录竞赛名称、奖项和时间。"
+            itemLabel="竞赛"
+            items={draft.competitions}
+            fields={[
+              ['name', '竞赛名称'],
+              ['award', '奖项'],
+              ['date', '获奖时间'],
+            ]}
+            onChange={(value) => {
+              updateArray('competitions', value as Draft['competitions']);
+            }}
+          />
+          <SimpleRepeater
+            id="resume-certificates"
+            title="证书"
+            description="记录职业、技术或语言类证书。"
+            itemLabel="证书"
+            items={draft.certificates}
+            fields={[
+              ['name', '证书名称'],
+              ['issuer', '颁发机构'],
+              ['date', '取得时间'],
+            ]}
+            onChange={(value) => {
+              updateArray('certificates', value as Draft['certificates']);
+            }}
+          />
+          <SimpleRepeater
+            id="resume-languages"
+            title="语言能力"
+            description="填写语言及听说读写水平或考试成绩。"
+            itemLabel="语言"
+            items={draft.languages}
+            fields={[
+              ['name', '语言'],
+              ['proficiency', '熟练程度 / 成绩'],
+            ]}
+            onChange={(value) => {
+              updateArray('languages', value as Draft['languages']);
+            }}
+          />
+
+          <EditorSection
+            id="resume-skills"
+            title="专业技能"
+            description="用一段连贯文字说明技术栈、工具、专业领域和掌握程度。"
+          >
+            <label>
+              专业技能
+              <textarea
+                className={classNames('resize-none', styles['resume-professional-skills'])}
+                rows={8}
+                value={draft.professionalSkills ?? ''}
+                onChange={(event) => {
+                  updateArray('professionalSkills', text(event.currentTarget.value));
+                }}
+                placeholder="例如：熟练使用 TypeScript 与 React，具备大模型应用、Agent 工作流和评测体系建设经验……"
+              />
+            </label>
+          </EditorSection>
+          <EditorSection
+            id="resume-evaluation"
+            title="自我评价"
+            description="用简洁事实总结优势、方向与工作方式。"
+          >
+            <label>
+              自我评价
+              <textarea
+                className="resize-none"
+                rows={7}
+                value={draft.selfEvaluation ?? ''}
+                onChange={(event) => {
+                  updateArray('selfEvaluation', text(event.currentTarget.value));
+                }}
+                placeholder="建议控制在 200–400 字"
+              />
+            </label>
+          </EditorSection>
+        </div>
       </div>
 
       {feedback ? (

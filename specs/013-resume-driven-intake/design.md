@@ -35,8 +35,8 @@ Web 组合根装配 ArtifactStore、ResumeDocumentRepository、CandidateProfileS
 CLI `init` 在幂等 seed 后：
 
 1. 若参考图片 `docs/resumes/nowcoder_1787802316450.jpeg` 存在则优先调用同一导入工作流，否则兼容旧的 `agent简历 - 新.docx`；固定内容哈希使重复执行返回同一文档/任务。
-2. 为所有启用来源入队固定幂等键的 `source.sync` 任务。
-3. 为每个来源 upsert `source.sync:<sourceId>` 每日 `03:00 Asia/Shanghai` 计划。
+2. 若已有画像已确认目标岗位，为所有启用来源入队固定幂等键的 `source.sync` 任务。
+3. 同一前提下，为每个来源 upsert `source.sync:<sourceId>` 每日 `03:00 Asia/Shanghai` 计划；否则等待用户在来源页确认后显式创建或启用。
 4. upsert `maintenance.cleanup:weekly` 每周日 `04:00 Asia/Shanghai` 计划。
 
 计划只存任务 payload 和下一次执行时间；官网请求和清理均由 Worker 执行。Web 手动调度仍可覆盖来源计划。
@@ -44,6 +44,8 @@ CLI `init` 在幂等 seed 后：
 ## 候选职位预筛选
 
 同步阶段直接使用 `ProfileJobIntakePolicy` 将目标岗位映射为内部大职位类别；不符合当前画像意向的职位不会写入 raw、Job 或 Revision。这样不会先保存全量职位再依赖匹配阶段筛选。
+
+`ProfileJobIntakePolicy` 同时作为同步前置门禁：只有 `targetRoles` 至少映射出一个非“其他”的规范大类时才允许创建或启用来源同步。个人资料用原生单选框展示除“其他”外的规范职位大类，并继续以单元素 `targetRoles` 数组保存，避免自由文本与 taxonomy 漂移；旧值载入编辑器时归一化为对应大类。Web 来源页在门禁未满足时禁用同步入口并链接到个人资料；应用服务拒绝绕过页面的同步请求；Worker 在访问招聘来源前再次检查，以覆盖门禁启用前已存在的计划任务。`domains` 只描述能力领域，不自动视为用户确认的求职意向。
 
 `MatchingBatchService` 只接受一个 `jobRevisionId` 和一个 `profileVersionId`，由职位详情的显式操作创建任务。它不再分页读取职位或画像，也不执行全量匹配。确定性评分不访问网络或模型；模型能力仅保留给用户主动请求的单职位理解/建议扩展。
 
@@ -61,6 +63,7 @@ CLI `init` 在幂等 seed 后：
 ## 测试设计
 
 - Web Route/浏览器测试：multipart PDF/DOCX、CSRF、立即返回任务、个人资料空态/处理中态。
-- CLI 集成测试：初始化 seed、默认简历幂等、十来源同步任务和默认计划。
+- Web Route/浏览器测试：未确认目标岗位时禁用同步、提供个人资料入口且 API 不创建任务。
+- CLI 集成测试：初始化 seed、默认简历幂等、未确认时跳过来源任务/计划，以及已确认时允许手动同步。
 - Matching 集成测试：目标岗位 OR 命中、排除词、空目标岗位兼容和分页。
 - Worker/应用测试：画像完成后匹配回调、cleanup Handler 和任务重试。

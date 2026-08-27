@@ -57,6 +57,30 @@ MODEL=your-model-name
 
 模型配置是可选的。只有执行简历画像、岗位理解或匹配建议等模型任务时才需要填写。
 
+### 浏览器运行时
+
+阿里、字节、得物、华为和美团实习等来源需要受控浏览器。项目会自动探测 Windows 与 macOS 标准位置中的 Chrome/Edge；如果未安装系统浏览器，也可以安装 Playwright 自带 Chromium：
+
+macOS / Linux（Terminal）：
+
+```bash
+pnpm exec playwright install chromium
+```
+
+Windows（PowerShell）：
+
+```powershell
+pnpm exec playwright install chromium
+```
+
+非标准安装位置可在 `.env` 中显式配置：
+
+```dotenv
+JOBHUNTER_BROWSER_EXECUTABLE="/absolute/path/to/browser"
+```
+
+macOS 默认依次探测系统及当前用户 `Applications` 目录中的 Microsoft Edge、Google Chrome；Windows 默认探测 `Program Files` 中的 Edge、Chrome。Linux 使用 Playwright Chromium，或通过上述变量指定可执行文件。浏览器启动失败时，任务页面只显示安全摘要；经过统一脱敏的底层错误链写入 `var/logs/jobhunter.log`，便于本机排查。
+
 初始化本地数据目录：
 
 ```shell
@@ -65,7 +89,7 @@ node apps/cli/dist/main.js init
 node apps/cli/dist/main.js doctor
 ```
 
-初始化会幂等执行以下后台准备工作：优先导入 `docs/resumes/nowcoder_1787802316450.jpeg`（缺失时兼容旧的 `agent简历 - 新.docx`）并创建画像提取任务；为启用的十个官网来源创建职位同步任务；建立每日来源刷新和每周清理计划。真正的 OCR、解析、官网请求和匹配由 Worker 异步执行。
+初始化会幂等执行以下后台准备工作：优先导入 `docs/resumes/nowcoder_1787802316450.jpeg`（缺失时兼容旧的 `agent简历 - 新.docx`）并创建画像提取任务；建立每周清理计划。只有已有画像已确认目标岗位大类时，初始化才会为启用的官网来源创建职位同步任务和每日刷新计划；否则请先在“个人资料”中确认，再从“招聘来源”显式同步。真正的 OCR、解析、官网请求和匹配由 Worker 异步执行。
 
 如果 `pnpm exec jh` 尚未建立命令链接，也可以先运行：
 

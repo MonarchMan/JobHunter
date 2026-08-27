@@ -8,9 +8,12 @@ import {
   TesseractResumeOcrEngine,
   detectResumeMediaType,
   parseResumeProfileAgentOutput,
+  parseResumePolishAgentOutput,
   parseResumeText,
   resumeProfileAgentDefinition,
   resumeProfilePromptV1,
+  resumePolishAgentDefinition,
+  resumePolishPromptV1,
 } from '../src/index.js';
 
 const encoder = new TextEncoder();
@@ -153,5 +156,50 @@ describe('resume profile Agent boundary schema', () => {
         '短文本',
       ),
     ).toThrow(/range exceeds/);
+  });
+});
+
+describe('resume polish Agent boundary schema', () => {
+  const input = {
+    targetRole: '研发',
+    selectedSections: ['projects'] as const,
+    workExperience: null,
+    projects: [
+      {
+        name: '任务调度系统',
+        role: '后端开发',
+        highlights: ['开发任务重试功能', '降低失败任务人工处理成本'],
+      },
+    ],
+  };
+
+  it('keeps prompt and Agent versions aligned and accepts selected section suggestions', () => {
+    expect(() => {
+      assertPromptMatchesDefinition(resumePolishPromptV1, resumePolishAgentDefinition);
+    }).not.toThrow();
+    expect(
+      parseResumePolishAgentOutput(
+        {
+          workExperience: null,
+          projects: [['实现任务重试机制，降低失败任务的人工处理成本。']],
+        },
+        input,
+      ),
+    ).toEqual({
+      workExperience: null,
+      projects: [['实现任务重试机制，降低失败任务的人工处理成本。']],
+    });
+  });
+
+  it('rejects content for unselected sections and changed entry counts', () => {
+    expect(() =>
+      parseResumePolishAgentOutput(
+        { workExperience: [['不应出现']], projects: [['项目建议']] },
+        input,
+      ),
+    ).toThrow(/Unselected resume section/);
+    expect(() =>
+      parseResumePolishAgentOutput({ workExperience: null, projects: [] }, input),
+    ).toThrow(/does not match source section/);
   });
 });

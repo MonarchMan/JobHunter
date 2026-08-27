@@ -32,16 +32,16 @@
 
 ## Canonical UI Map
 
-| Capability      | Canonical owner                 | Source of truth | Allowed variants           | Verification        |
-| --------------- | ------------------------------- | --------------- | -------------------------- | ------------------- |
-| Table Selection | `jobs-table.tsx` 职位批量选择   | 014 规格        | 桌面表格 / 移动记录卡      | E2E                 |
-| Select/Listbox  | 原生 `select` + 全局字段样式    | 本契约          | native                     | 键盘 + 浏览器弹出层 |
-| Combobox        | 共享 `CompanyCombobox`          | 014 规格        | authored                   | 键盘 + 弹层 + IME   |
-| Date            | ISO 显示层 + 原生 `date` 交互层 | 014 规格        | native-picker / ISO-shell  | locale + E2E        |
-| Form            | 页面表单 + 共享全局字段状态     | Schema 与本契约 | edit/upload/filter         | validation E2E      |
-| Scrollbar       | 全局应用样式                    | DESIGN.md       | stable gutter 例外         | computed style      |
-| Toast           | 当前不使用；持久内联反馈为规范  | 本契约          | success/warning/info/error | live-region test    |
-| CRUD            | Route Handler + 应用服务        | 011/013 规格    | stay/queued                | full-flow E2E       |
+| Capability      | Canonical owner                    | Source of truth | Allowed variants           | Verification      |
+| --------------- | ---------------------------------- | --------------- | -------------------------- | ----------------- |
+| Table Selection | `jobs-table.tsx` 职位批量选择      | 014 规格        | 桌面表格 / 移动记录卡      | E2E               |
+| Select/Listbox  | 共享 `SelectField` / 原生 `select` | 本契约          | authored / native          | 键盘 + 弹层几何   |
+| Combobox        | 共享 `CompanyCombobox`             | 014 规格        | authored                   | 键盘 + 弹层 + IME |
+| Date            | ISO 显示层 + 原生 `date` 交互层    | 014 规格        | native-picker / ISO-shell  | locale + E2E      |
+| Form            | 页面表单 + 共享全局字段状态        | Schema 与本契约 | edit/upload/filter         | validation E2E    |
+| Scrollbar       | 全局应用样式                       | DESIGN.md       | stable gutter 例外         | computed style    |
+| Toast           | 当前不使用；持久内联反馈为规范     | 本契约          | success/warning/info/error | live-region test  |
+| CRUD            | Route Handler + 应用服务           | 011/013 规格    | stay/queued                | full-flow E2E     |
 
 ## Component behavior
 
@@ -67,13 +67,15 @@
 
 ## Flow ledger
 
-| Operation             | Trigger                | Pending                    | Success destination  | Success feedback | Failure recovery   | Focus outcome                | Source ref |
-| --------------------- | ---------------------- | -------------------------- | -------------------- | ---------------- | ------------------ | ---------------------------- | ---------- |
-| Edit profile/settings | 保存按钮或设置控件     | 控件尺寸稳定并禁用重复提交 | 留在当前页           | 内联“已保存”     | 保留输入并显示错误 | 回到触发控件/首错字段        | 011        |
-| Search/filter         | 应用筛选               | 保持列表框架               | 同列表 URL           | 结果总数         | 清除或修改筛选     | 返回筛选控件                 | 011        |
-| Upload/background job | 文件选择/同步/匹配     | 立即显示已入队状态         | 留在当前上下文       | task ID 与状态   | 重试或前往任务详情 | 回到触发控件                 | 011/013    |
-| Cancel task           | 取消按钮               | 禁止重复触发               | 留在任务列表         | 内联状态更新     | 可重试失败操作     | 回到操作按钮                 | 011        |
-| Hard-delete resume    | 影响预览 + 输入 DELETE | 最终按钮 busy              | 留在资料页并跟踪任务 | 删除任务已创建   | 影响变化时重新预览 | 初始聚焦取消，失败回确认字段 | 011/013    |
+| Operation              | Trigger                | Pending                    | Success destination  | Success feedback | Failure recovery   | Focus outcome                | Source ref |
+| ---------------------- | ---------------------- | -------------------------- | -------------------- | ---------------- | ------------------ | ---------------------------- | ---------- |
+| Edit profile/settings  | 保存按钮或设置控件     | 控件尺寸稳定并禁用重复提交 | 留在当前页           | 内联“已保存”     | 保留输入并显示错误 | 回到触发控件/首错字段        | 011        |
+| Search/filter          | 应用筛选               | 保持列表框架               | 同列表 URL           | 结果总数         | 清除或修改筛选     | 返回筛选控件                 | 011        |
+| Upload/background job  | 文件选择/同步/匹配     | 立即显示已入队状态         | 留在当前上下文       | task ID 与状态   | 重试或前往任务详情 | 回到触发控件                 | 011/013    |
+| Polish resume sections | 生成 AI 润色建议       | 按钮尺寸稳定、阻止重复提交 | 留在在线简历         | 持久内联建议状态 | 保留草稿并允许重试 | 返回生成按钮或“应用到草稿”   | 007        |
+| Confirm sync scope     | 来源页同步入口         | 目标岗位未确认时保持禁用   | 前往个人资料         | 已确认的目标大类 | 返回来源页后重试   | 聚焦个人资料中的目标岗位字段 | 013        |
+| Cancel task            | 取消按钮               | 禁止重复触发               | 留在任务列表         | 内联状态更新     | 可重试失败操作     | 回到操作按钮                 | 011        |
+| Hard-delete resume     | 影响预览 + 输入 DELETE | 最终按钮 busy              | 留在资料页并跟踪任务 | 删除任务已创建   | 影响变化时重新预览 | 初始聚焦取消，失败回确认字段 | 011/013    |
 
 ## Navigation and responsive behavior
 
@@ -93,12 +95,16 @@
 - Alert/banner scope and persistence: 字段问题内联、页面问题在内容标题下、全局不可用才使用壳层横幅。
 - Tooltip delay/dismissal: 仅用于非通用图标，键盘聚焦可见，Escape 可关闭。
 - Unsaved-changes behavior: 在线简历以客户端草稿承载未保存内容；预览读取草稿。当前离页使用浏览器生命周期提示，后续共享路由拦截器可替换为应用内确认。
-- Layer/z-index contract: dialog > drawer > popover > inline feedback；评分 popover 使用页面顶层 portal，不能改变表格行高或被滚动容器裁切。
-- Profile resume workbench: 在线简历章节使用稳定锚点，目录可横向滚动；重复条目可增删。底部粘性操作条一次保存完整资料并生成单一版本。预览使用 portal 模态弹窗，读取未保存草稿、过滤空条目和空章节，内部滚动，Escape 关闭并恢复触发按钮焦点；同一导入控件接受 PDF/DOCX 与 JPEG/PNG，图片明确标记为 Worker 后台 OCR，不另设重复入口。
+- Layer/z-index contract: dialog > drawer > popover > dropdown > inline feedback；评分 popover 和 authored Select 使用页面顶层 portal，不能改变表格行高或被滚动容器裁切。
+- Profile resume workbench: 在线简历章节使用稳定锚点；宽屏目录在编辑器右侧 sticky 定位，可收起并保留恢复入口，滚动时根据 section 的实时视口位置，以 `aria-current="location"`、浅靛蓝背景和珊瑚色决策光标同步页面顶部实际章节；点击锚点后不得提前选中相邻的下一章节。1100px 以下转为顶部横向 sticky 目录且不压缩表单。重复条目可增删。底部粘性操作条一次保存完整资料并生成单一版本。预览使用 portal 模态弹窗，读取未保存草稿、过滤空条目和空章节，内部滚动，Escape 关闭并恢复触发按钮焦点；同一导入控件接受 PDF/DOCX 与 JPEG/PNG，图片明确标记为 Worker 后台 OCR，不另设重复入口。
+- Profile resume cleanup: 原生日期输入的空字符串在提交前恢复为 `null`；完全空白的重复条目在预览与保存时移除；工作、项目、作品、竞赛、证书或语言条目仍有其他内容但必填名称为空时，提交前恢复该类型稳定的“待填写”名称，保留其他输入并满足画像边界 Schema。
+- Profile resume polish: 在线简历只允许选择“项目经历”和“工作/实习经历”生成 AI 润色建议；目标岗位、章节选择和可润色内容在提交前校验。任务完成后先展示与来源条目逐项对应的建议，不自动改写草稿；用户点击“应用到草稿”后只替换所选条目的描述，再由现有“保存简历”显式创建版本。生成期间保持草稿可编辑，失败保留选择与输入并提供重试，普通任务诊断不展示润色正文。
 - Profile date inputs: 经历、项目、竞赛和证书日期使用原生 `date`；接受 Edge/Chrome 平台弹层的本地化、月/年切换和键盘行为。起止时间额外使用应用拥有的只读 ISO 表面，透明原生输入仍是实际交互与无障碍所有者，应用不仿制日历弹层。
 - Profile date ranges: 教育、工作和项目的开始/结束日期由同一字段组拥有；桌面端该组占一列（半行，外宽与普通字段一致），内部两个日期等宽同排，移动端扩为整行；应用表面固定显示 `YYYY-MM-DD`，旧的月份值载入时补齐为当月首日，保存值统一为完整 ISO 日期字符串。标题沿用普通字段的正常字重、行高和标签间距，日期控件顶边与同行普通输入框对齐。
 - Job title navigation: 职位列表的职位名称直接使用 `detailUrl` 在安全新标签页打开官网详情；站内 `/jobs/[id]` 是诊断详情而非列表默认落点，其历史修订读取必须兼容数组式和对象式 change set。
 - Professional skills: 在线简历用单一多行文本编辑和预览“专业技能”；解析得到的结构化 `skills`/`domains` 继续供匹配使用，不在表单拆成大量重复项。
+- Target role family: 在线简历的“目标岗位”使用共享 authored `SelectField` 展示规范大类，空值表示尚未确认；保存时写入零或一个 `targetRoles` 值，不接受自由文本作为同步范围。
+- Filter and profile selectors: 职位筛选的招聘类别、职位类别、状态、排序、个人资料版本，以及个人资料页的全部单选统一使用共享 authored `SelectField`，因为这些工作流的弹层宽度、边框、间距和定位属于应用契约；共享组件同时支持 URL 表单默认值和在线简历受控草稿值，弹层默认在触发框下方左对齐展开、与触发框等宽。来源设置中明确接受平台弹层的单选继续使用 native 变体。
 
 ## Async and resilience
 
@@ -110,7 +116,8 @@
 - Version conflict and multi-tab behavior: 画像更新沿用版本条件，冲突时重新加载并保留可复制输入。
 - Session expiry/re-authentication: 当前本地单用户，无登录会话。
 - Long-running progress and return path: 页面显示任务状态，并链接到任务诊断。
-- Source company card: 官网来源按 companyId 一家公司一卡；桌面端每行两张，860px 以下单列，卡片不随同排较高卡片拉伸。公司名称右侧使用原生单选下拉框，“全部”聚合视图始终存在，实习/校招/社招仅在实际接入时出现。多渠道公司的“全部”使用独立公司总览，不渲染具体渠道详情；只有选择具体渠道时才出现该渠道运行与高级设置。“全部”和具体渠道内容区使用一致的尺寸基线，切换不引起卡片明显跳变。公司名称以安全的新标签链接到当前选择对应的官方招聘入口；“立即同步”固定在右上角、综合状态左侧，并同步当前选择范围（“全部”表示全部启用来源）；公司综合健康取最差渠道状态，渠道切换不改变 URL。
+- Source company card: 官网来源按 companyId 一家公司一卡；桌面端每行两张，860px 以下单列，卡片不随同排较高卡片拉伸。公司名称右侧使用原生单选下拉框，“全部”聚合视图始终存在，实习/校招/社招仅在实际接入时出现。多渠道公司的“全部”使用独立公司总览，不渲染具体渠道详情；只有选择具体渠道时才出现该渠道运行与高级设置。“全部”和具体渠道内容区使用一致的尺寸基线，切换不引起卡片明显跳变。公司名称以安全的新标签链接到当前选择对应的官方招聘入口；刷新图标按钮固定在右上角、综合状态左侧，并同步当前选择范围（“全部”表示全部启用来源），悬浮或键盘聚焦显示“立即同步”；官网来源分类栏右侧使用同一水平线上的“全部同步”刷新按钮，为所有启用官网来源分别创建幂等任务并保留统一 busy 与内联反馈；公司综合健康取最差渠道状态，渠道切换不改变 URL。
+- Source sync prerequisite: 当前画像没有可映射到规范大类的目标岗位时，来源页在标题下显示持久内联提示，所有同步按钮使用真实 disabled 状态并解释原因，唯一主要恢复行动链接到 `/profile#resume-intention`；API 和 Worker 使用同一门禁，不能仅依赖客户端禁用。
 - Stale-request cancellation/invalidation and pending-state ownership: 刷新由页面级单一所有者控制，页面隐藏时暂停。
 - Dialog/form preservation and retry after mutation failure: 保持输入和弹层上下文，错误可再次提交。
 

@@ -4,6 +4,7 @@ export const huaweiCampusJobSchema = z
   .object({
     id: z.string().min(1),
     jobId: z.union([z.string().min(1), z.number().int()]),
+    advertisementId: z.union([z.string().min(1), z.number().int().positive()]),
     jobName: z.string().min(1),
     jobAddress: z.string().nullable().optional(),
     jobDesc: z.string().min(1).nullable().optional(),

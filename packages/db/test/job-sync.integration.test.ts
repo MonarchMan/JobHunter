@@ -258,6 +258,7 @@ async function setup(
       ? {
           jobIntakePolicy: {
             allowedJobFamilies: () => [],
+            isReady: () => true,
             accepts: () => false,
           },
         }

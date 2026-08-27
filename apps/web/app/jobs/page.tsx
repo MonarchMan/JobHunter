@@ -2,6 +2,7 @@ import { canonicalJobSubfamilies } from '@jobhunter/domain';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { Pagination } from '../components/pagination.js';
+import { SelectField } from '../components/select-field.js';
 import { JobsRefresh } from './jobs-refresh.js';
 import { PageHeader } from '../components/page-header.js';
 import { JobsTable } from './jobs-table.js';
@@ -62,14 +63,16 @@ export default async function JobsPage({
         >
           <label>
             招聘类别
-            <select
+            <SelectField
               name="category"
+              label="招聘类别"
               defaultValue={fieldValue(parameters, 'category') || 'internship'}
-            >
-              <option value="internship">实习</option>
-              <option value="campus">校招</option>
-              <option value="social">社招</option>
-            </select>
+              options={[
+                { value: 'internship', label: '实习' },
+                { value: 'campus', label: '校招' },
+                { value: 'social', label: '社招' },
+              ]}
+            />
           </label>
           <label>
             关键词
@@ -96,32 +99,46 @@ export default async function JobsPage({
           </label>
           <label>
             职位类别
-            <select name="subfamily" defaultValue={fieldValue(parameters, 'subfamily')}>
-              <option value="">全部类别</option>
-              {canonicalJobSubfamilies.map((subfamily) => (
-                <option key={subfamily} value={subfamily}>
-                  {subfamily}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              name="subfamily"
+              label="职位类别"
+              defaultValue={fieldValue(parameters, 'subfamily')}
+              options={[
+                { value: '', label: '全部类别' },
+                ...canonicalJobSubfamilies.map((subfamily) => ({
+                  value: subfamily,
+                  label: subfamily,
+                })),
+              ]}
+            />
           </label>
           <label>
             状态
-            <select name="status" defaultValue={fieldValue(parameters, 'status')}>
-              <option value="">在招和待确认</option>
-              <option value="active">仅在招</option>
-              <option value="stale">仅待确认</option>
-              <option value="closed">仅已关闭</option>
-              <option value="active,stale,closed">全部状态</option>
-            </select>
+            <SelectField
+              name="status"
+              label="状态"
+              defaultValue={fieldValue(parameters, 'status')}
+              options={[
+                { value: '', label: '在招和待确认' },
+                { value: 'active', label: '仅在招' },
+                { value: 'stale', label: '仅待确认' },
+                { value: 'closed', label: '仅已关闭' },
+                { value: 'active,stale,closed', label: '全部状态' },
+              ]}
+            />
           </label>
           <label>
             排序
-            <select name="sort" defaultValue={fieldValue(parameters, 'sort') || 'updated_desc'}>
-              <option value="updated_desc">最近更新</option>
-              <option value="published_desc">最近发布</option>
-              <option value="score_desc">匹配分数</option>
-            </select>
+            <SelectField
+              name="sort"
+              label="排序"
+              defaultValue={fieldValue(parameters, 'sort') || 'updated_desc'}
+              options={[
+                { value: 'updated_desc', label: '最近更新' },
+                { value: 'published_desc', label: '最近发布' },
+                { value: 'score_desc', label: '匹配分数' },
+              ]}
+            />
           </label>
           <label>
             最低分
@@ -135,23 +152,24 @@ export default async function JobsPage({
           </label>
           <label>
             个人资料版本
-            <select
+            <SelectField
               name="profile"
+              label="个人资料版本"
               defaultValue={
                 fieldValue(parameters, 'profile')
                   ? fieldValue(parameters, 'profile')
                   : (defaultProfileId ?? '')
               }
-            >
-              <option value="">不使用资料匹配</option>
-              {profiles
-                .filter((profile) => profile.currentVersionId !== null)
-                .map((profile) => (
-                  <option key={profile.id} value={profile.currentVersionId ?? ''}>
-                    {profile.name}
-                  </option>
-                ))}
-            </select>
+              options={[
+                { value: '', label: '不使用资料匹配' },
+                ...profiles
+                  .filter((profile) => profile.currentVersionId !== null)
+                  .map((profile) => ({
+                    value: profile.currentVersionId ?? '',
+                    label: profile.name,
+                  })),
+              ]}
+            />
           </label>
           <button type="submit">应用筛选</button>
           <a className="button-secondary" href="/jobs">

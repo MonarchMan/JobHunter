@@ -7,7 +7,11 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['packages/*/test/**/*.test.ts', 'scripts/test/**/*.test.mjs'],
+          include: [
+            'packages/*/test/**/*.test.ts',
+            'apps/worker/test/**/*.test.ts',
+            'scripts/test/**/*.test.mjs',
+          ],
           exclude: ['**/*.integration.test.ts', '**/*.e2e.test.ts', '**/*.online.test.ts'],
           sequence: { shuffle: false },
         },

@@ -29,6 +29,7 @@ export interface ScriptedAdapterDefinition {
   };
   readonly requiresRuntimeToken?: 'signature' | 'xiaohongshu';
   readonly recordSchema: { parse(value: unknown): RecordValue };
+  readonly jobUrl?: (record: RecordValue, externalJobId: string) => string;
   readonly request: (context: {
     readonly config: ScriptedConfig;
     readonly page: number;
@@ -67,25 +68,12 @@ function recruitmentCategoryFor(
     'projectType',
     'projectName',
   ]);
-  const semanticText = [
-    explicit,
+  const explicitCategory = normalizeRecruitmentCategory(explicit);
+  if (explicitCategory) return explicitCategory;
+  const titleCategory = normalizeRecruitmentCategory(
     firstText(record, ['title', 'name', 'positionName', 'positionNameOpen', 'jobName']),
-    firstText(record, [
-      'description',
-      'workContent',
-      'jobDuty',
-      'jobDesc',
-      'requirement',
-      'qualification',
-    ]),
-  ]
-    .filter((value): value is string => value !== null)
-    .join('\n');
-
-  // A record-level internship signal is stronger than a campus/social source
-  // descriptor. This covers provider labels such as 日常实习 and 暑期实习.
-  if (normalizeRecruitmentCategory(semanticText) === 'internship') return 'internship';
-  return normalizeRecruitmentCategory(explicit ?? fallback);
+  );
+  return titleCategory ?? normalizeRecruitmentCategory(fallback);
 }
 
 function findArray(value: unknown, depth = 0): RecordValue[] | null {
@@ -372,7 +360,9 @@ export function createScriptedAdapter(
             seen.add(id);
             discoveredCount += 1;
             const sourceUrl = canonicalizeOfficialUrl(
-              firstText(raw, ['detailUrl', 'sourceUrl', 'url']) ?? entryUrl,
+              firstText(raw, ['detailUrl', 'sourceUrl', 'url']) ??
+                definition.jobUrl?.(raw, id) ??
+                entryUrl,
               definition.hosts,
             );
             yield { type: 'job', job: { externalJobId: id, sourceUrl, raw } };
@@ -427,7 +417,11 @@ export function createScriptedAdapter(
           }
           seen.add(id);
           discoveredCount += 1;
-          yield { type: 'job', job: { externalJobId: id, sourceUrl: entryUrl, raw } };
+          const sourceUrl = canonicalizeOfficialUrl(
+            definition.jobUrl?.(raw, id) ?? entryUrl,
+            definition.hosts,
+          );
+          yield { type: 'job', job: { externalJobId: id, sourceUrl, raw } };
         }
         yield { type: 'page', page, discoveredCount };
         if (discoveredCount >= total || parsed.items.length === 0) break;

@@ -1,4 +1,4 @@
-import { webSourceMutationSchema } from '@jobhunter/application/web';
+import { SourceSyncTargetRequiredError, webSourceMutationSchema } from '@jobhunter/application/web';
 import { ZodError } from 'zod';
 import {
   badRequestResponse,
@@ -26,6 +26,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     const container = await getWebContainer();
     return dataResponse(container.services.webSources.mutate(mutation), { status: 202 });
   } catch (error) {
+    if (error instanceof SourceSyncTargetRequiredError) return badRequestResponse(error.message);
     if (error instanceof ZodError || error instanceof TypeError)
       return badRequestResponse('无法创建同步任务。');
     return errorResponse(error);

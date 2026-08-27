@@ -20,6 +20,7 @@ export * from './repositories/job-repository.js';
 export * from './repositories/matching-repository.js';
 export * from './repositories/job-query-repository.js';
 export * from './repositories/resume-document-repository.js';
+export * from './repositories/resume-polish-suggestion-repository.js';
 export * from './repositories/resume-deletion-repository.js';
 export * from './repositories/sync-repository.js';
 export * from './repositories/source-management-repository.js';

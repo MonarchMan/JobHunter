@@ -39,7 +39,7 @@ const canonicalUrlSchema: z.ZodType<CanonicalUrl> = z
   )
   .transform((value) => {
     const url = new URL(value);
-    url.hash = '';
+    if (!url.hash.startsWith('#/')) url.hash = '';
     return url.toString() as CanonicalUrl;
   });
 

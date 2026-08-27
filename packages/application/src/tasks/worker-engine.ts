@@ -231,6 +231,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
         taskType: task.taskType,
         attempt: task.attemptCount,
         errorCategory: classified.category,
+        error: classified,
       });
       return;
     }
@@ -248,6 +249,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       taskType: task.taskType,
       attempt: task.attemptCount,
       errorCategory: category,
+      error: classified,
     });
   }
 

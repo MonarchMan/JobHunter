@@ -8,6 +8,7 @@ import type { CandidateProfileRepository } from '../ports/profiles.js';
 
 export interface JobIntakePolicy {
   allowedJobFamilies(): readonly CanonicalJobFamily[];
+  isReady(): boolean;
   accepts(job: Pick<NormalizedJob, 'jobFamily'>): boolean;
 }
 
@@ -35,5 +36,9 @@ export class ProfileJobIntakePolicy implements JobIntakePolicy {
     return this.allowedJobFamilies().includes(
       job.jobFamily as (typeof canonicalJobFamilies)[number],
     );
+  }
+
+  public isReady(): boolean {
+    return this.allowedJobFamilies().length > 0;
   }
 }

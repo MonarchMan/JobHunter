@@ -53,8 +53,11 @@ function listBody(config: JdCampusConfig, pageIndex: number): string {
   });
 }
 
-function canonicalJobUrl(): string {
-  return canonicalizeOfficialUrl(entryUrl, hosts);
+function canonicalJobUrl(publishId: string | number): string {
+  return canonicalizeOfficialUrl(
+    `https://campus.jd.com/#/details?id=${encodeURIComponent(String(publishId))}&type=present`,
+    hosts,
+  );
 }
 
 function title(job: JdCampusJob): string {
@@ -161,7 +164,7 @@ export function createJdCampusAdapter(): JobSourceAdapter<JdCampusConfig, never>
           discoveredCount += 1;
           yield {
             type: 'job',
-            job: { externalJobId, sourceUrl: canonicalJobUrl(), raw },
+            job: { externalJobId, sourceUrl: canonicalJobUrl(raw.publishId), raw },
           };
         }
         yield { type: 'page', page: pageIndex + 1, discoveredCount };
@@ -206,8 +209,8 @@ export function createJdCampusAdapter(): JobSourceAdapter<JdCampusConfig, never>
             experienceText: job.workYears ?? null,
             educationText: job.education ?? null,
             description: description(job),
-            detailUrl: canonicalJobUrl(),
-            applyUrl: canonicalJobUrl(),
+            detailUrl: canonicalJobUrl(job.publishId),
+            applyUrl: canonicalJobUrl(job.publishId),
             publishedAt:
               job.publishTime === null || job.publishTime === undefined
                 ? null

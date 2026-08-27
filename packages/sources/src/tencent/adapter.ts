@@ -247,9 +247,7 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
           .join('\n\n');
         const taxonomy = normalizeJobTaxonomy(optionalText(list.CategoryName));
         const recruitmentCategory =
-          normalizeRecruitmentCategory(
-            `${list.RecruitPostName}\n${list.Responsibility}\n${detail?.Requirement ?? ''}`,
-          ) === 'internship'
+          normalizeRecruitmentCategory(list.RecruitPostName) === 'internship'
             ? 'internship'
             : 'social';
         return {

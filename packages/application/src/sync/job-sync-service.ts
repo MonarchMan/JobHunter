@@ -496,6 +496,9 @@ export class JobSyncService {
     command: { readonly sourceId: JobSourceId; readonly trigger: SyncTrigger },
     signal: AbortSignal,
   ): Promise<JobSyncResult> {
+    if (this.#jobIntakePolicy && !this.#jobIntakePolicy.isReady()) {
+      throw new SourceError('invalid_config', '请先在个人资料中确认目标岗位，再同步职位。');
+    }
     const source = this.#source(command.sourceId);
     if (!source?.enabled) throw new SourceError('invalid_config', 'Source is not enabled.');
     const registered = this.#registry.resolve(source.adapterKey, source.config);

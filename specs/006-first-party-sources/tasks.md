@@ -1,7 +1,7 @@
 # 006 首批企业官网来源任务
 
 > 状态：Implemented
-> 显式覆盖：FPS-001, FPS-002, FPS-003, FPS-004, FPS-005, FPS-006, FPS-007, FPS-008, FPS-009, FPS-010, FPS-011, FPS-012, FPS-013, FPS-014
+> 显式覆盖：FPS-001, FPS-002, FPS-003, FPS-004, FPS-005, FPS-006, FPS-007, FPS-008, FPS-009, FPS-010, FPS-011, FPS-012, FPS-013, FPS-014, FPS-015, FPS-016, FPS-017
 
 - [x] **FPS-T001** 建立来源目录模板、README 模板、support status 与公司/来源幂等 seed。（FPS-001,003）
 - [x] **FPS-T002** 完成腾讯 Spike、固定样本、适配器、契约和同步集成测试。（FPS-002..010）
@@ -63,3 +63,9 @@
   - 2026-08-23：字节校园入口 `jobs.bytedance.com/campus/position` 在正常浏览器会话中返回 200；首个 JSON 请求使用 `portal_type=3`，当前 count=7444，项目筛选包含日常实习、ByteIntern、Seed 大模型人才实习招聘。两页响应驱动 JSON Smoke 通过，首条记录归一化为 internship。
   - 2026-08-22：新增 Worker 侧 Playwright 在线测试，通过 `JOBHUNTER_BROWSER_ONLINE_SOURCE` 逐家选择；未显式选择时全部跳过，每次最多两页，验证匿名会话、分页响应、逐来源 Schema、稳定 ID、官方 URL 和归一化。
   - 2026-08-22：显式选择 `dewu` 运行真实 Worker→Playwright→SourcePageClient 链路，在线 Smoke 通过（1 passed，其他 3 家按选择器跳过）；未运行四家批量或全量采集。
+- [x] **FPS-T021** 补齐 macOS Chrome/Edge 标准路径自动探测、浏览器运行时安装说明和离线启动失败诊断测试；任务安全摘要不变，Worker 安全日志保留递归脱敏后的底层错误链。（FPS-015）
+  - 2026-08-27：在 Apple Silicon macOS 复现 Playwright 自带 Chromium 缺失导致的毫秒级同步失败；显式使用系统 Chrome 启动成功，据此补齐跨平台解析与诊断门禁。
+- [x] **FPS-T022** 修复社招文本包含“实习”导致的渠道误判，并迁移存量错误分类。（FPS-016）
+  - 2026-08-27：复现字节、美团、腾讯社招共 5 条误判；类别判断不再读取职责/要求，三套独立社招来源固定回退 `social`。
+- [x] **FPS-T023** 审计所有 supported 来源的岗位链接，修复列表入口伪装详情页并迁移存量 URL。（FPS-007,017）
+  - 2026-08-27：官网验证京东、小红书、阿里巴巴和华为的岗位级路由；其余 supported 来源已使用稳定岗位 ID 深链，无需修改。

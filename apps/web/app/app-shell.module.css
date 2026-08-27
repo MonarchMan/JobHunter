@@ -48,6 +48,11 @@
     padding-left: 14rem;
   }
 
+  .body[data-scroll-locked] {
+    /* Radix scroll lock resets body padding; preserve the desktop navigation gutter. */
+    padding-left: 14rem !important;
+  }
+
   .header {
     position: fixed;
     inset: 0 auto 0 0;

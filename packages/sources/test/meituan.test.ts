@@ -138,6 +138,28 @@ describe('Meituan source adapter contract', () => {
     );
   });
 
+  it('keeps social jobs social when their description mentions interns', async () => {
+    const raw = firstRaw();
+    expect(raw).toBeDefined();
+    if (!raw) return;
+    const socialDetail = { ...detail(), jobRequirement: '负责培养和指导实习生。' };
+    const normalized = await adapter.normalize(
+      {
+        discovered: {
+          externalJobId: raw.jobUnionId,
+          sourceUrl: `https://zhaopin.meituan.com/web/position/detail?jobShareType=1&jobUnionId=${raw.jobUnionId}`,
+          raw,
+        },
+        detail: socialDetail,
+      },
+      { sourceId, companyId, config },
+    );
+    expect(normalized.job).toMatchObject({
+      recruitmentCategory: 'social',
+      employmentType: '全职',
+    });
+  });
+
   it('reports partial when the advertised total cannot be reached', async () => {
     const emptySecond = {
       data: { list: [], page: { pageNo: 2, pageSize: 2, totalPage: 2, totalCount: 3 } },

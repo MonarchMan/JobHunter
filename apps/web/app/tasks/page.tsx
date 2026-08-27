@@ -112,7 +112,7 @@ export default async function TasksPage({
           className={[dataTableStyles.scroll, styles.desktopTable].filter(Boolean).join(' ')}
           data-task-table
         >
-          <table>
+          <table className={styles.taskTable}>
             <caption className="sr-only">后台任务列表</caption>
             <thead>
               <tr>

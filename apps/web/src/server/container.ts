@@ -6,6 +6,7 @@ import {
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createResumeProfileTaskHandler,
+  createResumePolishTaskHandler,
   createResumeDeletionTaskHandler,
   createSourceSyncTaskHandler,
   createSourceHealthTaskHandler,
@@ -15,6 +16,7 @@ import {
   MatchWorkflowService,
   ProfileInspectionService,
   ProfileManagementService,
+  ProfileJobIntakePolicy,
   ScheduleService,
   SourceManagementService,
   SystemSettingsService,
@@ -26,6 +28,7 @@ import {
   ResumeDeletionService,
   ResumeImportService,
   ResumeProfileWorkflow,
+  ResumePolishService,
   WebSourceService,
   WebDiagnosticsService,
   type AppConfig,
@@ -46,6 +49,7 @@ import {
   SqliteArtifactStore,
   SqliteResumeDeletionRepository,
   SqliteResumeDocumentRepository,
+  SqliteResumePolishSuggestionRepository,
   SqliteSettingsStore,
   NodeResumeFileReader,
 } from '@jobhunter/db/web';
@@ -66,6 +70,7 @@ export interface WebApplicationServices {
   readonly diagnostics: WebDiagnosticsService;
   readonly resumeDeletion: WebResumeDeletionService;
   readonly resumes: ResumeProfileWorkflow;
+  readonly resumePolish: ResumePolishService;
   readonly matches: MatchWorkflowService;
   readonly settings: SystemSettingsService;
 }
@@ -112,6 +117,7 @@ export function createLocalWebContainer(
     );
     registry.register(createCleanupTaskHandler({ unavailable: true }));
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
+    registry.register(createResumePolishTaskHandler({ unavailable: true }));
     registry.register(createResumeDeletionTaskHandler(resumeDeletion));
     const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
     const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
@@ -130,6 +136,7 @@ export function createLocalWebContainer(
     const queue = new SqliteTaskRepository(database.client);
     const tasks = new TaskService({ queue, clock, ids }, registry);
     const profileRepository = new SqliteCandidateProfileRepository(database.client);
+    const resumePolishSuggestions = new SqliteResumePolishSuggestionRepository(database.client);
     const candidateProfiles = new CandidateProfileService({
       repository: profileRepository,
       clock,
@@ -163,6 +170,7 @@ export function createLocalWebContainer(
       sources: new SqliteSourceManagementRepository(database.client),
       tasks,
       ids,
+      jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
     });
     const services: WebApplicationServices = {
       dashboard: new DashboardQueryService(new SqliteDashboardReadModel(database.client)),
@@ -186,6 +194,12 @@ export function createLocalWebContainer(
       }),
       resumeDeletion: new WebResumeDeletionService({ deletion: resumeDeletion, tasks }),
       resumes,
+      resumePolish: new ResumePolishService({
+        profiles: profileRepository,
+        suggestions: resumePolishSuggestions,
+        tasks,
+        ids,
+      }),
       tasks,
       profiles,
       webProfiles: new WebProfileService({

@@ -36,6 +36,7 @@ export function validateOfficialUrl(value: string, allowedHosts: readonly string
 
 export function canonicalizeOfficialUrl(value: string, allowedHosts: readonly string[]): string {
   const url = validateOfficialUrl(value, allowedHosts);
+  const hashRoute = url.hash.startsWith('#/') ? url.hash : '';
   url.hash = '';
   url.pathname = url.pathname.replaceAll(/;jsessionid=[^/?#;]*/gi, '');
   for (const key of [...url.searchParams.keys()]) {
@@ -45,5 +46,17 @@ export function canonicalizeOfficialUrl(value: string, allowedHosts: readonly st
     }
   }
   url.searchParams.sort();
+  if (hashRoute) {
+    const [pathname, query = ''] = hashRoute.slice(1).split('?', 2);
+    const parameters = new URLSearchParams(query);
+    for (const key of [...parameters.keys()]) {
+      const normalized = key.toLowerCase();
+      if (normalized.startsWith('utm_') || REMOVED_QUERY_KEYS.has(normalized)) {
+        parameters.delete(key);
+      }
+    }
+    parameters.sort();
+    url.hash = `${pathname}${parameters.size > 0 ? `?${parameters.toString()}` : ''}`;
+  }
   return url.toString();
 }

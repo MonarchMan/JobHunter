@@ -1,0 +1,126 @@
+.root {
+  margin: 0 0 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--action);
+  border-radius: var(--radius-panel);
+  background: var(--primary-soft);
+}
+
+.heading,
+.actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.heading h3 {
+  margin: 0.15rem 0 0.3rem;
+}
+
+.heading p,
+.actions span,
+.heading > span {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 0.875rem;
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 0;
+  border: 0;
+}
+
+.options legend {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  color: var(--ink);
+}
+
+.options label {
+  display: flex;
+  align-items: flex-start;
+  min-width: 13rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.options label:has(input:focus-visible) {
+  outline: 3px solid color-mix(in srgb, var(--primary) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.options label:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.options input {
+  margin: 0.2rem 0.65rem 0 0;
+}
+
+.options small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted-ink);
+}
+
+.actions {
+  align-items: center;
+}
+
+.suggestion {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.suggestion summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.suggestion section {
+  margin-top: 1rem;
+}
+
+.suggestion section > div {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.suggestion ul,
+.suggestion p {
+  margin: 0.5rem 0 0;
+}
+
+.suggestion > button {
+  margin-top: 1rem;
+}
+
+@media (max-width: 600px) {
+  .root {
+    padding: 1rem;
+  }
+
+  .heading,
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .options label {
+    width: 100%;
+  }
+}

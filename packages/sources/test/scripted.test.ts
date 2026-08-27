@@ -77,6 +77,8 @@ describe('script-reference source adapters', () => {
         description: '参与算法项目。',
         recruitmentCategory: 'internship',
         employmentType: '实习',
+        detailUrl: 'https://campus-talent.alibaba.com/campus/position/ali-fixture-1',
+        applyUrl: 'https://campus-talent.alibaba.com/campus/position/ali-fixture-1',
       },
     });
   });
@@ -113,6 +115,8 @@ describe('script-reference source adapters', () => {
         description: '参与软件研发。\n\n本科在读。',
         recruitmentCategory: 'internship',
         employmentType: '实习',
+        detailUrl: 'https://career.huawei.com/cn/job-details?advertisementId=30859',
+        applyUrl: 'https://career.huawei.com/cn/job-details?advertisementId=30859',
       },
     });
   });
@@ -169,6 +173,57 @@ describe('script-reference source adapters', () => {
         detailUrl: 'https://jobs.bytedance.com/position/1001/detail',
         applyUrl: 'https://jobs.bytedance.com/position/1001/detail',
       },
+    });
+  });
+
+  it('does not classify a social job as internship from description text', async () => {
+    const collection: SourcePageCollection = {
+      coverage: 'complete',
+      pages: [
+        {
+          page: 1,
+          url: 'https://jobs.bytedance.com/experienced/position',
+          total: 1,
+          capturedAt: 1,
+          records: [
+            {
+              id: 'byte-social-1',
+              title: '交换机软件工程师',
+              description: '负责实现网关并指导实习生。',
+              employmentType: '社招 正式',
+              detailUrl: 'https://jobs.bytedance.com/experienced/position/byte-social-1/detail',
+            },
+          ],
+        },
+      ],
+    };
+    const page: SourcePageClient = {
+      snapshot: () => Promise.reject(new Error('snapshot is not used by browser transport')),
+      collect: () => Promise.resolve(collection),
+    };
+    const config = scriptedConfigSchema.parse({});
+    const adapter = createByteDanceAdapter();
+    const events = [];
+    for await (const event of adapter.discover(
+      context(
+        { request: () => Promise.reject(new Error('HTTP is not used by browser transport.')) },
+        config,
+        page,
+      ),
+    )) {
+      events.push(event);
+    }
+    const discovered = events.find(
+      (event): event is Extract<DiscoveryEvent, { type: 'job' }> => event.type === 'job',
+    );
+    if (!discovered) throw new Error('Fixture job was not discovered.');
+    await expect(
+      adapter.normalize(
+        { discovered: discovered.job, detail: null },
+        { sourceId, companyId, config },
+      ),
+    ).resolves.toMatchObject({
+      job: { recruitmentCategory: 'social', employmentType: '社招 正式' },
     });
   });
 
@@ -267,6 +322,8 @@ describe('script-reference source adapters', () => {
         title: '内容运营实习生',
         locations: ['上海'],
         recruitmentCategory: 'internship',
+        detailUrl: 'https://job.xiaohongshu.com/campus/position/red-fixture-1',
+        applyUrl: 'https://job.xiaohongshu.com/campus/position/red-fixture-1',
       },
     });
   });

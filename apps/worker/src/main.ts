@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import { resolveAppConfig, resolveBootstrapConfig, type AppConfig } from '@jobhunter/application';
+import { createSafeLogger } from '@jobhunter/observability';
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import {
   createPlaywrightSourcePageClient,
   createProductionWorkerApplication,
@@ -33,20 +35,28 @@ try {
 }
 
 const config = await loadConfig();
-const worker = createProductionWorkerApplication({
-  dataRoot: config.bootstrap.dataRoot.value,
-  pollIntervalMs: config.worker.pollIntervalMs.value,
-  taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
-  pageClient: createPlaywrightSourcePageClient(),
-  ...(config.model.baseUrl.value && config.model.modelName.value && config.model.apiKey.value
-    ? {
-        model: {
-          baseUrl: config.model.baseUrl.value,
-          model: config.model.modelName.value,
-          apiKey: config.model.apiKey.value.reveal(),
-        },
-      }
-    : {}),
+const logger = createSafeLogger({
+  level: config.logLevel.value,
+  logFile: path.join(config.bootstrap.dataRoot.value, 'logs', 'jobhunter.log'),
 });
-
-await runWorkerProcess(worker);
+try {
+  const worker = createProductionWorkerApplication({
+    dataRoot: config.bootstrap.dataRoot.value,
+    pollIntervalMs: config.worker.pollIntervalMs.value,
+    taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
+    logger,
+    pageClient: createPlaywrightSourcePageClient(),
+    ...(config.model.baseUrl.value && config.model.modelName.value && config.model.apiKey.value
+      ? {
+          model: {
+            baseUrl: config.model.baseUrl.value,
+            model: config.model.modelName.value,
+            apiKey: config.model.apiKey.value.reveal(),
+          },
+        }
+      : {}),
+  });
+  await runWorkerProcess(worker);
+} finally {
+  await logger.close();
+}

@@ -7,6 +7,7 @@ import { ProfileEditor } from './profile-editor.js';
 import { ResumeDeletion } from './resume-deletion.js';
 import { ResumeImport } from './resume-import.js';
 import { Pagination } from '../components/pagination.js';
+import { SelectField } from '../components/select-field.js';
 import { webPagination } from '@jobhunter/application/web';
 import { ResumeEditor } from './resume-editor.js';
 import styles from './page.module.css';
@@ -81,13 +82,15 @@ export default async function ProfilePage({
         <form action="/profile" method="get" noValidate>
           <label>
             选择画像
-            <select name="profile" defaultValue={selectedId}>
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.name}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              name="profile"
+              label="选择画像"
+              defaultValue={selectedId}
+              options={profiles.map((profile) => ({
+                value: profile.id,
+                label: profile.name,
+              }))}
+            />
           </label>
           <button type="submit">查看</button>
         </form>

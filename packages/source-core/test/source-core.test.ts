@@ -155,6 +155,15 @@ describe('source adapter contract', () => {
 });
 
 describe('source identity, URL and registry policy', () => {
+  it('preserves canonical SPA detail routes while removing tracking parameters', () => {
+    expect(
+      canonicalizeOfficialUrl(
+        'https://campus.jd.com/#/details?utm_source=test&type=present&id=4864',
+        ['campus.jd.com'],
+      ),
+    ).toBe('https://campus.jd.com/#/details?id=4864&type=present');
+  });
+
   it('creates versioned deterministic fallback IDs', () => {
     const input = {
       sourceKey: 'fixture',

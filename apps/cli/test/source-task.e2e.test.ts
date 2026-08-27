@@ -1,4 +1,5 @@
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { openSqliteDatabase } from '@jobhunter/db';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
@@ -43,6 +44,48 @@ describe('source and task commands', () => {
     const dataRoot = path.join(root.path, '中文 数据');
     try {
       expect((await command(dataRoot, ['init'])).exitCode).toBe(0);
+      const database = openSqliteDatabase({ dataRoot });
+      try {
+        const profile = JSON.stringify({
+          basicInfo: { name: null, phone: null, email: null, location: null, website: null },
+          targetRoles: ['后端开发'],
+          preferences: {
+            locations: [],
+            companySizes: [],
+            employmentTypes: [],
+            excludedTerms: [],
+            remoteAccepted: null,
+          },
+          education: [],
+          workExperience: [],
+          projects: [],
+          works: [],
+          competitions: [],
+          certificates: [],
+          languages: [],
+          skills: [],
+          domains: [],
+          yearsOfExperience: null,
+          managementExperience: null,
+        });
+        database.client
+          .prepare(
+            `INSERT INTO candidate_profiles (id, name, created_at, updated_at)
+             VALUES ('018f0000-0000-7000-8000-000000000401', '测试画像', 1, 1)`,
+          )
+          .run();
+        database.client
+          .prepare(
+            `INSERT INTO profile_versions
+             (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+              content_hash, is_current, created_at)
+             VALUES ('018f0000-0000-7000-8000-000000000402',
+                     '018f0000-0000-7000-8000-000000000401', 1, ?, ?, '[]', ?, 1, 1)`,
+          )
+          .run(profile, profile, 'a'.repeat(64));
+      } finally {
+        database.close();
+      }
       const listed = await command(dataRoot, ['source', 'list']);
       expect(listed.exitCode).toBe(0);
       expect(listed.stderr).toBe('');

@@ -12,12 +12,21 @@ import {
   type SourcePageCollection,
 } from '@jobhunter/source-core';
 import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import path from 'node:path';
 
-interface BrowserSourceOptions {
+export interface BrowserSourceOptions {
   readonly headless?: boolean;
   readonly executablePath?: string;
   readonly navigationTimeoutMs?: number;
   readonly maximumPages?: number;
+}
+
+export interface BrowserExecutableRuntime {
+  readonly platform: NodeJS.Platform;
+  readonly homeDirectory: string;
+  readonly configuredPath?: string;
+  readonly exists: (candidate: string) => boolean;
 }
 
 const browserDebugEnabled = process.env.JOBHUNTER_BROWSER_DEBUG === '1';
@@ -26,24 +35,48 @@ function browserDebug(...values: unknown[]): void {
   if (browserDebugEnabled) console.error('[browser-source]', ...values);
 }
 
-function resolveExecutablePath(options: BrowserSourceOptions): string | undefined {
+const systemBrowserRuntime = (): BrowserExecutableRuntime => ({
+  platform: process.platform,
+  homeDirectory: homedir(),
+  ...(process.env.JOBHUNTER_BROWSER_EXECUTABLE
+    ? { configuredPath: process.env.JOBHUNTER_BROWSER_EXECUTABLE }
+    : {}),
+  exists: existsSync,
+});
+
+export function resolveBrowserExecutablePath(
+  options: BrowserSourceOptions = {},
+  runtime: BrowserExecutableRuntime = systemBrowserRuntime(),
+): string | undefined {
   if (options.executablePath) return options.executablePath;
-  const configured = process.env.JOBHUNTER_BROWSER_EXECUTABLE;
-  if (configured) return configured;
+  if (runtime.configuredPath) return runtime.configuredPath;
   const candidates =
-    process.platform === 'win32'
+    runtime.platform === 'win32'
       ? [
           'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
           'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
           'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
           'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
         ]
-      : [];
-  return candidates.find((candidate) => existsSync(candidate));
+      : runtime.platform === 'darwin'
+        ? [
+            '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            path.join(
+              runtime.homeDirectory,
+              'Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+            ),
+            path.join(
+              runtime.homeDirectory,
+              'Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            ),
+          ]
+        : [];
+  return candidates.find((candidate) => runtime.exists(candidate));
 }
 
 async function launchBrowser(options: BrowserSourceOptions): Promise<Browser> {
-  const executablePath = resolveExecutablePath(options);
+  const executablePath = resolveBrowserExecutablePath(options);
   return chromium.launch({
     headless: options.headless ?? true,
     ...(executablePath ? { executablePath } : {}),

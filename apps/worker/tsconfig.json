@@ -13,6 +13,7 @@
     { "path": "../../packages/db" },
     { "path": "../../packages/llm" },
     { "path": "../../packages/matching" },
+    { "path": "../../packages/observability" },
     { "path": "../../packages/source-core" },
     { "path": "../../packages/sources" }
   ]

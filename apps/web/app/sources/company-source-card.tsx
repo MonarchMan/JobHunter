@@ -44,7 +44,10 @@ function sourceLabel(source: WebSource): string {
   return source.recruitmentChannels.map((channel) => channelLabels[channel]).join(' / ');
 }
 
-function SourcePanel({ source }: Readonly<{ source: WebSource }>): ReactElement {
+function SourcePanel({
+  source,
+  syncReady,
+}: Readonly<{ source: WebSource; syncReady: boolean }>): ReactElement {
   const label = sourceLabel(source);
   return (
     <section
@@ -123,7 +126,11 @@ function SourcePanel({ source }: Readonly<{ source: WebSource }>): ReactElement 
       ) : (
         <p className="muted">尚无同步运行。</p>
       )}
-      <SourceActions source={source} contextLabel={`${source.companyName} ${label}`} />
+      <SourceActions
+        source={source}
+        syncReady={syncReady}
+        contextLabel={`${source.companyName} ${label}`}
+      />
     </section>
   );
 }
@@ -185,7 +192,8 @@ function CompanyOverview({
 
 export function CompanySourceCard({
   sources,
-}: Readonly<{ sources: readonly WebSource[] }>): ReactElement {
+  syncReady,
+}: Readonly<{ sources: readonly WebSource[]; syncReady: boolean }>): ReactElement {
   const [selected, setSelected] = useState<SelectedChannel>('all');
   const channels = useMemo(
     () =>
@@ -253,7 +261,11 @@ export function CompanySourceCard({
           </p>
         </div>
         <div className={styles['company-source-header-actions']} data-company-source-header-actions>
-          <SourceSyncAction sources={visibleSources} contextLabel={syncContextLabel} />
+          <SourceSyncAction
+            sources={visibleSources}
+            contextLabel={syncContextLabel}
+            syncReady={syncReady}
+          />
           <div className={styles['company-health-summary']} data-company-health-summary>
             <span>综合状态</span>
             <strong className={styles[`health-text-${companyHealth}`]}>
@@ -266,7 +278,9 @@ export function CompanySourceCard({
         {showsOverview ? (
           <CompanyOverview companyName={companyName} sources={sources} channels={channels} />
         ) : (
-          visibleSources.map((source) => <SourcePanel key={source.id} source={source} />)
+          visibleSources.map((source) => (
+            <SourcePanel key={source.id} source={source} syncReady={syncReady} />
+          ))
         )}
       </div>
     </article>

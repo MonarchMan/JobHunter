@@ -82,6 +82,8 @@ describe('JD campus source adapter', () => {
       title: '物流运营',
       employmentType: '实习',
       locations: ['北京市-北京市', '广东省-广州市'],
+      detailUrl: 'https://campus.jd.com/#/details?id=4864&type=present',
+      applyUrl: 'https://campus.jd.com/#/details?id=4864&type=present',
     });
     expect(normalized.job.description).toContain('岗位职责');
   });

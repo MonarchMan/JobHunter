@@ -3,6 +3,7 @@
 import type { WebSource } from '@jobhunter/application/web';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
+import { Icon } from '../components/ui-icon.js';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './source-actions.module.css';
 
@@ -23,7 +24,14 @@ interface ActionFeedback {
 export function SourceSyncAction({
   sources,
   contextLabel,
-}: Readonly<{ sources: readonly WebSource[]; contextLabel: string }>): ReactElement {
+  actionLabel = '立即同步',
+  syncReady,
+}: Readonly<{
+  sources: readonly WebSource[];
+  contextLabel: string;
+  actionLabel?: string;
+  syncReady: boolean;
+}>): ReactElement {
   const [tokens] = useState(() =>
     Object.fromEntries(sources.map((source) => [source.id, crypto.randomUUID()])),
   );
@@ -79,14 +87,25 @@ export function SourceSyncAction({
     <div className={styles.headerSync} data-source-header-sync>
       <button
         type="button"
-        aria-label={`立即同步 ${contextLabel}`}
-        disabled={busy || enabledSources.length === 0}
+        className={styles.syncButton}
+        aria-label={`${actionLabel} ${contextLabel}`}
+        aria-busy={busy}
+        disabled={busy || enabledSources.length === 0 || !syncReady}
+        aria-describedby={!syncReady ? 'source-sync-prerequisite' : undefined}
         onClick={() => {
           void sync();
         }}
       >
-        {busy ? '正在同步…' : '立即同步'}
+        <span className={busy ? styles.syncIconBusy : styles.syncIcon}>
+          <Icon name="refresh" size={20} />
+        </span>
+        <span className={styles.syncTooltip} role="tooltip">
+          {actionLabel}
+        </span>
       </button>
+      <span className="sr-only" aria-live="polite">
+        {busy ? `${actionLabel}进行中` : ''}
+      </span>
       {feedback ? (
         <p
           className={classNames(
@@ -104,8 +123,9 @@ export function SourceSyncAction({
 
 export function SourceActions({
   source,
+  syncReady,
   contextLabel = source.companyName,
-}: Readonly<{ source: WebSource; contextLabel?: string }>): ReactElement {
+}: Readonly<{ source: WebSource; syncReady: boolean; contextLabel?: string }>): ReactElement {
   const [token] = useState(() => crypto.randomUUID());
   const [cronExpression, setCronExpression] = useState(
     source.schedule?.cronExpression ?? '0 9 * * *',
@@ -196,6 +216,7 @@ export function SourceActions({
             <input
               type="checkbox"
               checked={scheduleEnabled}
+              aria-describedby={!syncReady ? 'source-sync-prerequisite' : undefined}
               onChange={(event) => {
                 setScheduleEnabled(event.target.checked);
               }}
@@ -205,7 +226,8 @@ export function SourceActions({
           <button
             type="submit"
             className="button-muted"
-            disabled={busy}
+            disabled={busy || (!syncReady && scheduleEnabled)}
+            aria-describedby={!syncReady ? 'source-sync-prerequisite' : undefined}
             aria-label={`保存 ${contextLabel} 的同步计划`}
           >
             保存计划

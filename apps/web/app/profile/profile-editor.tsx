@@ -4,6 +4,7 @@ import type { WebProfileDetail, WebProfileMutation } from '@jobhunter/applicatio
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import { SelectField } from '../components/select-field.js';
 import styles from './profile-editor.module.css';
 
 interface ApiFailure {
@@ -153,16 +154,17 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
           </label>
           <label>
             接受远程
-            <select
+            <SelectField
+              name="preferencesRemoteAccepted"
+              label="接受远程"
+              options={[
+                { value: 'unknown', label: '未设置' },
+                { value: 'true', label: '是' },
+                { value: 'false', label: '否' },
+              ]}
               value={remoteAccepted}
-              onChange={(event) => {
-                setRemoteAccepted(event.target.value);
-              }}
-            >
-              <option value="unknown">未设置</option>
-              <option value="true">是</option>
-              <option value="false">否</option>
-            </select>
+              onValueChange={setRemoteAccepted}
+            />
           </label>
           <button type="submit" disabled={submitting}>
             保存偏好

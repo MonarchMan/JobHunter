@@ -346,7 +346,7 @@ function createMeituanChannelAdapter(options: {
             recruitmentCategory:
               options.category === 'internship'
                 ? 'internship'
-                : normalizeRecruitmentCategory(`${detail.name}\n${description}`) === 'internship'
+                : normalizeRecruitmentCategory(detail.name) === 'internship'
                   ? 'internship'
                   : 'social',
             locations: detail.cityList.map((city) => city.name),

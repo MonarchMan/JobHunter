@@ -10,6 +10,7 @@
         {
           "id": "hw-fixture-1",
           "jobId": "hw-fixture-1",
+          "advertisementId": 30859,
           "jobName": "软件开发实习生",
           "jobAddress": "东莞/深圳",
           "jobDesc": "参与软件研发。",

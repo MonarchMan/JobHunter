@@ -66,9 +66,11 @@ function recruitmentChannels(
     'baidu.campus': ['internship'],
     'bytedance.campus': ['internship'],
     'huawei.campus': ['internship'],
+    'jd.campus': ['internship'],
     'meituan.intern': ['internship'],
     'pinduoduo.intern': ['internship'],
     'tencent.intern': ['internship'],
+    'xiaohongshu.campus': ['internship', 'campus'],
   };
   const known = explicit[adapterKey];
   if (known) return known;

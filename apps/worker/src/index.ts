@@ -7,6 +7,7 @@ import {
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createResumeProfileTaskHandler,
+  createResumePolishTaskHandler,
   createResumeDeletionTaskHandler,
   createArtifactPurgeTaskHandler,
   createSourceJobDetailTaskHandler,
@@ -40,6 +41,7 @@ import {
   SqliteCleanupRepository,
   SqliteMatchingRepository,
   SqliteResumeDocumentRepository,
+  SqliteResumePolishSuggestionRepository,
   SqliteResumeArtifactReader,
   SqliteResumeDeletionRepository,
   SqliteSourceHealthWriter,
@@ -229,6 +231,13 @@ export function createProductionWorkerApplication(input: {
         },
       }),
     );
+    registry.register(
+      createResumePolishTaskHandler({
+        runner,
+        profiles: profileRepository,
+        suggestions: new SqliteResumePolishSuggestionRepository(database.client),
+      }),
+    );
     understandingHandler = createJobUnderstandingTaskHandler({
       runner,
       matching: matchingRepository,
@@ -246,6 +255,7 @@ export function createProductionWorkerApplication(input: {
     registry.register(adviceHandler);
   } else {
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
+    registry.register(createResumePolishTaskHandler({ unavailable: true }));
     understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
     adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
     registry.register(understandingHandler);

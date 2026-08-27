@@ -5,4 +5,6 @@ export * from './resume-deletion-service.js';
 export * from './resume-deletion-handler.js';
 export * from './resume-profile-handler.js';
 export * from './resume-profile-workflow.js';
+export * from './resume-polish-handler.js';
+export * from './resume-polish-service.js';
 export * from './web-profile-service.js';

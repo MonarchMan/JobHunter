@@ -26,6 +26,12 @@
   display: none;
 }
 
+.desktopTable .taskTable th,
+.desktopTable .taskTable td {
+  text-align: center;
+  vertical-align: middle;
+}
+
 .card {
   display: grid;
   gap: 0.6rem;

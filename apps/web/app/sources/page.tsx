@@ -7,6 +7,7 @@ import { SourceTabs, type SourceChannel } from './source-tabs.js';
 import { Pagination } from '../components/pagination.js';
 import { webPagination, type WebSource } from '@jobhunter/application/web';
 import { CompanySourceCard } from './company-source-card.js';
+import { SourceSyncAction } from './source-actions.js';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +27,7 @@ export default async function SourcesPage({
   const pageNumber = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const container = await getWebContainer();
   const sources = container.services.webSources.list();
+  const syncReady = container.services.sources.isSyncReady();
   const companies = Array.from(
     sources.reduce((groups, source) => {
       const existing = groups.get(source.companyId) ?? [];
@@ -49,7 +51,32 @@ export default async function SourcesPage({
         title="招聘来源"
         description="按来源类型管理职位同步。操作仅创建后台任务，页面请求不会执行采集或健康检查。"
       />
-      <SourceTabs active={channel} officialCount={companies.length} />
+      <div className={styles.toolbar} data-source-toolbar>
+        <SourceTabs active={channel} officialCount={companies.length} />
+        {channel === 'official' && sources.length > 0 ? (
+          <SourceSyncAction
+            sources={sources}
+            contextLabel="全部官网来源"
+            actionLabel="全部同步"
+            syncReady={syncReady}
+          />
+        ) : null}
+      </div>
+      {channel === 'official' && !syncReady ? (
+        <section
+          id="source-sync-prerequisite"
+          className={styles.prerequisite}
+          aria-labelledby="source-sync-prerequisite-title"
+        >
+          <div>
+            <h2 id="source-sync-prerequisite-title">确认目标岗位后再同步</h2>
+            <p>请先在个人资料中填写并保存目标岗位，系统确认职位大类后才会开始同步。</p>
+          </div>
+          <a className="button-primary" href="/profile#resume-intention">
+            去确认目标岗位
+          </a>
+        </section>
+      ) : null}
       {channel === 'platform' ? (
         <section className="empty-state page-empty-state" aria-labelledby="platform-empty-title">
           <span className="empty-state-icon" aria-hidden="true">
@@ -76,7 +103,11 @@ export default async function SourcesPage({
         <>
           <div className={styles.list} data-source-list>
             {officialCompanies.map((company) => (
-              <CompanySourceCard key={company.companyId} sources={company.sources} />
+              <CompanySourceCard
+                key={company.companyId}
+                sources={company.sources}
+                syncReady={syncReady}
+              />
             ))}
           </div>
           <Pagination

@@ -41,6 +41,7 @@ describe('SQLite migrations and capabilities', () => {
       'resume_documents',
       'candidate_profiles',
       'profile_versions',
+      'resume_polish_suggestions',
       'job_enrichments',
       'match_rulesets',
       'match_results',
@@ -81,7 +82,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      12,
+      14,
     );
   });
 

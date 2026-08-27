@@ -7,6 +7,7 @@ export * from './repositories/matching-repository.js';
 export * from './repositories/source-management-repository.js';
 export * from './repositories/task-repository.js';
 export * from './repositories/resume-document-repository.js';
+export * from './repositories/resume-polish-suggestion-repository.js';
 export * from './web-job-trace-repository.js';
 export * from './web-source-repository.js';
 export * from './web-diagnostics-repository.js';

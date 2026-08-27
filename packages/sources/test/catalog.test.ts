@@ -53,4 +53,27 @@ describe('first-party source catalog', () => {
       'xiaohongshu.campus',
     ]);
   });
+
+  it('marks independent social sources as social-only', () => {
+    expect(
+      firstPartySourceCatalog
+        .filter((record) => record.source.adapterKey.endsWith('.social'))
+        .map((record) => [record.source.adapterKey, record.source.recruitmentType]),
+    ).toEqual([
+      ['tencent.social', 'social'],
+      ['bytedance.social', 'social'],
+      ['meituan.social', 'social'],
+    ]);
+  });
+
+  it('uses the campus entry for JD and Xiaohongshu campus sources', () => {
+    expect(
+      firstPartySourceCatalog
+        .filter((record) => ['jd.campus', 'xiaohongshu.campus'].includes(record.source.adapterKey))
+        .map((record) => [record.source.adapterKey, record.source.baseUrl]),
+    ).toEqual([
+      ['xiaohongshu.campus', 'https://job.xiaohongshu.com/campus/position'],
+      ['jd.campus', 'https://campus.jd.com/#/jobs'],
+    ]);
+  });
 });

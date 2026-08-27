@@ -73,6 +73,7 @@ export class WebSourceService {
           source: webSourceSchema.parse(this.#repository.setEnabled(sourceId, mutation.enabled)),
         };
       case 'schedule':
+        if (mutation.enabled) this.#sources.requireSyncReady();
         this.#schedules.upsert({
           id: this.#ids.generate(),
           scheduleKey: `source.sync:${sourceId}`,

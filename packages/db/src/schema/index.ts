@@ -400,6 +400,26 @@ export const profileVersions = sqliteTable(
   ],
 );
 
+export const resumePolishSuggestions = sqliteTable(
+  'resume_polish_suggestions',
+  {
+    id: text().primaryKey(),
+    profileId: text('profile_id')
+      .notNull()
+      .references(() => candidateProfiles.id, { onDelete: 'cascade' }),
+    sourceVersionId: text('source_version_id')
+      .notNull()
+      .references(() => profileVersions.id, { onDelete: 'cascade' }),
+    sectionsJson: jsonText('sections_json').notNull(),
+    resultJson: jsonText('result_json').notNull(),
+    agentRunId: text('agent_run_id')
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: 'restrict' }),
+    createdAt: epoch('created_at').notNull(),
+  },
+  (table) => [index('resume_polish_suggestions_profile_idx').on(table.profileId, table.createdAt)],
+);
+
 export const jobEnrichments = sqliteTable(
   'job_enrichments',
   {

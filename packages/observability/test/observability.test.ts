@@ -55,6 +55,23 @@ describe('safe structured logging', () => {
     expect(redactLogValue(value)).toEqual({ self: '[CIRCULAR]' });
   });
 
+  it('retains nested error diagnostics while redacting credential-shaped cause messages', () => {
+    const lines: string[] = [];
+    const logger = createSafeLogger({ stderr: { write: (value) => lines.push(value) } });
+    const launchError = new Error(
+      'Executable does not exist at /Applications/Browser token=browser-secret',
+    );
+    const taskError = new Error('Browser operation failed.', { cause: launchError });
+
+    logger.error('task.failed', { error: taskError });
+
+    const output = lines.join('');
+    expect(output).toContain('Browser operation failed.');
+    expect(output).toContain('Executable does not exist at /Applications/Browser');
+    expect(output).toContain('token=[REDACTED]');
+    expect(output).not.toContain('browser-secret');
+  });
+
   it('writes JSON to a rotating local file as well as stderr', async () => {
     const root = await mkdtemp(join(tmpdir(), 'jobhunter-logs-'));
     temporaryDirectories.push(root);

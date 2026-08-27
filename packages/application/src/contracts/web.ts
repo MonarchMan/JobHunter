@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { jobAdviceSchema, ruleOutcomeSchema, scoreComponentSchema } from '@jobhunter/matching';
 import { candidatePreferencesSchema, candidateProfileSchema } from '@jobhunter/domain';
+import { resumePolishAgentOutputSchema, resumePolishSectionSchema } from '@jobhunter/resume';
 
 /** Stable error body shared by Web route handlers and React clients. */
 export const webErrorSchema = z
@@ -311,6 +312,49 @@ export const webProfileMutationSchema = z.discriminatedUnion('kind', [
 ]);
 
 export type WebProfileMutation = z.infer<typeof webProfileMutationSchema>;
+
+export const webResumePolishRequestSchema = z
+  .object({
+    profileId: z.uuid(),
+    sourceVersionId: z.uuid(),
+    sections: z.array(resumePolishSectionSchema).min(1).max(2),
+    idempotencyToken: z.string().trim().min(8).max(200),
+  })
+  .strict();
+
+export const webResumePolishAcceptedSchema = z
+  .object({
+    suggestionId: z.uuid(),
+    task: z
+      .object({
+        taskId: z.uuid(),
+        status: z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled']),
+        deduplicated: z.boolean(),
+        statusUrl: z.string().startsWith('/api/profile/polish'),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type WebResumePolishAccepted = z.infer<typeof webResumePolishAcceptedSchema>;
+
+export const webResumePolishStatusSchema = z
+  .object({
+    suggestionId: z.uuid(),
+    status: z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled']),
+    errorSummary: z.string().nullable(),
+    suggestion: z
+      .object({
+        sourceVersionId: z.uuid(),
+        sections: z.array(resumePolishSectionSchema).min(1).max(2),
+        result: resumePolishAgentOutputSchema,
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+
+export type WebResumePolishStatus = z.infer<typeof webResumePolishStatusSchema>;
 
 const webSourceRunSchema = z
   .object({

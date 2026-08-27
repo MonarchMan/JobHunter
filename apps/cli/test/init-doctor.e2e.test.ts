@@ -85,11 +85,11 @@ describe('init and doctor commands', () => {
           sources: 13,
           bootstrap: {
             defaultResumeTaskId: null,
-            schedules: 14,
+            schedules: 1,
           },
         },
       });
-      expect(initialized.data.bootstrap.sourceSyncTaskIds).toHaveLength(13);
+      expect(initialized.data.bootstrap.sourceSyncTaskIds).toHaveLength(0);
       expect(
         initialized.data.bootstrap.sourceSyncTaskIds.every((id) => typeof id === 'string'),
       ).toBe(true);

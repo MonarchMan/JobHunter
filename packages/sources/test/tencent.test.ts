@@ -133,6 +133,28 @@ describe('Tencent source adapter contract', () => {
     expect(normalized.job.applyUrl).toContain('https://careers.tencent.com/resume.html?');
   });
 
+  it('keeps social jobs social when requirements mention interns', async () => {
+    const raw = firstRaw();
+    expect(raw).toBeDefined();
+    if (!raw) return;
+    const socialRaw = { ...raw, Responsibility: `${raw.Responsibility}\n指导实习生。` };
+    const normalized = await adapter.normalize(
+      {
+        discovered: {
+          externalJobId: socialRaw.PostId,
+          sourceUrl: `https://careers.tencent.com/jobdesc.html?postId=${socialRaw.PostId}`,
+          raw: socialRaw,
+        },
+        detail: detail(),
+      },
+      { sourceId, companyId, config },
+    );
+    expect(normalized.job).toMatchObject({
+      recruitmentCategory: 'social',
+      employmentType: '全职',
+    });
+  });
+
   it('reports partial when the advertised total cannot be reached', async () => {
     const emptySecond = { Code: 200, Data: { Count: 3, Posts: [] } };
     const discovery = await collectDiscovery(

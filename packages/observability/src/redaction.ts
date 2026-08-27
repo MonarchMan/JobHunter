@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 const email = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 const phone = /(?<!\d)(?:\+?86[- ]?)?1[3-9]\d{9}(?!\d)/g;
 const bearer = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const credentialAssignment = /\b(api[-_ ]?key|token|password|cookie)\s*[:=]\s*[^\s,;]+/gi;
 
 function normalizedKey(key: string): string {
   return key.replaceAll(/[-_]/g, '').toLowerCase();
@@ -52,6 +53,7 @@ function redactString(value: string): string {
   }
   return value
     .replaceAll(bearer, 'Bearer [REDACTED]')
+    .replaceAll(credentialAssignment, '$1=[REDACTED]')
     .replaceAll(email, '[REDACTED_EMAIL]')
     .replaceAll(phone, '[REDACTED_PHONE]');
 }

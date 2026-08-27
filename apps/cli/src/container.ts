@@ -3,6 +3,7 @@ import {
   BackupService,
   createCleanupTaskHandler,
   createResumeProfileTaskHandler,
+  createResumePolishTaskHandler,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createJobUnderstandingTaskHandler,
@@ -21,6 +22,7 @@ import {
   MatchWorkflowService,
   ProfileInspectionService,
   ProfileManagementService,
+  ProfileJobIntakePolicy,
   ResumeImportService,
   ResumeProfileWorkflow,
   ScheduleService,
@@ -55,6 +57,7 @@ import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/domain';
 import { hashCanonical } from '@jobhunter/agent-core';
 import { OpenAiCompatibleModelClient } from '@jobhunter/llm';
 import { jobAdviceAgentDefinition } from '@jobhunter/matching';
+import { createSafeLogger } from '@jobhunter/observability';
 import { firstPartySourceCatalog } from '@jobhunter/sources';
 import {
   createPlaywrightSourcePageClient,
@@ -171,6 +174,7 @@ export function createLocalCliContainer(
     );
     registry.register(createCleanupTaskHandler({ unavailable: true }));
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
+    registry.register(createResumePolishTaskHandler({ unavailable: true }));
     const matchingHandler = createMatchRevisionTaskHandler(null);
     const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
     const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
@@ -192,17 +196,19 @@ export function createLocalCliContainer(
       { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
       registry,
     );
+    const profileRepository = new SqliteCandidateProfileRepository(database.client);
+    const jobIntakePolicy = new ProfileJobIntakePolicy(profileRepository);
     const sources = new SourceManagementService({
       sources: new SqliteSourceManagementRepository(database.client),
       tasks,
       ids,
+      jobIntakePolicy,
     });
     const jobRepository = new SqliteJobQueryRepository(database.client);
     const jobs = new JobQueryService({
       jobs: jobRepository,
       companies: new SqliteCompanyLookupRepository(database.client),
     });
-    const profileRepository = new SqliteCandidateProfileRepository(database.client);
     const candidateProfiles = new CandidateProfileService({
       repository: profileRepository,
       clock: { now: () => utcInstant(Date.now()) },
@@ -298,22 +304,27 @@ export function createLocalCliContainer(
           });
           defaultResumeTaskId = imported.task?.id ?? null;
         }
-        const sourceSyncTasks = runtime.sources.enqueueSync({
-          sourceIds: 'all',
-          idempotencyToken: 'bootstrap-initialization-v1',
-        });
+        const sourceSyncReady = runtime.sources.isSyncReady();
+        const sourceSyncTasks = sourceSyncReady
+          ? runtime.sources.enqueueSync({
+              sourceIds: 'all',
+              idempotencyToken: 'bootstrap-initialization-v1',
+            })
+          : [];
         let schedules = 0;
-        for (const source of runtime.sources.list().filter((candidate) => candidate.enabled)) {
-          runtime.schedules.upsert({
-            id: source.id,
-            scheduleKey: `source.sync:${source.id}`,
-            taskType: 'source.sync',
-            payload: { sourceId: source.id, trigger: 'schedule' },
-            cronExpression: '0 3 * * *',
-            timezone: 'Asia/Shanghai',
-            enabled: true,
-          });
-          schedules += 1;
+        if (sourceSyncReady) {
+          for (const source of runtime.sources.list().filter((candidate) => candidate.enabled)) {
+            runtime.schedules.upsert({
+              id: source.id,
+              scheduleKey: `source.sync:${source.id}`,
+              taskType: 'source.sync',
+              payload: { sourceId: source.id, trigger: 'schedule' },
+              cronExpression: '0 3 * * *',
+              timezone: 'Asia/Shanghai',
+              enabled: true,
+            });
+            schedules += 1;
+          }
         }
         runtime.schedules.upsert({
           id: '018f0000-0000-7000-8000-000000000401',
@@ -380,25 +391,34 @@ export function createLocalCliContainer(
     worker: {
       start: async () => {
         operational();
-        await runWorkerProcess(
-          createProductionWorkerApplication({
-            dataRoot: config.bootstrap.dataRoot.value,
-            pollIntervalMs: config.worker.pollIntervalMs.value,
-            taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
-            pageClient: createPlaywrightSourcePageClient(),
-            ...(config.model.baseUrl.value &&
-            config.model.modelName.value &&
-            config.model.apiKey.value
-              ? {
-                  model: {
-                    baseUrl: config.model.baseUrl.value,
-                    model: config.model.modelName.value,
-                    apiKey: config.model.apiKey.value.reveal(),
-                  },
-                }
-              : {}),
-          }),
-        );
+        const logger = createSafeLogger({
+          level: config.logLevel.value,
+          logFile: path.join(config.bootstrap.dataRoot.value, 'logs', 'jobhunter.log'),
+        });
+        try {
+          await runWorkerProcess(
+            createProductionWorkerApplication({
+              dataRoot: config.bootstrap.dataRoot.value,
+              pollIntervalMs: config.worker.pollIntervalMs.value,
+              taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
+              logger,
+              pageClient: createPlaywrightSourcePageClient(),
+              ...(config.model.baseUrl.value &&
+              config.model.modelName.value &&
+              config.model.apiKey.value
+                ? {
+                    model: {
+                      baseUrl: config.model.baseUrl.value,
+                      model: config.model.modelName.value,
+                      apiKey: config.model.apiKey.value.reveal(),
+                    },
+                  }
+                : {}),
+            }),
+          );
+        } finally {
+          await logger.close();
+        }
       },
     },
     job: {

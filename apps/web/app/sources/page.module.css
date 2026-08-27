@@ -1,9 +1,54 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
 .list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   gap: 1.25rem;
   margin-top: 2rem;
+}
+
+.prerequisite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--primary-soft);
+}
+
+.prerequisite h2,
+.prerequisite p {
+  margin: 0;
+}
+
+.prerequisite h2 {
+  font-size: 1rem;
+}
+
+.prerequisite p {
+  margin-top: 0.3rem;
+  color: var(--muted-ink);
+}
+
+@media (max-width: 600px) {
+  .toolbar {
+    gap: 0.5rem;
+  }
+
+  .prerequisite {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 1100px) {

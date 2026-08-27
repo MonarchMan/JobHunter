@@ -26,21 +26,76 @@
   padding-bottom: 0;
 }
 
+.resume-editor-layout {
+  display: grid;
+  grid-template-areas: 'document outline';
+  grid-template-columns: minmax(0, 1fr) 11.5rem;
+  align-items: start;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.resume-editor-layout.is-outline-collapsed {
+  grid-template-columns: minmax(0, 1fr) 3.75rem;
+}
+
 .resume-edit-outline {
-  display: flex;
-  gap: 0.35rem;
-  overflow-x: auto;
-  margin: 1rem 0;
-  padding: 0.4rem;
+  position: sticky;
+  z-index: 4;
+  top: 1rem;
+  grid-area: outline;
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 0.55rem;
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-control);
   background: var(--surface-muted);
   scrollbar-gutter: stable;
 }
 
+.resume-edit-outline-heading {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0 0.35rem 0.35rem;
+  color: var(--ink);
+  font-size: 0.76rem;
+}
+
+.resume-edit-outline-toggle {
+  min-width: auto;
+  min-height: 2rem;
+  padding: 0.3rem 0.4rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--primary-hover);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.resume-edit-outline-toggle:hover,
+.resume-edit-outline-toggle:focus-visible {
+  background: var(--primary-soft);
+  box-shadow: none;
+  color: var(--primary-hover);
+}
+
+.resume-edit-outline-links {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.resume-edit-outline-links[hidden] {
+  display: none;
+}
+
 .resume-edit-outline a {
-  flex: 0 0 auto;
-  padding: 0.45rem 0.65rem;
+  position: relative;
+  display: block;
+  padding: 0.5rem 0.55rem 0.5rem 0.75rem;
   border-radius: var(--radius-control);
   color: var(--muted-ink);
   font-size: 0.76rem;
@@ -54,8 +109,38 @@
   color: var(--primary-hover);
 }
 
+.resume-edit-outline a[aria-current='location'] {
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+  font-weight: 800;
+}
+
+.resume-edit-outline a[aria-current='location']::before {
+  position: absolute;
+  top: 0.4rem;
+  bottom: 0.4rem;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--action);
+  content: '';
+}
+
+.is-outline-collapsed .resume-edit-outline-heading {
+  align-items: stretch;
+  flex-direction: column;
+  padding: 0;
+  text-align: center;
+}
+
+.is-outline-collapsed .resume-edit-outline-heading strong {
+  line-height: 1.35;
+}
+
 .resume-edit-document {
+  grid-area: document;
   display: grid;
+  min-width: 0;
   gap: 0.9rem;
 }
 
@@ -431,6 +516,60 @@
   white-space: pre-wrap;
 }
 
+@media (max-width: 1100px) {
+  .resume-editor-layout,
+  .resume-editor-layout.is-outline-collapsed {
+    grid-template-areas:
+      'outline'
+      'document';
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resume-edit-outline {
+    top: 0.75rem;
+    max-width: 100%;
+    max-height: none;
+    overflow: hidden;
+  }
+
+  .resume-edit-outline-heading {
+    padding-bottom: 0.25rem;
+  }
+
+  .resume-edit-outline-links {
+    display: flex;
+    gap: 0.2rem;
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
+    scrollbar-gutter: stable;
+  }
+
+  .resume-edit-outline a {
+    flex: 0 0 auto;
+  }
+
+  .is-outline-collapsed .resume-edit-outline-heading {
+    align-items: center;
+    flex-direction: row;
+    padding: 0;
+    text-align: left;
+  }
+
+  .resume-edit-section {
+    scroll-margin-top: 6rem;
+  }
+}
+
+@media (max-width: 1024px) {
+  .resume-edit-outline {
+    top: 5rem;
+  }
+
+  .resume-edit-section {
+    scroll-margin-top: 10rem;
+  }
+}
+
 @media (max-width: 700px) {
   .structured-resume-heading {
     align-items: flex-start;
@@ -489,5 +628,15 @@
   .resume-preview-person > p {
     max-width: none;
     text-align: left;
+  }
+}
+
+@media (max-width: 600px) {
+  .resume-edit-outline {
+    top: 4.25rem;
+  }
+
+  .resume-edit-section {
+    scroll-margin-top: 9rem;
   }
 }

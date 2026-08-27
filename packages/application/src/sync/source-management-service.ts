@@ -2,20 +2,39 @@ import type { IdGenerator, JobSourceId } from '@jobhunter/domain';
 import type { SourceManagementRepository, SourceOverview } from '../ports/source-management.js';
 import type { EnqueueTaskResult, TaskRecord } from '../tasks/model.js';
 import type { TaskService } from '../tasks/task-service.js';
+import type { JobIntakePolicy } from './job-intake-policy.js';
+
+export class SourceSyncTargetRequiredError extends TypeError {
+  public constructor() {
+    super('请先在个人资料中确认目标岗位，再同步职位。');
+    this.name = 'SourceSyncTargetRequiredError';
+  }
+}
 
 export class SourceManagementService {
   readonly #sources: SourceManagementRepository;
   readonly #tasks: TaskService;
   readonly #ids: IdGenerator;
+  readonly #jobIntakePolicy: JobIntakePolicy;
 
   public constructor(input: {
     readonly sources: SourceManagementRepository;
     readonly tasks: TaskService;
     readonly ids: IdGenerator;
+    readonly jobIntakePolicy: JobIntakePolicy;
   }) {
     this.#sources = input.sources;
     this.#tasks = input.tasks;
     this.#ids = input.ids;
+    this.#jobIntakePolicy = input.jobIntakePolicy;
+  }
+
+  public isSyncReady(): boolean {
+    return this.#jobIntakePolicy.isReady();
+  }
+
+  public requireSyncReady(): void {
+    if (!this.isSyncReady()) throw new SourceSyncTargetRequiredError();
   }
 
   public list(): readonly SourceOverview[] {
@@ -30,6 +49,7 @@ export class SourceManagementService {
     readonly sourceIds: readonly JobSourceId[] | 'all';
     readonly idempotencyToken?: string;
   }): readonly EnqueueTaskResult[] {
+    this.requireSyncReady();
     const selected =
       input.sourceIds === 'all'
         ? this.#sources.list().filter((source) => source.enabled)

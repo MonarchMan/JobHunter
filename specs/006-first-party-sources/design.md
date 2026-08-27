@@ -32,7 +32,9 @@ packages/sources/
 
 公司与来源 seed 通过幂等初始化用例写入。默认只启用通过 supported 门禁的来源；experimental/blocked 默认禁用自动计划但允许手动 health check。enabled、support status 与运行 health 不得互相推导覆盖。
 
-来源目录按“公司 1:N 招聘渠道”建模，同一 company ID 下每个社招、校招、实习渠道拥有稳定且唯一的 source ID、slug 和 adapter key。来源若同时返回校招与实习，适配器必须使用响应字段、项目标识以及标题/描述中的实习语义做记录级归一化；`internship` 优先于 source descriptor 的 `campus` 回退值。只请求 `INTERN` 的来源直接以常量归一化为 `internship`。
+来源目录按“公司 1:N 招聘渠道”建模，同一 company ID 下每个社招、校招、实习渠道拥有稳定且唯一的 source ID、slug 和 adapter key。来源若同时返回校招与实习，适配器先使用响应中的招聘类型或项目标识，再使用职位名称中的明确实习语义，最后才回退来源类型；职责和任职要求只描述工作内容，不参与招聘类别推断。只请求 `INTERN` 的来源直接以常量归一化为 `internship`，已有独立实习来源的社招来源声明为 `social`。
+
+岗位 URL 在来源边界生成并接受契约校验。提供稳定详情路由的来源必须使用岗位 ID 或官方详情标识生成深链；当前特殊路由为阿里 `/campus/position/{id}`、小红书 `/campus/position/{positionId}`、京东 `#/details?id={publishId}&type=present`、华为 `/cn/job-details?advertisementId={advertisementId}`。列表入口只用于来源元数据，不得写入规范职位的 `detailUrl/applyUrl`。
 
 ## 技术策略
 
@@ -60,6 +62,8 @@ packages/sources/
 
 Session 的创建与关闭留在 factory 内，避免浏览器对象泄露到 application/domain。BrowserPool 不负责登录、Cookie 持久化、验证码处理或风控参数生成；没有可用浏览器 runtime 时由装配层不提供 factory，来源按既有 `experimental/blocked` 降级路径运行。
 
+Worker 浏览器装配按“显式 `JOBHUNTER_BROWSER_EXECUTABLE`、操作系统标准安装路径、Playwright 自带 Chromium”的顺序解析运行时。Windows 探测 Edge/Chrome 的 Program Files 路径；macOS 探测系统级和用户级 Applications 目录中的 Chrome/Edge。浏览器启动异常仍映射为可重试的安全任务摘要；完整错误对象只进入 `SafeLogger`，由统一递归脱敏后写入 stderr 与本地轮转日志，数据库和 Web 诊断接口不保存底层错误文本。
+
 浏览器基础设施只校验分页响应外壳并输出中立记录；阿里、字节、得物和华为适配器还必须在发现与归一化边界使用各自 Zod Schema 再次校验职位记录。小红书 JSON 来源遵循同一规则。共享适配器不得仅凭候选字段存在就接受外部数据；逐来源 Schema 失败统一分类为 `parse_changed`，使同步层保留最后成功数据并禁止基于本次缺失关闭职位。
 
 ## 测试与上线
@@ -67,3 +71,5 @@ Session 的创建与关闭留在 factory 内，避免浏览器对象泄露到 ap
 固定样本测试是合并门禁；在线 Smoke 是标记 supported 的发布门禁。在线结果记录 run ID、日期、入口、发现数量区间和 coverage，不提交原始个人信息或认证数据。
 
 浏览器来源在线 Smoke 位于 Worker 测试目录，由 Worker 的 Playwright session factory 装配 `SourcePageClient`，避免 `packages/sources` 依赖浏览器 SDK。测试必须同时设置 `JOBHUNTER_ONLINE_SOURCES=1` 和单来源选择器 `JOBHUNTER_BROWSER_ONLINE_SOURCE=alibaba|bytedance|dewu|huawei`；默认及未指定选择器时跳过。每次最多采集两页，仅验证真实匿名会话、分页响应、逐来源 Schema、稳定 ID、官方 URL 和归一化，不替代低频全量覆盖门禁。
+
+Worker 离线单元测试注入平台、用户目录和文件存在性，覆盖 macOS Chrome/Edge 自动探测优先级；另以确定不存在的显式路径触发 Playwright 启动失败，断言对外摘要稳定且底层 `cause` 保留给安全日志，全程不访问招聘官网。

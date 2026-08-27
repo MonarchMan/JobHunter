@@ -4,7 +4,7 @@ import {
   jsonRequest,
   type ScriptedAdapterDefinition,
 } from './adapter.js';
-import type { JobSourceAdapter } from '@jobhunter/source-core';
+import { SourceError, type JobSourceAdapter } from '@jobhunter/source-core';
 import type { ScriptedConfig } from './schemas.js';
 import { alibabaCampusJobSchema } from '../alibaba/schemas.js';
 import { byteDanceJobSchema } from '../bytedance/schemas.js';
@@ -19,6 +19,8 @@ export const alibabaDefinition: ScriptedAdapterDefinition = {
   entryUrl: 'https://campus-talent.alibaba.com/campus/position?batchId=100000560002',
   hosts: ['campus-talent.alibaba.com'],
   recordSchema: alibabaCampusJobSchema,
+  jobUrl: (_record, id) =>
+    `https://campus-talent.alibaba.com/campus/position/${encodeURIComponent(id)}`,
   transport: 'browser',
   browser: {
     listEndpointPath: '/position/search',
@@ -203,6 +205,13 @@ export const huaweiDefinition: ScriptedAdapterDefinition = {
   entryUrl: 'https://career.huawei.com/cn/campus-recruitment-job-list?recruitmentType=INTERN',
   hosts: ['apigw-dgg-b0.huawei.com', 'career.huawei.com'],
   recordSchema: huaweiCampusJobSchema,
+  jobUrl: (record) => {
+    const advertisementId = record['advertisementId'];
+    if (typeof advertisementId !== 'string' && typeof advertisementId !== 'number') {
+      throw new SourceError('parse_changed', 'Huawei job record has no advertisement ID.');
+    }
+    return `https://career.huawei.com/cn/job-details?advertisementId=${encodeURIComponent(String(advertisementId))}`;
+  },
   transport: 'browser',
   browser: {
     listEndpointPath: '/api/apig/channelhw/recruitmentPosition/pub/getJobPage',
@@ -243,6 +252,7 @@ export const xiaohongshuDefinition: ScriptedAdapterDefinition = {
   entryUrl: 'https://job.xiaohongshu.com/campus/position',
   hosts: ['job.xiaohongshu.com'],
   recordSchema: xiaohongshuCampusJobSchema,
+  jobUrl: (_record, id) => `https://job.xiaohongshu.com/campus/position/${encodeURIComponent(id)}`,
   request: ({ config, page, requestId, signal, timeoutMs }) =>
     jsonRequest({
       sourceKey: 'xiaohongshu.campus',

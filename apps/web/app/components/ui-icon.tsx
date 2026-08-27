@@ -13,7 +13,11 @@ export type IconName =
   | 'score'
   | 'rules'
   | 'calendar'
-  | 'sparkles';
+  | 'refresh'
+  | 'sparkles'
+  | 'chevronDown'
+  | 'chevronUp'
+  | 'check';
 
 const paths: Readonly<Record<IconName, ReactElement>> = {
   dashboard: (
@@ -86,11 +90,20 @@ const paths: Readonly<Record<IconName, ReactElement>> = {
       <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
     </>
   ),
+  refresh: (
+    <>
+      <path d="M20 11a8 8 0 1 0-2.34 5.66" />
+      <path d="M20 4v7h-7" />
+    </>
+  ),
   sparkles: (
     <>
       <path d="m12 3 1.1 3.2L16 8l-2.9 1.8L12 13l-1.1-3.2L8 8l2.9-1.8L12 3ZM5 14l.8 2.2L8 17.5l-2.2 1.3L5 21l-.8-2.2L2 17.5l2.2-1.3L5 14Zm14-2 .7 1.8 1.8.7-1.8.7L19 17l-.7-1.8-1.8-.7 1.8-.7L19 12Z" />
     </>
   ),
+  chevronDown: <path d="m6 9 6 6 6-6" />,
+  chevronUp: <path d="m6 15 6-6 6 6" />,
+  check: <path d="m5 12 4 4L19 6" />,
 };
 
 export function Icon({
