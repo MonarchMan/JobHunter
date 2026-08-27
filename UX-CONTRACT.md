@@ -24,8 +24,8 @@
 
 - Project `DESIGN.md`: `DESIGN.md`。
 - Token ownership model: 现有运行时 CSS 为规范所有者，`DESIGN.md` 镜像批准值。
-- Runtime design-system/token source: `apps/web/app/styles.css` 首个且唯一的 `:root`。
-- Mapping/export/adapters: CSS 变量直接供共享类和组件消费，无生成适配器。
+- Runtime design-system/token source: `apps/web/app/styles/tokens.css` 中唯一的 `:root`。
+- Mapping/export/adapters: `apps/web/app/styles.css` 按稳定顺序装配全局分片；CSS 变量直接供全局共享类和路由级 CSS Modules 消费，无生成适配器。
 - Token drift gate: DESIGN lint、旧绿色/原始色值搜索、代表页面视觉验证。
 - Supported themes: 仅亮色；强制颜色模式交给系统。
 - Design-context owner/review policy: 修改共享视觉令牌时必须同步更新 `DESIGN.md`。
@@ -36,6 +36,7 @@
 | --------------- | ------------------------------- | --------------- | -------------------------- | ------------------- |
 | Table Selection | `jobs-table.tsx` 职位批量选择   | 014 规格        | 桌面表格 / 移动记录卡      | E2E                 |
 | Select/Listbox  | 原生 `select` + 全局字段样式    | 本契约          | native                     | 键盘 + 浏览器弹出层 |
+| Combobox        | 共享 `CompanyCombobox`          | 014 规格        | authored                   | 键盘 + 弹层 + IME   |
 | Date            | ISO 显示层 + 原生 `date` 交互层 | 014 规格        | native-picker / ISO-shell  | locale + E2E        |
 | Form            | 页面表单 + 共享全局字段状态     | Schema 与本契约 | edit/upload/filter         | validation E2E      |
 | Scrollbar       | 全局应用样式                    | DESIGN.md       | stable gutter 例外         | computed style      |
@@ -93,7 +94,7 @@
 - Tooltip delay/dismissal: 仅用于非通用图标，键盘聚焦可见，Escape 可关闭。
 - Unsaved-changes behavior: 在线简历以客户端草稿承载未保存内容；预览读取草稿。当前离页使用浏览器生命周期提示，后续共享路由拦截器可替换为应用内确认。
 - Layer/z-index contract: dialog > drawer > popover > inline feedback；评分 popover 使用页面顶层 portal，不能改变表格行高或被滚动容器裁切。
-- Profile resume workbench: 在线简历章节使用稳定锚点，目录可横向滚动；重复条目可增删。底部粘性操作条一次保存完整资料并生成单一版本。预览使用 portal 模态弹窗，读取未保存草稿、过滤空条目和空章节，内部滚动，Escape 关闭并恢复触发按钮焦点；OCR 入口在能力可用前保持禁用并邻近解释。
+- Profile resume workbench: 在线简历章节使用稳定锚点，目录可横向滚动；重复条目可增删。底部粘性操作条一次保存完整资料并生成单一版本。预览使用 portal 模态弹窗，读取未保存草稿、过滤空条目和空章节，内部滚动，Escape 关闭并恢复触发按钮焦点；同一导入控件接受 PDF/DOCX 与 JPEG/PNG，图片明确标记为 Worker 后台 OCR，不另设重复入口。
 - Profile date inputs: 经历、项目、竞赛和证书日期使用原生 `date`；接受 Edge/Chrome 平台弹层的本地化、月/年切换和键盘行为。起止时间额外使用应用拥有的只读 ISO 表面，透明原生输入仍是实际交互与无障碍所有者，应用不仿制日历弹层。
 - Profile date ranges: 教育、工作和项目的开始/结束日期由同一字段组拥有；桌面端该组占一列（半行，外宽与普通字段一致），内部两个日期等宽同排，移动端扩为整行；应用表面固定显示 `YYYY-MM-DD`，旧的月份值载入时补齐为当月首日，保存值统一为完整 ISO 日期字符串。标题沿用普通字段的正常字重、行高和标签间距，日期控件顶边与同行普通输入框对齐。
 - Job title navigation: 职位列表的职位名称直接使用 `detailUrl` 在安全新标签页打开官网详情；站内 `/jobs/[id]` 是诊断详情而非列表默认落点，其历史修订读取必须兼容数组式和对象式 change set。
@@ -131,8 +132,8 @@
 ## Migration status
 
 - Migration ledger location: `specs/014-ui-redesign/tasks.md`。
-- Canonical primitives and owners: `DESIGN.md`、本契约、`styles.css` 和 `apps/web/app/components`。
-- Current risk-prioritized slices: 全局壳层 → 职位 → 任务 → 来源 → 资料/设置 → 首页收口。
+- Canonical primitives and owners: `DESIGN.md`、本契约、`styles/tokens.css`、全局样式分片、组件级 CSS Modules 和 `apps/web/app/components`。
+- Current risk-prioritized slices: 页面级样式迁移已完成；后续新增页面必须复用现有共享所有者或使用就近 CSS Module。
 - Legacy import/token enforcement: 搜索旧绿色直接值、重复 `:root`、原生对话框和页面级反馈色。
 - Rollout/rollback and removal gates: 按完整页面工作流迁移，测试失败时可按页面回退，不保留双主题长期分支。
 

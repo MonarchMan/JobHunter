@@ -19,7 +19,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const form = await request.formData();
     const file = form.get('file');
-    if (!(file instanceof File)) return badRequestResponse('请选择 PDF 或 DOCX 简历文件。');
+    if (!(file instanceof File)) {
+      return badRequestResponse('请选择 PDF、DOCX、JPEG 或 PNG 简历文件。');
+    }
     if (file.size < 1 || file.size > maximumFileBytes) {
       return badRequestResponse('简历文件必须大于 0 且不超过 10 MiB。');
     }

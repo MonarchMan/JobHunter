@@ -21,7 +21,7 @@ jh --data-root "D:\JobHunter 数据" doctor
 
 ```powershell
 # 导入简历并得到画像提取 task ID
-jh resume import "docs/resumes/agent简历 - 新.docx"
+jh resume import "docs/resumes/nowcoder_1787802316450.jpeg"
 
 # 在另一个终端启动 Worker
 jh worker start

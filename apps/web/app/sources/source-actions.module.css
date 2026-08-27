@@ -1,0 +1,128 @@
+.headerSync {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.headerSync button {
+  min-width: 7rem;
+  white-space: nowrap;
+}
+
+.headerFeedback {
+  position: absolute;
+  z-index: 4;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: max-content;
+  max-width: min(18rem, 70vw);
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  box-shadow: var(--shadow-panel);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.headerSuccess {
+  border-color: #bfd9ce;
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.headerError {
+  border-color: #edc7c2;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.actions {
+  display: grid;
+  gap: 1rem;
+  margin-top: auto;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.advanced {
+  margin-top: 0;
+  padding: 0.75rem 0 1rem;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--primary-hover);
+  font-weight: 700;
+}
+
+.scheduleForm {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) auto auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.scheduleForm label {
+  display: grid;
+  gap: 0.4rem;
+  color: #50586a;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.scheduleForm .checkLabel {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+}
+
+.checkLabel input {
+  width: auto;
+  min-height: auto;
+}
+
+.feedback {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.55rem;
+  font-size: 0.85rem;
+  animation: feedbackIn var(--motion-standard) var(--ease-out) both;
+}
+
+.success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+@keyframes feedbackIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 600px) {
+  .scheduleForm {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedback {
+    animation: none;
+  }
+}

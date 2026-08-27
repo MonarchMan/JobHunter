@@ -1,0 +1,204 @@
+.selectionToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 4rem;
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 0.85rem 0.85rem 0 0;
+  background: #f0f2ff;
+  color: #50586a;
+  box-shadow: 0 0.35rem 1.25rem rgb(54 64 117 / 6%);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.tableScroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+  box-shadow: 0 0.35rem 1.25rem rgb(54 64 117 / 6%);
+  scrollbar-gutter: stable;
+}
+
+.selectionToolbar + .tableScroll {
+  border-radius: 0 0 1rem 1rem;
+}
+
+.tableScroll table {
+  width: 100%;
+  min-width: 62rem;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.tableScroll th,
+.tableScroll td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  vertical-align: top;
+}
+
+.tableScroll th {
+  color: #626b7c;
+  font-size: 0.78rem;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.tableScroll th:nth-child(1) {
+  width: 3.25rem;
+}
+
+.tableScroll th:nth-child(2) {
+  width: 14rem;
+}
+
+.tableScroll th:nth-child(3) {
+  width: 8rem;
+}
+
+.tableScroll th:nth-child(4) {
+  width: 9rem;
+}
+
+.tableScroll th:nth-child(5) {
+  width: 5.5rem;
+}
+
+.tableScroll th:nth-child(6) {
+  width: 7rem;
+}
+
+.tableScroll th:nth-child(7) {
+  width: 12rem;
+}
+
+.tableScroll td:nth-child(2),
+.tableScroll td:nth-child(3),
+.tableScroll td:nth-child(4),
+.tableScroll td:nth-child(5),
+.tableScroll td:nth-child(6),
+.tableScroll td:nth-child(7) {
+  min-width: 0;
+  overflow: visible;
+}
+
+.tableScroll tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.tableScroll tbody tr:hover {
+  background: #f6f7ff;
+}
+
+.staleRow {
+  background: var(--warning-soft);
+}
+
+.tableScroll .selectionCell {
+  width: 3.25rem;
+  min-width: 3.25rem;
+  padding-right: 0.25rem;
+}
+
+.tableScroll .selectionCell input,
+.cardSelection input {
+  width: 1.1rem;
+  min-height: 1.1rem;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  min-width: 13rem;
+  white-space: nowrap;
+}
+
+.rowActions > :last-child {
+  flex: 0 0 auto;
+}
+
+.applyLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.35rem;
+  padding: 0 0.7rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.company {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.jobLink {
+  color: var(--primary-hover);
+  font-weight: 750;
+}
+
+.cards {
+  display: none;
+}
+
+.card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--surface);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-standard) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.card:hover {
+  border-color: #c6ccec;
+  box-shadow: 0 0.7rem 1.6rem rgb(60 73 145 / 8%);
+  transform: translateY(-1px);
+}
+
+.cardHeading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.card p,
+.card small {
+  margin: 0;
+  color: #667085;
+}
+
+.cardSelection {
+  display: inline-grid;
+  min-height: 2.25rem;
+  place-items: center;
+}
+
+@media (max-width: 900px) {
+  .tableScroll {
+    display: none;
+  }
+
+  .cards {
+    display: grid;
+    gap: 0.75rem;
+  }
+}

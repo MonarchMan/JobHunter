@@ -1,0 +1,50 @@
+.logo {
+  display: inline-grid;
+  flex: 0 0 auto;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--line-soft);
+  border-radius: 0.45rem;
+  background: var(--surface);
+  color: var(--primary-hover);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.small {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.medium {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.logo img {
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+}
+
+.sourceHeading {
+  width: 1.9rem;
+  height: 1.9rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.sourceHeading img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+@media (max-width: 430px) {
+  .sourceHeading {
+    width: 1.65rem;
+    height: 1.65rem;
+  }
+}

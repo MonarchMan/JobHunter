@@ -1,0 +1,9 @@
+.facts,
+.facts > div,
+.facts dd {
+  min-width: 0;
+}
+
+.facts code {
+  overflow-wrap: anywhere;
+}

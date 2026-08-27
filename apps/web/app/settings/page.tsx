@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { getWebContainer } from '../../src/server/container.js';
 import { PageHeader } from '../components/page-header.js';
 import { SettingsForm } from './settings-form.js';
+import styles from './settings.module.css';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '设置' };
@@ -16,8 +17,11 @@ export default async function SettingsPage(): Promise<ReactElement> {
         title="设置"
         description="管理影响整个系统的非敏感运行开关。修改会立即保存，下一次同步开始时生效。"
       />
-      <section className="settings-panel panel" aria-labelledby="settings-title">
-        <div className="section-heading">
+      <section
+        className={[styles.settingsPanel, 'panel'].join(' ')}
+        aria-labelledby="settings-title"
+      >
+        <div className={[styles.sectionHeading, 'section-heading'].join(' ')}>
           <p className="eyebrow">MATCHING</p>
           <h2 id="settings-title">职位理解</h2>
           <p className="muted">

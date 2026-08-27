@@ -1,12 +1,15 @@
 import { JobNotFoundError } from '@jobhunter/application/web';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { JobStatus } from '../../components/job-status.js';
 import { getWebContainer } from '../../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../../src/server/job-query.js';
 import { JobScoreAction } from '../../components/job-score-action.js';
+import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: '职位详情' };
 
 interface JobDetailPageProperties {
   readonly params: Promise<{ readonly id: string }>;
@@ -46,18 +49,18 @@ export default async function JobDetailPage({
   return (
     <main id="main-content" tabIndex={-1}>
       <a
-        className="back-link"
+        className={styles.backLink}
         href={profile ? `/jobs?profile=${encodeURIComponent(profile)}` : '/jobs'}
       >
         ← 返回职位列表
       </a>
-      <header className="detail-heading">
+      <header className={styles.heading}>
         <div>
           <p className="eyebrow">{job.companyName}</p>
           <h1>{job.title}</h1>
           <p>{[job.department, job.jobSubfamily, ...job.locations].filter(Boolean).join(' · ')}</p>
         </div>
-        <div className="detail-actions">
+        <div className={styles.actions}>
           <JobStatus status={job.status} />
           <a
             className="button-primary"
@@ -78,11 +81,11 @@ export default async function JobDetailPage({
           <JobScoreAction jobIds={[job.id]} profileVersionId={currentProfileVersionId} showHint />
         </div>
       </header>
-      <section className="detail-grid">
+      <section className={styles.grid}>
         <article className="panel-block">
           <p className="eyebrow">JOB DESCRIPTION</p>
           <h2>职位描述</h2>
-          <div className="job-description">{job.description}</div>
+          <div className={styles.description}>{job.description}</div>
           <dl className="facts">
             <div>
               <dt>经验</dt>
@@ -112,7 +115,7 @@ export default async function JobDetailPage({
           {job.revisions.length === 0 ? (
             <p className="muted">暂无修订记录。</p>
           ) : (
-            <ol className="timeline">
+            <ol className={styles.timeline}>
               {job.revisions.map((revision) => (
                 <li key={revision.id}>
                   <strong>版本 {revision.revisionNumber}</strong>
@@ -142,7 +145,7 @@ export default async function JobDetailPage({
           </div>
         ) : (
           job.matches.map((match) => (
-            <article className="match-card" key={match.id}>
+            <article className={styles.matchCard} key={match.id}>
               <header>
                 <div>
                   <strong>{match.totalScore.toFixed(1)} 分</strong>
@@ -152,7 +155,7 @@ export default async function JobDetailPage({
                 </div>
                 <small>个人资料版本 {match.profileVersionId}</small>
               </header>
-              <div className="score-grid">
+              <div className={styles.scoreGrid}>
                 {match.components.map((component) => (
                   <section key={component.dimension}>
                     <h3>{dimensionLabels[component.dimension] ?? component.dimension}</h3>
@@ -168,7 +171,7 @@ export default async function JobDetailPage({
                       </p>
                     ))}
                     {component.uncertainties.map((uncertain) => (
-                      <p className="uncertain" key={uncertain}>
+                      <p className={styles.uncertain} key={uncertain}>
                         待确认：{uncertain}
                       </p>
                     ))}
@@ -177,7 +180,7 @@ export default async function JobDetailPage({
               </div>
               <details>
                 <summary>查看资格规则证据</summary>
-                <ul className="evidence-list">
+                <ul className={styles.evidenceList}>
                   {match.ruleOutcomes.map((outcome) => (
                     <li key={outcome.ruleId}>
                       <strong>{outcome.status}</strong> {outcome.explanation}
@@ -185,10 +188,10 @@ export default async function JobDetailPage({
                   ))}
                 </ul>
               </details>
-              <section className="advice-block">
+              <section className={styles.adviceBlock}>
                 <h3>Agent 建议</h3>
                 {match.advice.status === 'available' ? (
-                  <div className="advice-grid">
+                  <div className={styles.adviceGrid}>
                     <div>
                       <h4>亮点</h4>
                       {match.advice.content.highlights.map((point) => (

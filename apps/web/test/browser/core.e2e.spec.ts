@@ -151,16 +151,16 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(page.getByRole('heading', { name: '自我评价' })).toBeVisible();
     await expect(page.getByText('RESUME SECTION')).toHaveCount(0);
     const schoolField = page.getByLabel('学校').locator('..');
-    const dateRangeField = page.locator('#resume-education .resume-date-range').first();
+    const dateRangeField = page.locator('#resume-education [data-resume-date-range]').first();
     const schoolBox = await schoolField.boundingBox();
     const dateRangeBox = await dateRangeField.boundingBox();
     expect(Math.abs((schoolBox?.width ?? 0) - (dateRangeBox?.width ?? 0))).toBeLessThan(1);
     const majorInput = page.getByLabel('专业', { exact: true });
-    const firstDateControl = dateRangeField.locator('.iso-date-input').first();
+    const firstDateControl = dateRangeField.locator('[data-iso-date-input]').first();
     const majorInputBox = await majorInput.boundingBox();
     const dateControlBox = await firstDateControl.boundingBox();
     expect(Math.abs((majorInputBox?.y ?? 0) - (dateControlBox?.y ?? 0))).toBeLessThan(1);
-    const dateRangeTitle = dateRangeField.locator('.resume-date-range-title');
+    const dateRangeTitle = dateRangeField.locator('[data-resume-date-range-title]');
     await expect(dateRangeTitle).toHaveCSS('font-weight', '400');
     const dateGap = await dateRangeField.evaluate((element) =>
       Number.parseFloat(getComputedStyle(element).rowGap),
@@ -170,7 +170,7 @@ test.describe('校招实习管理台核心流程', () => {
       .evaluate((element) => Number.parseFloat(getComputedStyle(element).rowGap));
     expect(dateGap).toBeGreaterThan(4);
     expect(Math.abs(dateGap - majorGap)).toBeLessThan(0.1);
-    await expect(dateRangeField.locator('.iso-date-display')).toHaveText([
+    await expect(dateRangeField.locator('[data-iso-date-display]')).toHaveText([
       'YYYY-MM-DD',
       'YYYY-MM-DD',
     ]);
@@ -266,7 +266,8 @@ test.describe('校招实习管理台核心流程', () => {
     ).toBeVisible();
     await expect(page.getByLabel('姓名')).toHaveValue('测试候选人');
     await expect(page.getByRole('heading', { name: '项目经历' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /扫描件 OCR 识别/ })).toBeDisabled();
+    await expect(page.getByText(/JPEG 和 PNG 会进入后台 OCR/)).toBeVisible();
+    await expect(page.locator('input[type="file"]')).toHaveAttribute('accept', /image\/jpeg/);
     await expect(page.getByText(/图片型 PDF 的 OCR 识别将在后续版本开放/)).toBeVisible();
   });
 

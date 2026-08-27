@@ -1,0 +1,225 @@
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(19rem, 0.65fr);
+  gap: clamp(2rem, 7vw, 7rem);
+  min-height: 22rem;
+  padding: clamp(2rem, 5vw, 4rem);
+  overflow: hidden;
+  border: 1px solid #313c78;
+  border-radius: 1.5rem;
+  background:
+    radial-gradient(circle at 88% 12%, rgb(224 108 93 / 24%), transparent 17rem),
+    linear-gradient(128deg, #242c59 0%, #3d4b9a 100%);
+  box-shadow: 0 1.5rem 3.5rem rgb(45 55 110 / 17%);
+  color: #f4fbf5;
+}
+
+.copy {
+  align-self: center;
+  max-width: 42rem;
+}
+
+.eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #d9deff;
+  font-size: 0.68rem;
+}
+
+.eyebrowRule {
+  width: 2rem;
+  height: 1px;
+  background: rgb(169 223 189 / 65%);
+}
+
+.hero h1 {
+  max-width: 13ch;
+  margin: 1.15rem 0 1rem;
+  color: #fff;
+  font-size: clamp(3rem, 5vw, 4.5rem);
+  letter-spacing: -0.07em;
+  line-height: 0.98;
+}
+
+.hero h1 em {
+  color: #f5b4aa;
+  font-style: normal;
+}
+
+.copy > p {
+  max-width: 32rem;
+  margin: 0;
+  color: #e3e6f7;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.primaryAction {
+  min-height: 3.1rem;
+  padding: 0 1.25rem;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #313c78;
+}
+
+.primaryAction:hover {
+  background: #fff;
+}
+
+.quietAction {
+  color: #f1f3ff;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.quietAction:hover {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.aside {
+  display: flex;
+  align-self: end;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.liveStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #d9deff;
+  font-size: 0.82rem;
+}
+
+.liveStatus strong {
+  margin-left: auto;
+  color: #fff;
+  font-weight: 750;
+}
+
+.liveDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: #e06c5d;
+  box-shadow: 0 0 0 0.25rem rgb(127 221 161 / 16%);
+}
+
+.note {
+  position: relative;
+  padding: 1.25rem;
+  border: 1px solid rgb(218 222 255 / 22%);
+  border-radius: 0.9rem;
+  background: rgb(20 26 65 / 30%);
+}
+
+.note::before {
+  position: absolute;
+  top: 1rem;
+  bottom: 1rem;
+  left: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--action);
+  content: '';
+}
+
+.noteLabel {
+  color: #c8cefa;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.note strong {
+  display: block;
+  margin-top: 0.65rem;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.note p {
+  margin: 0.5rem 0 0;
+  color: #d8dcf2;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.copy > *,
+.aside {
+  animation: hero-enter var(--motion-emphasis) var(--ease-out) both;
+}
+
+.copy > :nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.copy > :nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.copy > :nth-child(4),
+.aside {
+  animation-delay: 120ms;
+}
+
+@keyframes hero-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .aside {
+    align-self: stretch;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero {
+    min-height: 0;
+    padding: 1.5rem;
+    border-radius: 1.15rem;
+  }
+
+  .hero h1 {
+    font-size: 3rem;
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .primaryAction {
+    width: 100%;
+  }
+}
+
+@media (forced-colors: active) {
+  .note::before {
+    background: Highlight;
+  }
+}

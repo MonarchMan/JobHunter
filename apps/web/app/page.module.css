@@ -1,0 +1,154 @@
+.page {
+  width: min(76rem, calc(100% - 3rem));
+  padding: clamp(2rem, 5vw, 4.25rem) 0 5rem;
+}
+
+.overview {
+  margin-top: 3.5rem;
+}
+
+.description {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 0.88rem;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+}
+
+.syncPanel {
+  display: flex;
+  flex-direction: column;
+}
+
+.tightHeading {
+  margin-bottom: 1.35rem;
+}
+
+.textLink {
+  color: var(--primary-hover);
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.textLink:hover {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+
+.syncContent {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 8.8rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: #f8f9fc;
+}
+
+.syncIcon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.6rem;
+  height: 2.6rem;
+  place-items: center;
+  border-radius: 0.75rem;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.syncContent strong {
+  font-size: 0.92rem;
+}
+
+.syncContent p {
+  margin: 0.3rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.syncState {
+  margin-left: auto;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.syncNeedsAttention {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.syncEmpty {
+  align-items: start;
+}
+
+.syncEmpty .syncIcon {
+  background: var(--violet-soft);
+  color: var(--violet);
+}
+
+.emptyAction {
+  flex: 0 0 auto;
+  min-height: 2.25rem;
+  margin-left: auto;
+  padding: 0 0.8rem;
+  font-size: 0.78rem;
+}
+
+@media (min-width: 1025px) {
+  .page {
+    width: min(90rem, calc(100% - 3rem));
+  }
+}
+
+@media (max-width: 900px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .page {
+    width: min(100% - 1.5rem, 90rem);
+    padding-top: 1.5rem;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .syncEmpty {
+    align-items: start;
+    flex-wrap: wrap;
+  }
+
+  .emptyAction {
+    margin-left: 3.45rem;
+  }
+}

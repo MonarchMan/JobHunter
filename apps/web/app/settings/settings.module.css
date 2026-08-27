@@ -1,0 +1,49 @@
+.settingsPanel {
+  display: grid;
+  gap: 2rem;
+  max-width: 54rem;
+}
+
+.sectionHeading {
+  max-width: 42rem;
+}
+
+.sectionHeading p:last-child {
+  line-height: 1.7;
+}
+
+.settingsForm {
+  display: grid;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.settingsToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: min(100%, 30rem);
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-muted);
+  color: #50586a;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.settingsToggle input {
+  width: 1.25rem;
+  min-height: 1.25rem;
+  accent-color: var(--primary);
+}
+
+.settingsToggle span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.settingsToggle small {
+  color: var(--muted-ink);
+}

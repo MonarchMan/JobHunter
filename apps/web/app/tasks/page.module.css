@@ -1,0 +1,69 @@
+.filters {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) minmax(13rem, 1fr) auto auto;
+  align-items: end;
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.filters label {
+  display: grid;
+  gap: 0.4rem;
+  color: #50586a;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.filters :global(.button-secondary) {
+  padding-inline: 1rem;
+}
+
+.cards {
+  display: none;
+}
+
+.card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  background: var(--surface);
+}
+
+.cardHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.card p {
+  margin: 0;
+  color: #667085;
+}
+
+@media (max-width: 900px) {
+  .desktopTable {
+    display: none;
+  }
+
+  .cards {
+    display: grid;
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .filters button,
+  .filters :global(.button-secondary) {
+    width: 100%;
+  }
+}

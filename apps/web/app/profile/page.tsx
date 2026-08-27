@@ -9,6 +9,7 @@ import { ResumeImport } from './resume-import.js';
 import { Pagination } from '../components/pagination.js';
 import { webPagination } from '@jobhunter/application/web';
 import { ResumeEditor } from './resume-editor.js';
+import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '个人资料' };
@@ -97,7 +98,7 @@ export default async function ProfilePage({
         versionId={detail.current.id}
         profile={detail.current.effective}
       />
-      <section className="profile-overview">
+      <section className={styles.overview} data-profile-overview>
         <article className="panel-block">
           <p className="eyebrow">CURRENT VERSION</p>
           <h2>版本 {detail.current.versionNumber}</h2>
@@ -133,7 +134,7 @@ export default async function ProfilePage({
         <article className="panel-block">
           <p className="eyebrow">VERSION HISTORY</p>
           <h2>历史版本</h2>
-          <ol className="version-list">
+          <ol className={styles.versionList}>
             {visibleVersions.map((version) => (
               <li key={version.id}>
                 <strong>版本 {version.versionNumber}</strong>
@@ -155,7 +156,7 @@ export default async function ProfilePage({
           />
         </article>
       </section>
-      <section className="comparison-grid" aria-label="提取值与有效值">
+      <section className={styles.comparison} data-profile-comparison aria-label="提取值与有效值">
         <details className="panel-block developer-details">
           <summary>开发者详情：原提取值 JSON</summary>
           <pre tabIndex={0} aria-label="原提取值 JSON">

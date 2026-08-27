@@ -1,0 +1,36 @@
+.pagination {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: center;
+  margin-top: 1rem;
+  color: #50586a;
+}
+
+.pagination a {
+  display: inline-grid;
+  min-width: 2.15rem;
+  min-height: 2.15rem;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: var(--surface);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.pagination a:hover,
+.pagination a.current {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--surface);
+  transform: translateY(-1px);
+}
+
+.summary,
+.ellipsis {
+  margin: 0 0.35rem;
+  color: var(--muted-ink);
+  font-size: 0.86rem;
+}

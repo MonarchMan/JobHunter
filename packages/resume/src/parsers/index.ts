@@ -5,7 +5,7 @@ export type ResumeParseStatus = 'parsed' | 'needs_ocr' | 'failed';
 
 export interface ResumeParseResult {
   readonly status: ResumeParseStatus;
-  readonly parser: 'pdfjs' | 'mammoth' | 'utf8';
+  readonly parser: 'pdfjs' | 'mammoth' | 'utf8' | 'image';
   readonly parserVersion: string;
   readonly text: string | null;
   readonly characterCount: number;
@@ -22,15 +22,21 @@ const parserVersions = {
   pdfjs: 'pdfjs-dist@5',
   mammoth: 'mammoth@1',
   utf8: 'utf8@1',
+  image: 'image-needs-ocr@1',
 } as const;
 
-function normalizeExtractedText(value: string): string {
+export function normalizeResumeText(value: string): string {
   return value
     .replaceAll('\u0000', '')
     .replaceAll('\r\n', '\n')
     .replaceAll('\r', '\n')
     .split('\n')
-    .map((line) => line.replaceAll(/[\t ]+/g, ' ').trim())
+    .map((line) =>
+      line
+        .replaceAll(/[\t ]+/g, ' ')
+        .replaceAll(/(?<=\p{Script=Han})\s+(?=\p{Script=Han})/gu, '')
+        .trim(),
+    )
     .join('\n')
     .replaceAll(/\n{3,}/g, '\n\n')
     .trim();
@@ -39,6 +45,7 @@ function normalizeExtractedText(value: string): string {
 function parserFor(mediaType: ResumeMediaType): ResumeParseResult['parser'] {
   if (mediaType === 'application/pdf') return 'pdfjs';
   if (mediaType === 'text/plain') return 'utf8';
+  if (mediaType === 'image/jpeg' || mediaType === 'image/png') return 'image';
   return 'mammoth';
 }
 
@@ -77,6 +84,7 @@ async function extract(
   signal: AbortSignal | undefined,
 ): Promise<string> {
   ensureNotAborted(signal);
+  if (mediaType === 'image/jpeg' || mediaType === 'image/png') return '';
   if (mediaType === 'text/plain') {
     return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
   }
@@ -102,7 +110,17 @@ export async function parseResumeText(
   }
 
   try {
-    const text = normalizeExtractedText(await extract(bytes, mediaType, options.signal));
+    if (parser === 'image') {
+      return {
+        status: 'needs_ocr',
+        parser,
+        parserVersion: parserVersions.image,
+        text: null,
+        characterCount: 0,
+        errorSummary: 'Resume image requires background OCR.',
+      };
+    }
+    const text = normalizeResumeText(await extract(bytes, mediaType, options.signal));
     const nonWhitespace = text.replaceAll(/\s/g, '').length;
     if (text.length > maximum) {
       return {

@@ -1,0 +1,152 @@
+.backLink {
+  display: inline-block;
+  margin-bottom: 2rem;
+  color: var(--primary-hover);
+  font-weight: 700;
+}
+
+.heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.heading h1 {
+  max-width: 52rem;
+  margin: 0.4rem 0 1rem;
+  font-size: clamp(2rem, 5vw, 3.6rem);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 0.75rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+  gap: 1rem;
+}
+
+.description {
+  margin: 1.5rem 0;
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.timeline {
+  display: grid;
+  gap: 1rem;
+  padding-left: 1.2rem;
+}
+
+.timeline li {
+  padding-left: 0.5rem;
+}
+
+.timeline time,
+.timeline span {
+  display: block;
+  margin-top: 0.25rem;
+  color: #667085;
+  font-size: 0.82rem;
+}
+
+.matchCard {
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.matchCard + .matchCard {
+  margin-top: 1rem;
+}
+
+.matchCard > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.matchCard > header strong,
+.matchCard > header span {
+  display: block;
+}
+
+.matchCard > header strong {
+  font-size: 2rem;
+}
+
+.matchCard > header span,
+.matchCard > header small {
+  color: #667085;
+}
+
+.scoreGrid,
+.adviceGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.scoreGrid section,
+.adviceGrid > div {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  background: var(--canvas);
+}
+
+.scoreGrid h3,
+.adviceGrid h4 {
+  margin-top: 0;
+}
+
+.scoreGrid p,
+.adviceGrid p,
+.evidenceList {
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.uncertain {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.adviceBlock {
+  padding-top: 1rem;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scoreGrid,
+  .adviceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .heading {
+    flex-direction: column;
+  }
+
+  .actions {
+    justify-content: start;
+  }
+
+  .scoreGrid,
+  .adviceGrid {
+    grid-template-columns: 1fr;
+  }
+}

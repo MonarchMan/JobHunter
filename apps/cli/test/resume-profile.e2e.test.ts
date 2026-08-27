@@ -106,14 +106,14 @@ function seedFirstProfileVersion(input: {
 }
 
 describe('resume and profile commands', () => {
-  it('imports the redacted DOCX without exposing text and versions manual profile changes', async () => {
+  it('imports the reference JPEG without exposing content and versions manual profile changes', async () => {
     const root = await createTemporaryDataRoot('jobhunter-cli-profile-');
     const dataRoot = path.join(root.path, '中文 数据');
-    const resumePath = path.resolve('docs', 'resumes', 'agent简历 - 新.docx');
+    const resumePath = path.resolve('docs', 'resumes', 'nowcoder_1787802316450.jpeg');
     try {
       expect((await command(dataRoot, ['init'])).exitCode).toBe(0);
       const imported = await command(dataRoot, ['resume', 'import', resumePath]);
-      expect(imported.exitCode).toBe(0);
+      expect(imported.exitCode).toBe(4);
       expect(imported.stderr).toBe('');
       const serialized = JSON.stringify(imported.body);
       expect(serialized).not.toContain('extractedText');
@@ -125,7 +125,7 @@ describe('resume and profile commands', () => {
           readonly task: { readonly id: string; readonly status: string };
         };
       };
-      expect(result.data.document.parseStatus).toBe('parsed');
+      expect(result.data.document.parseStatus).toBe('needs_ocr');
       expect(result.data.task.status).toBe('pending');
 
       const duplicate = await command(dataRoot, ['resume', 'import', resumePath]);

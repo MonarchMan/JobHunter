@@ -1,0 +1,394 @@
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid var(--action);
+  outline-offset: 3px;
+}
+
+main:focus {
+  outline: none;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 10;
+  top: 0.75rem;
+  left: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  background: #1c2130;
+  color: #fff;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+main {
+  width: min(72rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 5rem 0;
+}
+
+.panel {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+}
+
+.eyebrow {
+  color: #4e5fbb;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+h1 {
+  font-size: clamp(2.25rem, 6vw, 4.5rem);
+  line-height: 1;
+}
+
+h2 {
+  margin: 0.25rem 0;
+}
+
+.panel {
+  border: 1px solid #dee2ec;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 0.4rem 1.5rem rgb(33 54 41 / 5%);
+}
+
+.panel {
+  margin-top: 1rem;
+  padding: 1.5rem;
+}
+
+.muted {
+  color: #667085;
+}
+
+button {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: #4e5fbb;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+button:hover:not(:disabled),
+.button-primary:hover,
+.button-secondary:hover {
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled),
+.button-primary:active,
+.button-secondary:active {
+  transform: translateY(0);
+  box-shadow: inset 0 0.15rem 0.3rem rgb(20 55 35 / 18%);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+input,
+select,
+textarea {
+  min-height: 2.75rem;
+  width: 100%;
+  padding: 0 0.75rem;
+  border: 1px solid #b8bfcc;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #1c2130;
+  font: inherit;
+}
+
+textarea {
+  padding: 0.75rem;
+  resize: vertical;
+}
+
+.button-secondary {
+  display: inline-grid;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  place-items: center;
+  border: 1px solid #b8bfcc;
+  border-radius: 0.5rem;
+  color: #354139;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+button,
+.button-primary,
+.button-secondary,
+.button-muted {
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    opacity 160ms ease;
+}
+
+.button-primary {
+  display: inline-grid;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  place-items: center;
+  border-radius: 0.5rem;
+  background: #4e5fbb;
+  color: #fff;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.status {
+  display: inline-block;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.status-active {
+  background: #e6f3f8;
+  color: #236a8d;
+}
+
+.status-stale {
+  background: #fff3d8;
+  color: #9a6514;
+}
+
+.status-closed {
+  background: #eef0f4;
+  color: #5e6675;
+}
+
+.status-pending {
+  background: var(--blue-soft, #e3f1f7);
+  color: var(--blue, #316d8b);
+}
+
+.status-running {
+  background: var(--violet-soft, #eeeaff);
+  color: var(--violet, #6655a6);
+}
+
+.status-succeeded {
+  background: var(--primary-soft, #e9ecff);
+  color: var(--primary, #4e5fbb);
+}
+
+.status-failed {
+  background: #fcebe8;
+  color: #a13d32;
+}
+
+.status-cancelled {
+  background: #eef0f4;
+  color: #5e6675;
+}
+
+.empty-state {
+  padding: 3rem;
+  border: 1px dashed #b8bfcc;
+  border-radius: 1rem;
+  text-align: center;
+}
+
+.page-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  min-height: 13rem;
+  margin-top: 1.5rem;
+  padding: 2.5rem 1.5rem;
+}
+
+.page-empty-state h2,
+.page-empty-state p {
+  margin: 0;
+}
+
+.page-empty-state p {
+  max-width: 34rem;
+  line-height: 1.65;
+}
+
+.page-empty-state .button-secondary {
+  flex: 0 0 auto;
+  min-width: 7rem;
+}
+
+.empty-state-icon {
+  display: grid;
+  width: 2.8rem;
+  height: 2.8rem;
+  place-items: center;
+  margin-bottom: 0.35rem;
+  border-radius: 0.85rem;
+  background: var(--violet-soft, #eeeaff);
+  color: var(--violet, #6655a6);
+  font-size: 1.6rem;
+  font-weight: 800;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.panel-block {
+  padding: 1.5rem;
+  border: 1px solid #dee2ec;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.facts div {
+  padding-top: 0.8rem;
+  border-top: 1px solid #eaecf2;
+}
+
+.facts dt {
+  color: #667085;
+  font-size: 0.8rem;
+}
+
+.facts dd {
+  margin: 0.3rem 0 0;
+}
+
+.section-heading {
+  align-items: end;
+  margin: 0 0 1rem;
+}
+
+.section-heading h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.04em;
+}
+
+.risk {
+  color: #a13d32;
+}
+
+details {
+  padding: 1rem 0;
+  border-top: 1px solid #eaecf2;
+  border-bottom: 1px solid #eaecf2;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.button-muted {
+  border: 1px solid #b8bfcc;
+  background: #eef0f4;
+  color: #354139;
+}
+
+.form-feedback {
+  padding: 0.85rem 1rem;
+  border-radius: 0.6rem;
+}
+
+.form-feedback.error {
+  background: #fcebe8;
+  color: #a13d32;
+}
+
+.form-feedback.success {
+  background: #e6f3f8;
+  color: #236a8d;
+}
+
+.button-link {
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+  color: #3f4e9a;
+  text-decoration: underline;
+}
+
+.button-danger {
+  background: #a13d32;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .panel {
+    align-items: start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 600px) {
+  .section-heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .facts {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Accessibility override: component motion must yield to the user's OS preference. */
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,14 @@
+.panel {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 1.5rem;
+  border-color: var(--line);
+  border-radius: 1rem;
+}
+
+@media (max-width: 600px) {
+  .panel {
+    padding: 1.15rem;
+  }
+}

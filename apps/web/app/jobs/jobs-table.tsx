@@ -8,6 +8,7 @@ import { JobStatus } from '../components/job-status.js';
 import { Icon } from '../components/ui-icon.js';
 import { TruncatedText } from '../components/truncated-text.js';
 import { CompanyLogo } from '../components/company-logo.js';
+import styles from './jobs-table.module.css';
 
 export function JobsTable({
   jobs,
@@ -34,7 +35,7 @@ export function JobsTable({
 
   return (
     <>
-      <div className="job-selection-toolbar">
+      <div className={styles.selectionToolbar}>
         <span aria-live="polite">已选择 {selectedIds.length} 项</span>
         <JobScoreAction
           jobIds={selectedIds}
@@ -43,12 +44,12 @@ export function JobsTable({
           showHint
         />
       </div>
-      <div className="table-scroll">
+      <div className={styles.tableScroll}>
         <table>
           <caption className="sr-only">可投递职位列表</caption>
           <thead>
             <tr>
-              <th scope="col" className="selection-cell">
+              <th scope="col" className={styles.selectionCell}>
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -66,8 +67,8 @@ export function JobsTable({
           </thead>
           <tbody>
             {jobs.map((job) => (
-              <tr key={job.id} className={job.status === 'stale' ? 'row-stale' : undefined}>
-                <td className="selection-cell">
+              <tr key={job.id} className={job.status === 'stale' ? styles.staleRow : undefined}>
+                <td className={styles.selectionCell}>
                   <input
                     type="checkbox"
                     checked={selected.has(job.id)}
@@ -79,7 +80,7 @@ export function JobsTable({
                 </td>
                 <td>
                   <a
-                    className="job-link"
+                    className={styles.jobLink}
                     href={job.detailUrl}
                     target="_blank"
                     rel="noopener noreferrer"
@@ -90,13 +91,13 @@ export function JobsTable({
                       focusable={false}
                     />
                   </a>
-                  <span className="job-row-meta">
+                  <span>
                     {job.department ?? job.jobSubfamily ?? null}
                     <JobStatus status={job.status} />
                   </span>
                 </td>
                 <td>
-                  <span className="company-cell">
+                  <span className={styles.company}>
                     <CompanyLogo name={job.companyName} size="small" />
                     <TruncatedText value={job.companyName} />
                   </span>
@@ -114,9 +115,9 @@ export function JobsTable({
                   </time>
                 </td>
                 <td>
-                  <div className="job-row-actions">
+                  <div className={styles.rowActions}>
                     <a
-                      className="button-secondary job-apply-link"
+                      className={['button-secondary', styles.applyLink].filter(Boolean).join(' ')}
                       href={job.applyUrl}
                       target="_blank"
                       rel="noopener noreferrer"
@@ -132,11 +133,11 @@ export function JobsTable({
           </tbody>
         </table>
       </div>
-      <div className="job-cards" aria-label="可投递职位卡片列表">
+      <div className={styles.cards} aria-label="可投递职位卡片列表">
         {jobs.map((job) => (
-          <article className="job-card" key={job.id}>
-            <div className="job-card-heading">
-              <label className="job-card-selection">
+          <article className={styles.card} key={job.id}>
+            <div className={styles.cardHeading}>
+              <label className={styles.cardSelection}>
                 <input
                   type="checkbox"
                   checked={selected.has(job.id)}
@@ -147,7 +148,7 @@ export function JobsTable({
                 <span className="sr-only">选择职位：{job.title}</span>
               </label>
               <a
-                className="job-link"
+                className={styles.jobLink}
                 href={job.detailUrl}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -163,9 +164,9 @@ export function JobsTable({
               {job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`} · 更新于{' '}
               {new Intl.DateTimeFormat('zh-CN').format(new Date(job.updatedAt))}
             </small>
-            <div className="job-row-actions">
+            <div className={styles.rowActions}>
               <a
-                className="button-primary job-apply-link"
+                className={['button-primary', styles.applyLink].filter(Boolean).join(' ')}
                 href={job.applyUrl}
                 target="_blank"
                 rel="noopener noreferrer"

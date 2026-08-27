@@ -1,0 +1,91 @@
+.trigger {
+  min-height: auto;
+  padding: 0;
+  color: var(--primary-hover);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+}
+
+.dialog {
+  width: min(48rem, 100%);
+  max-height: min(42rem, 100%);
+  margin: auto;
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+  box-shadow: 0 1.5rem 4rem rgb(34 40 71 / 18%);
+  animation: dialog-in var(--motion-emphasis) var(--ease-out) both;
+}
+
+.dialog::backdrop {
+  background: rgb(28 33 48 / 44%);
+  animation: backdrop-in var(--motion-standard) var(--ease-standard) both;
+  backdrop-filter: blur(3px);
+}
+
+.header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.header h2 {
+  margin: 0;
+}
+
+.body {
+  display: grid;
+  gap: 1.25rem;
+  padding: 1.5rem;
+}
+
+.failureDetail {
+  padding: 1rem 1.1rem;
+  border-left: 0.25rem solid var(--danger);
+  border-radius: 0.5rem;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.failureDetail h3,
+.failureDetail p {
+  margin: 0;
+}
+
+.failureDetail h3 {
+  margin-bottom: 0.5rem;
+  color: var(--danger);
+}
+
+.failureDetail p + p {
+  margin-top: 0.35rem;
+  line-height: 1.6;
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

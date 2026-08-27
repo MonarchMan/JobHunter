@@ -1,0 +1,59 @@
+.form {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.hint {
+  color: var(--muted-ink);
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.dropzone {
+  display: grid;
+  gap: 0.35rem;
+  min-width: min(100%, 25rem);
+  padding: 1.25rem;
+  border: 1px dashed #aeb6d8;
+  border-radius: 0.85rem;
+  background: #f8f9fc;
+  cursor: pointer;
+}
+
+.dropzone[data-dragging='true'] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.dropzone span {
+  color: #667085;
+  font-size: 0.85rem;
+}
+
+.dropzone input {
+  margin-top: 0.25rem;
+}
+
+.dropzone input[type='file'] {
+  padding: 0.35rem;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted-ink);
+  font-size: 0.82rem;
+}
+
+.dropzone input[type='file']::file-selector-button {
+  min-height: 2.2rem;
+  margin-right: 0.7rem;
+  padding: 0 0.8rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+}

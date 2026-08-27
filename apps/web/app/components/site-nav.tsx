@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useRef } from 'react';
 import { Icon } from './ui-icon.js';
+import styles from './site-nav.module.css';
 
 const primaryLinks = [
   { href: '/', label: '工作台', icon: 'dashboard' },
@@ -27,19 +28,21 @@ export function SiteNav(): ReactElement {
   const secondaryActive = secondaryLinks.some((link) => isCurrentPath(pathname, link.href));
 
   return (
-    <nav className="site-nav" aria-label="主导航">
+    <nav className={styles.nav} aria-label="主导航">
       {primaryLinks.map((link) => {
         const current = isCurrentPath(pathname, link.href);
         return (
           <a
-            className={current ? 'site-nav-link is-active' : 'site-nav-link'}
+            className={[styles.link, current ? styles.current : undefined]
+              .filter(Boolean)
+              .join(' ')}
             href={link.href}
             aria-current={current ? 'page' : undefined}
             key={link.href}
           >
             <Icon name={link.icon} />
-            <span className="nav-label-full">{link.label}</span>
-            <span className="nav-label-short">
+            <span className={styles.fullLabel}>{link.label}</span>
+            <span className={styles.shortLabel}>
               {'shortLabel' in link ? link.shortLabel : link.label}
             </span>
           </a>
@@ -49,9 +52,9 @@ export function SiteNav(): ReactElement {
         const current = isCurrentPath(pathname, link.href);
         return (
           <a
-            className={
-              current ? 'site-nav-link nav-secondary is-active' : 'site-nav-link nav-secondary'
-            }
+            className={[styles.link, styles.secondary, current ? styles.current : undefined]
+              .filter(Boolean)
+              .join(' ')}
             href={link.href}
             aria-current={current ? 'page' : undefined}
             key={link.href}
@@ -63,7 +66,7 @@ export function SiteNav(): ReactElement {
       })}
       <details
         ref={moreNavigationReference}
-        className="mobile-more-nav"
+        className={styles.more}
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             moreNavigationReference.current?.removeAttribute('open');
@@ -71,16 +74,22 @@ export function SiteNav(): ReactElement {
           }
         }}
       >
-        <summary className={secondaryActive ? 'site-nav-link is-active' : 'site-nav-link'}>
+        <summary
+          className={[styles.link, secondaryActive ? styles.current : undefined]
+            .filter(Boolean)
+            .join(' ')}
+        >
           <Icon name="more" />
           更多
         </summary>
-        <div className="mobile-more-menu">
+        <div className={styles.moreMenu}>
           {secondaryLinks.map((link) => {
             const current = isCurrentPath(pathname, link.href);
             return (
               <a
-                className={current ? 'mobile-more-link is-active' : 'mobile-more-link'}
+                className={[styles.moreLink, current ? styles.moreLinkCurrent : undefined]
+                  .filter(Boolean)
+                  .join(' ')}
                 href={link.href}
                 aria-current={current ? 'page' : undefined}
                 key={link.href}

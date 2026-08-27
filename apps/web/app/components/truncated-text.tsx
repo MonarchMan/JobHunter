@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import styles from './truncated-text.module.css';
 
 export function TruncatedText({
   value,
@@ -7,15 +8,15 @@ export function TruncatedText({
 }: Readonly<{ value: string; className?: string; focusable?: boolean }>): ReactElement {
   return (
     <span
-      className={`truncated-text ${className}`.trim()}
+      className={[styles.root, className].filter(Boolean).join(' ')}
       tabIndex={focusable ? 0 : undefined}
       aria-label={value}
       title={value}
     >
-      <span className="truncated-text-value" aria-hidden="true">
+      <span className={styles.value} aria-hidden="true">
         {value}
       </span>
-      <span className="truncated-text-tooltip" role="tooltip">
+      <span className={styles.tooltip} role="tooltip">
         {value}
       </span>
     </span>

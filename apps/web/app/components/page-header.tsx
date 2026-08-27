@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import styles from './page-header.module.css';
 
 export function PageHeader({
   eyebrow,
@@ -12,7 +13,7 @@ export function PageHeader({
   children?: ReactNode;
 }>): ReactElement {
   return (
-    <header className="page-heading">
+    <header className={styles.header}>
       <div>
         <p className="eyebrow">{eyebrow}</p>
         <h1>{title}</h1>

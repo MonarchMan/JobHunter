@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import styles from './ui-icon.module.css';
 
 export type IconName =
   | 'dashboard'
@@ -98,7 +99,7 @@ export function Icon({
 }: Readonly<{ name: IconName; size?: number }>): ReactElement {
   return (
     <svg
-      className="ui-icon"
+      className={styles.icon}
       width={size}
       height={size}
       viewBox="0 0 24 24"

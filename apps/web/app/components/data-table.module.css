@@ -1,0 +1,94 @@
+.panel {
+  display: block;
+  margin-bottom: 1.25rem;
+}
+
+.scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+  box-shadow: 0 0.35rem 1.25rem rgb(54 64 117 / 6%);
+  scrollbar-gutter: stable;
+}
+
+.scroll table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.panel table {
+  min-width: 48rem;
+  table-layout: fixed;
+}
+
+.scroll th,
+.scroll td {
+  padding: 1rem;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  vertical-align: top;
+}
+
+.scroll th {
+  color: #626b7c;
+  font-size: 0.78rem;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.scroll td:first-child {
+  min-width: 18rem;
+}
+
+.scroll td:first-child span {
+  display: block;
+  margin-top: 0.35rem;
+  color: #667085;
+  font-size: 0.82rem;
+}
+
+.scroll tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-standard);
+}
+
+.scroll tbody tr:hover {
+  background: #f6f7ff;
+}
+
+.panel th,
+.panel td {
+  padding: 0.8rem;
+}
+
+.panel th {
+  color: #667085;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.panel td small {
+  display: block;
+  margin-top: 0.3rem;
+  color: #667085;
+}
+
+.panel td.empty {
+  padding: 2.25rem 1rem;
+  color: var(--muted-ink);
+  text-align: center;
+}
+
+.empty strong,
+.empty span {
+  display: block;
+}
+
+.empty strong {
+  margin-bottom: 0.35rem;
+  color: var(--ink);
+}
+
+.empty span {
+  font-size: 0.82rem;
+}

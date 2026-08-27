@@ -1,34 +1,39 @@
 import type { ReactElement } from 'react';
+import styles from './dashboard-hero.module.css';
 
 export function DashboardHero(): ReactElement {
   return (
-    <section className="dashboard-hero" aria-labelledby="dashboard-title">
-      <div className="hero-copy">
-        <div className="eyebrow hero-eyebrow">
-          PERSONAL JOB SEARCH OS <span className="eyebrow-rule" aria-hidden="true" /> LOCAL-FIRST
+    <section className={styles.hero} aria-labelledby="dashboard-title">
+      <div className={styles.copy}>
+        <div className={['eyebrow', styles.eyebrow].filter(Boolean).join(' ')}>
+          PERSONAL JOB SEARCH OS <span className={styles.eyebrowRule} aria-hidden="true" />{' '}
+          LOCAL-FIRST
         </div>
         <h1 id="dashboard-title">
           把下一份工作，
           <em>找得更快。</em>
         </h1>
         <p>从简历画像到官网职位同步，把每一次求职行动集中在一个清晰的工作台里。</p>
-        <div className="hero-actions">
-          <a className="button-primary button-large" href="/profile">
+        <div className={styles.actions}>
+          <a
+            className={['button-primary', styles.primaryAction].filter(Boolean).join(' ')}
+            href="/profile"
+          >
             建立个人资料 <span aria-hidden="true">→</span>
           </a>
-          <a className="button-quiet" href="/jobs">
+          <a className={styles.quietAction} href="/jobs">
             浏览职位 <span aria-hidden="true">↗</span>
           </a>
         </div>
       </div>
-      <div className="hero-aside" aria-label="工作台状态">
-        <div className="live-status">
-          <span className="live-dot" aria-hidden="true" />
+      <div className={styles.aside} aria-label="工作台状态">
+        <div className={styles.liveStatus}>
+          <span className={styles.liveDot} aria-hidden="true" />
           <span>本地工作区</span>
           <strong>已就绪</strong>
         </div>
-        <div className="hero-note">
-          <span className="hero-note-label">NEXT BEST ACTION</span>
+        <div className={styles.note}>
+          <span className={styles.noteLabel}>NEXT BEST ACTION</span>
           <strong>先建立画像，再开始匹配</strong>
           <p>让岗位列表从“有职位”变成“适合你的职位”。</p>
         </div>

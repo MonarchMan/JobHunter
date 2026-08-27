@@ -3,12 +3,19 @@
 import type { ReactElement } from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { CompanyLogo } from './company-logo.js';
+import styles from './company-combobox.module.css';
 
-export function CompanyCombobox({ companies, defaultValue = '' }: Readonly<{ companies: readonly string[]; defaultValue?: string }>): ReactElement {
+export function CompanyCombobox({
+  companies,
+  defaultValue = '',
+}: Readonly<{ companies: readonly string[]; defaultValue?: string }>): ReactElement {
   const rootReference = useRef<HTMLDivElement>(null);
   const inputReference = useRef<HTMLInputElement>(null);
   const listboxId = useId();
-  const uniqueCompanies = useMemo(() => [...new Set(companies)].sort((left, right) => left.localeCompare(right, 'zh-CN')), [companies]);
+  const uniqueCompanies = useMemo(
+    () => [...new Set(companies)].sort((left, right) => left.localeCompare(right, 'zh-CN')),
+    [companies],
+  );
   const [value, setValue] = useState(defaultValue);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -17,10 +24,13 @@ export function CompanyCombobox({ companies, defaultValue = '' }: Readonly<{ com
 
   useEffect(() => {
     const close = (event: PointerEvent): void => {
-      if (event.target instanceof Node && !rootReference.current?.contains(event.target)) setOpen(false);
+      if (event.target instanceof Node && !rootReference.current?.contains(event.target))
+        setOpen(false);
     };
     document.addEventListener('pointerdown', close);
-    return () => document.removeEventListener('pointerdown', close);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+    };
   }, []);
 
   const choose = (company: string): void => {
@@ -30,8 +40,8 @@ export function CompanyCombobox({ companies, defaultValue = '' }: Readonly<{ com
   };
 
   return (
-    <div className="company-combobox" ref={rootReference}>
-      <div className="company-combobox-control">
+    <div className={styles.combobox} ref={rootReference}>
+      <div className={styles.control}>
         <input
           ref={inputReference}
           name="company"
@@ -39,17 +49,23 @@ export function CompanyCombobox({ companies, defaultValue = '' }: Readonly<{ com
           aria-autocomplete="list"
           aria-controls={listboxId}
           aria-expanded={open}
-          aria-activedescendant={open && matches[activeIndex] ? `${listboxId}-${String(activeIndex)}` : undefined}
+          aria-activedescendant={
+            open && matches[activeIndex] ? `${listboxId}-${String(activeIndex)}` : undefined
+          }
           value={value}
           placeholder="选择或输入公司"
           autoComplete="off"
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setOpen(true);
+          }}
           onChange={(event) => {
             setValue(event.target.value);
             setActiveIndex(0);
             if (!composing) setOpen(true);
           }}
-          onCompositionStart={() => setComposing(true)}
+          onCompositionStart={() => {
+            setComposing(true);
+          }}
           onCompositionEnd={() => {
             setComposing(false);
             setOpen(true);
@@ -72,19 +88,61 @@ export function CompanyCombobox({ companies, defaultValue = '' }: Readonly<{ com
           }}
         />
         {value ? (
-          <button type="button" className="combobox-clear" aria-label="清除公司" onClick={() => { setValue(''); setOpen(true); inputReference.current?.focus(); }}>×</button>
+          <button
+            type="button"
+            className={styles.clear}
+            aria-label="清除公司"
+            onClick={() => {
+              setValue('');
+              setOpen(true);
+              inputReference.current?.focus();
+            }}
+          >
+            ×
+          </button>
         ) : null}
-        <button type="button" className="combobox-toggle" aria-label={open ? '收起公司选项' : '展开公司选项'} aria-expanded={open} onClick={() => { setOpen((current) => !current); inputReference.current?.focus(); }}>⌄</button>
+        <button
+          type="button"
+          className={styles.toggle}
+          aria-label={open ? '收起公司选项' : '展开公司选项'}
+          aria-expanded={open}
+          onClick={() => {
+            setOpen((current) => !current);
+            inputReference.current?.focus();
+          }}
+        >
+          ⌄
+        </button>
       </div>
       {open ? (
-        <ul id={listboxId} className="company-combobox-list" role="listbox" aria-label="公司选项">
-          {matches.length ? matches.map((company, index) => (
-            <li id={`${listboxId}-${String(index)}`} role="option" aria-selected={value === company} className={index === activeIndex ? 'is-active' : undefined} key={company} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(company)}>
-              <CompanyLogo name={company} size="small" />
-              <span>{company}</span>
-              {value === company ? <span className="combobox-check" aria-hidden="true">✓</span> : null}
-            </li>
-          )) : <li className="combobox-empty">没有匹配公司，可保留当前文本筛选</li>}
+        <ul id={listboxId} className={styles.list} role="listbox" aria-label="公司选项">
+          {matches.length ? (
+            matches.map((company, index) => (
+              <li
+                id={`${listboxId}-${String(index)}`}
+                role="option"
+                aria-selected={value === company}
+                className={index === activeIndex ? styles.active : undefined}
+                key={company}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                }}
+                onClick={() => {
+                  choose(company);
+                }}
+              >
+                <CompanyLogo name={company} size="small" />
+                <span>{company}</span>
+                {value === company ? (
+                  <span className={styles.check} aria-hidden="true">
+                    ✓
+                  </span>
+                ) : null}
+              </li>
+            ))
+          ) : (
+            <li className={styles.empty}>没有匹配公司，可保留当前文本筛选</li>
+          )}
         </ul>
       ) : null}
     </div>

@@ -20,6 +20,7 @@
     "@jobhunter/domain": "workspace:*",
     "@jobhunter/llm": "workspace:*",
     "@jobhunter/matching": "workspace:*",
+    "@jobhunter/resume": "workspace:*",
     "@jobhunter/source-core": "workspace:*",
     "@jobhunter/sources": "workspace:*",
     "playwright": "^1.62.1"

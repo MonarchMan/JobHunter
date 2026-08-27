@@ -1,0 +1,92 @@
+.primary::before {
+  background: var(--primary);
+}
+
+.blue::before {
+  background: var(--blue);
+}
+
+.violet::before {
+  background: var(--violet);
+}
+
+.amber::before {
+  background: var(--amber);
+}
+
+.card {
+  position: relative;
+  display: grid;
+  gap: 0.75rem;
+  min-height: 9.5rem;
+  padding: 1.25rem 1.35rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: var(--surface);
+  box-shadow: none;
+  text-decoration: none;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-standard) var(--ease-out),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+/* Preserve the current global cascade while this change only moves style ownership. */
+.card::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 0.2rem;
+  background: var(--primary);
+  content: '';
+}
+
+.card:hover {
+  border-color: #c6ccec;
+  box-shadow: 0 0.8rem 1.7rem rgb(60 73 145 / 10%);
+  transform: translateY(-2px);
+}
+
+.card p,
+.card span {
+  margin: 0;
+}
+
+.card p {
+  color: var(--muted-ink);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.card strong {
+  font-size: 2.4rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.06em;
+}
+
+.card span {
+  align-self: end;
+  color: var(--muted-ink);
+  font-size: 0.85rem;
+}
+
+.arrow {
+  position: absolute;
+  top: 1.2rem;
+  right: 1.25rem;
+  color: #8a93a5;
+  font-size: 1.1rem;
+  transition:
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.card:hover .arrow {
+  color: var(--primary);
+  transform: translate(2px, -2px);
+}

@@ -1,0 +1,64 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, 'Noto Sans SC', 'Microsoft YaHei UI', system-ui, sans-serif;
+  color: #1c2130;
+  background: #f5f6fa;
+  --ink: #1c2130;
+  --muted-ink: #596275;
+  --line: #dee2ec;
+  --line-soft: #eaecf2;
+  --canvas: #f5f6fa;
+  --canvas-tint: #eef1fb;
+  --surface: #ffffff;
+  --surface-muted: #f8f9fc;
+  --primary: #4e5fbb;
+  --primary-hover: #3f4e9a;
+  --primary-soft: #e9ecff;
+  --action: #e06c5d;
+  --action-soft: #fdece9;
+  --success: #236a8d;
+  --success-soft: #e6f3f8;
+  --warning: #8f5b0c;
+  --warning-soft: #fff3d8;
+  --danger: #a13d32;
+  --danger-soft: #fcebe8;
+  --neutral-soft: #eef0f4;
+  --violet: #6655a6;
+  --violet-soft: #eeefff;
+  --blue: #316d8b;
+  --blue-soft: #e6f3f8;
+  --amber: #8f5b0c;
+  --amber-soft: #fff3d8;
+  --radius-control: 0.5rem;
+  --radius-panel: 0.75rem;
+  --motion-fast: 120ms;
+  --motion-standard: 180ms;
+  --motion-emphasis: 260ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  scrollbar-color: #aab2c4 #eef0f4;
+  scrollbar-width: thin;
+}
+
+body::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+body::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  background: var(--neutral-soft);
+}
+
+body::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  border: 0.2rem solid var(--neutral-soft);
+  border-radius: 999px;
+  background: #aab2c4;
+}
+
+body::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:hover {
+  background: #838da2;
+}

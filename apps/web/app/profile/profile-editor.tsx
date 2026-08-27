@@ -4,6 +4,7 @@ import type { WebProfileDetail, WebProfileMutation } from '@jobhunter/applicatio
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import styles from './profile-editor.module.css';
 
 interface ApiFailure {
   readonly error?: { readonly message?: string };
@@ -97,7 +98,7 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
   };
 
   return (
-    <section className="profile-editor" aria-labelledby="profile-editor-title">
+    <section className={styles.root} aria-labelledby="profile-editor-title">
       <div className="section-heading">
         <p className="eyebrow">MANUAL OVERRIDES</p>
         <h2 id="profile-editor-title">人工维护</h2>
@@ -107,8 +108,12 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
           {feedback.text}
         </p>
       ) : null}
-      <div className="editor-grid">
-        <form className="panel-block form-stack" onSubmit={savePreferences} noValidate>
+      <div className={styles.grid}>
+        <form
+          className={['panel-block', styles.stack].join(' ')}
+          onSubmit={savePreferences}
+          noValidate
+        >
           <h3>求职偏好</h3>
           <label>
             目标地点（逗号分隔）
@@ -163,7 +168,7 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
             保存偏好
           </button>
         </form>
-        <form className="panel-block form-stack" onSubmit={correction} noValidate>
+        <form className={['panel-block', styles.stack].join(' ')} onSubmit={correction} noValidate>
           <h3>字段修正</h3>
           <label>
             JSON Pointer
@@ -204,7 +209,7 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
           </div>
         </form>
       </div>
-      <div className="panel-block locked-paths">
+      <div className={['panel-block', styles.lockedPaths].join(' ')}>
         <h3>已锁定字段</h3>
         {detail.current.lockedPaths.length === 0 ? (
           <p className="muted">暂无锁定字段。</p>

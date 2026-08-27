@@ -5,6 +5,11 @@ import type { ReactElement, ReactNode, SyntheticEvent } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import styles from './resume-editor.module.css';
+
+function classNames(...names: readonly (string | false | undefined)[]): string {
+  return names.filter(Boolean).join(' ');
+}
 import { Icon } from '../components/ui-icon.js';
 
 type Draft = CandidateProfileData;
@@ -98,7 +103,7 @@ function EditorSection({
   children: ReactNode;
 }>): ReactElement {
   return (
-    <section className="resume-edit-section" id={id} aria-labelledby={`${id}-title`}>
+    <section className={styles['resume-edit-section']} id={id} aria-labelledby={`${id}-title`}>
       <header>
         <div>
           <h3 id={`${id}-title`}>{title}</h3>
@@ -150,13 +155,17 @@ function IsoDateInput({
 }>): ReactElement {
   const normalized = dateInputValue(value);
   return (
-    <span className="iso-date-input">
-      <span className={`iso-date-display${normalized ? '' : ' is-placeholder'}`} aria-hidden="true">
+    <span className={styles['iso-date-input']} data-iso-date-input>
+      <span
+        className={classNames(styles['iso-date-display'], !normalized && styles['is-placeholder'])}
+        data-iso-date-display
+        aria-hidden="true"
+      >
         <span>{normalized || 'YYYY-MM-DD'}</span>
         <Icon name="calendar" />
       </span>
       <input
-        className="iso-date-native"
+        className={styles['iso-date-native']}
         type="date"
         lang="zh-CN"
         aria-label={label}
@@ -182,11 +191,16 @@ function DateRangeField({
 }>): ReactElement {
   const titleId = useId();
   return (
-    <div className="resume-date-range" role="group" aria-labelledby={titleId}>
-      <span className="resume-date-range-title" id={titleId}>
+    <div
+      className={styles['resume-date-range']}
+      data-resume-date-range
+      role="group"
+      aria-labelledby={titleId}
+    >
+      <span className={styles['resume-date-range-title']} data-resume-date-range-title id={titleId}>
         起止时间
       </span>
-      <div className="resume-date-range-controls">
+      <div className={styles['resume-date-range-controls']}>
         <IsoDateInput label="开始日期" value={start} onChange={onStartChange} />
         <span aria-hidden="true">—</span>
         <IsoDateInput label="结束日期" value={end} onChange={onEndChange} />
@@ -207,8 +221,8 @@ function Repeater({
   children: ReactNode;
 }>): ReactElement {
   return (
-    <div className="resume-repeater">
-      <div className="resume-repeater-heading">
+    <div className={styles['resume-repeater']}>
+      <div className={styles['resume-repeater-heading']}>
         <span>{count ? `${String(count)} 项` : '尚未填写'}</span>
         <button type="button" className="button-secondary" onClick={onAdd}>
           ＋ 添加{title}
@@ -226,7 +240,7 @@ function RemoveButton({
   return (
     <button
       type="button"
-      className="button-link resume-remove"
+      className={classNames('button-link', styles['resume-remove'])}
       onClick={onRemove}
       aria-label={`删除${label}`}
     >
@@ -240,7 +254,7 @@ function PreviewSection({
   children,
 }: Readonly<{ title: string; children: ReactNode }>): ReactElement {
   return (
-    <section className="resume-preview-section">
+    <section className={styles['resume-preview-section']}>
       <h3>{title}</h3>
       {children}
     </section>
@@ -253,7 +267,7 @@ function PreviewEntries({
   entries: readonly { title: string; meta?: string; detail?: readonly string[] }[];
 }>): ReactElement {
   return (
-    <div className="resume-preview-entries">
+    <div className={styles['resume-preview-entries']}>
       {entries.map((entry, index) => (
         <article key={`${entry.title}-${String(index)}`}>
           <div>
@@ -287,9 +301,9 @@ function ResumePreview({ draft: source }: Readonly<{ draft: Draft }>): ReactElem
     ...draft.preferences.employmentTypes,
   ];
   return (
-    <article className="resume-preview-paper">
+    <article className={styles['resume-preview-paper']}>
       {filled(draft.basicInfo.name) || basic.length ? (
-        <header className="resume-preview-person">
+        <header className={styles['resume-preview-person']}>
           <div>
             <p className="eyebrow">CANDIDATE PROFILE</p>
             {filled(draft.basicInfo.name) ? <h2>{draft.basicInfo.name}</h2> : null}
@@ -386,12 +400,12 @@ function ResumePreview({ draft: source }: Readonly<{ draft: Draft }>): ReactElem
       ) : null}
       {filled(draft.professionalSkills) ? (
         <PreviewSection title="专业技能">
-          <p className="resume-preview-copy">{draft.professionalSkills}</p>
+          <p className={styles['resume-preview-copy']}>{draft.professionalSkills}</p>
         </PreviewSection>
       ) : null}
       {filled(draft.selfEvaluation) ? (
         <PreviewSection title="自我评价">
-          <p className="resume-preview-copy">{draft.selfEvaluation}</p>
+          <p className={styles['resume-preview-copy']}>{draft.selfEvaluation}</p>
         </PreviewSection>
       ) : null}
     </article>
@@ -436,10 +450,11 @@ function PreviewDialog({
     };
   }, [onClose]);
   return createPortal(
-    <div className="resume-preview-backdrop">
+    <div className={styles['resume-preview-backdrop']} data-resume-preview-backdrop>
       <div
         ref={panel}
-        className="resume-preview-dialog"
+        className={styles['resume-preview-dialog']}
+        data-resume-preview-dialog
         role="dialog"
         aria-modal="true"
         aria-labelledby="resume-preview-title"
@@ -454,7 +469,7 @@ function PreviewDialog({
             关闭预览
           </button>
         </header>
-        <div className="resume-preview-scroll">
+        <div className={styles['resume-preview-scroll']} data-resume-preview-scroll>
           <ResumePreview draft={draft} />
         </div>
         <footer>
@@ -538,13 +553,14 @@ export function ResumeEditor({
 
   return (
     <form
-      className="structured-resume resume-editor-form"
+      className={classNames(styles['structured-resume'], styles['resume-editor-form'])}
+      data-resume-editor
       onSubmit={(event) => {
         void save(event);
       }}
       noValidate
     >
-      <header className="structured-resume-heading">
+      <header className={styles['structured-resume-heading']} data-resume-editor-heading>
         <div>
           <p className="eyebrow">ONLINE RESUME</p>
           <h2>在线简历</h2>
@@ -552,7 +568,11 @@ export function ResumeEditor({
         </div>
         <span className="status status-succeeded">可编辑</span>
       </header>
-      <nav className="resume-edit-outline" aria-label="在线简历章节">
+      <nav
+        className={styles['resume-edit-outline']}
+        data-resume-edit-outline
+        aria-label="在线简历章节"
+      >
         {(
           [
             ['resume-basic', '基本信息'],
@@ -574,13 +594,13 @@ export function ResumeEditor({
         ))}
       </nav>
 
-      <div className="resume-edit-document">
+      <div className={styles['resume-edit-document']}>
         <EditorSection
           id="resume-basic"
           title="基本信息"
           description="用于简历抬头和联系，请确认信息准确。"
         >
-          <div className="resume-field-grid">
+          <div className={styles['resume-field-grid']}>
             <Field
               label="姓名"
               value={draft.basicInfo.name}
@@ -634,7 +654,7 @@ export function ResumeEditor({
           title="求职意向"
           description="用于职位筛选和匹配排序。"
         >
-          <div className="resume-field-grid">
+          <div className={styles['resume-field-grid']}>
             <label>
               目标岗位
               <input
@@ -751,7 +771,9 @@ export function ResumeEditor({
                 <option value="false">无</option>
               </select>
             </label>
-            <fieldset className="resume-checkbox-group resume-wide-field">
+            <fieldset
+              className={classNames(styles['resume-checkbox-group'], styles['resume-wide-field'])}
+            >
               <legend>期望公司规模</legend>
               {(
                 [
@@ -806,9 +828,9 @@ export function ResumeEditor({
             }}
           >
             {draft.education.map((item, index) => (
-              <div className="resume-edit-entry" key={index}>
+              <div className={styles['resume-edit-entry']} key={index}>
                 <span>{String(index + 1).padStart(2, '0')}</span>
-                <div className="resume-field-grid">
+                <div className={styles['resume-field-grid']}>
                   <Field
                     label="学校"
                     value={item.institution}
@@ -948,7 +970,7 @@ export function ResumeEditor({
           <label>
             专业技能
             <textarea
-              className="resize-none resume-professional-skills"
+              className={classNames('resize-none', styles['resume-professional-skills'])}
               rows={8}
               value={draft.professionalSkills ?? ''}
               onChange={(event) => {
@@ -986,7 +1008,7 @@ export function ResumeEditor({
           {feedback.text}
         </p>
       ) : null}
-      <footer className="resume-editor-actions">
+      <footer className={styles['resume-editor-actions']} data-resume-editor-actions>
         <span>{dirty ? '有尚未保存的修改' : '保存会创建新的画像版本'}</span>
         <div>
           <button
@@ -1042,9 +1064,9 @@ function ExperienceEditor({
         }}
       >
         {entries.map((item, index) => (
-          <div className="resume-edit-entry" key={index}>
+          <div className={styles['resume-edit-entry']} key={index}>
             <span>{String(index + 1).padStart(2, '0')}</span>
-            <div className="resume-field-grid">
+            <div className={styles['resume-field-grid']}>
               <Field
                 label="公司 / 组织"
                 value={item.organization}
@@ -1079,7 +1101,7 @@ function ExperienceEditor({
                   onChange(next);
                 }}
               />
-              <label className="resume-wide-field">
+              <label className={styles['resume-wide-field']}>
                 成果与职责
                 <textarea
                   className="resize-none"
@@ -1134,9 +1156,9 @@ function ProjectEditor({
         }}
       >
         {entries.map((item, index) => (
-          <div className="resume-edit-entry" key={index}>
+          <div className={styles['resume-edit-entry']} key={index}>
             <span>{String(index + 1).padStart(2, '0')}</span>
-            <div className="resume-field-grid">
+            <div className={styles['resume-field-grid']}>
               <label>
                 项目名称
                 <input
@@ -1171,7 +1193,7 @@ function ProjectEditor({
                   onChange(next);
                 }}
               />
-              <label className="resume-wide-field">
+              <label className={styles['resume-wide-field']}>
                 项目描述
                 <textarea
                   className="resize-none"
@@ -1231,9 +1253,9 @@ function SimpleRepeater({
         }}
       >
         {items.map((item, index) => (
-          <div className="resume-edit-entry" key={index}>
+          <div className={styles['resume-edit-entry']} key={index}>
             <span>{String(index + 1).padStart(2, '0')}</span>
-            <div className="resume-field-grid">
+            <div className={styles['resume-field-grid']}>
               {fields.map(([key, label]) => (
                 <Field
                   key={key}

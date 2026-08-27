@@ -4,6 +4,7 @@ import type { WebResumeDeletionImpact } from '@jobhunter/application/web';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import styles from './resume-deletion.module.css';
 
 interface ApiEnvelope<T> {
   readonly data?: T;
@@ -61,7 +62,7 @@ export function ResumeDeletion({
   };
 
   return (
-    <section className="danger-zone" aria-labelledby="delete-resume-heading">
+    <section className={styles.root} aria-labelledby="delete-resume-heading">
       <h2 id="delete-resume-heading">敏感数据删除</h2>
       <p>先生成影响预览；预览不会修改数据。真正删除由 Worker 执行且不可撤销。</p>
       {!impact ? (
@@ -74,7 +75,7 @@ export function ResumeDeletion({
           预览删除影响
         </button>
       ) : (
-        <div className="deletion-preview">
+        <div className={styles.preview}>
           <ul>
             {Object.entries(impact.counts).map(([name, count]) => (
               <li key={name}>

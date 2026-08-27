@@ -78,4 +78,27 @@ export class SqliteResumeDocumentRepository implements ResumeDocumentRepository 
     if (!stored) throw new Error('Resume document persistence did not produce a row.');
     return stored;
   }
+
+  public completeOcr(input: {
+    readonly id: string;
+    readonly extractedText: string;
+    readonly parserVersion: string;
+  }): ResumeDocumentRecord {
+    const text = input.extractedText.trim();
+    const parserVersion = input.parserVersion.trim();
+    if (!text || !parserVersion) throw new TypeError('OCR result is incomplete.');
+    this.#client
+      .prepare(
+        `UPDATE resume_documents
+         SET extracted_text = ?, parse_status = 'parsed', parser_version = ?, error_summary = NULL
+         WHERE id = ? AND parse_status = 'needs_ocr'`,
+      )
+      .run(text, parserVersion, input.id);
+    const stored = this.getById(input.id);
+    if (!stored) throw new TypeError('Resume document was not found.');
+    if (stored.parseStatus !== 'parsed' || stored.extractedText === null) {
+      throw new TypeError('Resume document is not awaiting OCR.');
+    }
+    return stored;
+  }
 }

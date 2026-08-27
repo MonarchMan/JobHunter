@@ -4,6 +4,11 @@ import type { WebSource } from '@jobhunter/application/web';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import styles from './source-actions.module.css';
+
+function classNames(...names: readonly (string | false | undefined)[]): string {
+  return names.filter(Boolean).join(' ');
+}
 
 interface ActionResponse {
   readonly data?: { readonly kind?: string; readonly task?: { readonly taskId?: string } };
@@ -71,7 +76,7 @@ export function SourceSyncAction({
   };
 
   return (
-    <div className="source-header-sync">
+    <div className={styles.headerSync} data-source-header-sync>
       <button
         type="button"
         aria-label={`立即同步 ${contextLabel}`}
@@ -84,7 +89,10 @@ export function SourceSyncAction({
       </button>
       {feedback ? (
         <p
-          className={`source-header-feedback source-header-feedback-${feedback.tone}`}
+          className={classNames(
+            styles.headerFeedback,
+            feedback.tone === 'success' ? styles.headerSuccess : styles.headerError,
+          )}
           role={feedback.tone === 'error' ? 'alert' : 'status'}
         >
           {feedback.message}
@@ -141,8 +149,8 @@ export function SourceActions({
   };
 
   return (
-    <div className="source-actions">
-      <details className="source-advanced">
+    <div className={styles.actions} data-source-actions>
+      <details className={styles.advanced} data-source-advanced>
         <summary>高级设置</summary>
         <div className="inline-actions">
           <button
@@ -173,7 +181,7 @@ export function SourceActions({
             {source.enabled ? '停用来源' : '启用来源'}
           </button>
         </div>
-        <form className="schedule-form" onSubmit={schedule} noValidate>
+        <form className={styles.scheduleForm} data-source-schedule onSubmit={schedule} noValidate>
           <label>
             {' '}
             Cron（Asia/Shanghai）{' '}
@@ -184,7 +192,7 @@ export function SourceActions({
               }}
             />{' '}
           </label>
-          <label className="check-label">
+          <label className={styles.checkLabel}>
             <input
               type="checkbox"
               checked={scheduleEnabled}
@@ -206,7 +214,10 @@ export function SourceActions({
       </details>
       {feedback ? (
         <p
-          className={`action-feedback action-feedback-${feedback.tone}`}
+          className={classNames(
+            styles.feedback,
+            feedback.tone === 'success' ? styles.success : styles.error,
+          )}
           role={feedback.tone === 'error' ? 'alert' : 'status'}
         >
           {feedback.message}

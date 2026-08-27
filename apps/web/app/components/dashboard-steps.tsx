@@ -1,4 +1,6 @@
 import type { ReactElement } from 'react';
+import panelStyles from '../dashboard-panel.module.css';
+import styles from './dashboard-steps.module.css';
 
 function Step({
   number,
@@ -14,8 +16,8 @@ function Step({
   href: string;
 }>): ReactElement {
   return (
-    <li className={complete ? 'setup-step is-complete' : 'setup-step'}>
-      <span className="step-number" aria-hidden="true">
+    <li className={[styles.step, complete ? styles.complete : undefined].filter(Boolean).join(' ')}>
+      <span className={styles.number} aria-hidden="true">
         {complete ? '✓' : number}
       </span>
       <div>
@@ -36,15 +38,15 @@ export function DashboardSteps({
   hasJobs,
 }: Readonly<{ hasSources: boolean; hasJobs: boolean }>): ReactElement {
   return (
-    <section className="dashboard-panel setup-panel" aria-labelledby="setup-title">
-      <div className="section-heading section-heading-tight">
+    <section className={panelStyles.panel} aria-labelledby="setup-title">
+      <div className={['section-heading', styles.heading].filter(Boolean).join(' ')}>
         <div>
           <span className="eyebrow">GET STARTED</span>
           <h2 id="setup-title">三步开始使用</h2>
         </div>
-        <span className="section-count">个人工作流</span>
+        <span className={styles.count}>个人工作流</span>
       </div>
-      <ol className="setup-list">
+      <ol className={styles.list}>
         <Step
           number="01"
           title="建立简历画像"

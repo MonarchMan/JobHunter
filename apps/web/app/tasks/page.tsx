@@ -18,6 +18,8 @@ import {
 import { TaskActions } from './task-actions.js';
 import { TaskAutoRefresh } from './task-auto-refresh.js';
 import { AgentRunDetailsDialog, TaskDetailsDialog } from './diagnostic-details.js';
+import dataTableStyles from '../components/data-table.module.css';
+import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '任务与 Agent 运行' };
@@ -65,7 +67,13 @@ export default async function TasksPage({
         </div>
       </PageHeader>
 
-      <form className="task-filters" action="/tasks" method="get" aria-label="任务筛选" noValidate>
+      <form
+        className={styles.filters}
+        action="/tasks"
+        method="get"
+        aria-label="任务筛选"
+        noValidate
+      >
         <label>
           状态
           <select name="status" defaultValue={status ?? ''}>
@@ -94,9 +102,16 @@ export default async function TasksPage({
         </a>
       </form>
 
-      <section className="panel table-panel task-section" aria-labelledby="task-heading">
+      <section
+        className={['panel', dataTableStyles.panel].filter(Boolean).join(' ')}
+        aria-labelledby="task-heading"
+        data-task-section
+      >
         <h2 id="task-heading">后台任务</h2>
-        <div className="table-scroll">
+        <div
+          className={[dataTableStyles.scroll, styles.desktopTable].filter(Boolean).join(' ')}
+          data-task-table
+        >
           <table>
             <caption className="sr-only">后台任务列表</caption>
             <thead>
@@ -112,7 +127,7 @@ export default async function TasksPage({
             <tbody>
               {diagnostics.tasks.length === 0 ? (
                 <tr key="empty-tasks">
-                  <td className="table-empty" colSpan={6}>
+                  <td className={dataTableStyles.empty} colSpan={6}>
                     <strong>暂无后台任务</strong>
                     <span>来源同步、健康检查或其他操作开始后，任务会显示在这里。</span>
                   </td>
@@ -160,10 +175,10 @@ export default async function TasksPage({
             </tbody>
           </table>
         </div>
-        <div className="task-cards" aria-label="后台任务卡片列表">
+        <div className={styles.cards} aria-label="后台任务卡片列表" data-task-cards>
           {diagnostics.tasks.map((task) => (
-            <article className="task-card" key={task.id}>
-              <div className="task-card-heading">
+            <article className={styles.card} key={task.id}>
+              <div className={styles.cardHeading}>
                 <strong>
                   <TaskDetailsDialog task={task} />
                 </strong>
@@ -189,9 +204,16 @@ export default async function TasksPage({
         />
       </section>
 
-      <section className="panel table-panel agent-section" aria-labelledby="agent-heading">
+      <section
+        className={['panel', dataTableStyles.panel].filter(Boolean).join(' ')}
+        aria-labelledby="agent-heading"
+        data-agent-section
+      >
         <h2 id="agent-heading">Agent 运行</h2>
-        <div className="table-scroll">
+        <div
+          className={[dataTableStyles.scroll, styles.desktopTable].filter(Boolean).join(' ')}
+          data-agent-table
+        >
           <table>
             <caption className="sr-only">Agent 运行列表</caption>
             <thead>
@@ -207,7 +229,7 @@ export default async function TasksPage({
             <tbody>
               {diagnostics.agentRuns.length === 0 ? (
                 <tr key="empty-agent-runs">
-                  <td className="table-empty" colSpan={6}>
+                  <td className={dataTableStyles.empty} colSpan={6}>
                     <strong>暂无 Agent 运行记录</strong>
                     <span>简历提取、匹配或建议生成后，运行记录会显示在这里。</span>
                   </td>
@@ -243,10 +265,10 @@ export default async function TasksPage({
             </tbody>
           </table>
         </div>
-        <div className="agent-cards" aria-label="Agent 运行卡片列表">
+        <div className={styles.cards} aria-label="Agent 运行卡片列表" data-agent-cards>
           {diagnostics.agentRuns.map((run) => (
-            <article className="task-card" key={run.id}>
-              <div className="task-card-heading">
+            <article className={styles.card} key={run.id}>
+              <div className={styles.cardHeading}>
                 <AgentRunDetailsDialog run={run} />
                 <span className={`status status-${run.status}`}>
                   {labelStatus(agentRunStatusLabels, run.status)}

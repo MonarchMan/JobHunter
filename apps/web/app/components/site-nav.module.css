@@ -1,0 +1,230 @@
+.nav {
+  display: flex;
+  gap: clamp(0.8rem, 3vw, 2rem);
+}
+
+.link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0;
+  color: #667085;
+  font-size: 0.88rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-standard) var(--ease-out),
+    opacity var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+.link:hover {
+  color: var(--ink);
+}
+
+.link::after {
+  position: absolute;
+  right: 0;
+  bottom: 0.28rem;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  content: '';
+}
+
+.current::after {
+  background: var(--primary);
+}
+
+.link svg {
+  display: block;
+  flex: 0 0 auto;
+  color: #7781ae;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+.link:hover svg,
+.current svg {
+  color: var(--primary);
+}
+
+.shortLabel,
+.more {
+  display: none;
+}
+
+@media (min-width: 1025px) {
+  .nav {
+    width: 100%;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .link {
+    min-height: 2.9rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: var(--radius-control);
+  }
+
+  .link:hover {
+    background: var(--surface-muted);
+  }
+
+  .current {
+    background: var(--primary-soft);
+    color: var(--primary-hover);
+  }
+
+  .current::after {
+    top: 0.65rem;
+    right: auto;
+    bottom: 0.65rem;
+    left: 0;
+    width: 3px;
+    height: auto;
+    background: var(--action);
+  }
+}
+
+@media (max-width: 1024px) {
+  .nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-gutter: stable;
+  }
+
+  .link {
+    flex: 0 0 auto;
+    min-width: 4.5rem;
+    text-align: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .nav {
+    position: fixed;
+    z-index: 12;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    width: 100%;
+    height: calc(4.5rem + env(safe-area-inset-bottom));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding: 0.45rem max(0.55rem, env(safe-area-inset-right))
+      max(0.45rem, env(safe-area-inset-bottom)) max(0.55rem, env(safe-area-inset-left));
+    overflow: visible;
+    border-top: 1px solid var(--line);
+    background: rgb(255 255 255 / 94%);
+    box-shadow: 0 -0.6rem 1.8rem rgb(38 45 84 / 8%);
+    backdrop-filter: blur(16px);
+    scrollbar-gutter: auto;
+  }
+
+  .link {
+    display: inline-flex;
+    height: 3rem;
+    min-width: 0;
+    min-height: 3rem;
+    place-items: center;
+    padding: 0.45rem 0.35rem;
+    border-radius: var(--radius-control);
+    background: transparent;
+    font-size: 0.82rem;
+  }
+
+  .current {
+    background: var(--primary-soft);
+    color: var(--primary-hover);
+  }
+
+  .current::after {
+    top: 0.15rem;
+    right: 35%;
+    bottom: auto;
+    left: 35%;
+    height: 3px;
+    background: var(--action);
+  }
+
+  .fullLabel,
+  .secondary {
+    display: none;
+  }
+
+  .shortLabel,
+  .more {
+    display: block;
+  }
+
+  .more {
+    position: relative;
+    padding: 0;
+    border: 0;
+  }
+
+  .more summary {
+    height: 100%;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .more summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .moreMenu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.75rem);
+    display: grid;
+    width: 11rem;
+    padding: 0.4rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+    background: var(--surface);
+    box-shadow: 0 1rem 2.5rem rgb(38 45 84 / 18%);
+    animation: feedback-in var(--motion-standard) var(--ease-out) both;
+  }
+
+  .moreLink {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: var(--radius-control);
+    color: var(--ink);
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .moreLink:hover,
+  .moreLinkCurrent {
+    background: var(--primary-soft);
+    color: var(--primary-hover);
+  }
+}
+
+@keyframes feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (forced-colors: active) {
+  .current::after {
+    background: Highlight;
+  }
+}

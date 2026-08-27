@@ -26,7 +26,7 @@ Web 只调用应用端口并返回任务 DTO；CLI 初始化在数据库 seed �
 
 ## Web 简历导入
 
-`ResumeProfileWorkflow` 增加字节输入入口，与现有路径入口共用 `ResumeImportService`。Route Handler 接收 multipart `file`，限制 10 MiB，随后由内容探测器确认 PDF/DOCX/TXT；文件名只用于 UI，不参与类型判断。解析结果为 `parsed` 时入队画像提取，`needs_ocr/failed` 只保存文档状态并返回可读错误。
+`ResumeProfileWorkflow` 增加字节输入入口，与现有路径入口共用 `ResumeImportService`。Route Handler 接收 multipart `file`，限制 10 MiB，随后由内容探测器确认 PDF/DOCX/TXT；文件名只用于 UI，不参与类型判断。基线中解析结果为 `parsed` 时入队画像提取，`needs_ocr/failed` 只保存文档状态并返回可读错误；`015-resume-ocr` 在不改变 Web 异步边界的前提下扩展 JPEG/PNG 和 Worker OCR。
 
 Web 组合根装配 ArtifactStore、ResumeDocumentRepository、CandidateProfileService 和 TaskService，但注册的 Handler 使用 unavailable stub，因此 Web 永不执行模型任务。
 
@@ -34,7 +34,7 @@ Web 组合根装配 ArtifactStore、ResumeDocumentRepository、CandidateProfileS
 
 CLI `init` 在幂等 seed 后：
 
-1. 若默认简历位于工作区 `docs/resumes/agent简历 - 新.docx`，调用同一导入工作流；固定内容哈希使重复执行返回同一文档/任务。
+1. 若参考图片 `docs/resumes/nowcoder_1787802316450.jpeg` 存在则优先调用同一导入工作流，否则兼容旧的 `agent简历 - 新.docx`；固定内容哈希使重复执行返回同一文档/任务。
 2. 为所有启用来源入队固定幂等键的 `source.sync` 任务。
 3. 为每个来源 upsert `source.sync:<sourceId>` 每日 `03:00 Asia/Shanghai` 计划。
 4. upsert `maintenance.cleanup:weekly` 每周日 `04:00 Asia/Shanghai` 计划。

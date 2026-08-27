@@ -1,8 +1,11 @@
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { assertPromptMatchesDefinition } from '@jobhunter/agent-core';
 import { describe, expect, it } from 'vitest';
 import {
   ResumeMediaError,
+  TesseractResumeOcrEngine,
   detectResumeMediaType,
   parseResumeProfileAgentOutput,
   parseResumeText,
@@ -13,25 +16,6 @@ import {
 const encoder = new TextEncoder();
 
 describe('resume media detection and deterministic parsing', () => {
-  it('recognizes and parses the redacted Agent resume DOCX by content', async () => {
-    const bytes = await readFile(
-      new URL('../../../docs/resumes/agent简历 - 新.docx', import.meta.url),
-    );
-    expect(detectResumeMediaType(bytes)).toMatchObject({
-      mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      byteSize: 23_708,
-    });
-    const parsed = await parseResumeText(
-      bytes,
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    );
-    expect(parsed).toMatchObject({ status: 'parsed', parser: 'mammoth' });
-    expect(parsed.text).toContain('Coding Agent');
-    expect(parsed.text).toContain('ReAct');
-    expect(parsed.text).toContain('RAG');
-    expect(parsed.characterCount).toBeGreaterThan(1_000);
-  });
-
   it('accepts strict UTF-8 text and applies the pre-model quality and size gates', async () => {
     const text = '候选人具备 TypeScript、Python、RAG 和 Agent 系统开发经验。'.repeat(5);
     const bytes = encoder.encode(text);
@@ -57,6 +41,44 @@ describe('resume media detection and deterministic parsing', () => {
     new DataView(fakeZip.buffer).setUint32(0, 0x04034b50, true);
     expect(() => detectResumeMediaType(fakeZip)).toThrow(/not a valid DOCX/);
   });
+
+  it('detects resume images by content and defers them to OCR', async () => {
+    const jpeg = await readFile(
+      new URL('../../../docs/resumes/nowcoder_1787802316450.jpeg', import.meta.url),
+    );
+    expect(detectResumeMediaType(jpeg)).toMatchObject({
+      mediaType: 'image/jpeg',
+      byteSize: jpeg.byteLength,
+    });
+    await expect(parseResumeText(jpeg, 'image/jpeg')).resolves.toMatchObject({
+      status: 'needs_ocr',
+      parser: 'image',
+      text: null,
+    });
+
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
+    expect(detectResumeMediaType(png).mediaType).toBe('image/png');
+  });
+
+  it('recognizes stable education, skill and project anchors from the reference image locally', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'jobhunter-ocr-'));
+    try {
+      const jpeg = await readFile(
+        new URL('../../../docs/resumes/nowcoder_1787802316450.jpeg', import.meta.url),
+      );
+      const result = await new TesseractResumeOcrEngine({ dataRoot: root }).recognize(
+        jpeg,
+        'image/jpeg',
+      );
+      expect(result.text).toContain('陕西师范大学');
+      expect(result.text).toContain('python');
+      expect(result.text).toContain('Prism');
+      expect(result.text).toContain('SuperMew');
+      expect(result.characterCount).toBeGreaterThan(1_000);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   it('honors cancellation before parser work starts', async () => {
     const abort = new AbortController();

@@ -20,8 +20,11 @@
   "dependencies": {
     "@jobhunter/agent-core": "workspace:*",
     "@jobhunter/domain": "workspace:*",
+    "@tesseract.js-data/chi_sim": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
     "mammoth": "^1.12.1",
     "pdfjs-dist": "^6.2.108",
+    "tesseract.js": "^7.0.0",
     "zod": "^4.4.3"
   }
 }

@@ -40,6 +40,7 @@ import {
   SqliteCleanupRepository,
   SqliteMatchingRepository,
   SqliteResumeDocumentRepository,
+  SqliteResumeArtifactReader,
   SqliteResumeDeletionRepository,
   SqliteSourceHealthWriter,
   SqliteSyncRepository,
@@ -48,6 +49,7 @@ import {
 } from '@jobhunter/db';
 import { SystemIdGenerator, utcInstant, type Clock, type IdGenerator } from '@jobhunter/domain';
 import { OpenAiCompatibleModelClient } from '@jobhunter/llm';
+import { TesseractResumeOcrEngine } from '@jobhunter/resume';
 import {
   AdapterRegistry,
   FetchSourceHttpClient,
@@ -221,6 +223,10 @@ export function createProductionWorkerApplication(input: {
         runner,
         documents: new SqliteResumeDocumentRepository(database.client),
         profiles,
+        ocr: {
+          engine: new TesseractResumeOcrEngine({ dataRoot: input.dataRoot }),
+          artifacts: new SqliteResumeArtifactReader(database.client, input.dataRoot),
+        },
       }),
     );
     understandingHandler = createJobUnderstandingTaskHandler({

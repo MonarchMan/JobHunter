@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation.js';
+import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import {
   agentRunStatusLabels,
@@ -8,8 +9,11 @@ import {
 import { PageHeader } from '../../components/page-header.js';
 import { TruncatedText } from '../../components/truncated-text.js';
 import { getWebContainer } from '../../../src/server/container.js';
+import dataTableStyles from '../../components/data-table.module.css';
+import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
+export const metadata: Metadata = { title: 'Agent 运行详情' };
 
 export default async function AgentRunPage({
   params,
@@ -24,7 +28,7 @@ export default async function AgentRunPage({
         <a href="/tasks">返回任务</a>
       </PageHeader>
       <section className="panel">
-        <dl className="facts">
+        <dl className={['facts', styles.facts].filter(Boolean).join(' ')}>
           <div>
             <dt>状态</dt>
             <dd>
@@ -64,9 +68,12 @@ export default async function AgentRunPage({
           </p>
         ) : null}
       </section>
-      <section className="panel table-panel" aria-labelledby="tools-heading">
+      <section
+        className={['panel', dataTableStyles.panel].filter(Boolean).join(' ')}
+        aria-labelledby="tools-heading"
+      >
         <h2 id="tools-heading">脱敏工具调用</h2>
-        <div className="table-scroll">
+        <div className={dataTableStyles.scroll}>
           <table>
             <caption className="sr-only">脱敏工具调用列表</caption>
             <thead>

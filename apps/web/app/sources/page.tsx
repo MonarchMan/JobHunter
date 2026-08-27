@@ -7,6 +7,7 @@ import { SourceTabs, type SourceChannel } from './source-tabs.js';
 import { Pagination } from '../components/pagination.js';
 import { webPagination, type WebSource } from '@jobhunter/application/web';
 import { CompanySourceCard } from './company-source-card.js';
+import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '招聘来源' };
@@ -73,7 +74,7 @@ export default async function SourcesPage({
         </section>
       ) : (
         <>
-          <div className="source-list">
+          <div className={styles.list} data-source-list>
             {officialCompanies.map((company) => (
               <CompanySourceCard key={company.companyId} sources={company.sources} />
             ))}

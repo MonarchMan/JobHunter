@@ -11,6 +11,8 @@ import {
 } from '../components/status-labels.js';
 import { TaskActions } from './task-actions.js';
 import { TruncatedText } from '../components/truncated-text.js';
+import dataTableStyles from '../components/data-table.module.css';
+import styles from './diagnostic-details.module.css';
 
 function time(value: string | null): string {
   return value
@@ -24,22 +26,27 @@ function DialogShell({
   title,
   children,
   onClose,
-}: Readonly<{ title: string; children: ReactElement; onClose: () => void }>): ReactElement {
+  returnFocusTo,
+}: Readonly<{
+  title: string;
+  children: ReactElement;
+  onClose: () => void;
+  returnFocusTo: HTMLButtonElement | null;
+}>): ReactElement {
   const dialogReference = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const dialog = dialogReference.current;
-    const previousActiveElement = document.activeElement;
     if (dialog && !dialog.open) dialog.showModal();
     return () => {
-      if (previousActiveElement instanceof HTMLElement) previousActiveElement.focus();
+      returnFocusTo?.focus();
     };
-  }, [onClose]);
+  }, [returnFocusTo]);
 
   return (
     <dialog
       ref={dialogReference}
-      className="diagnostic-dialog"
+      className={styles.dialog}
       aria-labelledby="diagnostic-dialog-title"
       onCancel={(event) => {
         event.preventDefault();
@@ -49,7 +56,7 @@ function DialogShell({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <header className="diagnostic-dialog-header">
+      <header className={styles.header}>
         <h2 id="diagnostic-dialog-title">{title}</h2>
         <button type="button" className="button-muted" onClick={onClose} autoFocus>
           关闭
@@ -62,11 +69,13 @@ function DialogShell({
 
 export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactElement {
   const [open, setOpen] = useState(false);
+  const triggerReference = useRef<HTMLButtonElement>(null);
   return (
     <>
       <button
+        ref={triggerReference}
         type="button"
-        className="button-link diagnostic-detail-trigger"
+        className={['button-link', styles.trigger].filter(Boolean).join(' ')}
         onClick={() => {
           setOpen(true);
         }}
@@ -76,11 +85,12 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
       {open ? (
         <DialogShell
           title="任务详情"
+          returnFocusTo={triggerReference.current}
           onClose={() => {
             setOpen(false);
           }}
         >
-          <div className="diagnostic-dialog-body">
+          <div className={styles.body}>
             <dl className="facts">
               <div>
                 <dt>任务类型</dt>
@@ -123,7 +133,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
               </div>
             </dl>
             {task.status === 'failed' ? (
-              <section className="failure-detail" aria-labelledby="task-failure-heading">
+              <section className={styles.failureDetail} aria-labelledby="task-failure-heading">
                 <h3 id="task-failure-heading">失败原因</h3>
                 <p>
                   <strong>{task.errorCategory ?? '未分类'}</strong>
@@ -146,6 +156,7 @@ export function AgentRunDetailsDialog({
   const [detail, setDetail] = useState<WebAgentRunDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const triggerReference = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open || detail) return;
@@ -177,8 +188,9 @@ export function AgentRunDetailsDialog({
   return (
     <>
       <button
+        ref={triggerReference}
         type="button"
-        className="button-link diagnostic-detail-trigger"
+        className={['button-link', styles.trigger].filter(Boolean).join(' ')}
         onClick={() => {
           setOpen(true);
         }}
@@ -188,11 +200,12 @@ export function AgentRunDetailsDialog({
       {open ? (
         <DialogShell
           title="Agent 运行详情"
+          returnFocusTo={triggerReference.current}
           onClose={() => {
             setOpen(false);
           }}
         >
-          <div className="diagnostic-dialog-body">
+          <div className={styles.body}>
             <dl className="facts">
               <div>
                 <dt>Agent</dt>
@@ -226,7 +239,7 @@ export function AgentRunDetailsDialog({
               </div>
             </dl>
             {run.status === 'failed' ? (
-              <section className="failure-detail" aria-labelledby="agent-failure-heading">
+              <section className={styles.failureDetail} aria-labelledby="agent-failure-heading">
                 <h3 id="agent-failure-heading">失败原因</h3>
                 <p>
                   <strong>{run.errorCategory ?? '未分类'}</strong>
@@ -237,7 +250,7 @@ export function AgentRunDetailsDialog({
             {loading ? <p className="muted">正在加载工具调用……</p> : null}
             {error ? <p className="risk">{error}</p> : null}
             {detail && detail.toolCalls.length > 0 ? (
-              <div className="table-scroll">
+              <div className={dataTableStyles.scroll}>
                 <table>
                   <caption>工具调用</caption>
                   <thead>

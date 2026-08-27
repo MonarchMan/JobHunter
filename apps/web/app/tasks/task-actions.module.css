@@ -1,0 +1,9 @@
+.cell {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 7rem;
+}
+
+.cell span {
+  font-size: 0.75rem;
+}

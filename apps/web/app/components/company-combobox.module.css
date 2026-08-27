@@ -1,0 +1,101 @@
+.combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.control {
+  position: relative;
+}
+
+.control input {
+  width: 100%;
+  padding-right: 5rem;
+}
+
+.control button {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted-ink);
+  transform: translateY(-50%);
+}
+
+.control button:hover {
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+  transform: translateY(-50%);
+}
+
+.clear {
+  right: 2.25rem;
+  font-size: 1.2rem;
+}
+
+.toggle {
+  right: 0.25rem;
+  font-size: 1rem;
+}
+
+.list {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  display: grid;
+  width: 100%;
+  max-height: 18rem;
+  margin: 0;
+  padding: 0.4rem;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  box-shadow: 0 1.25rem 3rem rgb(34 40 71 / 20%);
+  list-style: none;
+  animation: list-in var(--motion-standard) var(--ease-out) both;
+  scrollbar-gutter: stable;
+}
+
+.list li {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 2.75rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.list li:hover,
+.list li.active {
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+}
+
+.list .empty {
+  display: block;
+  color: var(--muted-ink);
+  cursor: default;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.check {
+  color: var(--primary);
+}
+
+@keyframes list-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

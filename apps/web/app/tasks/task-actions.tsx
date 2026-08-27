@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import styles from './task-actions.module.css';
 
 interface ActionResponse {
   readonly error?: { readonly message?: string };
@@ -40,7 +41,7 @@ export function TaskActions({
 
   if (status !== 'failed' && status !== 'pending' && status !== 'running') return null;
   return (
-    <div className="task-action-cell">
+    <div className={styles.cell}>
       {status === 'failed' ? (
         <button
           type="button"

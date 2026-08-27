@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactElement, ReactNode } from 'react';
 import { SiteNav } from './components/site-nav.js';
 import './styles.css';
+import styles from './app-shell.module.css';
 
 export const metadata: Metadata = {
   title: {
@@ -14,13 +15,13 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>): ReactElement {
   return (
     <html lang="zh-CN">
-      <body>
+      <body className={styles.body}>
         <a className="skip-link" href="#main-content">
           跳到主要内容
         </a>
-        <header className="site-header">
-          <a className="brand" href="/">
-            <span className="brand-mark" aria-hidden="true">
+        <header className={styles.header}>
+          <a className={styles.brand} href="/">
+            <span className={styles.brandMark} aria-hidden="true">
               J
             </span>
             <span>JobHunter</span>

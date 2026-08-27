@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useState, useTransition } from 'react';
+import styles from './task-auto-refresh.module.css';
 
 export function TaskAutoRefresh(): ReactElement {
   const router = useRouter();
@@ -33,7 +34,7 @@ export function TaskAutoRefresh(): ReactElement {
   }, [paused, refresh]);
 
   return (
-    <div className="task-refresh" aria-live="polite">
+    <div className={styles.refresh} aria-live="polite" data-task-refresh>
       <span>{paused ? '自动刷新已暂停' : '自动刷新 · 每 10 秒'}</span>
       {updatedAt ? <small>刚刚更新</small> : null}
       <button type="button" className="button-muted" onClick={refresh} disabled={refreshing}>

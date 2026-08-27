@@ -286,14 +286,12 @@ export function createLocalCliContainer(
           },
         });
         const runtime = operational();
-        const defaultResumePath = path.join(
-          workspaceRoot,
-          'docs',
-          'resumes',
-          'agent简历 - 新.docx',
-        );
+        const defaultResumePath = [
+          path.join(workspaceRoot, 'docs', 'resumes', 'nowcoder_1787802316450.jpeg'),
+          path.join(workspaceRoot, 'docs', 'resumes', 'agent简历 - 新.docx'),
+        ].find((candidate) => existsSync(candidate));
         let defaultResumeTaskId: string | null = null;
-        if (existsSync(defaultResumePath)) {
+        if (defaultResumePath) {
           const imported = await runtime.resumes.import({
             path: defaultResumePath,
             signal: new AbortController().signal,

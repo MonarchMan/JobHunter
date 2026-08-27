@@ -8,6 +8,8 @@ import {
 } from '@jobhunter/application';
 import { utcInstant, type Clock, type IdGenerator, type UtcInstant } from '@jobhunter/domain';
 import { FakeModelClient } from '@jobhunter/llm';
+import type { ResumeArtifactReader } from '@jobhunter/application';
+import type { ResumeOcrEngine } from '@jobhunter/resume';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -120,7 +122,10 @@ function modelOutput(request: ModelRequest): unknown {
   };
 }
 
-async function setup(model: FakeModelClient): Promise<{
+async function setup(
+  model: FakeModelClient,
+  options: { readonly image?: boolean } = {},
+): Promise<{
   readonly handle: SqliteDatabaseHandle;
   readonly profiles: CandidateProfileService;
   readonly handler: ReturnType<typeof createResumeProfileTaskHandler>;
@@ -136,18 +141,26 @@ async function setup(model: FakeModelClient): Promise<{
       `INSERT INTO file_artifacts
        (id, kind, relative_path, media_type, sha256, byte_size, created_at, deleted_at)
        VALUES ('018f0000-0000-7000-8000-00000000b001', 'resume', 'artifacts/resume-agent',
-               'text/plain', ?, ?, 1, NULL)`,
+               ?, ?, ?, 1, NULL)`,
     )
-    .run('d'.repeat(64), resumeText.length);
+    .run(options.image ? 'image/jpeg' : 'text/plain', 'd'.repeat(64), resumeText.length);
   handle.client
     .prepare(
       `INSERT INTO resume_documents
        (id, artifact_id, content_hash, media_type, extracted_text, parse_status,
         parser_version, error_summary, created_at)
-       VALUES (?, '018f0000-0000-7000-8000-00000000b001', ?, 'text/plain', ?,
-               'parsed', 'utf8@1', NULL, 1)`,
+       VALUES (?, '018f0000-0000-7000-8000-00000000b001', ?, ?, ?,
+               ?, ?, ?, 1)`,
     )
-    .run(documentId, 'd'.repeat(64), resumeText);
+    .run(
+      documentId,
+      'd'.repeat(64),
+      options.image ? 'image/jpeg' : 'text/plain',
+      options.image ? null : resumeText,
+      options.image ? 'needs_ocr' : 'parsed',
+      options.image ? 'image-needs-ocr@1' : 'utf8@1',
+      options.image ? 'Resume image requires background OCR.' : null,
+    );
   const profiles = new CandidateProfileService({
     repository: new SqliteCandidateProfileRepository(handle.client),
     clock,
@@ -159,6 +172,17 @@ async function setup(model: FakeModelClient): Promise<{
     createId: () => ids.generate(),
     now: () => clock.now(),
   });
+  const ocrEngine: ResumeOcrEngine = {
+    recognize: () =>
+      Promise.resolve({
+        text: resumeText,
+        characterCount: resumeText.length,
+        engineVersion: 'fake-ocr@1',
+      }),
+  };
+  const artifacts: ResumeArtifactReader = {
+    read: () => Promise.resolve(new Uint8Array([0xff, 0xd8, 0xff, 0xd9])),
+  };
   return {
     handle,
     profiles,
@@ -166,6 +190,7 @@ async function setup(model: FakeModelClient): Promise<{
       runner,
       documents: new SqliteResumeDocumentRepository(handle.client),
       profiles,
+      ...(options.image ? { ocr: { engine: ocrEngine, artifacts } } : {}),
     }),
     context: {
       signal: new AbortController().signal,
@@ -231,6 +256,32 @@ describe('resume profile Agent pipeline', () => {
       status: 'failed',
       error_category: 'invalid_output',
     });
+  });
+
+  it('runs OCR for an image document before reusing the profile Agent pipeline', async () => {
+    const model = new FakeModelClient([
+      (request) => ({
+        kind: 'output',
+        output: modelOutput(request),
+        usage: { inputTokens: 100, outputTokens: 80, estimatedCostMicros: 20 },
+      }),
+    ]);
+    const { handle, profiles, handler, context } = await setup(model, { image: true });
+    const profile = profiles.createProfile('图片简历候选人');
+    await handler.execute(context, {
+      profileId: profile.id,
+      resumeDocumentId: documentId,
+      expectedCurrentVersionId: null,
+    });
+
+    expect(profiles.getCurrent(profile.id)?.effective).toMatchObject({
+      targetRoles: ['Agent 开发'],
+      projects: [{ name: 'Coding Agent' }],
+    });
+    expect(
+      handle.client.prepare('SELECT parse_status, parser_version FROM resume_documents').get(),
+    ).toEqual({ parse_status: 'parsed', parser_version: 'fake-ocr@1' });
+    expect(model.requests[0]?.input).toEqual({ extractedText: resumeText });
   });
 
   it('maps model rate limits to a retryable Worker task category', async () => {

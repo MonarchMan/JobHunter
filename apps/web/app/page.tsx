@@ -4,6 +4,8 @@ import { DashboardSteps } from './components/dashboard-steps.js';
 import { MetricCard } from './components/metric-card.js';
 import { labelStatus, syncRunStatusLabels } from './components/status-labels.js';
 import { getWebContainer } from '../src/server/container.js';
+import panelStyles from './dashboard-panel.module.css';
+import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,18 +16,18 @@ export default async function DashboardPage(): Promise<ReactElement> {
   const hasJobs = dashboard.activeJobs > 0;
 
   return (
-    <main id="main-content" className="dashboard-page" tabIndex={-1}>
+    <main id="main-content" className={styles.page} tabIndex={-1}>
       <DashboardHero />
 
-      <section className="dashboard-section" aria-labelledby="snapshot-title">
+      <section className={styles.overview} aria-labelledby="snapshot-title">
         <div className="section-heading">
           <div>
             <span className="eyebrow">AT A GLANCE</span>
             <h2 id="snapshot-title">工作台概览</h2>
           </div>
-          <p className="section-description">所有关键进展，都从这里开始。</p>
+          <p className={styles.description}>所有关键进展，都从这里开始。</p>
         </div>
-        <div className="metric-grid" aria-label="核心指标">
+        <div className={styles.metrics} aria-label="核心指标">
           <MetricCard
             label="在招职位"
             value={dashboard.activeJobs}
@@ -57,21 +59,24 @@ export default async function DashboardPage(): Promise<ReactElement> {
         </div>
       </section>
 
-      <div className="dashboard-columns">
+      <div className={styles.columns}>
         <DashboardSteps hasSources={hasSources} hasJobs={hasJobs} />
-        <section className="dashboard-panel sync-panel" aria-labelledby="latest-sync-title">
-          <div className="section-heading section-heading-tight">
+        <section
+          className={[panelStyles.panel, styles.syncPanel].filter(Boolean).join(' ')}
+          aria-labelledby="latest-sync-title"
+        >
+          <div className={['section-heading', styles.tightHeading].filter(Boolean).join(' ')}>
             <div>
               <span className="eyebrow">ACTIVITY</span>
               <h2 id="latest-sync-title">最近同步</h2>
             </div>
-            <a className="text-link" href="/sources">
+            <a className={styles.textLink} href="/sources">
               查看来源 <span aria-hidden="true">↗</span>
             </a>
           </div>
           {dashboard.latestSync ? (
-            <div className="sync-summary">
-              <span className="sync-icon" aria-hidden="true">
+            <div className={styles.syncContent}>
+              <span className={styles.syncIcon} aria-hidden="true">
                 ↻
               </span>
               <div>
@@ -86,20 +91,32 @@ export default async function DashboardPage(): Promise<ReactElement> {
                   </time>
                 </p>
               </div>
-              <span className={`sync-state sync-${dashboard.latestSync.status}`}>
+              <span
+                className={[
+                  styles.syncState,
+                  dashboard.latestSync.status === 'succeeded'
+                    ? undefined
+                    : styles.syncNeedsAttention,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
                 {dashboard.latestSync.status === 'succeeded' ? '正常' : '需关注'}
               </span>
             </div>
           ) : (
-            <div className="sync-empty">
-              <span className="empty-orbit" aria-hidden="true">
+            <div className={[styles.syncContent, styles.syncEmpty].filter(Boolean).join(' ')}>
+              <span className={styles.syncIcon} aria-hidden="true">
                 ✦
               </span>
               <div>
                 <strong>还没有同步记录</strong>
                 <p>启动 Worker 后，从来源页面同步第一批职位。</p>
               </div>
-              <a className="button-secondary" href="/sources">
+              <a
+                className={['button-secondary', styles.emptyAction].filter(Boolean).join(' ')}
+                href="/sources"
+              >
                 去配置来源
               </a>
             </div>

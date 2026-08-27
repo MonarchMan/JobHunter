@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import styles from './pagination.module.css';
 
 interface PaginationProperties {
   readonly currentPage: number;
@@ -37,22 +38,18 @@ export function Pagination({
   label,
 }: PaginationProperties): ReactElement {
   return (
-    <nav className="pagination" aria-label={label}>
-      <span className="pagination-summary">
+    <nav className={styles.pagination} aria-label={label}>
+      <span className={styles.summary}>
         第 {currentPage} / {totalPages} 页
       </span>
       {pageItems(currentPage, totalPages).map((item, index) =>
         item === 'ellipsis' ? (
-          <span
-            className="pagination-ellipsis"
-            key={`ellipsis-${String(index)}`}
-            aria-hidden="true"
-          >
+          <span className={styles.ellipsis} key={`ellipsis-${String(index)}`} aria-hidden="true">
             …
           </span>
         ) : (
           <a
-            className={item === currentPage ? 'is-current' : undefined}
+            className={item === currentPage ? styles.current : undefined}
             href={createHref(item)}
             key={item}
             aria-current={item === currentPage ? 'page' : undefined}

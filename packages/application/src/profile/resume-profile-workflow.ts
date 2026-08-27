@@ -1,4 +1,5 @@
 import { parseId, type CandidateProfileData, type CandidateProfileId } from '@jobhunter/domain';
+import { isResumeOcrMediaType } from '@jobhunter/resume';
 import type { ResumeFileReader } from '../ports/resume-documents.js';
 import type { EnqueueTaskResult } from '../tasks/model.js';
 import type { TaskService } from '../tasks/task-service.js';
@@ -85,19 +86,22 @@ export class ResumeProfileWorkflow {
       : (this.#profiles.listProfiles()[0] ??
         this.#profiles.createProfile(input.profileName ?? '默认候选人画像'));
     const current = this.#profiles.getCurrent(profile.id);
-    const queued =
-      imported.document.parseStatus === 'parsed'
-        ? this.#tasks.enqueue({
-            taskType: 'resume.profile.extract',
-            priority: 100,
-            payload: {
-              profileId: profile.id,
-              resumeDocumentId: imported.document.id,
-              expectedCurrentVersionId: current?.id ?? null,
-            },
-            idempotencyKey: `resume.profile.extract:${profile.id}:${imported.document.contentHash}:${current?.id ?? 'initial'}`,
-          })
-        : null;
+    const canExtract =
+      imported.document.parseStatus === 'parsed' ||
+      (imported.document.parseStatus === 'needs_ocr' &&
+        isResumeOcrMediaType(imported.document.mediaType));
+    const queued = canExtract
+      ? this.#tasks.enqueue({
+          taskType: 'resume.profile.extract',
+          priority: 100,
+          payload: {
+            profileId: profile.id,
+            resumeDocumentId: imported.document.id,
+            expectedCurrentVersionId: current?.id ?? null,
+          },
+          idempotencyKey: `resume.profile.extract:${profile.id}:${imported.document.contentHash}:${current?.id ?? 'initial'}`,
+        })
+      : null;
     return {
       document: {
         id: imported.document.id,

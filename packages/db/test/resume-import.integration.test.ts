@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   openSqliteDatabase,
   SqliteArtifactStore,
+  SqliteResumeArtifactReader,
   SqliteResumeDocumentRepository,
   type SqliteDatabaseHandle,
 } from '../src/index.js';
@@ -57,18 +58,18 @@ async function setup(): Promise<{
 }
 
 describe('resume import persistence', () => {
-  it('imports the redacted Agent DOCX and deduplicates both artifact and document', async () => {
+  it('imports the reference JPEG and deduplicates both artifact and document', async () => {
     const { handle, service } = await setup();
     const bytes = await readFile(
-      new URL('../../../docs/resumes/agent简历 - 新.docx', import.meta.url),
+      new URL('../../../docs/resumes/nowcoder_1787802316450.jpeg', import.meta.url),
     );
     const first = await service.import(bytes, new AbortController().signal);
     const replay = await service.import(bytes, new AbortController().signal);
 
     expect(first.deduplicated).toBe(false);
-    expect(first.document.parseStatus).toBe('parsed');
-    expect(first.document.mediaType).toContain('wordprocessingml');
-    expect(first.document.extractedText).toContain('Coding Agent');
+    expect(first.document.parseStatus).toBe('needs_ocr');
+    expect(first.document.mediaType).toBe('image/jpeg');
+    expect(first.document.extractedText).toBeNull();
     expect(replay).toMatchObject({ deduplicated: true, document: { id: first.document.id } });
     expect(handle.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(1);
     expect(handle.client.prepare('SELECT count(*) FROM resume_documents').pluck().get()).toBe(1);
@@ -86,6 +87,27 @@ describe('resume import persistence', () => {
       errorSummary: 'Resume contains too little readable text.',
     });
     expect(handle.client.prepare('SELECT count(*) FROM profile_versions').pluck().get()).toBe(0);
+  });
+
+  it('keeps the stored reference JPEG artifact readable for the Worker', async () => {
+    const { handle, service } = await setup();
+    const bytes = await readFile(
+      new URL('../../../docs/resumes/nowcoder_1787802316450.jpeg', import.meta.url),
+    );
+    const result = await service.import(bytes, new AbortController().signal);
+    expect(result.document).toMatchObject({
+      mediaType: 'image/jpeg',
+      parseStatus: 'needs_ocr',
+      extractedText: null,
+    });
+    const root = resources.at(-1)?.root.path;
+    if (!root) throw new TypeError('Temporary data root is missing.');
+    const stored = await new SqliteResumeArtifactReader(handle.client, root).read(
+      result.document.artifactId,
+      10 * 1024 * 1024,
+      new AbortController().signal,
+    );
+    expect(stored).toEqual(new Uint8Array(bytes));
   });
 
   it('cancels before writing sensitive artifacts', async () => {

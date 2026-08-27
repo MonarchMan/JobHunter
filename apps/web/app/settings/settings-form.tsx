@@ -4,6 +4,7 @@ import type { SystemSettings } from '@jobhunter/application/web';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import styles from './settings.module.css';
 
 interface SettingsFormProperties {
   readonly settings: SystemSettings;
@@ -45,13 +46,13 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
 
   return (
     <form
-      className="settings-form form-stack"
+      className={styles.settingsForm}
       onSubmit={(event) => {
         void submit(event);
       }}
       noValidate
     >
-      <label className="settings-toggle">
+      <label className={styles.settingsToggle}>
         <input
           type="checkbox"
           checked={enabled}

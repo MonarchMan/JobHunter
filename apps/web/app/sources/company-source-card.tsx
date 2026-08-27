@@ -11,6 +11,11 @@ import {
   syncStatLabels,
 } from '../components/status-labels.js';
 import { SourceActions, SourceSyncAction } from './source-actions.js';
+import styles from './company-source-card.module.css';
+
+function classNames(...names: readonly (string | false | undefined)[]): string {
+  return names.filter(Boolean).join(' ');
+}
 
 type RecruitmentChannel = WebSource['recruitmentChannels'][number];
 type SelectedChannel = 'all' | RecruitmentChannel;
@@ -43,25 +48,26 @@ function SourcePanel({ source }: Readonly<{ source: WebSource }>): ReactElement 
   const label = sourceLabel(source);
   return (
     <section
-      className="company-source-view company-source-panel"
+      className={classNames(styles['company-source-view'], styles['company-source-panel'])}
+      data-company-source-panel
       aria-label={`${source.companyName} ${label}来源`}
     >
-      <header className="company-source-panel-header">
+      <header className={styles['company-source-panel-header']}>
         <div>
-          <p className="source-channel-kicker">{label}渠道</p>
+          <p className={styles['source-channel-kicker']}>{label}渠道</p>
           <h3>{source.enabled ? '自动同步已启用' : '当前来源已停用'}</h3>
-          <p className="source-technical-name">{source.slug}</p>
+          <p className={styles['source-technical-name']}>{source.slug}</p>
         </div>
-        <div className="source-badges">
-          <span className={`status health-${source.healthStatus}`}>
+        <div className={styles['source-badges']}>
+          <span className={classNames('status', styles[`health-${source.healthStatus}`])}>
             {healthLabels[source.healthStatus]}
           </span>
-          <span className={`status support-${source.supportStatus}`}>
+          <span className={classNames('status', styles[`support-${source.supportStatus}`])}>
             {labelStatus(supportStatusLabels, source.supportStatus)}
           </span>
         </div>
       </header>
-      <dl className="facts source-facts">
+      <dl className={classNames('facts', styles['source-facts'])} data-source-facts>
         <div>
           <dt>连续失败</dt>
           <dd>{source.consecutiveFailures}</dd>
@@ -95,12 +101,12 @@ function SourcePanel({ source }: Readonly<{ source: WebSource }>): ReactElement 
         </div>
       </dl>
       {source.latestRun ? (
-        <details className="run-summary">
+        <details className={styles['run-summary']}>
           <summary>
             最近运行：{labelStatus(syncRunStatusLabels, source.latestRun.status)} /{' '}
             {labelStatus(coverageLabels, source.latestRun.coverage)}
           </summary>
-          <dl className="stats-list">
+          <dl className={styles['stats-list']}>
             {Object.entries(source.latestRun.stats).map(([key, value]) => (
               <div key={key}>
                 <dt>{labelStatus(syncStatLabels, key)}</dt>
@@ -139,15 +145,15 @@ function CompanyOverview({
 
   return (
     <section
-      className="company-source-view company-source-overview"
+      className={classNames(styles['company-source-view'], styles['company-source-overview'])}
       aria-label={`${companyName}全部渠道总览`}
     >
-      <div className="company-overview-intro">
-        <p className="source-channel-kicker">全部渠道</p>
+      <div className={styles['company-overview-intro']}>
+        <p className={styles['source-channel-kicker']}>全部渠道</p>
         <h3>{channels.map((channel) => channelLabels[channel]).join('、')}已接入</h3>
         <p>选择具体渠道可查看同步运行、统计和计划设置。</p>
       </div>
-      <dl className="company-overview-metrics">
+      <dl className={styles['company-overview-metrics']}>
         <div>
           <dt>接入渠道</dt>
           <dd>{channels.length}</dd>
@@ -209,14 +215,14 @@ export function CompanySourceCard({
         : companyName;
 
   return (
-    <article className="source-card company-source-card">
-      <header className="company-source-header">
-        <div className="company-source-heading-block">
-          <div className="company-name-channel-row">
-            <CompanyLogo name={companyName} />
+    <article className={styles['company-source-card']} data-company-source-card>
+      <header className={styles['company-source-header']} data-company-source-header>
+        <div className={styles['company-source-heading-block']}>
+          <div className={styles['company-name-channel-row']} data-company-name-channel-row>
+            <CompanyLogo name={companyName} variant="source-heading" />
             {officialUrl ? (
               <a
-                className="company-source-name-link"
+                className={styles['company-source-name-link']}
                 href={officialUrl}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -242,21 +248,21 @@ export function CompanySourceCard({
               ))}
             </select>
           </div>
-          <p className="company-source-meta">
+          <p className={styles['company-source-meta']}>
             {channels.length} 个已接入渠道 · {sources.length} 个官网来源
           </p>
         </div>
-        <div className="company-source-header-actions">
+        <div className={styles['company-source-header-actions']} data-company-source-header-actions>
           <SourceSyncAction sources={visibleSources} contextLabel={syncContextLabel} />
-          <div className="company-health-summary">
+          <div className={styles['company-health-summary']} data-company-health-summary>
             <span>综合状态</span>
-            <strong className={`health-text-${companyHealth}`}>
+            <strong className={styles[`health-text-${companyHealth}`]}>
               {healthLabels[companyHealth]}
             </strong>
           </div>
         </div>
       </header>
-      <div className="company-source-panels">
+      <div className={styles['company-source-panels']} data-company-source-panels>
         {showsOverview ? (
           <CompanyOverview companyName={companyName} sources={sources} channels={channels} />
         ) : (

@@ -39,7 +39,7 @@ const helpExamples: Readonly<Record<string, readonly string[]>> = {
   'job list': ['jh job list --company tencent --location 北京 --limit 20'],
   'job show': ['jh job show <jobId>'],
   'job export': ['jh job export ./exports/jobs.csv --format csv --bom'],
-  'resume import': ['jh resume import "./docs/resumes/agent简历 - 新.docx"'],
+  'resume import': ['jh resume import "./docs/resumes/nowcoder_1787802316450.jpeg"'],
   'profile show': ['jh --json profile show <profileId>'],
   'profile history': ['jh profile history <profileId>'],
   'profile set': ['jh profile set <profileId> /preferences/locations "[\\"北京\\"]"'],

@@ -1,13 +1,20 @@
 import { AgentRuntimeError, type AgentRunner } from '@jobhunter/agent-core';
 import { parseId } from '@jobhunter/domain';
 import {
+  isResumeOcrMediaType,
   parseResumeProfileAgentOutput,
+  ResumeOcrError,
   resumeProfileAgentDefinition,
   toCandidateProfile,
   type CandidatePreferences,
+  type ResumeOcrEngine,
 } from '@jobhunter/resume';
 import { z } from 'zod';
-import type { ResumeDocumentRepository } from '../ports/resume-documents.js';
+import type {
+  ResumeArtifactReader,
+  ResumeDocumentRecord,
+  ResumeDocumentRepository,
+} from '../ports/resume-documents.js';
 import { mapAgentRuntimeError } from '../agents/error-mapping.js';
 import type { TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
@@ -43,6 +50,13 @@ export function createResumeProfileTaskHandler(
         readonly runner: AgentRunner;
         readonly documents: ResumeDocumentRepository;
         readonly profiles: CandidateProfileService;
+        readonly ocr?: {
+          readonly engine: ResumeOcrEngine;
+          readonly artifacts: ResumeArtifactReader;
+          readonly maximumFileBytes?: number;
+          readonly minimumNonWhitespaceCharacters?: number;
+          readonly maximumExtractedCharacters?: number;
+        };
       }
     | { readonly unavailable: true },
 ): TaskHandler<
@@ -60,7 +74,10 @@ export function createResumeProfileTaskHandler(
       if ('unavailable' in input) {
         throw new TaskExecutionError('invalid_config', 'Resume profile model is not configured.');
       }
-      const document = input.documents.getById(payload.resumeDocumentId);
+      let document = input.documents.getById(payload.resumeDocumentId);
+      if (document?.parseStatus === 'needs_ocr') {
+        document = await completeDocumentOcr(input, document, context.signal);
+      }
       if (document?.parseStatus !== 'parsed' || document.extractedText === null) {
         throw new TaskExecutionError(
           'validation_failed',
@@ -100,4 +117,67 @@ export function createResumeProfileTaskHandler(
       }
     },
   };
+}
+
+async function completeDocumentOcr(
+  input: {
+    readonly documents: ResumeDocumentRepository;
+    readonly ocr?: {
+      readonly engine: ResumeOcrEngine;
+      readonly artifacts: ResumeArtifactReader;
+      readonly maximumFileBytes?: number;
+      readonly minimumNonWhitespaceCharacters?: number;
+      readonly maximumExtractedCharacters?: number;
+    };
+  },
+  document: ResumeDocumentRecord,
+  signal: AbortSignal,
+): Promise<ResumeDocumentRecord> {
+  if (!isResumeOcrMediaType(document.mediaType)) {
+    throw new TaskExecutionError(
+      'validation_failed',
+      'Image-based PDF OCR is not supported; upload a JPEG or PNG image.',
+    );
+  }
+  if (!input.ocr) {
+    throw new TaskExecutionError('invalid_config', 'Resume OCR is not configured.');
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = await input.ocr.artifacts.read(
+      document.artifactId,
+      input.ocr.maximumFileBytes ?? 10 * 1024 * 1024,
+      signal,
+    );
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    throw new TaskExecutionError('io_temporary', 'Resume image could not be read.', {
+      cause: error,
+    });
+  }
+  try {
+    const result = await input.ocr.engine.recognize(bytes, document.mediaType, {
+      minimumNonWhitespaceCharacters: input.ocr.minimumNonWhitespaceCharacters ?? 80,
+      maximumExtractedCharacters: input.ocr.maximumExtractedCharacters ?? 250_000,
+      signal,
+    });
+    return input.documents.completeOcr({
+      id: document.id,
+      extractedText: result.text,
+      parserVersion: result.engineVersion,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    if (error instanceof ResumeOcrError) {
+      const validationFailure = error.code === 'low_quality' || error.code === 'text_too_large';
+      throw new TaskExecutionError(
+        validationFailure ? 'validation_failed' : 'io_temporary',
+        validationFailure
+          ? 'Resume OCR did not produce usable text.'
+          : 'Resume OCR is temporarily unavailable.',
+        { cause: error },
+      );
+    }
+    throw error;
+  }
 }

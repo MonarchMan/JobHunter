@@ -13,6 +13,7 @@ import {
   parseWebJobQuery,
   type SearchParameterSource,
 } from '../../src/server/job-query.js';
+import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '职位' };
@@ -44,15 +45,21 @@ export default async function JobsPage({
   );
   const page = container.services.webJobs.list(query);
   return (
-    <main id="main-content" className="jobs-page" tabIndex={-1}>
+    <main id="main-content" tabIndex={-1}>
       <PageHeader
         eyebrow="OPPORTUNITIES"
         title="职位列表"
         description="默认隐藏已关闭职位。筛选条件会保存在当前 URL 中。"
       />
-      <details className="job-filter-panel" open={hasFilters}>
+      <details className={styles.filterPanel} open={hasFilters}>
         <summary>筛选职位{hasFilters ? ' · 已设置条件' : ''}</summary>
-        <form className="filters" action="/jobs" method="get" aria-label="职位筛选" noValidate>
+        <form
+          className={styles.filters}
+          action="/jobs"
+          method="get"
+          aria-label="职位筛选"
+          noValidate
+        >
           <label>
             招聘类别
             <select
@@ -152,8 +159,8 @@ export default async function JobsPage({
           </a>
         </form>
       </details>
-      <div className="jobs-result-toolbar">
-        <p className="result-summary" aria-live="polite">
+      <div className={styles.resultToolbar}>
+        <p className={styles.resultSummary} aria-live="polite">
           当前类别：
           {fieldValue(parameters, 'category') === 'campus'
             ? '校招'

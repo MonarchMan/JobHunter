@@ -5,6 +5,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { Icon } from './ui-icon.js';
+import styles from './job-score-action.module.css';
 
 export function JobScoreAction({
   jobIds,
@@ -117,11 +118,11 @@ export function JobScoreAction({
   }, [open]);
 
   return (
-    <div className="score-action">
+    <div className={styles.action}>
       {unavailableReason ? (
         <button
           type="button"
-          className="button-secondary score-trigger"
+          className={['button-secondary', styles.trigger].filter(Boolean).join(' ')}
           disabled
           title={unavailableReason}
         >
@@ -133,7 +134,9 @@ export function JobScoreAction({
           <button
             ref={triggerReference}
             type="button"
-            className={`button-secondary score-trigger${busy ? ' is-busy' : ''}`}
+            className={['button-secondary', styles.trigger, busy ? 'is-busy' : undefined]
+              .filter(Boolean)
+              .join(' ')}
             aria-expanded={open}
             aria-controls={panelId}
             aria-haspopup="dialog"
@@ -150,7 +153,7 @@ export function JobScoreAction({
                 <div
                   ref={panelReference}
                   id={panelId}
-                  className="score-menu-panel score-menu-popover"
+                  className={styles.popover}
                   role="dialog"
                   aria-label="选择评分方式"
                   style={{ left: position.left, top: position.top }}
@@ -176,10 +179,10 @@ export function JobScoreAction({
         </>
       )}
       {showHint && unavailableReason ? (
-        <span className="action-hint">{unavailableReason}</span>
+        <span className={styles.hint}>{unavailableReason}</span>
       ) : null}
       {message ? (
-        <span className="action-feedback" role="status">
+        <span className={styles.feedback} role="status">
           {message}
         </span>
       ) : null}

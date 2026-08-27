@@ -1,0 +1,56 @@
+.root {
+  position: relative;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  outline: none;
+}
+
+.value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  width: max-content;
+  max-width: min(24rem, 70vw);
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--ink);
+  box-shadow: 0 0.8rem 2rem rgb(28 33 48 / 20%);
+  color: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.45;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+  white-space: normal;
+}
+
+.root:hover .tooltip,
+.root:focus-visible .tooltip,
+:global(.job-link):focus-visible .tooltip {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.root:focus-visible .value {
+  border-radius: 0.2rem;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+:global(.company-cell) .root {
+  flex: 1 1 auto;
+}

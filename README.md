@@ -20,7 +20,7 @@ JobHunter 是一个面向个人求职场景的本地招聘数据与岗位匹配�
 
 检查版本：
 
-```powershell
+```shell
 node --version
 pnpm --version
 ```
@@ -28,6 +28,15 @@ pnpm --version
 ## 安装与配置
 
 在项目根目录执行：
+
+macOS / Linux（Terminal）：
+
+```bash
+pnpm install
+cp .env.example .env
+```
+
+Windows（PowerShell）：
 
 ```powershell
 pnpm install
@@ -46,21 +55,21 @@ API_KEY=your-api-key
 MODEL=your-model-name
 ```
 
-模型配置是可选的。只有执行简历画像、岗位理解或匹配建议等模型任务时才需要填写。API Key 只放在本地 `.env`，不要提交到 Git。
+模型配置是可选的。只有执行简历画像、岗位理解或匹配建议等模型任务时才需要填写。
 
 初始化本地数据目录：
 
-```powershell
+```shell
 pnpm --filter @jobhunter/cli build
 node apps/cli/dist/main.js init
 node apps/cli/dist/main.js doctor
 ```
 
-初始化会幂等执行以下后台准备工作：如果存在 `docs/resumes/agent简历 - 新.docx`，将其导入并创建画像提取任务；为启用的十个官网来源创建职位同步任务；建立每日来源刷新和每周清理计划。真正的解析、官网请求和匹配由 Worker 异步执行。
+初始化会幂等执行以下后台准备工作：优先导入 `docs/resumes/nowcoder_1787802316450.jpeg`（缺失时兼容旧的 `agent简历 - 新.docx`）并创建画像提取任务；为启用的十个官网来源创建职位同步任务；建立每日来源刷新和每周清理计划。真正的 OCR、解析、官网请求和匹配由 Worker 异步执行。
 
 如果 `pnpm exec jh` 尚未建立命令链接，也可以先运行：
 
-```powershell
+```shell
 pnpm install
 pnpm --filter @jobhunter/cli build
 ```
@@ -71,7 +80,7 @@ pnpm --filter @jobhunter/cli build
 
 ### 1. 启动 Web 管理台
 
-```powershell
+```shell
 pnpm --filter @jobhunter/web dev
 ```
 
@@ -90,6 +99,14 @@ Web 管理台默认入口：
 
 可以通过环境变量修改本地监听端口：
 
+macOS / Linux（bash、zsh）：
+
+```bash
+PORT=3211 pnpm --filter @jobhunter/web dev
+```
+
+Windows（PowerShell）：
+
 ```powershell
 $env:PORT='3211'
 pnpm --filter @jobhunter/web dev
@@ -101,7 +118,7 @@ Web 服务默认只允许绑定 loopback 地址；不建议将它直接暴露到
 
 Worker 负责执行职位同步、简历画像、匹配等耗时任务：
 
-```powershell
+```shell
 node apps/cli/dist/main.js worker start
 ```
 
@@ -115,19 +132,19 @@ Web 的“个人资料”页面也支持直接导入 PDF、DOCX 简历。上传�
 
 查看来源：
 
-```powershell
+```shell
 node apps/cli/dist/main.js source list
 ```
 
 同步单个来源并等待结果：
 
-```powershell
+```shell
 node apps/cli/dist/main.js source sync tencent-social --wait
 ```
 
 同步所有默认启用来源：
 
-```powershell
+```shell
 node apps/cli/dist/main.js source sync --all --wait
 ```
 
@@ -135,9 +152,9 @@ node apps/cli/dist/main.js source sync --all --wait
 
 ## 常用 CLI 操作
 
-```powershell
-# 导入简历
-node apps/cli/dist/main.js resume import "docs/resumes/your-resume.docx"
+```shell
+# 导入简历（支持 PDF、DOCX、JPEG、PNG）
+node apps/cli/dist/main.js resume import "docs/resumes/your-resume.jpeg"
 
 # 查看职位
 node apps/cli/dist/main.js job list --limit 20
@@ -161,7 +178,7 @@ node apps/cli/dist/main.js --help
 
 ## 开发与验证
 
-```powershell
+```shell
 # 类型检查
 pnpm typecheck
 
@@ -182,6 +199,16 @@ pnpm check
 ```
 
 在线招聘来源测试默认关闭。需要显式启用时，使用：
+
+macOS / Linux（bash、zsh）：
+
+```bash
+JOBHUNTER_ONLINE_SOURCES=1 \
+JOBHUNTER_BROWSER_ONLINE_SOURCE=dewu \
+pnpm test:online
+```
+
+Windows（PowerShell）：
 
 ```powershell
 $env:JOBHUNTER_ONLINE_SOURCES='1'

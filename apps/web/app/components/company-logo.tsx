@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import styles from './company-logo.module.css';
 
 const companyLogoPaths: Readonly<Record<string, string>> = {
   腾讯: '/assets/company-logos/tencent.png',
@@ -13,11 +14,28 @@ const companyLogoPaths: Readonly<Record<string, string>> = {
   华为: '/assets/company-logos/huawei.png',
 };
 
-export function CompanyLogo({ name, size = 'medium' }: Readonly<{ name: string; size?: 'small' | 'medium' }>): ReactElement {
+export function CompanyLogo({
+  name,
+  size = 'medium',
+  variant = 'default',
+}: Readonly<{
+  name: string;
+  size?: 'small' | 'medium';
+  variant?: 'default' | 'source-heading';
+}>): ReactElement {
   const source = companyLogoPaths[name];
+  const sizeClass = size === 'small' ? styles.small : styles.medium;
+  const variantClass = variant === 'source-heading' ? styles.sourceHeading : undefined;
   return (
-    <span className={`company-logo company-logo-${size}`} aria-hidden="true">
-      {source ? <img src={source} alt="" width={32} height={32} /> : <span>{name.slice(0, 1)}</span>}
+    <span
+      className={[styles.logo, sizeClass, variantClass].filter(Boolean).join(' ')}
+      aria-hidden="true"
+    >
+      {source ? (
+        <img src={source} alt="" width={32} height={32} />
+      ) : (
+        <span>{name.slice(0, 1)}</span>
+      )}
     </span>
   );
 }

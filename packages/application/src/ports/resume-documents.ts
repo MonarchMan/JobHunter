@@ -17,8 +17,17 @@ export interface ResumeDocumentRepository {
   getById(id: string): ResumeDocumentRecord | null;
   findByContentHash(contentHash: ContentHash): ResumeDocumentRecord | null;
   createOrGet(input: ResumeDocumentRecord): ResumeDocumentRecord;
+  completeOcr(input: {
+    readonly id: string;
+    readonly extractedText: string;
+    readonly parserVersion: string;
+  }): ResumeDocumentRecord;
 }
 
 export interface ResumeFileReader {
   read(path: string, maximumBytes: number): Promise<Uint8Array>;
+}
+
+export interface ResumeArtifactReader {
+  read(artifactId: string, maximumBytes: number, signal: AbortSignal): Promise<Uint8Array>;
 }

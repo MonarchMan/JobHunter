@@ -64,7 +64,7 @@ JobHunter 像一套正在整理中的个人求职档案：信息可信、分类�
 - **Memorable signature:** 3px 珊瑚色“决策光标”，只标记下一步行动、核心判断或首要恢复入口。
 - **Restraint:** 表格、表单、设置与诊断界面优先熟悉度、密度和稳定性。
 - **Anti-references:** 不使用绿色品牌后台、荧光 AI 科技风、玻璃拟态、大面积渐变和所有内容卡片化。
-- **Token ownership/runtime mapping:** `apps/web/app/styles.css` 是运行时唯一令牌源；本文件镜像并解释同一组批准值。变更必须同步修改两处并运行设计 lint、颜色搜索和浏览器视觉验证。
+- **Token ownership/runtime mapping:** `apps/web/app/styles/tokens.css` 是运行时唯一令牌源，`apps/web/app/styles.css` 只负责按稳定顺序装配全局分片；本文件镜像并解释同一组批准值。变更必须同步修改令牌源与本文件，并运行设计 lint、颜色搜索和浏览器视觉验证。
 
 ## Colors
 

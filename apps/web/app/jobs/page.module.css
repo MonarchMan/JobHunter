@@ -1,0 +1,81 @@
+.filterPanel {
+  margin-bottom: 1.25rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  background: var(--surface);
+  box-shadow: 0 0.35rem 1.25rem rgb(54 64 117 / 6%);
+}
+
+.filterPanel summary {
+  color: var(--primary-hover);
+  cursor: pointer;
+  font-weight: 800;
+  text-underline-offset: 0.18rem;
+}
+
+.filterPanel[open] {
+  box-shadow: 0 0.8rem 2rem rgb(60 73 145 / 7%);
+}
+
+.filterPanel[open] summary {
+  margin-bottom: 1rem;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0 0 1rem;
+  padding: 1.25rem;
+  border: 0;
+  border-radius: 1rem;
+  background: transparent;
+}
+
+.filters button,
+.filters :global(.button-secondary) {
+  align-self: end;
+}
+
+.filters label {
+  display: grid;
+  gap: 0.4rem;
+  color: #50586a;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.resultToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.resultSummary {
+  color: var(--muted-ink);
+}
+
+@media (max-width: 1024px) {
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .filters {
+    grid-template-columns: 1fr;
+    padding: 0.75rem 0;
+  }
+
+  .filters button,
+  .filters :global(.button-secondary) {
+    width: 100%;
+  }
+
+  .resultToolbar {
+    align-items: start;
+    flex-direction: column;
+  }
+}

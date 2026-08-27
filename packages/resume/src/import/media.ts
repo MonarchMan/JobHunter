@@ -1,7 +1,9 @@
 export type ResumeMediaType =
   | 'application/pdf'
   | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  | 'text/plain';
+  | 'text/plain'
+  | 'image/jpeg'
+  | 'image/png';
 
 export interface ResumeMediaDetection {
   readonly mediaType: ResumeMediaType;
@@ -19,6 +21,8 @@ export class ResumeMediaError extends Error {
 }
 
 const pdfHeader = new TextEncoder().encode('%PDF-');
+const jpegHeader = new Uint8Array([0xff, 0xd8, 0xff]);
+const pngHeader = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const zipLocalHeader = 0x04034b50;
 const zipCentralHeader = 0x02014b50;
 const zipEndOfCentralDirectory = 0x06054b50;
@@ -105,6 +109,12 @@ export function detectResumeMediaType(
   if (startsWith(bytes, pdfHeader)) {
     return { mediaType: 'application/pdf', byteSize: bytes.byteLength };
   }
+  if (startsWith(bytes, jpegHeader) && bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9) {
+    return { mediaType: 'image/jpeg', byteSize: bytes.byteLength };
+  }
+  if (startsWith(bytes, pngHeader)) {
+    return { mediaType: 'image/png', byteSize: bytes.byteLength };
+  }
   if (bytes.byteLength >= 4) {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     if (view.getUint32(0, true) === zipLocalHeader) {
@@ -121,6 +131,12 @@ export function detectResumeMediaType(
   if (isStrictUtf8Text(bytes)) return { mediaType: 'text/plain', byteSize: bytes.byteLength };
   throw new ResumeMediaError(
     'unsupported_media_type',
-    'Resume content is not a supported PDF, DOCX or UTF-8 text file.',
+    'Resume content is not a supported PDF, DOCX, JPEG, PNG or UTF-8 text file.',
   );
+}
+
+export function isResumeOcrMediaType(
+  mediaType: ResumeMediaType,
+): mediaType is 'image/jpeg' | 'image/png' {
+  return mediaType === 'image/jpeg' || mediaType === 'image/png';
 }

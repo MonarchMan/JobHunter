@@ -12,6 +12,7 @@ export * from './errors.js';
 export * from './health.js';
 export * from './job-export-file-store.js';
 export * from './resume-file-reader.js';
+export * from './resume-artifact-reader.js';
 export * from './initializer.js';
 export * from './repositories/agent-run-store.js';
 export * from './repositories/candidate-profile-repository.js';
