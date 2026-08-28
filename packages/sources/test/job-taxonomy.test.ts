@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeJobTaxonomy } from '../src/job-taxonomy.js';
+import { normalizeJobTaxonomy } from '../src/shared/normalization/job-taxonomy.js';
 
 describe('job taxonomy', () => {
   it.each([

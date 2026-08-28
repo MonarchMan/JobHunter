@@ -43,6 +43,7 @@ try {
   const worker = createProductionWorkerApplication({
     dataRoot: config.bootstrap.dataRoot.value,
     pollIntervalMs: config.worker.pollIntervalMs.value,
+    maxConcurrentNetworkTasks: config.worker.maxConcurrentNetworkTasks.value,
     taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
     logger,
     pageClient: createPlaywrightSourcePageClient(),

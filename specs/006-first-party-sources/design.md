@@ -34,6 +34,8 @@ packages/sources/
 
 来源目录按“公司 1:N 招聘渠道”建模，同一 company ID 下每个社招、校招、实习渠道拥有稳定且唯一的 source ID、slug 和 adapter key。来源若同时返回校招与实习，适配器先使用响应中的招聘类型或项目标识，再使用职位名称中的明确实习语义，最后才回退来源类型；职责和任职要求只描述工作内容，不参与招聘类别推断。只请求 `INTERN` 的来源直接以常量归一化为 `internship`，已有独立实习来源的社招来源声明为 `social`。
 
+> 演进说明：018 将此处的“招聘渠道”拆为稳定逻辑 `SourceChannel` 与 `0..N` 个物理 `JobSource`。本规格记录首批适配器交付背景；持续的数据所有权和同步语义以 018 与 ADR-0009 为准。
+
 岗位 URL 在来源边界生成并接受契约校验。提供稳定详情路由的来源必须使用岗位 ID 或官方详情标识生成深链；当前特殊路由为阿里 `/campus/position/{id}`、小红书 `/campus/position/{positionId}`、京东 `#/details?id={publishId}&type=present`、华为 `/cn/job-details?advertisementId={advertisementId}`。列表入口只用于来源元数据，不得写入规范职位的 `detailUrl/applyUrl`。
 
 ## 技术策略

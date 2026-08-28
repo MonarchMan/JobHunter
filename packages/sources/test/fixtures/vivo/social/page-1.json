@@ -1,0 +1,36 @@
+{
+  "code": 0,
+  "message": "success",
+  "success": true,
+  "data": [
+    {
+      "job_id": "M2087541405486350338",
+      "job_code": "D9170X",
+      "job_title": "互联网产品经理",
+      "requirement_org_name": "互联网大数据部",
+      "degree_range_name": "本科",
+      "yoe_min": 5,
+      "yoe_max": -1,
+      "job_location_list": [{ "city": "深圳", "location": "宝安区" }],
+      "job_desc": "负责数据产品规划、建设和持续优化。",
+      "job_category_id": "M1718986166464483330",
+      "job_category": "研发类",
+      "publish_timestamp": 1787885229556
+    },
+    {
+      "job_id": "M2077966807372054530",
+      "job_code": "Z9000T",
+      "job_title": "软件开发工程师",
+      "requirement_org_name": "软件系统集成部",
+      "degree_range_name": "本科",
+      "yoe_min": 3,
+      "yoe_max": 5,
+      "job_location_list": [{ "city": "上海", "location": "浦东新区" }],
+      "job_desc": "负责系统软件设计、开发和维护。",
+      "job_category_id": "M1718986166464483330",
+      "job_category": "研发类",
+      "publish_timestamp": 1787885229000
+    }
+  ],
+  "meta": { "page": 1, "total": 2, "page_count": 1, "max_results": 2 }
+}

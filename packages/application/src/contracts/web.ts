@@ -373,16 +373,19 @@ export const webSourceSchema = z
   .object({
     id: z.uuid(),
     companyId: z.uuid(),
+    channelId: z.uuid(),
     companyName: z.string(),
     officialUrl: z.url({ protocol: /^https$/ }),
     slug: z.string(),
     adapterKey: z.string(),
+    coverageRole: z.enum(['required', 'supplemental']),
     recruitmentType: z.enum(['social', 'campus', 'mixed']),
     recruitmentChannels: z
       .array(z.enum(['internship', 'campus', 'social']))
       .min(1)
       .max(3),
     enabled: z.boolean(),
+    effectiveEnabled: z.boolean(),
     supportStatus: z.enum(['experimental', 'supported', 'blocked']),
     healthStatus: z.enum(['unknown', 'healthy', 'degraded', 'unhealthy']),
     consecutiveFailures: z.number().int().nonnegative(),
@@ -402,6 +405,37 @@ export const webSourceSchema = z
   .strict();
 
 export type WebSource = z.infer<typeof webSourceSchema>;
+
+export const webSourceChannelSchema = z
+  .object({
+    id: z.uuid(),
+    companyId: z.uuid(),
+    companyName: z.string(),
+    slug: z.string(),
+    channel: z.enum(['intern', 'campus', 'social']),
+    enabled: z.boolean(),
+    effectiveEnabled: z.boolean(),
+    supportNote: z.string().nullable(),
+    supportStatus: z.enum(['experimental', 'supported', 'blocked']),
+    healthStatus: z.enum(['unknown', 'healthy', 'degraded', 'unhealthy']),
+    sources: z.array(webSourceSchema),
+  })
+  .strict();
+
+export type WebSourceChannel = z.infer<typeof webSourceChannelSchema>;
+
+export const webSourceChannelMutationSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('sync'),
+      channelId: z.uuid(),
+      idempotencyToken: z.string().trim().min(8).max(200),
+    })
+    .strict(),
+  z.object({ kind: z.literal('enable'), channelId: z.uuid(), enabled: z.boolean() }).strict(),
+]);
+
+export type WebSourceChannelMutation = z.infer<typeof webSourceChannelMutationSchema>;
 
 export const webSourceMutationSchema = z.discriminatedUnion('kind', [
   z

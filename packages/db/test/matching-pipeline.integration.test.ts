@@ -172,16 +172,24 @@ async function setup(): Promise<{
        VALUES (?, 'fixture-match', 'Fixture Match', '[]', '大模型应用', 'large', 1, 1, 1)`,
     )
     .run(companyId);
+  const channelId = '018f0000-0000-7000-8200-000000000103';
+  handle.client
+    .prepare(
+      `INSERT INTO source_channels
+       (id, company_id, channel, slug, enabled, created_at, updated_at)
+       VALUES (?, ?, 'social', 'fixture-match-social', 1, 1, 1)`,
+    )
+    .run(channelId, companyId);
   handle.client
     .prepare(
       `INSERT INTO job_sources
-       (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+       (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
         sync_policy_version, sync_policy_json, enabled, support_status, health_status,
         consecutive_failures, created_at, updated_at)
-       VALUES (?, ?, 'fixture-match-social', 'fixture.match', 'social',
+       VALUES (?, ?, ?, 'fixture-match-social', 'fixture.match', 'social',
                'https://careers.example.com', '{}', 'v1', '{}', 1, 'supported', 'healthy', 0, 1, 1)`,
     )
-    .run(sourceId, companyId);
+    .run(sourceId, companyId, channelId);
   handle.client
     .prepare(
       `INSERT INTO sync_runs

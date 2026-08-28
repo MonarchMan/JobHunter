@@ -1,0 +1,38 @@
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "list": [
+      {
+        "title": "顶尖实习-大语言模型算法研究员",
+        "cityZhNames": ["北京"],
+        "levelOneDeptName": "集团技术委员会",
+        "description": "参与大语言模型核心技术研发。",
+        "requirement": "熟悉深度学习框架并具备良好编程能力。",
+        "publishTime": "2026-08-21",
+        "larkJobCode": "A100001",
+        "type": 3,
+        "url": "https://xiaomi.jobs.f.mioffice.cn/topintern/position/7559917443185379634/detail",
+        "jobId": "7559917443185264946",
+        "jobPostId": "7559917443185379634"
+      },
+      {
+        "title": "软件开发工程师（实习）",
+        "cityZhNames": ["南京"],
+        "levelOneDeptName": "研发部",
+        "description": "参与软件模块开发和测试。",
+        "requirement": "计算机相关专业在校生。",
+        "publishTime": "2026-08-20",
+        "larkJobCode": "A100002",
+        "type": 3,
+        "url": "https://xiaomi.jobs.f.mioffice.cn/index/position/7559917443185379635/detail",
+        "jobId": "7559917443185264947",
+        "jobPostId": "7559917443185379635"
+      }
+    ],
+    "pageSize": 2,
+    "pageNum": 1,
+    "pageTotal": 1,
+    "total": 2
+  }
+}

@@ -1,10 +1,12 @@
 import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application';
 import { openSqliteDatabase } from '@jobhunter/db';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { parseId } from '@jobhunter/domain';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 
 const companyId = '018f0000-0000-7000-8000-000000000101';
+const channelId = '018f0000-0000-7000-8200-000000010103';
 const sourceId = '018f0000-0000-7000-8000-000000000201';
 
 function seedSource(dataRoot: string): void {
@@ -19,15 +21,22 @@ function seedSource(dataRoot: string): void {
       .run(companyId);
     database.client
       .prepare(
+        `INSERT INTO source_channels
+         (id, company_id, channel, slug, enabled, created_at, updated_at)
+         VALUES (?, ?, 'social', 'tencent-social', 1, 1, 1)`,
+      )
+      .run(channelId, companyId);
+    database.client
+      .prepare(
         `INSERT INTO job_sources
-         (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+         (id, company_id, channel_id, slug, adapter_key, coverage_role, recruitment_type, base_url, config_json,
           sync_policy_version, sync_policy_json, enabled, support_status, health_status,
           consecutive_failures, last_success_at, created_at, updated_at)
-         VALUES (?, ?, 'tencent-social', 'tencent.social', 'social',
+         VALUES (?, ?, ?, 'tencent-social', 'tencent.social', 'required', 'social',
           'https://careers.tencent.com', '{}', 'v1', '{}', 1, 'supported', 'healthy',
           0, 2, 1, 2)`,
       )
-      .run(sourceId, companyId);
+      .run(sourceId, companyId, channelId);
     database.client
       .prepare(
         `INSERT INTO sync_runs
@@ -117,6 +126,59 @@ describe('Web source management', () => {
     }
   });
 
+  it('fans one logical channel out to independent physical source tasks', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-web-channel-fanout-');
+    try {
+      seedSource(root.path);
+      const secondSourceId = '018f0000-0000-7000-8000-000000000202';
+      const database = openSqliteDatabase({ dataRoot: root.path });
+      try {
+        database.client
+          .prepare(
+            `INSERT INTO job_sources
+             (id, company_id, channel_id, slug, adapter_key, coverage_role, recruitment_type,
+              base_url, config_json, sync_policy_version, sync_policy_json, enabled,
+              support_status, health_status, created_at, updated_at)
+             VALUES (?, ?, ?, 'tencent-social-second', 'tencent.social.second', 'required',
+                     'social', 'https://careers.tencent.com/second', '{}', 'v1', '{}', 1,
+                     'supported', 'unknown', 1, 1)`,
+          )
+          .run(secondSourceId, companyId, channelId);
+      } finally {
+        database.close();
+      }
+      const bootstrap = resolveBootstrapConfig({
+        cli: { dataRoot: root.path },
+        environment: {},
+        cwd: root.path,
+      });
+      const container = createLocalWebContainer(
+        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
+      );
+      try {
+        const result = container.services.webSources.mutateChannel({
+          kind: 'sync',
+          channelId,
+          idempotencyToken: 'fanout-request-token',
+        });
+        expect(result).toMatchObject({ kind: 'tasks', tasks: [{}, {}] });
+        expect(
+          container.services.tasks
+            .list()
+            .map((task) => task.payload)
+            .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
+        ).toEqual([
+          { sourceId, trigger: 'manual' },
+          { sourceId: secondSourceId, trigger: 'manual' },
+        ]);
+      } finally {
+        container.close();
+      }
+    } finally {
+      await root.cleanup();
+    }
+  });
+
   it('reads and updates system settings without removing existing work', async () => {
     const root = await createTemporaryDataRoot('jobhunter-web-settings-');
     try {
@@ -171,6 +233,15 @@ describe('Web source management', () => {
             schedule: null,
           },
         ]);
+        expect(container.services.webSources.listChannels()).toMatchObject([
+          {
+            id: channelId,
+            channel: 'social',
+            supportStatus: 'supported',
+            healthStatus: 'healthy',
+            sources: [{ id: sourceId, effectiveEnabled: true }],
+          },
+        ]);
 
         const syncInput = {
           kind: 'sync' as const,
@@ -186,6 +257,15 @@ describe('Web source management', () => {
             taskId: firstSync.kind === 'task' ? firstSync.task.taskId : '',
             deduplicated: true,
           },
+        });
+        const channelSync = container.services.webSources.mutateChannel({
+          kind: 'sync',
+          channelId,
+          idempotencyToken: 'channel-request-token',
+        });
+        expect(channelSync).toMatchObject({
+          kind: 'tasks',
+          tasks: [{ deduplicated: true }],
         });
 
         const health = container.services.webSources.mutate({
@@ -228,6 +308,18 @@ describe('Web source management', () => {
         const listed = container.services.webSources.list()[0];
         expect(listed?.enabled).toBe(false);
         expect(Date.parse(listed?.schedule?.nextRunAt ?? '')).toBeGreaterThan(Date.now());
+        const disabledChannel = container.services.webSources.mutateChannel({
+          kind: 'enable',
+          channelId,
+          enabled: false,
+        });
+        expect(disabledChannel).toMatchObject({ kind: 'channel', channel: { enabled: false } });
+        expect(() =>
+          container.services.sources.enqueueSync({
+            sourceIds: [parseId(sourceId, 'JobSource')],
+            idempotencyToken: 'disabled-channel-token',
+          }),
+        ).toThrow('Source is disabled');
       } finally {
         container.close();
       }

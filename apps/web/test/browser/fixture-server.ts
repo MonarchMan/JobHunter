@@ -14,6 +14,7 @@ import {
 
 const ids = {
   company: '018f0000-0000-7000-8000-000000000101',
+  channel: '018f0000-0000-7000-8200-000000010102',
   source: '018f0000-0000-7000-8000-000000000201',
   syncRun: '018f0000-0000-7000-8000-000000000301',
   activeJob: '018f0000-0000-7000-8000-000000000401',
@@ -218,15 +219,22 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run(ids.company);
     database.client
       .prepare(
+        `INSERT INTO source_channels
+         (id, company_id, channel, slug, enabled, created_at, updated_at)
+         VALUES (?, ?, 'campus', 'tencent-campus', 1, 1, 1)`,
+      )
+      .run(ids.channel, ids.company);
+    database.client
+      .prepare(
         `INSERT INTO job_sources
-         (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+         (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
           sync_policy_version, sync_policy_json, enabled, support_status, health_status,
           consecutive_failures, last_success_at, created_at, updated_at)
-         VALUES (?, ?, 'tencent-campus', 'fake.campus', 'campus',
+         VALUES (?, ?, ?, 'tencent-campus', 'fake.campus', 'campus',
           'https://careers.tencent.com/campus', '{}', 'fake-v1', '{}', 1,
           'supported', 'healthy', 0, 2, 1, 2)`,
       )
-      .run(ids.source, ids.company);
+      .run(ids.source, ids.company, ids.channel);
     database.client
       .prepare(
         `INSERT INTO sync_runs

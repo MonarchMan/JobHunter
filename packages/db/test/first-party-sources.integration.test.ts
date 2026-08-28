@@ -10,8 +10,8 @@ import {
 import {
   createMeituanAdapter,
   createTencentAdapter,
+  firstPartyPhysicalSourceCatalog,
   firstPartySourceCatalog,
-  type FirstPartySourceSeed,
 } from '@jobhunter/sources';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -20,6 +20,7 @@ import {
   seedSourceCatalog,
   SqliteArtifactStore,
   SqliteUnitOfWork,
+  SqliteWebSourceRepository,
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
@@ -173,8 +174,20 @@ describe('first-party source seed and sync', () => {
       .run();
     seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 2 });
 
-    expect(handle.client.prepare('SELECT count(*) FROM companies').pluck().get()).toBe(10);
-    expect(handle.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(13);
+    expect(handle.client.prepare('SELECT count(*) FROM companies').pluck().get()).toBe(15);
+    expect(handle.client.prepare('SELECT count(*) FROM source_channels').pluck().get()).toBe(45);
+    expect(handle.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(47);
+    const webChannels = new SqliteWebSourceRepository(handle.client).listChannels();
+    const channelsByCompany = new Map<string, string[]>();
+    for (const channel of webChannels) {
+      const channels = channelsByCompany.get(channel.companyId) ?? [];
+      channels.push(channel.channel);
+      channelsByCompany.set(channel.companyId, channels);
+    }
+    expect(channelsByCompany.size).toBe(15);
+    for (const channels of channelsByCompany.values()) {
+      expect(channels.sort()).toEqual(['campus', 'intern', 'social']);
+    }
     expect(
       handle.client
         .prepare(
@@ -193,8 +206,8 @@ describe('first-party source seed and sync', () => {
   it('runs the supported Tencent adapter through the real sync pipeline', async () => {
     const { root, handle } = await database();
     seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 1 });
-    const tencent = firstPartySourceCatalog.find(
-      (record): record is FirstPartySourceSeed => record.company.slug === 'tencent',
+    const tencent = firstPartyPhysicalSourceCatalog.find(
+      (record) => record.company.slug === 'tencent',
     );
     expect(tencent).toBeDefined();
     if (!tencent) return;
@@ -219,7 +232,7 @@ describe('first-party source seed and sync', () => {
       kind: 'completed',
       status: 'succeeded',
       coverage: 'complete',
-      stats: { discovered: 1, created: 1, followupEnqueued: 0 },
+      stats: { discovered: 1, created: 1, followupEnqueued: 1 },
     });
     expect(handle.client.prepare('SELECT title, status FROM jobs').get()).toEqual({
       title: 'Agent 开发工程师',
@@ -227,11 +240,47 @@ describe('first-party source seed and sync', () => {
     });
   });
 
+  it('keeps identity and missing state isolated between sibling physical sources', async () => {
+    const { handle } = await database();
+    seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 1 });
+    const companyId = '018f0000-0000-7000-8000-000000000115';
+    const sourceIds = [
+      '018f0000-0000-7000-8000-000000000245',
+      '018f0000-0000-7000-8000-000000000246',
+    ] as const;
+    const insert = handle.client.prepare(
+      `INSERT INTO jobs
+       (id, company_id, source_id, external_job_id, title, locations_json, description,
+        detail_url, apply_url, status, missing_count, content_hash,
+        first_seen_at, last_seen_at, created_at, updated_at)
+       VALUES (?, ?, ?, 'same-official-id', '同一岗位', '[]', '职位描述',
+               'https://example.com/job', 'https://example.com/apply', 'active', 0, ?, 1, 1, 1, 1)`,
+    );
+    insert.run('018f0000-0000-7000-8000-000000000601', companyId, sourceIds[0], 'hash-a');
+    insert.run('018f0000-0000-7000-8000-000000000602', companyId, sourceIds[1], 'hash-b');
+
+    expect(
+      handle.client
+        .prepare("SELECT count(*) FROM jobs WHERE external_job_id = 'same-official-id'")
+        .pluck()
+        .get(),
+    ).toBe(2);
+    handle.client
+      .prepare('UPDATE jobs SET missing_count = 1 WHERE source_id = ?')
+      .run(sourceIds[0]);
+    expect(
+      handle.client.prepare('SELECT source_id, missing_count FROM jobs ORDER BY source_id').all(),
+    ).toEqual([
+      { source_id: sourceIds[0], missing_count: 1 },
+      { source_id: sourceIds[1], missing_count: 0 },
+    ]);
+  });
+
   it('runs the supported Meituan adapter and preserves jobs after a partial page', async () => {
     const { root, handle } = await database();
     seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 1 });
-    const meituan = firstPartySourceCatalog.find(
-      (record): record is FirstPartySourceSeed => record.company.slug === 'meituan',
+    const meituan = firstPartyPhysicalSourceCatalog.find(
+      (record) => record.company.slug === 'meituan',
     );
     expect(meituan).toBeDefined();
     if (!meituan) return;

@@ -11,6 +11,7 @@ export type JobEnrichmentId = Id<'JobEnrichment'>;
 export type JobId = Id<'Job'>;
 export type JobRevisionId = Id<'JobRevision'>;
 export type JobSourceId = Id<'JobSource'>;
+export type SourceChannelId = Id<'SourceChannel'>;
 export type MatchAdviceId = Id<'MatchAdvice'>;
 export type MatchResultId = Id<'MatchResult'>;
 export type MatchRulesetId = Id<'MatchRuleset'>;

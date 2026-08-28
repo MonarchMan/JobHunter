@@ -31,7 +31,7 @@ import {
   TaskWaitService,
   createSourceSyncTaskHandler,
   type EnqueueTaskResult,
-  type SourceOverview,
+  type SourceChannelOverview,
   type TaskListFilter,
   type TaskRecord,
 } from '@jobhunter/application';
@@ -74,7 +74,7 @@ export interface CliContainer {
   readonly initialize?: { run(): Promise<InitializationResult> };
   readonly doctor?: { run(): Promise<DoctorReport> };
   readonly source?: {
-    list(): readonly SourceOverview[];
+    list(): readonly SourceChannelOverview[];
     sync(selector: string): readonly EnqueueTaskResult[];
     wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
   };
@@ -310,8 +310,8 @@ export function createLocalCliContainer(
         }
         const sourceSyncReady = runtime.sources.isSyncReady();
         const sourceSyncTasks = sourceSyncReady
-          ? runtime.sources.enqueueSync({
-              sourceIds: 'all',
+          ? runtime.sources.enqueueChannelSync({
+              channelIds: 'all',
               idempotencyToken: 'bootstrap-initialization-v1',
             })
           : [];
@@ -367,10 +367,14 @@ export function createLocalCliContainer(
         }).run(),
     },
     source: {
-      list: () => operational().sources.list(),
+      list: () => operational().sources.listChannels(),
       sync: (selector) => {
         const service = operational().sources;
-        if (selector === 'all') return service.enqueueSync({ sourceIds: 'all' });
+        if (selector === 'all') return service.enqueueChannelSync({ channelIds: 'all' });
+        const channel = service
+          .listChannels()
+          .find((candidate) => candidate.id === selector || candidate.slug === selector);
+        if (channel) return service.enqueueChannelSync({ channelIds: [channel.id] });
         const source = service
           .list()
           .find((candidate) => candidate.id === selector || candidate.slug === selector);
@@ -404,6 +408,7 @@ export function createLocalCliContainer(
             createProductionWorkerApplication({
               dataRoot: config.bootstrap.dataRoot.value,
               pollIntervalMs: config.worker.pollIntervalMs.value,
+              maxConcurrentNetworkTasks: config.worker.maxConcurrentNetworkTasks.value,
               taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
               logger,
               pageClient: createPlaywrightSourcePageClient(),

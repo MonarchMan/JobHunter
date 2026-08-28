@@ -48,6 +48,6 @@
 9. 显式在线烟测可以使用本地 `.env` 发起最小结构化请求；普通测试和 CI 不读取真实密钥、不产生付费调用。（AGT-001,011, AGT-Q02）
 10. 配置 Anthropic Provider 后，Worker 与 CLI 使用 Messages API 完成结构化输出和工具调用；OpenAI 兼容配置行为不变。（AGT-001,012, AGT-Q02, AGT-Q04）
 
-## 未决问题
+## 未解决问题
 
 无。首个模型供应商由运行配置选择；开发与 CI 使用 FakeModelClient。

@@ -1,5 +1,7 @@
 import {
   CandidateProfileService,
+  AsyncSemaphore,
+  AsyncSemaphoreCancelledError,
   CleanupService,
   createJobAdviceTaskHandler,
   createJobUnderstandingTaskHandler,
@@ -30,7 +32,7 @@ import {
   type WorkerDelay,
   type WorkerEngineOptions,
 } from '@jobhunter/application';
-import { AgentRunner } from '@jobhunter/agent-core';
+import { AgentRunner, ModelClientError, type ModelClient } from '@jobhunter/agent-core';
 import {
   defaultMatchRulesetId,
   openSqliteDatabase,
@@ -55,9 +57,14 @@ import { TesseractResumeOcrEngine } from '@jobhunter/resume';
 import {
   AdapterRegistry,
   FetchSourceHttpClient,
+  SourceError,
+  TokenBucketSourceRateLimitGate,
+  type SourceHttpClient,
   type SourcePageClient,
+  type SourceRateLimitGate,
 } from '@jobhunter/source-core';
-import { registerFirstPartyAdapters } from '@jobhunter/sources';
+import { firstPartySourceCatalog, registerFirstPartyAdapters } from '@jobhunter/sources';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 
 export { createPlaywrightSourcePageClient } from './browser-source.js';
 
@@ -73,6 +80,113 @@ const systemClock: Clock = {
 const systemRandom: RandomSource = {
   next: () => Math.random(),
 };
+
+function limitSourceHttp(
+  client: SourceHttpClient,
+  semaphore: AsyncSemaphore,
+  rateLimit: SourceRateLimitGate,
+): SourceHttpClient {
+  return {
+    async request(request) {
+      try {
+        await rateLimit.beforeRequest({
+          sourceKey: request.sourceKey,
+          signal: request.signal,
+        });
+        return await semaphore.run(request.signal, () => client.request(request));
+      } catch (error) {
+        if (error instanceof AsyncSemaphoreCancelledError) {
+          throw new SourceError('temporary', 'Source request was cancelled while queued.');
+        }
+        throw error;
+      }
+    },
+  };
+}
+
+function limitSourcePage(
+  client: SourcePageClient,
+  semaphore: AsyncSemaphore,
+  rateLimit: SourceRateLimitGate,
+): SourcePageClient {
+  const collect = client.collect;
+  return {
+    async snapshot(request) {
+      try {
+        await rateLimit.beforeRequest({
+          sourceKey: request.sourceKey,
+          signal: request.signal,
+        });
+        return await semaphore.run(request.signal, () => client.snapshot(request));
+      } catch (error) {
+        if (error instanceof AsyncSemaphoreCancelledError) {
+          throw new SourceError('temporary', 'Browser request was cancelled while queued.');
+        }
+        throw error;
+      }
+    },
+    ...(collect
+      ? {
+          async collect(request) {
+            try {
+              await rateLimit.beforeRequest({
+                sourceKey: request.sourceKey,
+                signal: request.signal,
+              });
+              return await semaphore.run(request.signal, () => collect(request));
+            } catch (error) {
+              if (error instanceof AsyncSemaphoreCancelledError) {
+                throw new SourceError(
+                  'temporary',
+                  'Browser collection was cancelled while queued.',
+                );
+              }
+              throw error;
+            }
+          },
+        }
+      : {}),
+  };
+}
+
+function firstPartyRateLimits(): ReadonlyMap<
+  string,
+  { readonly requestsPerMinute: number; readonly burst: number }
+> {
+  const policies = new Map<
+    string,
+    { readonly requestsPerMinute: number; readonly burst: number }
+  >();
+  for (const channel of firstPartySourceCatalog) {
+    for (const source of channel.sources) {
+      const current = policies.get(source.adapterKey);
+      policies.set(source.adapterKey, {
+        requestsPerMinute: Math.min(
+          current?.requestsPerMinute ?? Number.POSITIVE_INFINITY,
+          source.defaultRateLimit.requestsPerMinute,
+        ),
+        burst: Math.min(current?.burst ?? Number.POSITIVE_INFINITY, source.defaultRateLimit.burst),
+      });
+    }
+  }
+  return policies;
+}
+
+function limitModel(client: ModelClient, semaphore: AsyncSemaphore): ModelClient {
+  return {
+    metadata: client.metadata,
+    async complete(request, signal) {
+      try {
+        return await semaphore.run(signal, () => client.complete(request, signal));
+      } catch (error) {
+        if (error instanceof AsyncSemaphoreCancelledError) {
+          throw new ModelClientError('cancelled', 'Model request was cancelled while queued.');
+        }
+        throw error;
+      }
+    },
+  };
+}
 
 export function createWorkerApplication(input: {
   readonly dataRoot: string;
@@ -116,6 +230,7 @@ export function createProductionWorkerApplication(input: {
   readonly dataRoot: string;
   readonly workerId?: string;
   readonly pollIntervalMs?: number;
+  readonly maxConcurrentNetworkTasks?: number;
   readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
   readonly logger?: TaskLogger;
   readonly model?: {
@@ -133,13 +248,38 @@ export function createProductionWorkerApplication(input: {
   registerFirstPartyAdapters(adapters);
   const profileRepository = new SqliteCandidateProfileRepository(database.client);
   const uow = new SqliteUnitOfWork(database.client);
-  const sourceHttp = new FetchSourceHttpClient();
+  const networkSemaphore = new AsyncSemaphore(input.maxConcurrentNetworkTasks ?? 4);
+  const sourceRateLimit = new TokenBucketSourceRateLimitGate(firstPartyRateLimits());
+  const sourceHttp = limitSourceHttp(
+    new FetchSourceHttpClient(),
+    networkSemaphore,
+    sourceRateLimit,
+  );
+  const sourcePage = input.pageClient
+    ? limitSourcePage(input.pageClient, networkSemaphore, sourceRateLimit)
+    : undefined;
+  const eventLoopDelay = input.logger ? monitorEventLoopDelay({ resolution: 20 }) : null;
+  eventLoopDelay?.enable();
+  const runtimeMetrics = input.logger
+    ? setInterval(() => {
+        input.logger?.info('worker.runtime', {
+          networkActive: networkSemaphore.activeCount,
+          networkQueued: networkSemaphore.queuedCount,
+          sourceRateLimitQueued: sourceRateLimit.queuedCount(),
+          eventLoopDelayP95Ms: Number(
+            ((eventLoopDelay?.percentile(95) ?? 0) / 1_000_000).toFixed(2),
+          ),
+        });
+        eventLoopDelay?.reset();
+      }, 30_000)
+    : null;
+  runtimeMetrics?.unref();
   const sync = new JobSyncService({
     uow,
     registry: adapters,
     artifacts: new SqliteArtifactStore(database.client, input.dataRoot),
     http: sourceHttp,
-    ...(input.pageClient ? { page: input.pageClient } : {}),
+    ...(sourcePage ? { page: sourcePage } : {}),
     clock,
     ids,
     jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
@@ -153,7 +293,7 @@ export function createProductionWorkerApplication(input: {
         uow,
         registry: adapters,
         http: sourceHttp,
-        ...(input.pageClient ? { page: input.pageClient } : {}),
+        ...(sourcePage ? { page: sourcePage } : {}),
         clock,
         ids,
         normalizerVersion: 'normalize-v1',
@@ -186,8 +326,8 @@ export function createProductionWorkerApplication(input: {
         config: parsedConfig,
         signal,
         timeoutMs: source.syncPolicy.requestTimeoutMs,
-        http: new FetchSourceHttpClient(),
-        ...(input.pageClient ? { page: input.pageClient } : {}),
+        http: sourceHttp,
+        ...(sourcePage ? { page: sourcePage } : {}),
         cursor: source.cursor,
       }),
     }),
@@ -217,7 +357,7 @@ export function createProductionWorkerApplication(input: {
     });
     const runner = new AgentRunner({
       store: new SqliteAgentRunStore(database.client),
-      model: createConfiguredModelClient(input.model),
+      model: limitModel(createConfiguredModelClient(input.model), networkSemaphore),
       createId: () => ids.generate(),
       now: () => clock.now(),
     });
@@ -301,6 +441,8 @@ export function createProductionWorkerApplication(input: {
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
+      if (runtimeMetrics) clearInterval(runtimeMetrics);
+      eventLoopDelay?.disable();
       await engine.shutdown();
       database.close();
     },

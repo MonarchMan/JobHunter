@@ -1,4 +1,9 @@
-import type { EnqueueTaskResult, SourceOverview, TaskRecord } from '@jobhunter/application';
+import type {
+  EnqueueTaskResult,
+  SourceChannelOverview,
+  SourceOverview,
+  TaskRecord,
+} from '@jobhunter/application';
 import { parseId, utcInstant } from '@jobhunter/domain';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -111,6 +116,8 @@ describe('CLI framework', () => {
   it('maps a completed partial source synchronization to exit code 4', async () => {
     const output = memoryIo();
     const sourceId = parseId('018f0000-0000-7000-8000-000000000202', 'JobSource');
+    const companyId = parseId('018f0000-0000-7000-8000-000000000101', 'Company');
+    const channelId = parseId('018f0000-0000-7000-8200-000000010103', 'SourceChannel');
     const task: TaskRecord = {
       id: parseId('018f0000-0000-7000-8000-000000000302', 'Task'),
       taskType: 'source.sync',
@@ -136,10 +143,14 @@ describe('CLI framework', () => {
     };
     const overview: SourceOverview = {
       id: sourceId,
+      companyId,
+      channelId,
       companyName: '腾讯',
       slug: 'tencent-social',
       adapterKey: 'tencent.social',
+      coverageRole: 'required',
       enabled: true,
+      effectiveEnabled: true,
       supportStatus: 'supported',
       healthStatus: 'degraded',
       lastRun: {
@@ -150,11 +161,24 @@ describe('CLI framework', () => {
         finishedAt: utcInstant(2),
       },
     };
+    const channel: SourceChannelOverview = {
+      id: channelId,
+      companyId,
+      companyName: '腾讯',
+      slug: 'tencent-social',
+      channel: 'social',
+      enabled: true,
+      effectiveEnabled: true,
+      supportNote: null,
+      supportStatus: 'supported',
+      healthStatus: 'degraded',
+      sources: [overview],
+    };
     const queued: EnqueueTaskResult = { kind: 'enqueued', task };
     const fixture: CliContainer = {
       version: { get: () => ({ app: 'test' }) },
       source: {
-        list: () => [overview],
+        list: () => [channel],
         sync: () => [queued],
         wait: () => Promise.resolve(task),
       },
@@ -175,6 +199,8 @@ describe('CLI framework', () => {
   it('maps a final failed background task to exit code 5', async () => {
     const output = memoryIo();
     const sourceId = parseId('018f0000-0000-7000-8000-000000000202', 'JobSource');
+    const companyId = parseId('018f0000-0000-7000-8000-000000000101', 'Company');
+    const channelId = parseId('018f0000-0000-7000-8200-000000010103', 'SourceChannel');
     const failed: TaskRecord = {
       id: parseId('018f0000-0000-7000-8000-000000000303', 'Task'),
       taskType: 'source.sync',
@@ -200,18 +226,35 @@ describe('CLI framework', () => {
     };
     const overview: SourceOverview = {
       id: sourceId,
+      companyId,
+      channelId,
       companyName: '腾讯',
       slug: 'tencent-social',
       adapterKey: 'tencent.social',
+      coverageRole: 'required',
       enabled: true,
+      effectiveEnabled: true,
       supportStatus: 'supported',
       healthStatus: 'unhealthy',
       lastRun: null,
     };
+    const channel: SourceChannelOverview = {
+      id: channelId,
+      companyId,
+      companyName: '腾讯',
+      slug: 'tencent-social',
+      channel: 'social',
+      enabled: true,
+      effectiveEnabled: true,
+      supportNote: null,
+      supportStatus: 'supported',
+      healthStatus: 'unhealthy',
+      sources: [overview],
+    };
     const fixture: CliContainer = {
       version: { get: () => ({ app: 'test' }) },
       source: {
-        list: () => [overview],
+        list: () => [channel],
         sync: () => [{ kind: 'enqueued', task: failed }],
         wait: () => Promise.resolve(failed),
       },

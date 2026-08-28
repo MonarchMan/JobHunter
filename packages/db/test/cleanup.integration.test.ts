@@ -82,11 +82,14 @@ describe('cleanup infrastructure', () => {
         INSERT INTO companies
           (id, slug, name, aliases_json, industry, size_tag, enabled, created_at, updated_at)
         VALUES ('company', 'cleanup', 'Cleanup', '[]', NULL, NULL, 1, 1, 1);
+        INSERT INTO source_channels
+          (id, company_id, channel, slug, enabled, created_at, updated_at)
+        VALUES ('channel', 'company', 'social', 'cleanup-social', 1, 1, 1);
         INSERT INTO job_sources
-          (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+          (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
            sync_policy_version, sync_policy_json, enabled, support_status, health_status,
            consecutive_failures, created_at, updated_at)
-        VALUES ('source', 'company', 'cleanup-social', 'cleanup.fixture', 'social',
+        VALUES ('source', 'company', 'channel', 'cleanup-social', 'cleanup.fixture', 'social',
                 'https://careers.example.com', '{}', 'v1', '{}', 1, 'supported',
                 'healthy', 0, 1, 1);
         INSERT INTO sync_runs

@@ -1,6 +1,8 @@
 import { parseId, utcInstant } from '@jobhunter/domain';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  AsyncSemaphore,
+  AsyncSemaphoreCancelledError,
   createSourceSyncTaskHandler,
   HandlerRegistry,
   RetryPolicy,
@@ -8,6 +10,65 @@ import {
   TaskExecutionError,
   voidTaskOutputSchema,
 } from '../src/index.js';
+
+describe('AsyncSemaphore', () => {
+  it('enforces a FIFO global limit without blocking and releases permits', async () => {
+    const semaphore = new AsyncSemaphore(2);
+    const started: number[] = [];
+    const releases: (() => void)[] = [];
+    const operation = (id: number): Promise<number> =>
+      semaphore.run(new AbortController().signal, async () => {
+        started.push(id);
+        await new Promise<void>((resolve) => releases.push(resolve));
+        return id;
+      });
+
+    const first = operation(1);
+    const second = operation(2);
+    const third = operation(3);
+    await vi.waitFor(() => {
+      expect(started).toEqual([1, 2]);
+    });
+    expect(semaphore.activeCount).toBe(2);
+    expect(semaphore.queuedCount).toBe(1);
+
+    releases[0]?.();
+    await expect(first).resolves.toBe(1);
+    await vi.waitFor(() => {
+      expect(started).toEqual([1, 2, 3]);
+    });
+    releases[1]?.();
+    releases[2]?.();
+    await expect(Promise.all([second, third])).resolves.toEqual([2, 3]);
+    expect(semaphore.activeCount).toBe(0);
+    expect(semaphore.queuedCount).toBe(0);
+  });
+
+  it('removes a cancelled waiter without consuming a permit', async () => {
+    const semaphore = new AsyncSemaphore(1);
+    let releaseFirst: (() => void) | undefined;
+    const first = semaphore.run(
+      new AbortController().signal,
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        }),
+    );
+    const waiting = new AbortController();
+    const second = semaphore.run(waiting.signal, () => Promise.resolve());
+    await vi.waitFor(() => {
+      expect(semaphore.queuedCount).toBe(1);
+    });
+
+    waiting.abort();
+    await expect(second).rejects.toBeInstanceOf(AsyncSemaphoreCancelledError);
+    expect(semaphore.queuedCount).toBe(0);
+    expect(semaphore.activeCount).toBe(1);
+    releaseFirst?.();
+    await first;
+    expect(semaphore.activeCount).toBe(0);
+  });
+});
 
 const silentLogger = {
   info(event: string): void {

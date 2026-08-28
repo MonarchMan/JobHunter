@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebSource } from '@jobhunter/application/web';
+import type { WebSource, WebSourceChannel } from '@jobhunter/application/web';
 import { useMemo, useState, type ReactElement } from 'react';
 import { CompanyLogo } from '../components/company-logo.js';
 import {
@@ -10,18 +10,18 @@ import {
   syncRunStatusLabels,
   syncStatLabels,
 } from '../components/status-labels.js';
-import { SourceActions, SourceSyncAction } from './source-actions.js';
+import { SourceActions, SourceChannelSyncAction, SourceChannelToggle } from './source-actions.js';
 import styles from './company-source-card.module.css';
 
 function classNames(...names: readonly (string | false | undefined)[]): string {
   return names.filter(Boolean).join(' ');
 }
 
-type RecruitmentChannel = WebSource['recruitmentChannels'][number];
+type RecruitmentChannel = WebSourceChannel['channel'];
 type SelectedChannel = 'all' | RecruitmentChannel;
 
 const channelLabels: Record<RecruitmentChannel, string> = {
-  internship: '实习',
+  intern: '实习',
   campus: '校招',
   social: '社招',
 };
@@ -40,15 +40,16 @@ const healthWeight: Record<WebSource['healthStatus'], number> = {
   unhealthy: 3,
 };
 
-function sourceLabel(source: WebSource): string {
-  return source.recruitmentChannels.map((channel) => channelLabels[channel]).join(' / ');
-}
-
 function SourcePanel({
   source,
+  channel,
   syncReady,
-}: Readonly<{ source: WebSource; syncReady: boolean }>): ReactElement {
-  const label = sourceLabel(source);
+}: Readonly<{
+  source: WebSource;
+  channel: RecruitmentChannel;
+  syncReady: boolean;
+}>): ReactElement {
+  const label = channelLabels[channel];
   return (
     <section
       className={classNames(styles['company-source-view'], styles['company-source-panel'])}
@@ -142,7 +143,7 @@ function CompanyOverview({
 }: Readonly<{
   companyName: string;
   sources: readonly WebSource[];
-  channels: readonly RecruitmentChannel[];
+  channels: readonly WebSourceChannel[];
 }>): ReactElement {
   const enabledCount = sources.filter((source) => source.enabled).length;
   const healthyCount = sources.filter((source) => source.healthStatus === 'healthy').length;
@@ -157,7 +158,7 @@ function CompanyOverview({
     >
       <div className={styles['company-overview-intro']}>
         <p className={styles['source-channel-kicker']}>全部渠道</p>
-        <h3>{channels.map((channel) => channelLabels[channel]).join('、')}已接入</h3>
+        <h3>{channels.map((channel) => channelLabels[channel.channel]).join('、')}渠道</h3>
         <p>选择具体渠道可查看同步运行、统计和计划设置。</p>
       </div>
       <dl className={styles['company-overview-metrics']}>
@@ -191,35 +192,28 @@ function CompanyOverview({
 }
 
 export function CompanySourceCard({
-  sources,
+  channels,
   syncReady,
-}: Readonly<{ sources: readonly WebSource[]; syncReady: boolean }>): ReactElement {
+}: Readonly<{ channels: readonly WebSourceChannel[]; syncReady: boolean }>): ReactElement {
   const [selected, setSelected] = useState<SelectedChannel>('all');
-  const channels = useMemo(
-    () =>
-      (['internship', 'campus', 'social'] as const).filter((channel) =>
-        sources.some((source) => source.recruitmentChannels.includes(channel)),
-      ),
-    [sources],
-  );
-  const visibleSources =
-    selected === 'all'
-      ? sources
-      : sources.filter((source) => source.recruitmentChannels.includes(selected));
-  const companyName = sources[0]?.companyName ?? '未知公司';
-  const showsOverview = selected === 'all' && channels.length > 1;
+  const sources = useMemo(() => channels.flatMap((channel) => channel.sources), [channels]);
+  const selectedChannel =
+    selected === 'all' ? null : (channels.find((channel) => channel.channel === selected) ?? null);
+  const visibleSources = selectedChannel ? selectedChannel.sources : sources;
+  const visibleChannels = selectedChannel ? [selectedChannel] : channels;
+  const companyName = channels[0]?.companyName ?? '未知公司';
+  const showsOverview = selected === 'all';
   const officialUrl = visibleSources[0]?.officialUrl ?? sources[0]?.officialUrl;
   const companyHealth = sources.reduce<WebSource['healthStatus']>(
     (worst, source) =>
       healthWeight[source.healthStatus] > healthWeight[worst] ? source.healthStatus : worst,
     'healthy',
   );
-  const syncScopeSource = visibleSources[0] ?? sources[0];
   const syncContextLabel =
-    selected === 'all' && channels.length > 1
+    selected === 'all'
       ? `${companyName}全部渠道`
-      : syncScopeSource
-        ? `${companyName}${sourceLabel(syncScopeSource)}`
+      : selectedChannel
+        ? `${companyName}${channelLabels[selectedChannel.channel]}`
         : companyName;
 
   return (
@@ -250,22 +244,23 @@ export function CompanySourceCard({
             >
               <option value="all">全部</option>
               {channels.map((channel) => (
-                <option value={channel} key={channel}>
-                  {channelLabels[channel]}
+                <option value={channel.channel} key={channel.id}>
+                  {channelLabels[channel.channel]}
                 </option>
               ))}
             </select>
           </div>
           <p className={styles['company-source-meta']}>
-            {channels.length} 个已接入渠道 · {sources.length} 个官网来源
+            {channels.length} 个逻辑渠道 · {sources.length} 个物理来源
           </p>
         </div>
         <div className={styles['company-source-header-actions']} data-company-source-header-actions>
-          <SourceSyncAction
-            sources={visibleSources}
+          <SourceChannelSyncAction
+            channels={visibleChannels}
             contextLabel={syncContextLabel}
             syncReady={syncReady}
           />
+          {selectedChannel ? <SourceChannelToggle channel={selectedChannel} /> : null}
           <div className={styles['company-health-summary']} data-company-health-summary>
             <span>综合状态</span>
             <strong className={styles[`health-text-${companyHealth}`]}>
@@ -277,9 +272,24 @@ export function CompanySourceCard({
       <div className={styles['company-source-panels']} data-company-source-panels>
         {showsOverview ? (
           <CompanyOverview companyName={companyName} sources={sources} channels={channels} />
+        ) : selectedChannel?.sources.length === 0 ? (
+          <section className={styles['company-source-view']}>
+            <p className={styles['source-channel-kicker']}>
+              {channelLabels[selectedChannel.channel]}渠道
+            </p>
+            <h3>暂无可执行的官网来源</h3>
+            <p className="muted">
+              {selectedChannel.supportNote ?? '该渠道当前处于 blocked 状态。'}
+            </p>
+          </section>
         ) : (
           visibleSources.map((source) => (
-            <SourcePanel key={source.id} source={source} syncReady={syncReady} />
+            <SourcePanel
+              key={source.id}
+              source={source}
+              channel={selectedChannel?.channel ?? 'campus'}
+              syncReady={syncReady}
+            />
           ))
         )}
       </div>

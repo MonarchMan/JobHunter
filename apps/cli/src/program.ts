@@ -310,7 +310,7 @@ export function createProgram(input: {
             sources
               .map(
                 (source) =>
-                  `${source.id}\t${source.companyName}\t${source.enabled ? 'enabled' : 'disabled'}\t${source.supportStatus}\t${source.healthStatus}`,
+                  `${source.id}\t${source.companyName}\t${source.channel}\t${source.enabled ? 'enabled' : 'disabled'}\t${source.supportStatus}\t${source.healthStatus}\t${String(source.sources.length)} source(s)`,
               )
               .join('\n') || '没有来源。',
         });
@@ -341,7 +341,7 @@ export function createProgram(input: {
             human: sources
               .map(
                 (source) =>
-                  `${source.companyName}\t${source.healthStatus}\t${source.lastRun?.status ?? 'never'}`,
+                  `${source.companyName}\t${source.channel}\t${source.healthStatus}\t${String(source.sources.length)} source(s)`,
               )
               .join('\n'),
           });
@@ -393,10 +393,12 @@ export function createProgram(input: {
             );
             const degraded = sourceService
               .list()
-              .some(
-                (source) =>
-                  sourceIds.has(source.id) &&
-                  (source.lastRun?.status === 'partial' || source.healthStatus === 'degraded'),
+              .some((channel) =>
+                channel.sources.some(
+                  (source) =>
+                    sourceIds.has(source.id) &&
+                    (source.lastRun?.status === 'partial' || source.healthStatus === 'degraded'),
+                ),
               );
             input.onResult({
               data: { tasks: queued.map((item) => item.task), waits },

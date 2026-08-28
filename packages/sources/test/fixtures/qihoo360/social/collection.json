@@ -1,0 +1,39 @@
+{
+  "coverage": "complete",
+  "pages": [
+    {
+      "page": 1,
+      "url": "https://hr.360.cn/hr/list",
+      "records": [
+        {
+          "id": "6a0d033efd5a462f18dd7632",
+          "title": "PC客户端开发工程师",
+          "type": "技术",
+          "position": "技术",
+          "area": "北京",
+          "date": "2026-08-03"
+        },
+        {
+          "id": "6a0d033efd5a462f18dd7633",
+          "title": "安全研究员",
+          "type": "技术",
+          "position": "安全",
+          "area": "北京",
+          "date": "2026-08-02"
+        }
+      ],
+      "total": 2,
+      "capturedAt": 1
+    }
+  ],
+  "diagnostics": {
+    "reason": null,
+    "retryable": false,
+    "expectedCount": 2,
+    "discoveredCount": 2,
+    "expectedPages": 1,
+    "fetchedPages": 1,
+    "duplicateIds": 0,
+    "totalChanged": false
+  }
+}

@@ -219,16 +219,24 @@ async function setup(
        VALUES (?, 'fixture', 'Fixture', '[]', NULL, 'large', 1, 1, 1)`,
     )
     .run(companyId);
+  const channelId = '018f0000-0000-7000-8200-000000000103';
+  handle.client
+    .prepare(
+      `INSERT INTO source_channels
+       (id, company_id, channel, slug, enabled, created_at, updated_at)
+       VALUES (?, ?, 'social', 'fixture-social', 1, 1, 1)`,
+    )
+    .run(channelId, companyId);
   handle.client
     .prepare(
       `INSERT INTO job_sources
-       (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+       (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
         sync_policy_version, sync_policy_json, enabled, support_status, support_note,
         health_status, consecutive_failures, last_success_at, last_failure_at, created_at, updated_at)
-       VALUES (?, ?, 'fixture-social', 'fixture.sync', 'social', 'https://careers.example.com/jobs',
+       VALUES (?, ?, ?, 'fixture-social', 'fixture.sync', 'social', 'https://careers.example.com/jobs',
                '{}', 'v1', ?, 1, 'supported', NULL, 'unknown', 0, NULL, NULL, 1, 1)`,
     )
-    .run(sourceId, companyId, JSON.stringify(policy));
+    .run(sourceId, companyId, channelId, JSON.stringify(policy));
 
   const clock = new TestClock();
   const ids = new SequentialIds();

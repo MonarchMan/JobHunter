@@ -1,5 +1,9 @@
-import type { IdGenerator, JobSourceId } from '@jobhunter/domain';
-import type { SourceManagementRepository, SourceOverview } from '../ports/source-management.js';
+import type { IdGenerator, JobSourceId, SourceChannelId } from '@jobhunter/domain';
+import type {
+  SourceChannelOverview,
+  SourceManagementRepository,
+  SourceOverview,
+} from '../ports/source-management.js';
 import type { EnqueueTaskResult, TaskRecord } from '../tasks/model.js';
 import type { TaskService } from '../tasks/task-service.js';
 import type { JobIntakePolicy } from './job-intake-policy.js';
@@ -45,6 +49,38 @@ export class SourceManagementService {
     return this.#sources.get(id);
   }
 
+  public listChannels(): readonly SourceChannelOverview[] {
+    return this.#sources.listChannels();
+  }
+
+  public getChannel(id: SourceChannelId): SourceChannelOverview | null {
+    return this.#sources.getChannel(id);
+  }
+
+  public enqueueChannelSync(input: {
+    readonly channelIds: readonly SourceChannelId[] | 'all';
+    readonly idempotencyToken?: string;
+  }): readonly EnqueueTaskResult[] {
+    this.requireSyncReady();
+    const channels =
+      input.channelIds === 'all'
+        ? this.#sources.listChannels().filter((channel) => channel.effectiveEnabled)
+        : input.channelIds.map((id) => {
+            const channel = this.#sources.getChannel(id);
+            if (!channel) throw new TypeError(`Source channel not found: ${id}`);
+            if (!channel.effectiveEnabled) throw new TypeError(`Source channel is disabled: ${id}`);
+            return channel;
+          });
+    const sourceIds = Array.from(
+      new Set(
+        channels.flatMap((channel) =>
+          channel.sources.filter((source) => source.effectiveEnabled).map((source) => source.id),
+        ),
+      ),
+    );
+    return this.#enqueue(sourceIds, input.idempotencyToken);
+  }
+
   public enqueueSync(input: {
     readonly sourceIds: readonly JobSourceId[] | 'all';
     readonly idempotencyToken?: string;
@@ -52,20 +88,30 @@ export class SourceManagementService {
     this.requireSyncReady();
     const selected =
       input.sourceIds === 'all'
-        ? this.#sources.list().filter((source) => source.enabled)
+        ? this.#sources.list().filter((source) => source.effectiveEnabled)
         : input.sourceIds.map((id) => {
             const source = this.#sources.get(id);
             if (!source) throw new TypeError(`Source not found: ${id}`);
-            if (!source.enabled) throw new TypeError(`Source is disabled: ${id}`);
+            if (!source.effectiveEnabled) throw new TypeError(`Source is disabled: ${id}`);
             return source;
           });
-    const suppliedToken = input.idempotencyToken?.trim();
+    return this.#enqueue(
+      selected.map((source) => source.id),
+      input.idempotencyToken,
+    );
+  }
+
+  #enqueue(
+    sourceIds: readonly JobSourceId[],
+    idempotencyToken: string | undefined,
+  ): readonly EnqueueTaskResult[] {
+    const suppliedToken = idempotencyToken?.trim();
     const token = suppliedToken && suppliedToken.length > 0 ? suppliedToken : this.#ids.generate();
-    return selected.map((source) =>
+    return sourceIds.map((sourceId) =>
       this.#tasks.enqueue({
         taskType: 'source.sync',
-        payload: { sourceId: source.id, trigger: 'manual' },
-        idempotencyKey: `source.sync:${source.id}:manual:${token}`,
+        payload: { sourceId, trigger: 'manual' },
+        idempotencyKey: `source.sync:${sourceId}:manual:${token}`,
       }),
     );
   }

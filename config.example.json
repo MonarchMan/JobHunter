@@ -2,6 +2,11 @@
   "logLevel": "info",
   "worker": {
     "pollIntervalMs": 1000,
-    "maxConcurrentNetworkTasks": 4
+    "maxConcurrentNetworkTasks": 4,
+    "taskTypeConcurrency": {
+      "source.sync": 3,
+      "source.job-detail": 4,
+      "source.health-check": 2
+    }
   }
 }

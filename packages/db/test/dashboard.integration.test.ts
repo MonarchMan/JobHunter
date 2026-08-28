@@ -16,11 +16,18 @@ describe('SQLite dashboard read model', () => {
         .run();
       handle.client
         .prepare(
+          `INSERT INTO source_channels
+           (id, company_id, channel, slug, enabled, created_at, updated_at)
+           VALUES ('channel-1', 'company-1', 'social', 'example-social', 1, 1, 1)`,
+        )
+        .run();
+      handle.client
+        .prepare(
           `INSERT INTO job_sources
-           (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+           (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
             sync_policy_version, sync_policy_json, enabled, support_status, health_status,
             consecutive_failures, created_at, updated_at)
-           VALUES ('source-1', 'company-1', 'example-social', 'example.social', 'social',
+           VALUES ('source-1', 'company-1', 'channel-1', 'example-social', 'example.social', 'social',
             'https://jobs.example.com', '{}', 'v1', '{}', 1, 'supported', 'healthy', 0, 1, 1)`,
         )
         .run();

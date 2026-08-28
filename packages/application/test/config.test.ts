@@ -70,6 +70,19 @@ describe('two-stage configuration', () => {
     });
   });
 
+  it('uses bounded I/O task concurrency defaults', () => {
+    const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
+    const config = resolveAppConfig({ bootstrap, environment: {} });
+    expect(config.worker.taskTypeConcurrency).toEqual({
+      source: 'default',
+      value: {
+        'source.sync': 3,
+        'source.job-detail': 4,
+        'source.health-check': 2,
+      },
+    });
+  });
+
   it('accepts personal OpenAI-compatible aliases without exposing the secret', () => {
     const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
     const config = resolveAppConfig({

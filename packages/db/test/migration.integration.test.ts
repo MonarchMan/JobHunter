@@ -30,6 +30,7 @@ describe('SQLite migrations and capabilities', () => {
     const names = tables.map((row) => row.name);
     for (const required of [
       'companies',
+      'source_channels',
       'job_sources',
       'sync_runs',
       'file_artifacts',
@@ -82,7 +83,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      14,
+      16,
     );
   });
 
@@ -113,6 +114,196 @@ describe('SQLite migrations and capabilities', () => {
     ).toBe(1);
   });
 
+  it('canonicalizes existing source channels without changing source identities', async () => {
+    const handle = await openTestDatabase();
+    const companyId = '018f0000-0000-7000-8000-000000000100';
+    handle.client
+      .prepare(
+        `INSERT INTO companies
+         (id, slug, name, aliases_json, enabled, created_at, updated_at)
+         VALUES (?, 'migration-fixture', 'Migration Fixture', '[]', 1, 1, 1)`,
+      )
+      .run(companyId);
+    for (const [id, channel] of [
+      ['018f0000-0000-7000-8200-000000010001', 'intern'],
+      ['018f0000-0000-7000-8200-000000010002', 'campus'],
+      ['018f0000-0000-7000-8200-000000010003', 'social'],
+    ] as const) {
+      handle.client
+        .prepare(
+          `INSERT INTO source_channels
+           (id, company_id, channel, slug, enabled, created_at, updated_at)
+           VALUES (?, ?, ?, 'migration-fixture-' || ?, 1, 1, 1)`,
+        )
+        .run(id, companyId, channel, channel);
+    }
+    const insert = handle.client.prepare(
+      `INSERT INTO job_sources
+       (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
+        sync_policy_version, sync_policy_json, enabled, support_status, health_status,
+        created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'https://example.com', '{}', '1', '{}', 0,
+               'experimental', 'unknown', 1, 1)`,
+    );
+    for (const row of [
+      [
+        '018f0000-0000-7000-8000-000000000213',
+        '018f0000-0000-7000-8200-000000010002',
+        'bytedance-intern',
+        'bytedance.campus',
+        'campus',
+      ],
+      [
+        '018f0000-0000-7000-8000-000000000205',
+        '018f0000-0000-7000-8200-000000010001',
+        'pinduoduo-campus',
+        'pinduoduo.intern',
+        'campus',
+      ],
+      [
+        '018f0000-0000-7000-8000-000000000209',
+        '018f0000-0000-7000-8200-000000010001',
+        'jd-campus',
+        'jd.campus',
+        'campus',
+      ],
+      [
+        '018f0000-0000-7000-8000-000000000210',
+        '018f0000-0000-7000-8200-000000010001',
+        'huawei-campus',
+        'huawei.campus',
+        'campus',
+      ],
+      [
+        '018f0000-0000-7000-8000-000000000218',
+        '018f0000-0000-7000-8200-000000010003',
+        'netease-mixed',
+        'netease.mixed',
+        'mixed',
+      ],
+    ] as const) {
+      insert.run(row[0], companyId, row[1], row[2], row[3], row[4]);
+    }
+    handle.client.exec(
+      await readFile(
+        new URL('../migrations/0014_canonical_source_channels.sql', import.meta.url),
+        'utf8',
+      ),
+    );
+    expect(
+      handle.client
+        .prepare('SELECT id, slug, adapter_key, recruitment_type FROM job_sources ORDER BY id')
+        .all(),
+    ).toEqual([
+      {
+        id: '018f0000-0000-7000-8000-000000000205',
+        slug: 'pinduoduo-intern',
+        adapter_key: 'pinduoduo.intern',
+        recruitment_type: 'campus',
+      },
+      {
+        id: '018f0000-0000-7000-8000-000000000209',
+        slug: 'jd-intern',
+        adapter_key: 'jd.intern',
+        recruitment_type: 'campus',
+      },
+      {
+        id: '018f0000-0000-7000-8000-000000000210',
+        slug: 'huawei-intern',
+        adapter_key: 'huawei.intern',
+        recruitment_type: 'campus',
+      },
+      {
+        id: '018f0000-0000-7000-8000-000000000213',
+        slug: 'bytedance-campus',
+        adapter_key: 'bytedance.campus',
+        recruitment_type: 'campus',
+      },
+      {
+        id: '018f0000-0000-7000-8000-000000000218',
+        slug: 'netease-social',
+        adapter_key: 'netease.social',
+        recruitment_type: 'social',
+      },
+    ]);
+  });
+
+  it('adds logical channels without rewriting physical source history', async () => {
+    const database = new Database(':memory:');
+    try {
+      database.pragma('foreign_keys = ON');
+      database.exec(`
+        CREATE TABLE companies (
+          id text PRIMARY KEY, slug text NOT NULL UNIQUE, name text NOT NULL, enabled integer NOT NULL
+        );
+        CREATE TABLE job_sources (
+          id text PRIMARY KEY, company_id text NOT NULL REFERENCES companies(id),
+          slug text NOT NULL UNIQUE, adapter_key text NOT NULL, recruitment_type text NOT NULL,
+          base_url text NOT NULL, support_status text NOT NULL, support_note text
+        );
+        CREATE TABLE sync_runs (
+          id text PRIMARY KEY, source_id text NOT NULL REFERENCES job_sources(id)
+        );
+        CREATE TABLE jobs (
+          id text PRIMARY KEY, source_id text NOT NULL REFERENCES job_sources(id)
+        );
+        CREATE TABLE tasks (id text PRIMARY KEY, payload_json text NOT NULL);
+        INSERT INTO companies VALUES (
+          '018f0000-0000-7000-8000-000000000101', 'tencent', '腾讯', 1
+        );
+        INSERT INTO job_sources VALUES (
+          '018f0000-0000-7000-8000-000000000201',
+          '018f0000-0000-7000-8000-000000000101',
+          'tencent-social', 'tencent.social', 'social',
+          'https://careers.tencent.com', 'supported', NULL
+        );
+        INSERT INTO sync_runs VALUES ('run-1', '018f0000-0000-7000-8000-000000000201');
+        INSERT INTO jobs VALUES ('job-1', '018f0000-0000-7000-8000-000000000201');
+        INSERT INTO tasks VALUES (
+          'task-1', '{"sourceId":"018f0000-0000-7000-8000-000000000201"}'
+        );
+      `);
+      const migration = await readFile(
+        new URL('../migrations/0015_logical_source_channels.sql', import.meta.url),
+        'utf8',
+      );
+      for (const statement of migration.split('--> statement-breakpoint')) {
+        if (statement.trim()) database.exec(statement);
+      }
+
+      expect(
+        database.prepare('SELECT id, channel_id, coverage_role FROM job_sources').get(),
+      ).toEqual({
+        id: '018f0000-0000-7000-8000-000000000201',
+        channel_id: '018f0000-0000-7000-8200-000000010103',
+        coverage_role: 'required',
+      });
+      expect(database.prepare('SELECT source_id FROM sync_runs').pluck().get()).toBe(
+        '018f0000-0000-7000-8000-000000000201',
+      );
+      expect(database.prepare('SELECT source_id FROM jobs').pluck().get()).toBe(
+        '018f0000-0000-7000-8000-000000000201',
+      );
+      expect(database.prepare('SELECT payload_json FROM tasks').pluck().get()).toBe(
+        '{"sourceId":"018f0000-0000-7000-8000-000000000201"}',
+      );
+      expect(database.pragma('foreign_key_check')).toEqual([]);
+      expect(() =>
+        database
+          .prepare(
+            `INSERT INTO job_sources
+             (id, company_id, channel_id, slug, adapter_key, recruitment_type,
+              base_url, support_status)
+             VALUES ('invalid', '018f0000-0000-7000-8000-000000000101', NULL,
+                     'invalid', 'invalid', 'social', 'https://example.com', 'blocked')`,
+          )
+          .run(),
+      ).toThrow();
+    } finally {
+      database.close();
+    }
+  });
+
   it('keeps FTS synchronized through insert, update and delete triggers', async () => {
     const handle = await openTestDatabase();
     const transaction = handle.client.transaction(() => {
@@ -125,12 +316,22 @@ describe('SQLite migrations and capabilities', () => {
         .run();
       handle.client
         .prepare(
+          `INSERT INTO source_channels
+           (id, company_id, channel, slug, enabled, created_at, updated_at)
+           VALUES ('018f0000-0000-7000-8200-000000000103',
+                   '018f0000-0000-7000-8000-000000000001', 'social',
+                   'fixture-social', 1, 1, 1)`,
+        )
+        .run();
+      handle.client
+        .prepare(
           `INSERT INTO job_sources
-           (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+           (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
             sync_policy_version, sync_policy_json, enabled, support_status, health_status,
             created_at, updated_at)
            VALUES ('018f0000-0000-7000-8000-000000000002',
-                   '018f0000-0000-7000-8000-000000000001', 'fixture', 'fixture', 'social',
+                   '018f0000-0000-7000-8000-000000000001',
+                   '018f0000-0000-7000-8200-000000000103', 'fixture', 'fixture', 'social',
                    'https://example.com', '{}', '1', '{}', 1, 'supported', 'healthy', 1, 1)`,
         )
         .run();

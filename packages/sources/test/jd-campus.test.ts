@@ -10,7 +10,7 @@ import {
 } from '@jobhunter/source-core';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
-  createJdCampusAdapter,
+  createJdInternAdapter,
   jdCampusConfigSchema,
   type JdCampusConfig,
   type JdCampusListResponse,
@@ -53,7 +53,7 @@ function fixtureHttp(): SourceHttpClient {
 }
 
 describe('JD campus source adapter', () => {
-  const adapter = createJdCampusAdapter();
+  const adapter = createJdInternAdapter();
 
   it('discovers and deduplicates campus positions by publishId', async () => {
     const discovery = await collectDiscovery(adapter.discover(context()));

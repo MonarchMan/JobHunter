@@ -1,6 +1,6 @@
 import { parseId, parseNormalizedJob } from '@jobhunter/domain';
 import { z } from 'zod';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   AdapterRegistry,
   assertFixtureContainsNoSensitiveContent,
@@ -11,12 +11,68 @@ import {
   defineSourceContractSuite,
   FetchSourceHttpClient,
   SourceError,
+  TokenBucketSourceRateLimitGate,
   type DiscoverContext,
   type DiscoveryEvent,
   type JobSourceAdapter,
   type SourceHttpClient,
   type SourceHttpResponse,
 } from '../src/index.js';
+
+describe('TokenBucketSourceRateLimitGate', () => {
+  it('paces each source independently and preserves FIFO order', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    try {
+      const gate = new TokenBucketSourceRateLimitGate(
+        new Map([
+          ['source-a', { requestsPerMinute: 60_000, burst: 1 }],
+          ['source-b', { requestsPerMinute: 60_000, burst: 1 }],
+        ]),
+      );
+      const signal = new AbortController().signal;
+      await gate.beforeRequest({ sourceKey: 'source-a', signal });
+      const order: number[] = [];
+      const second = gate
+        .beforeRequest({ sourceKey: 'source-a', signal })
+        .then(() => order.push(2));
+      const third = gate.beforeRequest({ sourceKey: 'source-a', signal }).then(() => order.push(3));
+
+      await expect(gate.beforeRequest({ sourceKey: 'source-b', signal })).resolves.toBeUndefined();
+      expect(gate.queuedCount('source-a')).toBe(2);
+      await vi.advanceTimersByTimeAsync(1);
+      await second;
+      expect(order).toEqual([2]);
+      await vi.advanceTimersByTimeAsync(1);
+      await third;
+      expect(order).toEqual([2, 3]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('removes cancelled requests from a source queue', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    try {
+      const gate = new TokenBucketSourceRateLimitGate(
+        new Map([['source-a', { requestsPerMinute: 60, burst: 1 }]]),
+      );
+      await gate.beforeRequest({
+        sourceKey: 'source-a',
+        signal: new AbortController().signal,
+      });
+      const abort = new AbortController();
+      const waiting = gate.beforeRequest({ sourceKey: 'source-a', signal: abort.signal });
+      expect(gate.queuedCount()).toBe(1);
+      abort.abort();
+      await expect(waiting).rejects.toMatchObject({ category: 'temporary' });
+      expect(gate.queuedCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
 const sourceId = parseId('018f0000-0000-7000-8000-000000000001', 'JobSource');
 const companyId = parseId('018f0000-0000-7000-8000-000000000002', 'Company');

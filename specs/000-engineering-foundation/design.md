@@ -40,7 +40,7 @@ workspace 只匹配 `apps/*` 和 `packages/*`。`packages/sources/<company>` 是
 - 顶部状态是否合法。
 - Requirement/Task ID 是否全局唯一。
 - 相对 Markdown 链接目标是否存在。
-- Ready 规格是否含“未决问题：无”。
+- Ready 规格是否含“未解决问题：无”。
 - specs index 是否覆盖全部目录。
 
 ## 测试隔离

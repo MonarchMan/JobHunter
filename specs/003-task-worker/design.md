@@ -16,6 +16,12 @@ Handler 定义 payload/output Schema、默认 maxAttempts、lease duration 和 `
 
 Scheduler 与 ClaimLoop 独立运行。每个已注册 task type 按 `taskTypeConcurrency` 配置启动一个或多个消费槽位，每个槽位拥有独立 ClaimLoop，并在领取 SQL 中固定 `task_type`；未配置类型默认启动一个槽位。领取后在事务外执行 Handler，因此某一类型的积压或慢任务不会占用其他类型的领取循环。成功/失败更新使用 `WHERE id=? AND lease_owner=? AND status='running'`，租约丢失时不得覆盖新持有者结果。多槽位仍受持久化 `concurrency_key` 约束，不能并行执行互斥任务。
 
+Worker 组合根创建一个容量为 `maxConcurrentNetworkTasks` 的 FIFO 异步信号量，并将同一实例装饰到来源 HTTP、浏览器采集和 ModelClient 边界。许可只覆盖一次完整网络操作及响应读取，不覆盖任务中的解析和数据库事务；等待许可使用 Promise，不创建阻塞线程。排队项监听任务 `AbortSignal`，取消时从队列移除。该上限与 `taskTypeConcurrency` 分工：后者决定可同时推进多少任务，前者限制这些任务合计产生多少在途网络操作。
+
+来源 HTTP 和浏览器采集在申请全局许可前，先经过按 adapter key 隔离的 Token Bucket。桶容量使用来源 `burst`，补充速度使用 `requestsPerMinute`；因此单来源遵守官网节奏，不同来源仍可并发。生产默认消费槽位为 `source.sync=3`、`source.job-detail=4`、`source.health-check=2`，其他任务保持 1，并始终受全局网络上限和持久化 concurrency key 约束。
+
+Worker 使用 Node 事件循环延迟直方图周期输出 `worker.runtime`，只记录网络 active/queued 和 P95 延迟，不记录 URL、请求或响应正文。该指标用于决定是否继续增加异步并发，或将 OCR/重解析等 CPU 工作迁移到独立线程/进程。
+
 Cron 解析使用 `cron-parser` 和 IANA timezone；计算结果统一转换为 UTC epoch milliseconds 后持久化。夏令时重复/跳过时以库的时区语义为准，并用 occurrence UTC 时间参与幂等键。
 
 重试由 `RetryPolicy` 产生 `availableAt`；测试注入确定性随机数。手动 retry 创建新任务幂等键后缀并关联原失败任务，保留审计链。

@@ -1,9 +1,18 @@
-import { parseId, type IdGenerator, type JobSourceId } from '@jobhunter/domain';
 import {
+  parseId,
+  type IdGenerator,
+  type JobSourceId,
+  type SourceChannelId,
+} from '@jobhunter/domain';
+import {
+  webSourceChannelMutationSchema,
+  webSourceChannelSchema,
   webSourceMutationSchema,
   webSourceSchema,
   webTaskAcceptedSchema,
   type WebSource,
+  type WebSourceChannel,
+  type WebSourceChannelMutation,
   type WebSourceMutation,
   type WebTaskAccepted,
 } from '../contracts/web.js';
@@ -15,11 +24,16 @@ export interface WebSourceRepository {
   list(): readonly WebSource[];
   get(id: JobSourceId): WebSource | null;
   setEnabled(id: JobSourceId, enabled: boolean): WebSource;
+  listChannels(): readonly WebSourceChannel[];
+  getChannel(id: SourceChannelId): WebSourceChannel | null;
+  setChannelEnabled(id: SourceChannelId, enabled: boolean): WebSourceChannel;
 }
 
 export type WebSourceMutationResult =
   | { readonly kind: 'task'; readonly task: WebTaskAccepted }
-  | { readonly kind: 'source'; readonly source: WebSource };
+  | { readonly kind: 'tasks'; readonly tasks: readonly WebTaskAccepted[] }
+  | { readonly kind: 'source'; readonly source: WebSource }
+  | { readonly kind: 'channel'; readonly channel: WebSourceChannel };
 
 export class WebSourceService {
   readonly #repository: WebSourceRepository;
@@ -44,6 +58,29 @@ export class WebSourceService {
 
   public list(): readonly WebSource[] {
     return this.#repository.list().map((source) => webSourceSchema.parse(source));
+  }
+
+  public listChannels(): readonly WebSourceChannel[] {
+    return this.#repository.listChannels().map((channel) => webSourceChannelSchema.parse(channel));
+  }
+
+  public mutateChannel(input: WebSourceChannelMutation): WebSourceMutationResult {
+    const mutation = webSourceChannelMutationSchema.parse(input);
+    const channelId = parseId(mutation.channelId, 'SourceChannel');
+    if (!this.#repository.getChannel(channelId)) throw new TypeError('Source channel not found.');
+    if (mutation.kind === 'enable') {
+      return {
+        kind: 'channel',
+        channel: this.#repository.setChannelEnabled(channelId, mutation.enabled),
+      };
+    }
+    const results = this.#sources.enqueueChannelSync({
+      channelIds: [channelId],
+      idempotencyToken: mutation.idempotencyToken,
+    });
+    if (results.length === 0)
+      throw new TypeError('Source channel has no enabled physical sources.');
+    return { kind: 'tasks', tasks: results.map((result) => this.#task(result)) };
   }
 
   public mutate(input: WebSourceMutation): WebSourceMutationResult {

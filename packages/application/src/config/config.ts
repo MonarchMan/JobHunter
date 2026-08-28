@@ -84,6 +84,12 @@ const localConfigSchema = z
   })
   .strict();
 
+const defaultTaskTypeConcurrency: Readonly<Record<string, number>> = {
+  'source.sync': 3,
+  'source.job-detail': 4,
+  'source.health-check': 2,
+};
+
 function nonEmpty(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   if (!normalized) return undefined;
@@ -224,7 +230,7 @@ export function resolveAppConfig(input: {
     input.cli?.taskTypeConcurrency,
     environmentConcurrency(environment.JOBHUNTER_TASK_TYPE_CONCURRENCY),
     file.worker?.taskTypeConcurrency,
-    {},
+    defaultTaskTypeConcurrency,
   );
   return {
     bootstrap: input.bootstrap,

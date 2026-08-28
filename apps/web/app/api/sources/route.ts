@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request): Promise<Response> {
   try {
     const container = await getWebContainer();
-    const allSources = container.services.webSources.list();
+    const allSources = container.services.webSources.listChannels();
     const search = new URL(request.url).searchParams;
     const requestedPage = Number(search.get('page') ?? '1');
     const pageSize = Number(search.get('limit') ?? '10');
@@ -17,7 +17,7 @@ export async function GET(request: Request): Promise<Response> {
       Number.isSafeInteger(pageSize) && pageSize > 0 && pageSize <= 100 ? pageSize : 10,
     );
     return dataResponse({
-      sources: allSources.slice(
+      channels: allSources.slice(
         (pagination.current - 1) * pagination.pageSize,
         pagination.current * pagination.pageSize,
       ),

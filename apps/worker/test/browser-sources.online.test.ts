@@ -12,7 +12,9 @@ import {
   createDewuAdapter,
   createHuaweiAdapter,
   createMeituanInternAdapter,
+  createQihoo360SocialAdapter,
   meituanConfigSchema,
+  qihoo360ConfigSchema,
   scriptedConfigSchema,
   type ScriptedConfig,
 } from '@jobhunter/sources';
@@ -26,6 +28,49 @@ const selected = new Set(
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean),
 );
+
+describe.skipIf(!online || !selected.has('qihoo360'))('360 controlled browser online smoke', () => {
+  it('collects and normalizes the current anonymous official list', async () => {
+    const config = qihoo360ConfigSchema.parse({});
+    const context: DiscoverContext<typeof config> = {
+      companyId: parseId('018f0000-0000-7000-8000-000000000114', 'Company'),
+      sourceId: parseId('018f0000-0000-7000-8000-000000000217', 'JobSource'),
+      requestId: `qihoo360-browser-online-${String(Date.now())}`,
+      config,
+      signal: AbortSignal.timeout(120_000),
+      timeoutMs: 60_000,
+      http: new FetchSourceHttpClient(),
+      page: createPlaywrightSourcePageClient({
+        headless: true,
+        navigationTimeoutMs: 60_000,
+        maximumPages: 2,
+      }),
+      cursor: null,
+    };
+    const adapter = createQihoo360SocialAdapter();
+    const jobs: Extract<DiscoveryEvent, { type: 'job' }>[] = [];
+    let completion: Extract<DiscoveryEvent, { type: 'complete' }> | undefined;
+    for await (const event of adapter.discover(context)) {
+      if (event.type === 'job') jobs.push(event);
+      if (event.type === 'complete') completion = event;
+    }
+    expect(completion?.coverage).toBe('complete');
+    expect(jobs.length).toBeGreaterThan(0);
+    const first = jobs[0];
+    if (!first) return;
+    expect(adapter.fetchDetail).toBeDefined();
+    if (!adapter.fetchDetail) return;
+    const detail = await adapter.fetchDetail(first.job, context);
+    await expect(
+      adapter.normalize(
+        { discovered: first.job, detail },
+        { sourceId: context.sourceId, companyId: context.companyId, config },
+      ),
+    ).resolves.toMatchObject({
+      job: { recruitmentCategory: 'social', description: detail.description },
+    });
+  }, 130_000);
+});
 
 interface BrowserSmokeDefinition {
   readonly slug: 'alibaba' | 'bytedance' | 'bytedance-campus' | 'dewu' | 'huawei';

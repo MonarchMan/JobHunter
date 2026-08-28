@@ -1,0 +1,40 @@
+{
+  "code": 0,
+  "msg": "success",
+  "data": {
+    "records": [
+      {
+        "idRecruitPosition": 1599,
+        "projectId": 29,
+        "atsProjectPositionId": 1646,
+        "projectName": "2027届寻梦实习招聘",
+        "recruitmentTypeName": "实习生",
+        "recruitmentType": "Intern",
+        "positionTypeName": "软件类",
+        "positionName": "高级底层软件工程师（AI方向）-博士",
+        "positionDesc": "负责 AI 系统相关预研和落地。",
+        "positionRequire": "计算机相关专业，熟悉 C++ 或 Python。",
+        "workCityName": "深圳市",
+        "releaseTime": "2026-03-06"
+      },
+      {
+        "idRecruitPosition": 1680,
+        "projectId": 29,
+        "atsProjectPositionId": 1674,
+        "projectName": "2027届寻梦实习招聘",
+        "recruitmentTypeName": "实习生",
+        "recruitmentType": "Intern",
+        "positionTypeName": "AI/算法类",
+        "positionName": "高级AI研究员-博士",
+        "positionDesc": "开展智能体算法研究和工程落地。",
+        "positionRequire": "具备机器学习基础和良好代码能力。",
+        "workCityName": "深圳市",
+        "releaseTime": "2026-03-06"
+      }
+    ],
+    "total": 2,
+    "size": 2,
+    "current": 1,
+    "pages": 1
+  }
+}

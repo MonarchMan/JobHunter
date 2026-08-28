@@ -1,0 +1,18 @@
+{
+  "Code": 200,
+  "Count": 1,
+  "Data": [
+    {
+      "Id": "33572111-23f9-49bf-a0df-70f0e841ee51",
+      "JobAdId": 561288935,
+      "JobAdName": "GNSS算法工程师-实习",
+      "Category": "实习生招聘",
+      "CategoryId": "3",
+      "LocNames": ["广东省·深圳市"],
+      "Duty": "负责穿戴设备 GNSS 定位软件研发。",
+      "Require": "硕士及以上在读，可实习六个月。",
+      "HeadCount": 1,
+      "ChangeDate": "2026-08-20T16:36:37"
+    }
+  ]
+}

@@ -5,7 +5,13 @@ import type { SourceHttpClient } from './http-client.js';
 
 /** Browser-backed implementations expose only a neutral snapshot, never Playwright objects. */
 export type SourcePageCollectionResponseShape =
-  'ats-job-posts' | 'alibaba-campus' | 'huawei-campus' | 'meituan-jobs';
+  | 'ats-job-posts'
+  | 'alibaba-campus'
+  | 'huawei-campus'
+  | 'meituan-jobs'
+  | 'qihoo360-jobs'
+  | 'xiaomi-jobs'
+  | 'netease-jobs';
 
 export interface SourcePageCollectionRequest {
   readonly sourceKey: string;

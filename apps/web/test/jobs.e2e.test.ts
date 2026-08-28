@@ -17,12 +17,22 @@ function seedJobs(dataRoot: string): void {
       .run();
     database.client
       .prepare(
+        `INSERT INTO source_channels
+         (id, company_id, channel, slug, enabled, created_at, updated_at)
+         VALUES ('018f0000-0000-7000-8200-000000010103',
+                 '018f0000-0000-7000-8000-000000000101', 'social',
+                 'tencent-social', 1, 1, 1)`,
+      )
+      .run();
+    database.client
+      .prepare(
         `INSERT INTO job_sources
-         (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+         (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
           sync_policy_version, sync_policy_json, enabled, support_status, health_status,
           consecutive_failures, created_at, updated_at)
          VALUES ('018f0000-0000-7000-8000-000000000201',
-          '018f0000-0000-7000-8000-000000000101', 'tencent-social', 'tencent.social',
+          '018f0000-0000-7000-8000-000000000101',
+          '018f0000-0000-7000-8200-000000010103', 'tencent-social', 'tencent.social',
           'social', 'https://careers.tencent.com', '{}', 'v1', '{}', 1, 'supported',
           'healthy', 0, 1, 1)`,
       )

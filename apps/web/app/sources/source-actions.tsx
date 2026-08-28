@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebSource } from '@jobhunter/application/web';
+import type { WebSource, WebSourceChannel } from '@jobhunter/application/web';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { Icon } from '../components/ui-icon.js';
@@ -12,8 +12,138 @@ function classNames(...names: readonly (string | false | undefined)[]): string {
 }
 
 interface ActionResponse {
-  readonly data?: { readonly kind?: string; readonly task?: { readonly taskId?: string } };
+  readonly data?: {
+    readonly kind?: string;
+    readonly task?: { readonly taskId?: string };
+    readonly tasks?: readonly { readonly taskId?: string }[];
+  };
   readonly error?: { readonly message?: string };
+}
+
+export function SourceChannelSyncAction({
+  channels,
+  contextLabel,
+  actionLabel = '立即同步',
+  syncReady,
+}: Readonly<{
+  channels: readonly WebSourceChannel[];
+  contextLabel: string;
+  actionLabel?: string;
+  syncReady: boolean;
+}>): ReactElement {
+  const [tokens] = useState(() =>
+    Object.fromEntries(channels.map((channel) => [channel.id, crypto.randomUUID()])),
+  );
+  const [feedback, setFeedback] = useState<ActionFeedback | null>(null);
+  const [busy, setBusy] = useState(false);
+  const enabledChannels = channels.filter(
+    (channel) =>
+      channel.effectiveEnabled && channel.sources.some((source) => source.effectiveEnabled),
+  );
+
+  const sync = async (): Promise<void> => {
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const responses = await Promise.allSettled(
+        enabledChannels.map(async (channel) => {
+          const response = await fetch(`/api/source-channels/${channel.id}/sync`, {
+            method: 'POST',
+            headers: await mutationHeaders(),
+            body: JSON.stringify({ idempotencyToken: tokens[channel.id] }),
+          });
+          const result = (await response.json()) as ActionResponse;
+          if (!response.ok) throw new Error(result.error?.message ?? '渠道同步失败。');
+          return result.data?.tasks?.length ?? 0;
+        }),
+      );
+      const taskCount = responses.reduce(
+        (total, result) => total + (result.status === 'fulfilled' ? result.value : 0),
+        0,
+      );
+      const failures = responses.filter((result) => result.status === 'rejected');
+      if (failures.length > 0) {
+        const firstFailure: unknown = failures[0]?.reason;
+        const reason = firstFailure instanceof Error ? firstFailure.message : '渠道同步失败。';
+        setFeedback({
+          tone: 'error',
+          message:
+            taskCount > 0 ? `已创建 ${String(taskCount)} 个任务，部分渠道失败：${reason}` : reason,
+        });
+      } else {
+        setFeedback({
+          tone: 'success',
+          message: `同步任务已创建，共 ${String(taskCount)} 个来源。`,
+        });
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={styles.headerSync} data-source-header-sync>
+      <button
+        type="button"
+        className={styles.syncButton}
+        aria-label={`${actionLabel} ${contextLabel}`}
+        aria-busy={busy}
+        disabled={busy || enabledChannels.length === 0 || !syncReady}
+        aria-describedby={!syncReady ? 'source-sync-prerequisite' : undefined}
+        onClick={() => void sync()}
+      >
+        <span className={busy ? styles.syncIconBusy : styles.syncIcon}>
+          <Icon name="refresh" size={20} />
+        </span>
+        <span className={styles.syncTooltip} role="tooltip">
+          {actionLabel}
+        </span>
+      </button>
+      {feedback ? (
+        <p
+          className={classNames(
+            styles.headerFeedback,
+            feedback.tone === 'success' ? styles.headerSuccess : styles.headerError,
+          )}
+          role={feedback.tone === 'error' ? 'alert' : 'status'}
+        >
+          {feedback.message}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function SourceChannelToggle({
+  channel,
+}: Readonly<{ channel: WebSourceChannel }>): ReactElement {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const toggle = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/source-channels/${channel.id}`, {
+        method: 'PATCH',
+        headers: await mutationHeaders(),
+        body: JSON.stringify({ kind: 'enable', enabled: !channel.enabled }),
+      });
+      const result = (await response.json()) as ActionResponse;
+      if (!response.ok) throw new Error(result.error?.message ?? '渠道设置保存失败。');
+      window.location.reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '渠道设置保存失败。');
+      setBusy(false);
+    }
+  };
+  return (
+    <div>
+      <button type="button" className="button-muted" disabled={busy} onClick={() => void toggle()}>
+        {channel.enabled ? '停用渠道' : '启用渠道'}
+      </button>
+      {error ? <p className={styles.error}>{error}</p> : null}
+    </div>
+  );
 }
 
 interface ActionFeedback {

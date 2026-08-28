@@ -1,8 +1,8 @@
 # 数据模型与 SQLite 表设计
 
 > 状态：Accepted
-> 版本：1.1.0
-> 日期：2026-08-19
+> 版本：1.2.0
+> 日期：2026-08-28
 > 上位文档：[总体架构](./overall-arch.md)
 
 ## 1. 目的与约束
@@ -24,7 +24,8 @@
 
 ```mermaid
 erDiagram
-    companies ||--o{ job_sources : owns
+    companies ||--o{ source_channels : owns
+    source_channels ||--o{ job_sources : groups
     job_sources ||--o{ sync_runs : executes
     sync_runs ||--o{ raw_job_records : captures
     job_sources ||--o{ jobs : publishes
@@ -79,30 +80,53 @@ erDiagram
 | `created_at`   | INTEGER | NOT NULL                | 创建时间             |
 | `updated_at`   | INTEGER | NOT NULL                | 修改时间             |
 
-### 3.2 `job_sources`
+### 3.2 来源目录
 
-| 列                     | 类型    | 约束                    | 说明                                          |
-| ---------------------- | ------- | ----------------------- | --------------------------------------------- |
-| `id`                   | TEXT    | PK                      | UUIDv7                                        |
-| `company_id`           | TEXT    | FK companies, NOT NULL  | 所属公司                                      |
-| `slug`                 | TEXT    | UNIQUE NOT NULL         | 来源标识                                      |
-| `adapter_key`          | TEXT    | NOT NULL                | 适配器注册键                                  |
-| `recruitment_type`     | TEXT    | CHECK                   | `social`、`campus`、`mixed`                   |
-| `base_url`             | TEXT    | NOT NULL                | 官方入口                                      |
-| `config_json`          | TEXT    | NOT NULL DEFAULT `'{}'` | 非敏感来源配置                                |
-| `sync_policy_version`  | TEXT    | NOT NULL                | 当前同步策略版本                              |
-| `sync_policy_json`     | TEXT    | NOT NULL                | 限速、缺失阈值等版本化策略                    |
-| `enabled`              | INTEGER | NOT NULL CHECK          | 是否启用                                      |
-| `support_status`       | TEXT    | CHECK                   | `experimental`、`supported`、`blocked`        |
-| `support_note`         | TEXT    | NULL                    | 非敏感限制或复核说明                          |
-| `health_status`        | TEXT    | CHECK                   | `unknown`、`healthy`、`degraded`、`unhealthy` |
-| `consecutive_failures` | INTEGER | NOT NULL DEFAULT 0      | 连续失败数                                    |
-| `last_success_at`      | INTEGER | NULL                    | 最近成功时间                                  |
-| `last_failure_at`      | INTEGER | NULL                    | 最近失败时间                                  |
-| `created_at`           | INTEGER | NOT NULL                | 创建时间                                      |
-| `updated_at`           | INTEGER | NOT NULL                | 修改时间                                      |
+#### 3.2.1 `source_channels`
 
-唯一约束：`(company_id, recruitment_type, adapter_key)`。
+逻辑渠道是公司下稳定、面向用户的实习、校招或社招入口，不承担具体官网的运行状态：
+
+| 列             | 类型    | 约束                   | 说明                         |
+| -------------- | ------- | ---------------------- | ---------------------------- |
+| `id`           | TEXT    | PK                     | UUIDv7                       |
+| `company_id`   | TEXT    | FK companies, NOT NULL | 所属公司                     |
+| `channel`      | TEXT    | CHECK                  | `intern`、`campus`、`social` |
+| `slug`         | TEXT    | UNIQUE NOT NULL        | 稳定的渠道级机器标识         |
+| `enabled`      | INTEGER | NOT NULL CHECK         | 渠道总开关                   |
+| `support_note` | TEXT    | NULL                   | 非敏感覆盖范围或阻断说明     |
+| `created_at`   | INTEGER | NOT NULL               | 创建时间                     |
+| `updated_at`   | INTEGER | NOT NULL               | 修改时间                     |
+
+唯一约束：`(company_id, channel)`。每家公司恰好拥有三个逻辑渠道由 catalog seed 与集成测试共同保证。渠道支持状态由 required 物理来源派生，渠道健康只作为查询摘要，不重复持久化。
+
+#### 3.2.2 `job_sources`
+
+`job_sources` 表示可独立执行、限流、重试和观测的物理官网入口或协议：
+
+| 列                     | 类型    | 约束                         | 说明                                          |
+| ---------------------- | ------- | ---------------------------- | --------------------------------------------- |
+| `id`                   | TEXT    | PK                           | UUIDv7                                        |
+| `company_id`           | TEXT    | FK companies, NOT NULL       | 所属公司；与渠道公司必须一致                  |
+| `channel_id`           | TEXT    | FK source_channels, NOT NULL | 所属逻辑渠道                                  |
+| `slug`                 | TEXT    | UNIQUE NOT NULL              | 来源标识                                      |
+| `adapter_key`          | TEXT    | UNIQUE NOT NULL              | 适配器注册键                                  |
+| `coverage_role`        | TEXT    | CHECK                        | `required`、`supplemental`                    |
+| `recruitment_type`     | TEXT    | CHECK                        | `social`、`campus`、`mixed`                   |
+| `base_url`             | TEXT    | NOT NULL                     | 官方入口                                      |
+| `config_json`          | TEXT    | NOT NULL DEFAULT `'{}'`      | 非敏感来源配置                                |
+| `sync_policy_version`  | TEXT    | NOT NULL                     | 当前同步策略版本                              |
+| `sync_policy_json`     | TEXT    | NOT NULL                     | 限速、缺失阈值等版本化策略                    |
+| `enabled`              | INTEGER | NOT NULL CHECK               | 是否启用                                      |
+| `support_status`       | TEXT    | CHECK                        | `experimental`、`supported`、`blocked`        |
+| `support_note`         | TEXT    | NULL                         | 非敏感限制或复核说明                          |
+| `health_status`        | TEXT    | CHECK                        | `unknown`、`healthy`、`degraded`、`unhealthy` |
+| `consecutive_failures` | INTEGER | NOT NULL DEFAULT 0           | 连续失败数                                    |
+| `last_success_at`      | INTEGER | NULL                         | 最近成功时间                                  |
+| `last_failure_at`      | INTEGER | NULL                         | 最近失败时间                                  |
+| `created_at`           | INTEGER | NOT NULL                     | 创建时间                                      |
+| `updated_at`           | INTEGER | NOT NULL                     | 修改时间                                      |
+
+一个逻辑渠道可拥有零个、一个或多个物理来源，每个物理来源只能属于一个逻辑渠道。`recruitment_type` 在迁移期继续兼容既有代码，权威渠道身份以 `channel_id` 为准；应用层必须校验 `job_sources.company_id` 与所属逻辑渠道公司一致。
 
 ### 3.3 `sync_runs`
 
@@ -474,13 +498,14 @@ erDiagram
 必须由应用层和集成测试共同保证：
 
 1. 一个来源同一时刻最多有一个 `running` SyncRun，并且最多一个 `pending/running` 同步任务；分别由部分唯一索引和应用层错误映射保证。
-2. `sync_runs.coverage != complete` 时，不得增加未观察职位的 `missing_count`。
-3. 每次 `jobs.content_hash` 变化必须在同一事务中创建一条 `job_revisions`。
-4. 职位状态变化必须在同一事务中创建 `job_status_events`。
-5. 同一画像只能有一个 `is_current = 1` 版本。
-6. 任何匹配结果都引用不可变的画像版本、职位修订、实际语义结果/空哨兵和规则集；建议通过 `match_advices` 单独版本化。
-7. Agent 成功结果必须已通过对应输出 Schema；失败运行不得被当作缓存命中。`agent_runs.cache_key` 只对 `status = 'succeeded'` 建立部分唯一索引，允许失败后创建新的重试运行；并发成功冲突时后提交者读取已存在的成功缓存。
-8. 文件记录只有在文件原子写入成功后创建；数据库回滚后的孤立文件由维护任务清理。
+2. 每家公司必须且只能有三个逻辑渠道；每个物理来源只属于一个同公司的逻辑渠道。渠道级同步只能扇出来源级任务，不得共享 SyncRun、游标或事务。
+3. `sync_runs.coverage != complete` 时，不得增加未观察职位的 `missing_count`；完整性和缺失推进只能作用于同一个物理 `source_id`，不得跨兄弟来源计算。
+4. 每次 `jobs.content_hash` 变化必须在同一事务中创建一条 `job_revisions`。
+5. 职位状态变化必须在同一事务中创建 `job_status_events`。
+6. 同一画像只能有一个 `is_current = 1` 版本。
+7. 任何匹配结果都引用不可变的画像版本、职位修订、实际语义结果/空哨兵和规则集；建议通过 `match_advices` 单独版本化。
+8. Agent 成功结果必须已通过对应输出 Schema；失败运行不得被当作缓存命中。`agent_runs.cache_key` 只对 `status = 'succeeded'` 建立部分唯一索引，允许失败后创建新的重试运行；并发成功冲突时后提交者读取已存在的成功缓存。
+9. 文件记录只有在文件原子写入成功后创建；数据库回滚后的孤立文件由维护任务清理。
 
 外键默认 `ON DELETE RESTRICT`。只有明确的聚合子记录使用级联删除：Job → Revision/Observation/StatusEvent、CandidateProfile → ProfileVersion、AgentRun → AgentToolCall、MatchResult → MatchAdvice。SyncRun、RawJobRecord、FileArtifact、Job、ProfileVersion、Ruleset 等审计或被引用事实不得因普通父记录删除而隐式消失；敏感数据删除由专用 Operations 用例按影响计划和固定顺序执行。
 
@@ -503,5 +528,7 @@ erDiagram
 3. 通过 `PRAGMA foreign_key_check` 和 `PRAGMA integrity_check`。
 4. 验证必要索引、CHECK 和 FTS5 触发器存在。
 5. 在不可逆数据变化前提供备份提示和回滚说明。
+
+逻辑渠道迁移必须采用“新增表、回填可空外键、验证、收紧非空约束”的顺序，并证明既有物理来源 UUID 及其 Job、SyncRun 和 Task 引用未改变。
 
 首个开发任务应将本文档转为 Drizzle Schema，并以集成测试逐条证明本节和第 4 节的不变量。

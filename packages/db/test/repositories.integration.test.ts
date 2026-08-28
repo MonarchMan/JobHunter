@@ -40,13 +40,19 @@ function seedSync(handle: SqliteDatabaseHandle): void {
       (id, slug, name, aliases_json, enabled, created_at, updated_at)
     VALUES
       ('018f0000-0000-7000-8000-000000000001', 'fixture', 'Fixture', '[]', 1, 1, 1);
+    INSERT INTO source_channels
+      (id, company_id, channel, slug, enabled, created_at, updated_at)
+    VALUES
+      ('018f0000-0000-7000-8200-000000000103',
+       '018f0000-0000-7000-8000-000000000001', 'social', 'fixture-social', 1, 1, 1);
     INSERT INTO job_sources
-      (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+      (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
        sync_policy_version, sync_policy_json, enabled, support_status, health_status,
        created_at, updated_at)
     VALUES
       ('018f0000-0000-7000-8000-000000000002',
-       '018f0000-0000-7000-8000-000000000001', 'fixture', 'fixture', 'social',
+       '018f0000-0000-7000-8000-000000000001',
+       '018f0000-0000-7000-8200-000000000103', 'fixture', 'fixture', 'social',
        'https://example.com', '{}', '1', '{}', 1, 'supported', 'healthy', 1, 1);
     INSERT INTO sync_runs
       (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,

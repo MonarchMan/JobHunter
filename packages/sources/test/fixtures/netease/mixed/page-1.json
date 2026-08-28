@@ -1,0 +1,41 @@
+{
+  "code": 200,
+  "msg": null,
+  "data": {
+    "pages": 1,
+    "total": 2,
+    "list": [
+      {
+        "id": 53708,
+        "name": "游戏交互设计实习生",
+        "workType": "1",
+        "firstPostTypeName": "用户体验及设计",
+        "requirement": "设计类相关专业，每周可实习五天。",
+        "description": "参与游戏交互设计和体验优化。",
+        "reqEducationName": "本科",
+        "reqWorkYearsName": "不限",
+        "firstDepName": "雷火事业群",
+        "updateTime": 1787889039000,
+        "productName": "网易游戏（雷火）",
+        "workPlaceNameList": ["杭州市"],
+        "beeUrl": null
+      },
+      {
+        "id": 60001,
+        "name": "服务端开发工程师",
+        "workType": "0",
+        "firstPostTypeName": "技术",
+        "requirement": "本科及以上学历，熟悉服务端开发。",
+        "description": "负责服务端系统设计、开发和维护，并指导实习生。",
+        "reqEducationName": "本科",
+        "reqWorkYearsName": "经验3-5年",
+        "firstDepName": "互联网事业群",
+        "updateTime": 1787889038000,
+        "productName": "网易",
+        "workPlaceNameList": ["杭州市"],
+        "beeUrl": null
+      }
+    ],
+    "lastPage": true
+  }
+}

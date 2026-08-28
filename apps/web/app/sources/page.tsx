@@ -5,9 +5,9 @@ import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { SourceTabs, type SourceChannel } from './source-tabs.js';
 import { Pagination } from '../components/pagination.js';
-import { webPagination, type WebSource } from '@jobhunter/application/web';
+import { webPagination, type WebSourceChannel } from '@jobhunter/application/web';
 import { CompanySourceCard } from './company-source-card.js';
-import { SourceSyncAction } from './source-actions.js';
+import { SourceChannelSyncAction } from './source-actions.js';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -26,15 +26,15 @@ export default async function SourcesPage({
   const requestedPage = Number(firstSearchParameter(parameters, 'page') ?? '1');
   const pageNumber = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const container = await getWebContainer();
-  const sources = container.services.webSources.list();
+  const sourceChannels = container.services.webSources.listChannels();
   const syncReady = container.services.sources.isSyncReady();
   const companies = Array.from(
-    sources.reduce((groups, source) => {
-      const existing = groups.get(source.companyId) ?? [];
-      groups.set(source.companyId, [...existing, source]);
+    sourceChannels.reduce((groups, sourceChannel) => {
+      const existing = groups.get(sourceChannel.companyId) ?? [];
+      groups.set(sourceChannel.companyId, [...existing, sourceChannel]);
       return groups;
-    }, new Map<string, WebSource[]>()),
-    ([companyId, companySources]) => ({ companyId, sources: companySources }),
+    }, new Map<string, WebSourceChannel[]>()),
+    ([companyId, channels]) => ({ companyId, channels }),
   );
   const sourcePage = webPagination(companies.length, pageNumber, 10);
   const officialCompanies =
@@ -53,9 +53,9 @@ export default async function SourcesPage({
       />
       <div className={styles.toolbar} data-source-toolbar>
         <SourceTabs active={channel} officialCount={companies.length} />
-        {channel === 'official' && sources.length > 0 ? (
-          <SourceSyncAction
-            sources={sources}
+        {channel === 'official' && sourceChannels.length > 0 ? (
+          <SourceChannelSyncAction
+            channels={sourceChannels}
             contextLabel="全部官网来源"
             actionLabel="全部同步"
             syncReady={syncReady}
@@ -105,7 +105,7 @@ export default async function SourcesPage({
             {officialCompanies.map((company) => (
               <CompanySourceCard
                 key={company.companyId}
-                sources={company.sources}
+                channels={company.channels}
                 syncReady={syncReady}
               />
             ))}

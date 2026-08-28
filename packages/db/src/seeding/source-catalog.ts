@@ -9,7 +9,14 @@ export interface SourceCatalogSeedRecord {
     readonly industry: string | null;
     readonly sizeTag: 'large' | 'medium' | 'other';
   };
-  readonly source: {
+  readonly channel: {
+    readonly id: string;
+    readonly slug: string;
+    readonly type: 'intern' | 'campus' | 'social';
+    readonly enabledByDefault: boolean;
+    readonly supportNote: string | null;
+  };
+  readonly sources: readonly {
     readonly id: string;
     readonly slug: string;
     readonly adapterKey: string;
@@ -19,7 +26,8 @@ export interface SourceCatalogSeedRecord {
     readonly enabledByDefault: boolean;
     readonly supportStatus: 'experimental' | 'supported' | 'blocked';
     readonly supportNote: string | null;
-  };
+    readonly coverageRole: 'required' | 'supplemental';
+  }[];
 }
 
 const defaultSyncPolicy = {
@@ -57,15 +65,29 @@ export function seedSourceCatalog(
        updated_at = excluded.updated_at`,
   );
   const companyIdBySlug = database.prepare('SELECT id FROM companies WHERE slug = ?').pluck();
+  const insertChannel = database.prepare(
+    `INSERT INTO source_channels
+       (id, company_id, channel, slug, enabled, support_note, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(company_id, channel) DO UPDATE SET
+       slug = excluded.slug,
+       support_note = excluded.support_note,
+       updated_at = excluded.updated_at`,
+  );
+  const channelIdByCompanyAndType = database
+    .prepare('SELECT id FROM source_channels WHERE company_id = ? AND channel = ?')
+    .pluck();
   const insertSource = database.prepare(
     `INSERT INTO job_sources
-       (id, company_id, slug, adapter_key, recruitment_type, base_url, config_json,
+       (id, company_id, channel_id, slug, adapter_key, coverage_role, recruitment_type, base_url, config_json,
         sync_policy_version, sync_policy_json, enabled, support_status, support_note,
         health_status, consecutive_failures, last_success_at, last_failure_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown', 0, NULL, NULL, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown', 0, NULL, NULL, ?, ?)
      ON CONFLICT(slug) DO UPDATE SET
        company_id = excluded.company_id,
+       channel_id = excluded.channel_id,
        adapter_key = excluded.adapter_key,
+       coverage_role = excluded.coverage_role,
        recruitment_type = excluded.recruitment_type,
        base_url = excluded.base_url,
        support_status = excluded.support_status,
@@ -89,22 +111,40 @@ export function seedSourceCatalog(
       if (typeof companyId !== 'string') {
         throw new TypeError(`Unable to resolve seeded company: ${record.company.slug}`);
       }
-      insertSource.run(
-        record.source.id,
+      insertChannel.run(
+        record.channel.id,
         companyId,
-        record.source.slug,
-        record.source.adapterKey,
-        record.source.recruitmentType,
-        record.source.baseUrl,
-        JSON.stringify(record.source.config),
-        syncPolicyVersion,
-        syncPolicyJson,
-        record.source.enabledByDefault ? 1 : 0,
-        record.source.supportStatus,
-        record.source.supportNote,
+        record.channel.type,
+        record.channel.slug,
+        record.channel.enabledByDefault ? 1 : 0,
+        record.channel.supportNote,
         now,
         now,
       );
+      const channelId = channelIdByCompanyAndType.get(companyId, record.channel.type);
+      if (typeof channelId !== 'string') {
+        throw new TypeError(`Unable to resolve seeded channel: ${record.channel.slug}`);
+      }
+      for (const source of record.sources) {
+        insertSource.run(
+          source.id,
+          companyId,
+          channelId,
+          source.slug,
+          source.adapterKey,
+          source.coverageRole,
+          source.recruitmentType,
+          source.baseUrl,
+          JSON.stringify(source.config),
+          syncPolicyVersion,
+          syncPolicyJson,
+          source.enabledByDefault ? 1 : 0,
+          source.supportStatus,
+          source.supportNote,
+          now,
+          now,
+        );
+      }
     }
   })();
 }

@@ -84,7 +84,7 @@ describe('backup commands', () => {
       });
 
       addPostBackupMutation(dataRoot);
-      expect(companyCount(dataRoot)).toBe(11);
+      expect(companyCount(dataRoot)).toBe(16);
       const planned = await command(dataRoot, ['backup', 'restore', backupDirectory]);
       expect(planned.exitCode).toBe(0);
       const plan = planned.body as {
@@ -95,7 +95,7 @@ describe('backup commands', () => {
       };
       expect(plan.data.dryRun).toBe(true);
       expect(plan.data.plan.targetDataRoot).toBe(dataRoot);
-      expect(companyCount(dataRoot)).toBe(11);
+      expect(companyCount(dataRoot)).toBe(16);
 
       const rejected = await command(dataRoot, [
         'backup',
@@ -106,7 +106,7 @@ describe('backup commands', () => {
       ]);
       expect(rejected.exitCode).toBe(2);
       expect(rejected.body).toMatchObject({ ok: false, error: { code: 'RESTORE_REJECTED' } });
-      expect(companyCount(dataRoot)).toBe(11);
+      expect(companyCount(dataRoot)).toBe(16);
 
       const restored = await command(dataRoot, [
         'backup',
@@ -130,7 +130,7 @@ describe('backup commands', () => {
           }
         ).data.result.previousDataRoot,
       ).toBeTypeOf('string');
-      expect(companyCount(dataRoot)).toBe(10);
+      expect(companyCount(dataRoot)).toBe(15);
 
       await appendFile(path.join(backupDirectory, 'jobhunter.sqlite'), 'tampered');
       const invalid = await command(dataRoot, ['backup', 'verify', backupDirectory]);

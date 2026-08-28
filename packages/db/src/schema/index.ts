@@ -36,6 +36,27 @@ export const companies = sqliteTable(
   (table) => [check('companies_enabled_check', sql`${table.enabled} in (0, 1)`)],
 );
 
+export const sourceChannels = sqliteTable(
+  'source_channels',
+  {
+    id: text().primaryKey(),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'restrict' }),
+    channel: text().notNull(),
+    slug: text().notNull().unique(),
+    enabled: integer().notNull(),
+    supportNote: text('support_note'),
+    createdAt: epoch('created_at').notNull(),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    unique('source_channels_company_channel_unique').on(table.companyId, table.channel),
+    check('source_channels_channel_check', sql`${table.channel} in ('intern', 'campus', 'social')`),
+    check('source_channels_enabled_check', sql`${table.enabled} in (0, 1)`),
+  ],
+);
+
 export const jobSources = sqliteTable(
   'job_sources',
   {
@@ -43,8 +64,12 @@ export const jobSources = sqliteTable(
     companyId: text('company_id')
       .notNull()
       .references(() => companies.id, { onDelete: 'restrict' }),
+    channelId: text('channel_id')
+      .notNull()
+      .references(() => sourceChannels.id, { onDelete: 'restrict' }),
     slug: text().notNull().unique(),
-    adapterKey: text('adapter_key').notNull(),
+    adapterKey: text('adapter_key').notNull().unique(),
+    coverageRole: text('coverage_role').notNull().default('required'),
     recruitmentType: text('recruitment_type').notNull(),
     baseUrl: text('base_url').notNull(),
     configJson: jsonText('config_json').notNull().default('{}'),
@@ -65,12 +90,11 @@ export const jobSources = sqliteTable(
     updatedAt: epoch('updated_at').notNull(),
   },
   (table) => [
-    unique('job_sources_company_type_adapter_unique').on(
-      table.companyId,
-      table.recruitmentType,
-      table.adapterKey,
-    ),
     check('job_sources_enabled_check', sql`${table.enabled} in (0, 1)`),
+    check(
+      'job_sources_coverage_role_check',
+      sql`${table.coverageRole} in ('required', 'supplemental')`,
+    ),
     check(
       'job_sources_recruitment_check',
       sql`${table.recruitmentType} in ('social', 'campus', 'mixed')`,

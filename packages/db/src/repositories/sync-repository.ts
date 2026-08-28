@@ -94,12 +94,18 @@ export class SqliteSyncRepository implements SyncRepository {
     const row = this.#client
       .prepare(
         `SELECT s.id, s.company_id, s.adapter_key, s.config_json, s.sync_policy_version,
-                s.sync_policy_json, s.enabled, s.consecutive_failures,
+                s.sync_policy_json,
+                CASE WHEN s.enabled = 1 AND company.enabled = 1 AND channel.enabled = 1
+                     THEN 1 ELSE 0 END AS enabled,
+                s.consecutive_failures,
                 (SELECT r.cursor_out_json FROM sync_runs r
                  WHERE r.source_id = s.id AND r.status = 'succeeded'
                    AND r.cursor_out_json IS NOT NULL
                  ORDER BY r.finished_at DESC LIMIT 1) AS cursor_out_json
-         FROM job_sources s WHERE s.id = ?`,
+         FROM job_sources s
+         JOIN companies company ON company.id = s.company_id
+         JOIN source_channels channel ON channel.id = s.channel_id
+         WHERE s.id = ?`,
       )
       .get(sourceId) as SourceRow | undefined;
     if (!row) return null;

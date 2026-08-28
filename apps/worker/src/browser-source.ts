@@ -20,6 +20,7 @@ export interface BrowserSourceOptions {
   readonly executablePath?: string;
   readonly navigationTimeoutMs?: number;
   readonly maximumPages?: number;
+  readonly pageSampling?: 'sequential' | 'first-last';
 }
 
 export interface BrowserExecutableRuntime {
@@ -147,7 +148,7 @@ function requestTemplate(
   return {
     url: response.url(),
     headers: requestHeaders(response),
-    body: postData(response),
+    body: response.request().method() === 'GET' ? {} : postData(response),
   };
 }
 
@@ -165,7 +166,7 @@ async function browserListResponse(
   return {
     url: response.url(),
     status: response.status(),
-    requestBody: postData(response),
+    requestBody: response.request().method() === 'GET' ? {} : postData(response),
     body,
   };
 }
@@ -198,6 +199,15 @@ function readListResponse(
     }
     limit = Number(requestBody.page.pageSize);
     currentPage = Number(requestBody.page.pageNo);
+  } else if (request.responseShape === 'qihoo360-jobs') {
+    limit = Number(requestBody.limit);
+    currentPage = Number(requestBody.page);
+  } else if (request.responseShape === 'xiaomi-jobs') {
+    limit = Number(query.get('pageSize'));
+    currentPage = Number(query.get('pageNum'));
+  } else if (request.responseShape === 'netease-jobs') {
+    limit = Number(requestBody.pageSize);
+    currentPage = Number(requestBody.currentPage);
   } else {
     limit = Number(requestBody.pageSize);
     currentPage = Number(requestBody.curPage);
@@ -240,6 +250,24 @@ function readListResponse(
     }
     items = body.data.list;
     total = Number(body.data.page.totalCount);
+  } else if (request.responseShape === 'qihoo360-jobs') {
+    if (!isRecord(body)) {
+      throw new SourceError('parse_changed', '360 list response has no response object.');
+    }
+    items = body.data;
+    total = Number(body.count);
+  } else if (request.responseShape === 'xiaomi-jobs') {
+    if (!isRecord(body) || !isRecord(body.data)) {
+      throw new SourceError('parse_changed', 'Xiaomi list response has no data object.');
+    }
+    items = body.data.list;
+    total = Number(body.data.total);
+  } else if (request.responseShape === 'netease-jobs') {
+    if (!isRecord(body) || !isRecord(body.data)) {
+      throw new SourceError('parse_changed', 'NetEase list response has no data object.');
+    }
+    items = body.data.list;
+    total = Number(body.data.total);
   } else {
     if (!isRecord(body) || !isRecord(body.data) || !isRecord(body.data.pageVO)) {
       throw new SourceError('parse_changed', 'Huawei list response has no pageVO object.');
@@ -273,7 +301,7 @@ async function waitForListResponse(
     (candidate) =>
       new URL(candidate.url()).pathname === request.listEndpointPath &&
       request.allowedHosts.includes(new URL(candidate.url()).hostname) &&
-      candidate.request().method() === 'POST' &&
+      candidate.request().method() === (request.responseShape === 'xiaomi-jobs' ? 'GET' : 'POST') &&
       candidate.status() === 200,
     { timeout: timeoutMs },
   );
@@ -311,13 +339,20 @@ async function requestJsonPage(
       } else if (responseShape === 'meituan-jobs') {
         body.page = { ...(body.page ?? {}), pageNo: pageNumber };
         body.jobType = [{ code: '2', subCode: [] }];
+      } else if (responseShape === 'qihoo360-jobs') {
+        body.page = pageNumber;
+      } else if (responseShape === 'xiaomi-jobs') {
+        url.searchParams.set('pageNum', String(pageNumber));
+      } else if (responseShape === 'netease-jobs') {
+        body.currentPage = pageNumber;
       } else {
         body.curPage = pageNumber;
       }
+      const get = responseShape === 'xiaomi-jobs';
       const result = await fetch(url, {
-        method: 'POST',
+        method: get ? 'GET' : 'POST',
         headers: input.headers,
-        body: JSON.stringify(body),
+        ...(get ? {} : { body: JSON.stringify(body) }),
       });
       const text = await result.text();
       let parsed: unknown = null;
@@ -359,7 +394,11 @@ async function requestJsonPage(
                     pageNo: targetPage,
                   },
                 }
-              : { ...template.body, curPage: targetPage },
+              : request.responseShape === 'qihoo360-jobs'
+                ? { ...template.body, page: targetPage }
+                : request.responseShape === 'netease-jobs'
+                  ? { ...template.body, currentPage: targetPage }
+                  : { ...template.body, curPage: targetPage },
       body: response.body,
     },
     request,
@@ -394,11 +433,23 @@ async function collectJsonPages(
   let totalChanged = false;
   let duplicateIds = 0;
   const seenIds = new Set<string>();
-  let current = first;
   const expectedPages = first.total === 0 ? 0 : Math.ceil(first.total / first.limit);
-  for (let pageNumber = 1; pageNumber <= Math.min(expectedPages, maximumPages); pageNumber += 1) {
+  const sampled = options.pageSampling === 'first-last' && expectedPages > maximumPages;
+  const pageNumbers = sampled
+    ? maximumPages <= 1
+      ? [1]
+      : maximumPages === 2
+        ? [1, expectedPages]
+        : [1, Math.ceil(expectedPages / 2), expectedPages]
+    : Array.from({ length: Math.min(expectedPages, maximumPages) }, (_, index) => index + 1);
+  for (const pageNumber of pageNumbers) {
     if (request.signal.aborted)
       throw new SourceError('temporary', 'Browser collection was aborted.');
+    const expectedOffset = (pageNumber - 1) * first.limit;
+    const current =
+      pageNumber === 1
+        ? first
+        : await requestJsonPage(page, request, firstTemplate, pageNumber, expectedOffset);
     if (current.total !== first.total || current.limit !== first.limit) {
       coverage = 'partial';
       totalChanged = true;
@@ -408,7 +459,8 @@ async function collectJsonPages(
       page: pageNumber,
       url: page.url(),
       records: current.items.map((raw) => {
-        const rawId = raw.id ?? raw.jobId ?? raw.positionId ?? raw.publishId ?? raw.jobUnionId;
+        const rawId =
+          raw.id ?? raw.jobId ?? raw.jobPostId ?? raw.positionId ?? raw.publishId ?? raw.jobUnionId;
         const id = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : '';
         if (!id) throw new SourceError('parse_changed', 'Browser list record has no stable ID.');
         if (seenIds.has(id)) {
@@ -431,29 +483,22 @@ async function collectJsonPages(
       total: current.total,
       capturedAt: Date.now(),
     });
-    if (pageNumber < expectedPages && pageNumber < maximumPages) {
-      current = await requestJsonPage(
-        page,
-        request,
-        firstTemplate,
-        pageNumber + 1,
-        pageNumber * first.limit,
-      );
-    }
   }
-  if (pages.length < expectedPages) coverage = 'partial';
-  const truncated = pages.length < expectedPages;
+  if (sampled || pages.length < expectedPages) coverage = 'partial';
+  const truncated = !sampled && pages.length < expectedPages;
   return {
     pages,
     coverage,
     diagnostics: {
       reason: truncated
         ? 'maximum_pages_reached'
-        : totalChanged
-          ? 'pagination_total_changed'
-          : duplicateIds > 0
-            ? 'duplicate_job_ids'
-            : null,
+        : sampled
+          ? 'sampled_pages'
+          : totalChanged
+            ? 'pagination_total_changed'
+            : duplicateIds > 0
+              ? 'duplicate_job_ids'
+              : null,
       retryable: totalChanged,
       expectedCount: first.total,
       discoveredCount: seenIds.size,
