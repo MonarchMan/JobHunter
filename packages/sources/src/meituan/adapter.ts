@@ -6,6 +6,7 @@ import {
   canonicalizeOfficialUrl,
   type DiscoveryEvent,
   type JobSourceAdapter,
+  type SourcePageCollection,
   type SourceHealth,
 } from '@jobhunter/source-core';
 import { ZodError } from 'zod';
@@ -95,6 +96,19 @@ function descriptions(detail: MeituanDetail): string {
     .join('\n\n');
 }
 
+function hasOnlyDuplicateMeituanRecords(collection: SourcePageCollection): boolean {
+  const diagnostics = collection.diagnostics;
+  const duplicateIds = diagnostics?.duplicateIds ?? 0;
+  return (
+    collection.coverage === 'partial' &&
+    diagnostics?.reason === 'duplicate_job_ids' &&
+    duplicateIds > 0 &&
+    diagnostics.totalChanged === false &&
+    diagnostics.expectedPages === diagnostics.fetchedPages &&
+    diagnostics.expectedCount === (diagnostics.discoveredCount ?? -1) + duplicateIds
+  );
+}
+
 function createMeituanChannelAdapter(options: {
   readonly key: 'meituan.social' | 'meituan.intern';
   readonly entryUrl: string;
@@ -141,12 +155,12 @@ function createMeituanChannelAdapter(options: {
         });
         let discoveredCount = 0;
         const seen = new Set<string>();
-        let coverage = collection.coverage;
+        const duplicateOnly = hasOnlyDuplicateMeituanRecords(collection);
+        const coverage = duplicateOnly ? 'complete' : collection.coverage;
         for (const collectedPage of collection.pages) {
           for (const value of collectedPage.records) {
             const raw = meituanJobSchema.parse(value);
             if (seen.has(raw.jobUnionId)) {
-              coverage = 'partial';
               continue;
             }
             seen.add(raw.jobUnionId);
@@ -170,7 +184,7 @@ function createMeituanChannelAdapter(options: {
           discoveredCount,
           diagnostics: {
             ...collection.diagnostics,
-            reason: collection.diagnostics?.reason ?? null,
+            reason: duplicateOnly ? null : (collection.diagnostics?.reason ?? null),
             retryable: collection.diagnostics?.retryable ?? false,
             discoveredCount,
             duplicateIds:

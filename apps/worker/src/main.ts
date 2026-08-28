@@ -46,9 +46,13 @@ try {
     taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
     logger,
     pageClient: createPlaywrightSourcePageClient(),
-    ...(config.model.baseUrl.value && config.model.modelName.value && config.model.apiKey.value
+    ...(config.model.provider.value &&
+    config.model.baseUrl.value &&
+    config.model.modelName.value &&
+    config.model.apiKey.value
       ? {
           model: {
+            provider: config.model.provider.value,
             baseUrl: config.model.baseUrl.value,
             model: config.model.modelName.value,
             apiKey: config.model.apiKey.value.reveal(),

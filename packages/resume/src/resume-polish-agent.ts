@@ -74,7 +74,7 @@ export function parseResumePolishAgentOutput(
     if (!selected && result !== null) {
       throw new TypeError(`Unselected resume section returned content: ${section}`);
     }
-    if (selected && (source === null || result === null || result.length !== source.length)) {
+    if (selected && (source?.length !== result?.length || source === null)) {
       throw new TypeError(`Resume polish output does not match source section: ${section}`);
     }
   }

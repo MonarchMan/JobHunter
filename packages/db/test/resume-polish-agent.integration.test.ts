@@ -16,9 +16,18 @@ import {
 } from '../src/index.js';
 
 const logger: TaskLogger = {
-  info(): void {},
-  warn(): void {},
-  error(): void {},
+  info(event, fields): void {
+    void event;
+    void fields;
+  },
+  warn(event, fields): void {
+    void event;
+    void fields;
+  },
+  error(event, fields): void {
+    void event;
+    void fields;
+  },
 };
 
 describe('resume polish Agent task', () => {

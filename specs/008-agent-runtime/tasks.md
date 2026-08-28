@@ -1,7 +1,7 @@
 # 008 轻量 Agent 运行时任务
 
 > 状态：Implemented
-> 显式覆盖：AGT-001, AGT-002, AGT-003, AGT-004, AGT-005, AGT-006, AGT-007, AGT-008, AGT-009, AGT-010, AGT-011, AGT-Q01, AGT-Q02, AGT-Q03, AGT-Q04
+> 显式覆盖：AGT-001, AGT-002, AGT-003, AGT-004, AGT-005, AGT-006, AGT-007, AGT-008, AGT-009, AGT-010, AGT-011, AGT-012, AGT-Q01, AGT-Q02, AGT-Q03, AGT-Q04
 
 - [x] **AGT-T001** 定义 ModelClient DTO、错误分类、FakeModelClient 和契约测试。（AGT-001, AGT-Q03）
 - [x] **AGT-T002** 实现 AgentDefinition、ToolDefinition、Registry 与唯一性校验。（AGT-002,006）
@@ -14,3 +14,4 @@
 - [x] **AGT-T009** 接入首个可配置 ModelClient provider，并验证无配置时确定性功能可启动。（AGT-Q04）
   - 2026-08-20：Provider Registry 与无 Provider 启动能力已完成；具体线上 Provider 待按官方 API 文档复核请求/工具调用结构后接入。
   - 接入 OpenAI 兼容 Chat Completions Provider，支持本地 `.env` 别名、结构化输出、工具调用、错误分类和显式在线烟测。（AGT-001,011, AGT-Q02）
+- [x] **AGT-T010** 接入 Anthropic Messages Provider，并让 Worker/CLI 按 provider 装配客户端；覆盖结构化输出、工具调用、错误分类、配置别名和 OpenAI 回归测试。（AGT-001,012, AGT-Q02, AGT-Q04）

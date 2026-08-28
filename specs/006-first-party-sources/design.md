@@ -52,6 +52,8 @@ packages/sources/
 
 阿里巴巴校园实习与华为校园实习现已接入同一响应驱动采集端口：前者按 `pageIndex/pageSize` 读取 `/position/search` 的 `content`，后者按 `curPage/pageSize` 读取网关响应的 `data.pageVO`。两者均使用官网自身匿名会话生成运行时请求参数，并通过完整分页 Smoke 后标记为 `supported`。
 
+美团实习接口可能在分页期间重复返回相同 `jobUnionId`。适配器只在所有预期页均已抓取、总数未变化，且“唯一 ID 数 + 重复记录数”等于接口总数时，将重复视为可安全去重的数据冗余：重复数量继续写入 coverage evidence，但不产生错误 reason，也不降低来源健康。任何缺页、总数变化、解析失败或无法闭合的计数仍保持 partial，避免把真实覆盖缺口误判为完整。
+
 ### 百度校园 JSON 适配（2026-08-22）
 
 百度校园页面在部分浏览器环境或打开开发者工具后会跳转空白页，但服务端仍匿名输出 SSR 数据，公开前端脚本也明确使用 `POST /httservice/getPostListNew`。适配器直接复用该匿名 JSON 协议，不依赖 DevTools 或页面 DOM：请求使用 `application/x-www-form-urlencoded`，按 `recruitType/curPage/pageSize` 分页，服务端页大小上限为 20；默认先采 `INTERN`，再采 `GRADUATE`。列表已内联职责和要求，`postId` 作为稳定外部 ID，官方详情 URL 为 `/jobs/detail/{recruitType}/{postId}`。

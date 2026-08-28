@@ -77,7 +77,7 @@ export class CandidateProfileService {
     readonly profileId: CandidateProfileId;
     readonly expectedCurrentVersionId: ProfileVersionId | null;
     readonly resumeDocumentId: string;
-    readonly agentRunId: string;
+    readonly agentRunId: string | null;
     readonly extracted: CandidateProfileData;
   }): ProfileVersionRecord {
     const current = this.#repository.getCurrentVersion(input.profileId);

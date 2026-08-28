@@ -527,6 +527,7 @@ test.describe('校招实习管理台核心流程', () => {
           expectedVersionId: detail.current.id,
           profile: {
             ...detail.current.effective,
+            targetRoles: ['研发'],
             projects: [
               {
                 name: '任务调度系统',
@@ -547,7 +548,30 @@ test.describe('校招实习管理台核心流程', () => {
     await page.reload();
     const panel = page.locator('[data-resume-polish]');
     await expect(panel.getByRole('heading', { name: '按求职意向润色经历' })).toBeVisible();
-    await expect(panel.getByText('仅改写描述，不新增事实')).toBeVisible();
+    await expect(panel.getByText('仅优化表达，不新增事实')).toBeVisible();
+    const panelBox = await panel.boundingBox();
+    expect(panelBox?.height).toBeLessThan(220);
+    const projectOption = panel.getByLabel('项目经历');
+    await expect
+      .poll(() =>
+        projectOption.evaluate((checkbox) => {
+          const style = window.getComputedStyle(checkbox);
+          const label = checkbox.closest('label');
+          const copy = label?.querySelector('span');
+          return {
+            checkboxHeight: style.height,
+            checkboxWidth: style.width,
+            labelHeight: label ? window.getComputedStyle(label).height : '',
+            writingMode: copy ? window.getComputedStyle(copy).writingMode : '',
+          };
+        }),
+      )
+      .toEqual({
+        checkboxHeight: '16px',
+        checkboxWidth: '16px',
+        labelHeight: '40px',
+        writingMode: 'horizontal-tb',
+      });
     const projectDescriptions = page.getByRole('textbox', { name: '项目描述' });
     const projectCount = await projectDescriptions.count();
     expect(projectCount).toBeGreaterThan(0);
@@ -598,7 +622,6 @@ test.describe('校招实习管理台核心流程', () => {
 
     await panel.getByRole('button', { name: '生成 AI 润色建议' }).click();
     await expect(panel.getByRole('alert')).toContainText('至少选择一项');
-    const projectOption = panel.getByLabel('项目经历');
     await projectOption.focus();
     await page.keyboard.press('Space');
     await expect(projectOption).toBeChecked();

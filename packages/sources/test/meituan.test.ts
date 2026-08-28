@@ -12,6 +12,7 @@ import {
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   createMeituanAdapter,
+  createMeituanInternAdapter,
   meituanConfigSchema,
   meituanDetailResponseSchema,
   meituanListResponseSchema,
@@ -170,6 +171,59 @@ describe('Meituan source adapter contract', () => {
       adapter.discover(context(fixtureHttp({ secondPage: emptySecond }))),
     );
     expect(discovery.completion).toMatchObject({ coverage: 'partial', discoveredCount: 2 });
+  });
+
+  it('deduplicates repeated internship records without degrading a fully fetched list', async () => {
+    const parsed = meituanListResponseSchema.parse(listPage1);
+    const first = parsed.data.list[0];
+    const second = parsed.data.list[1];
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    if (!first || !second) return;
+    const discovery = await collectDiscovery(
+      createMeituanInternAdapter().discover({
+        ...context(),
+        page: {
+          snapshot: () => Promise.reject(new Error('Unexpected snapshot request.')),
+          collect: () =>
+            Promise.resolve({
+              coverage: 'partial' as const,
+              pages: [
+                {
+                  page: 1,
+                  url: 'https://zhaopin.meituan.com/web/campus',
+                  records: [first, second],
+                  total: 3,
+                  capturedAt: 1,
+                },
+                {
+                  page: 2,
+                  url: 'https://zhaopin.meituan.com/web/campus',
+                  records: [second],
+                  total: 3,
+                  capturedAt: 2,
+                },
+              ],
+              diagnostics: {
+                reason: 'duplicate_job_ids',
+                retryable: false,
+                expectedCount: 3,
+                discoveredCount: 2,
+                expectedPages: 2,
+                fetchedPages: 2,
+                duplicateIds: 1,
+                totalChanged: false,
+              },
+            }),
+        },
+      }),
+    );
+    expect(discovery.ids).toHaveLength(2);
+    expect(discovery.completion).toMatchObject({
+      coverage: 'complete',
+      discoveredCount: 2,
+      diagnostics: { reason: null, duplicateIds: 1 },
+    });
   });
 
   it('preserves access-blocked classification and health diagnostics', async () => {

@@ -63,7 +63,7 @@ export class ResumePolishService {
     const sourceVersionId = parseId(input.sourceVersionId, 'ProfileVersion');
     const version = this.#profiles.getVersion(sourceVersionId);
     const current = this.#profiles.getCurrentVersion(profileId);
-    if (!version || version.profileId !== profileId || current?.id !== version.id) {
+    if (version?.profileId !== profileId || current?.id !== version.id) {
       throw new ResumePolishValidationError('在线简历已更新，请刷新后重新生成润色建议。');
     }
     const sections = [
@@ -107,7 +107,7 @@ export class ResumePolishService {
 
   public status(taskIdValue: string, suggestionId: string): WebResumePolishStatus | null {
     const task = this.#tasks.get(parseId(taskIdValue, 'Task'));
-    if (!task || task.taskType !== 'resume.polish') return null;
+    if (task?.taskType !== 'resume.polish') return null;
     const payload = task.payload as { readonly suggestionId?: string };
     if (payload.suggestionId !== suggestionId) return null;
     const suggestion = task.status === 'succeeded' ? this.#suggestions.get(suggestionId) : null;

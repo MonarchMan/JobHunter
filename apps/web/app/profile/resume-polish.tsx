@@ -152,44 +152,53 @@ export function ResumePolish({
 
   const readySuggestion = suggestion?.suggestion;
   return (
-    <section className={styles.root} aria-labelledby="resume-polish-title" data-resume-polish>
-      <div className={styles.heading}>
-        <div>
-          <p className="eyebrow">AI POLISH</p>
+    <section
+      className={styles.root}
+      aria-busy={busy}
+      aria-labelledby="resume-polish-title"
+      data-resume-polish
+    >
+      <header className={styles.heading}>
+        <div className={styles.titleBlock}>
+          <p className={styles.kicker}>AI POLISH</p>
           <h3 id="resume-polish-title">按求职意向润色经历</h3>
-          <p>
-            当前目标岗位：<strong>{draft.targetRoles[0] ?? '尚未确认'}</strong>
+          <p className={styles.targetRole}>
+            目标岗位 <strong>{draft.targetRoles[0] ?? '尚未确认'}</strong>
           </p>
         </div>
-        <span>仅改写描述，不新增事实</span>
-      </div>
-      <fieldset className={styles.options}>
-        <legend>选择需要润色的内容</legend>
-        {(Object.keys(sectionLabels) as ResumePolishSection[]).map((section) => {
-          const available = hasDescription(draft, section);
-          return (
-            <label key={section}>
-              <input
-                type="checkbox"
-                checked={sections.includes(section)}
-                disabled={busy || !available}
-                onChange={(event) => {
-                  toggleSection(section, event.currentTarget.checked);
-                }}
-              />
-              <span>
-                {sectionLabels[section]}
-                {!available ? <small>暂无可润色描述</small> : null}
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
-      <div className={styles.actions}>
-        <button type="button" disabled={busy} onClick={() => void generate()}>
-          {busy ? '正在生成…' : '生成 AI 润色建议'}
-        </button>
-        <span>建议不会自动覆盖当前简历</span>
+        <p className={styles.guardrail}>仅优化表达，不新增事实</p>
+      </header>
+      <div className={styles.controls}>
+        <fieldset className={styles.options}>
+          <legend>润色范围</legend>
+          <div className={styles.optionList}>
+            {(Object.keys(sectionLabels) as ResumePolishSection[]).map((section) => {
+              const available = hasDescription(draft, section);
+              return (
+                <label key={section}>
+                  <input
+                    type="checkbox"
+                    checked={sections.includes(section)}
+                    disabled={busy || !available}
+                    onChange={(event) => {
+                      toggleSection(section, event.currentTarget.checked);
+                    }}
+                  />
+                  <span className={styles.optionCopy}>
+                    {sectionLabels[section]}
+                    {!available ? <small>暂无可润色描述</small> : null}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+        <div className={styles.actions}>
+          <span>生成后先预览，不会自动覆盖简历</span>
+          <button type="button" disabled={busy} onClick={() => void generate()}>
+            {busy ? '正在生成…' : '生成 AI 润色建议'}
+          </button>
+        </div>
       </div>
       {error ? (
         <p className="form-feedback error" role="alert">

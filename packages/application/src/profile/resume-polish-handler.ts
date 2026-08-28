@@ -49,7 +49,7 @@ export function createResumePolishTaskHandler(
         throw new TaskExecutionError('invalid_config', 'Resume polish model is not configured.');
       }
       const version = input.profiles.getVersion(parseId(payload.sourceVersionId, 'ProfileVersion'));
-      if (!version || version.profileId !== payload.profileId) {
+      if (version?.profileId !== payload.profileId) {
         throw new TaskExecutionError('validation_failed', 'Resume profile version is unavailable.');
       }
       const targetRole = version.effective.targetRoles[0];

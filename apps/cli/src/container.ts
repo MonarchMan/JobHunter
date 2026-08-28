@@ -55,7 +55,7 @@ import {
 } from '@jobhunter/db';
 import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/domain';
 import { hashCanonical } from '@jobhunter/agent-core';
-import { OpenAiCompatibleModelClient } from '@jobhunter/llm';
+import { createConfiguredModelClient } from '@jobhunter/llm';
 import { jobAdviceAgentDefinition } from '@jobhunter/matching';
 import { createSafeLogger } from '@jobhunter/observability';
 import { firstPartySourceCatalog } from '@jobhunter/sources';
@@ -221,8 +221,12 @@ export function createLocalCliContainer(
     const resumeDocuments = new SqliteResumeDocumentRepository(database.client);
     const matchingRepository = new SqliteMatchingRepository(database.client);
     const modelMetadata =
-      config.model.baseUrl.value && config.model.modelName.value && config.model.apiKey.value
-        ? new OpenAiCompatibleModelClient({
+      config.model.provider.value &&
+      config.model.baseUrl.value &&
+      config.model.modelName.value &&
+      config.model.apiKey.value
+        ? createConfiguredModelClient({
+            provider: config.model.provider.value,
             baseUrl: config.model.baseUrl.value,
             model: config.model.modelName.value,
             apiKey: config.model.apiKey.value.reveal(),
@@ -403,11 +407,13 @@ export function createLocalCliContainer(
               taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
               logger,
               pageClient: createPlaywrightSourcePageClient(),
-              ...(config.model.baseUrl.value &&
+              ...(config.model.provider.value &&
+              config.model.baseUrl.value &&
               config.model.modelName.value &&
               config.model.apiKey.value
                 ? {
                     model: {
+                      provider: config.model.provider.value,
                       baseUrl: config.model.baseUrl.value,
                       model: config.model.modelName.value,
                       apiKey: config.model.apiKey.value.reveal(),

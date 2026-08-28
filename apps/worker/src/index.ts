@@ -50,7 +50,7 @@ import {
   SqliteUnitOfWork,
 } from '@jobhunter/db';
 import { SystemIdGenerator, utcInstant, type Clock, type IdGenerator } from '@jobhunter/domain';
-import { OpenAiCompatibleModelClient } from '@jobhunter/llm';
+import { createConfiguredModelClient } from '@jobhunter/llm';
 import { TesseractResumeOcrEngine } from '@jobhunter/resume';
 import {
   AdapterRegistry,
@@ -119,6 +119,7 @@ export function createProductionWorkerApplication(input: {
   readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
   readonly logger?: TaskLogger;
   readonly model?: {
+    readonly provider: string;
     readonly baseUrl: string;
     readonly apiKey: string;
     readonly model: string;
@@ -216,7 +217,7 @@ export function createProductionWorkerApplication(input: {
     });
     const runner = new AgentRunner({
       store: new SqliteAgentRunStore(database.client),
-      model: new OpenAiCompatibleModelClient(input.model),
+      model: createConfiguredModelClient(input.model),
       createId: () => ids.generate(),
       now: () => clock.now(),
     });
@@ -254,7 +255,16 @@ export function createProductionWorkerApplication(input: {
     registry.register(understandingHandler);
     registry.register(adviceHandler);
   } else {
-    registry.register(createResumeProfileTaskHandler({ unavailable: true }));
+    registry.register(
+      createResumeProfileTaskHandler({
+        documents: new SqliteResumeDocumentRepository(database.client),
+        profiles: new CandidateProfileService({ repository: profileRepository, clock, ids }),
+        ocr: {
+          engine: new TesseractResumeOcrEngine({ dataRoot: input.dataRoot }),
+          artifacts: new SqliteResumeArtifactReader(database.client, input.dataRoot),
+        },
+      }),
+    );
     registry.register(createResumePolishTaskHandler({ unavailable: true }));
     understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
     adviceHandler = createJobAdviceTaskHandler({ unavailable: true });

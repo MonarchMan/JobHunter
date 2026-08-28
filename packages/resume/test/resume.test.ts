@@ -7,6 +7,7 @@ import {
   ResumeMediaError,
   TesseractResumeOcrEngine,
   detectResumeMediaType,
+  extractResumeProfileByRules,
   parseResumeProfileAgentOutput,
   parseResumePolishAgentOutput,
   parseResumeText,
@@ -17,6 +18,13 @@ import {
 } from '../src/index.js';
 
 const encoder = new TextEncoder();
+const emptyPreferences = {
+  locations: [],
+  companySizes: [],
+  employmentTypes: [],
+  excludedTerms: [],
+  remoteAccepted: null,
+} as const;
 
 describe('resume media detection and deterministic parsing', () => {
   it('accepts strict UTF-8 text and applies the pre-model quality and size gates', async () => {
@@ -91,6 +99,61 @@ describe('resume media detection and deterministic parsing', () => {
         signal: abort.signal,
       }),
     ).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+describe('rule-first resume profile extraction', () => {
+  const structuredResume = `候选人邮箱 candidate@example.com
+
+求职意向
+后端研发
+
+教育经历
+示例大学 | 本科 | 软件工程 | 2019.09-2023.06
+
+工作/实习经历
+示例科技 | 后端开发实习生 | 2022.07-2022.12
+- 使用 TypeScript 开发任务调度接口
+- 补充失败重试与监控告警
+
+项目经历
+任务调度系统 | 后端负责人 | 2023.01-2023.06
+- 设计任务状态机与幂等执行机制
+- 实现任务失败后的指数退避重试
+
+专业技能
+编程语言：TypeScript、Python`;
+
+  it('maps clear sections and dated entries without a model', () => {
+    const result = extractResumeProfileByRules(structuredResume, emptyPreferences);
+    expect(result).toMatchObject({
+      kind: 'extracted',
+      profile: {
+        basicInfo: { email: 'candidate@example.com' },
+        targetRoles: ['后端研发'],
+        education: [{ institution: '示例大学', degree: '本科', field: '软件工程' }],
+        workExperience: [
+          {
+            organization: '示例科技',
+            title: '后端开发实习生',
+            highlights: ['使用 TypeScript 开发任务调度接口', '补充失败重试与监控告警'],
+          },
+        ],
+        projects: [{ name: '任务调度系统', role: '后端负责人' }],
+        skills: [{ name: 'TypeScript' }, { name: 'Python' }],
+      },
+    });
+  });
+
+  it('falls back as a whole when an experience entry has no explicit bullet structure', () => {
+    const ambiguous = structuredResume.replace(
+      '- 使用 TypeScript 开发任务调度接口\n- 补充失败重试与监控告警',
+      '使用 TypeScript 开发任务调度接口并补充监控告警',
+    );
+    expect(extractResumeProfileByRules(ambiguous, emptyPreferences)).toEqual({
+      kind: 'fallback',
+      reason: 'ambiguous_entry',
+    });
   });
 });
 

@@ -2,6 +2,7 @@ export * from './import/media.js';
 export * from './parsers/index.js';
 export * from './ocr/index.js';
 export * from './profile-agent.js';
+export * from './rule-profile-extractor.js';
 export * from './resume-polish-agent.js';
 export * from './profile-schema/index.js';
 export * from './prompts/resume-profile/v1.js';

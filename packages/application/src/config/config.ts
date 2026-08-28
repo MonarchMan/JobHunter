@@ -168,26 +168,46 @@ export function resolveAppConfig(input: {
     'info',
   );
   const parsedLogLevel = z.enum(['debug', 'info', 'warn', 'error']).parse(logLevel.value);
+  const configuredProvider =
+    nonEmpty(input.cli?.modelProvider) ??
+    nonEmpty(environment.JOBHUNTER_MODEL_PROVIDER) ??
+    file.model?.provider;
+  const useAnthropicAliases =
+    configuredProvider === 'anthropic' ||
+    (configuredProvider === undefined &&
+      nonEmpty(environment.ANTHROPIC_API_KEY) !== undefined &&
+      nonEmpty(environment.ANTHROPIC_MODEL) !== undefined);
   const modelApiKey = choose(
     nonEmpty(input.cli?.modelApiKey),
-    nonEmpty(environment.JOBHUNTER_MODEL_API_KEY) ?? nonEmpty(environment.API_KEY),
+    nonEmpty(environment.JOBHUNTER_MODEL_API_KEY) ??
+      (useAnthropicAliases
+        ? nonEmpty(environment.ANTHROPIC_API_KEY)
+        : nonEmpty(environment.API_KEY)),
     undefined,
     null,
   );
   const modelBaseUrl = choose(
     nonEmpty(input.cli?.modelBaseUrl),
-    nonEmpty(environment.JOBHUNTER_MODEL_BASE_URL) ?? nonEmpty(environment.BASE_URL),
+    nonEmpty(environment.JOBHUNTER_MODEL_BASE_URL) ??
+      (useAnthropicAliases
+        ? nonEmpty(environment.ANTHROPIC_BASE_URL)
+        : nonEmpty(environment.BASE_URL)),
     undefined,
-    null,
+    useAnthropicAliases ? 'https://api.anthropic.com' : null,
   );
   const modelName = choose(
     nonEmpty(input.cli?.modelName),
-    nonEmpty(environment.JOBHUNTER_MODEL_NAME) ?? nonEmpty(environment.MODEL),
+    nonEmpty(environment.JOBHUNTER_MODEL_NAME) ??
+      (useAnthropicAliases ? nonEmpty(environment.ANTHROPIC_MODEL) : nonEmpty(environment.MODEL)),
     undefined,
     null,
   );
   const inferredProvider =
-    modelApiKey.value && modelBaseUrl.value && modelName.value ? 'openai-compatible' : null;
+    modelApiKey.value && modelBaseUrl.value && modelName.value
+      ? useAnthropicAliases
+        ? 'anthropic'
+        : 'openai-compatible'
+      : null;
   const pollIntervalMs = choose(
     input.cli?.workerPollIntervalMs,
     environmentInteger(environment.JOBHUNTER_WORKER_POLL_INTERVAL_MS, 'poll interval'),

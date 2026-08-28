@@ -86,6 +86,21 @@ describe('two-stage configuration', () => {
     expect(JSON.stringify(config.model.apiKey)).not.toContain('local-secret');
   });
 
+  it('infers Anthropic from its local aliases and supplies the official base URL', () => {
+    const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
+    const config = resolveAppConfig({
+      bootstrap,
+      environment: {
+        ANTHROPIC_API_KEY: 'anthropic-secret',
+        ANTHROPIC_MODEL: 'claude-test',
+      },
+    });
+    expect(config.model.provider.value).toBe('anthropic');
+    expect(config.model.baseUrl.value).toBe('https://api.anthropic.com');
+    expect(config.model.modelName.value).toBe('claude-test');
+    expect(config.model.apiKey.value?.reveal()).toBe('anthropic-secret');
+  });
+
   it('rejects bootstrap fields and secrets in the local non-sensitive file', () => {
     const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
     expect(() =>

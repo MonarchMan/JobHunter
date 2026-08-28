@@ -26,6 +26,8 @@ ModelClient 使用项目自有 DTO，不向上暴露供应商 SDK 类型。Provi
 
 首个 Provider 使用 OpenAI 兼容的 `POST {baseUrl}/chat/completions` 边界，不向 Agent Core 暴露供应商 DTO。配置在组合根归一化：`JOBHUNTER_MODEL_BASE_URL`、`JOBHUNTER_MODEL_API_KEY`、`JOBHUNTER_MODEL_NAME` 优先，个人本地 `.env` 可使用 `BASE_URL`、`API_KEY`、`MODEL` 别名。API Key 仅保存在 `SecretString` 和请求头中，Provider metadata、异常与日志不得包含密钥。在线烟测通过显式脚本执行，不进入默认测试集合。
 
+Anthropic Provider 使用原生 `POST {baseUrl}/v1/messages` 边界和 `2023-06-01` API 版本，通过顶层 `system`、`output_config.format`、`tools[].input_schema` 及响应 `content` block 转换项目 DTO。为兼容尚未支持结构化输出的模型或网关，仅在 `output_config` 返回 400 时重试不带该字段的请求。组合根必须根据 `model.provider` 创建客户端；`ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL` 可作为个人本地别名，官方 Base URL 缺省为 `https://api.anthropic.com`。
+
 ## Runner
 
 Runner 自身不写业务表，只通过 AgentRunStore 保存运行和工具摘要。业务 Handler 在 Runner 返回后关联 ProfileVersion、JobEnrichment 或独立 MatchAdvice，不能把建议直接写回 MatchResult。

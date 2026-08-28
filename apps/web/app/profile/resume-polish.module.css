@@ -1,56 +1,120 @@
 .root {
   margin: 0 0 1.25rem;
-  padding: 1.25rem;
+  padding: 1rem 1.1rem;
   border: 1px solid var(--line);
   border-left: 3px solid var(--action);
   border-radius: var(--radius-panel);
-  background: var(--primary-soft);
+  background: var(--surface);
 }
 
-.heading,
-.actions {
+.heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.heading h3 {
-  margin: 0.15rem 0 0.3rem;
+.titleBlock {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
 }
 
-.heading p,
-.actions span,
-.heading > span {
+.kicker {
+  margin: 0;
+  color: var(--primary);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+  line-height: 1.2;
+}
+
+.heading h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.targetRole,
+.guardrail,
+.actions span {
   margin: 0;
   color: var(--muted-ink);
-  font-size: 0.875rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.targetRole {
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.targetRole strong {
+  color: var(--ink);
+}
+
+.guardrail {
+  flex: 0 0 auto;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
 }
 
 .options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  margin: 1rem 0;
+  min-width: 0;
+  margin: 0;
   padding: 0;
   border: 0;
 }
 
 .options legend {
-  width: 100%;
-  margin-bottom: 0.5rem;
-  color: var(--ink);
+  margin-bottom: 0.4rem;
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.optionList {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .options label {
   display: flex;
-  align-items: flex-start;
-  min-width: 13rem;
-  padding: 0.7rem 0.85rem;
+  min-width: 0;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  background: var(--surface);
+  background: var(--canvas);
   cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard);
+}
+
+.options label:hover:not(:has(input:disabled)) {
+  border-color: var(--primary);
+}
+
+.options label:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .options label:has(input:focus-visible) {
@@ -64,7 +128,24 @@
 }
 
 .options input {
-  margin: 0.2rem 0.65rem 0 0;
+  width: 1rem;
+  height: 1rem;
+  min-width: 1rem;
+  min-height: 1rem;
+  flex: 0 0 1rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 0.25rem;
+  box-shadow: none;
+}
+
+.optionCopy {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.875rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  writing-mode: horizontal-tb;
 }
 
 .options small {
@@ -74,7 +155,20 @@
 }
 
 .actions {
+  display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.actions span {
+  max-width: 11rem;
+  text-align: right;
+}
+
+.actions button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .suggestion {
@@ -109,18 +203,53 @@
   margin-top: 1rem;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 760px) {
+  .controls {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    justify-content: space-between;
+  }
+
+  .actions span {
+    max-width: none;
+    text-align: left;
+  }
+}
+
+@media (max-width: 520px) {
   .root {
     padding: 1rem;
   }
 
-  .heading,
-  .actions {
-    align-items: stretch;
+  .heading {
+    align-items: flex-start;
     flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .titleBlock {
+    gap: 0.2rem 0.55rem;
+  }
+
+  .targetRole {
+    width: 100%;
+    padding: 0;
+    border: 0;
   }
 
   .options label {
+    flex: 1 1 calc(50% - 0.25rem);
+  }
+
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .actions button {
     width: 100%;
   }
 }

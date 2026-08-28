@@ -70,6 +70,16 @@ const documentId = '018f0000-0000-7000-8000-00000000b002';
 const resumeText =
   '项目经历：Coding Agent。使用 ReAct 推理循环、MCP 工具延迟加载和上下文压缩，实现多 Agent 协作。' +
   '智能云盘项目使用 RAG、RRF 与 Reranker Fusion，提高知识检索质量。'.repeat(3);
+const structuredResumeText = `求职意向
+后端研发
+教育经历
+示例大学 | 本科 | 软件工程 | 2019.09-2023.06
+项目经历
+任务调度系统 | 后端负责人 | 2023.01-2023.06
+- 设计任务状态机与幂等执行机制
+- 实现任务失败后的指数退避重试
+专业技能
+编程语言：TypeScript、Python`;
 
 function evidence(text: string, value: string): { start: number; end: number; summary: string } {
   const start = text.indexOf(value);
@@ -124,7 +134,11 @@ function modelOutput(request: ModelRequest): unknown {
 
 async function setup(
   model: FakeModelClient,
-  options: { readonly image?: boolean } = {},
+  options: {
+    readonly image?: boolean;
+    readonly text?: string;
+    readonly withoutRunner?: boolean;
+  } = {},
 ): Promise<{
   readonly handle: SqliteDatabaseHandle;
   readonly profiles: CandidateProfileService;
@@ -136,6 +150,7 @@ async function setup(
   resources.push({ root, handle });
   const ids = new SequentialIds();
   const clock = new AdvancingClock();
+  const documentText = options.text ?? resumeText;
   handle.client
     .prepare(
       `INSERT INTO file_artifacts
@@ -143,7 +158,7 @@ async function setup(
        VALUES ('018f0000-0000-7000-8000-00000000b001', 'resume', 'artifacts/resume-agent',
                ?, ?, ?, 1, NULL)`,
     )
-    .run(options.image ? 'image/jpeg' : 'text/plain', 'd'.repeat(64), resumeText.length);
+    .run(options.image ? 'image/jpeg' : 'text/plain', 'd'.repeat(64), documentText.length);
   handle.client
     .prepare(
       `INSERT INTO resume_documents
@@ -156,7 +171,7 @@ async function setup(
       documentId,
       'd'.repeat(64),
       options.image ? 'image/jpeg' : 'text/plain',
-      options.image ? null : resumeText,
+      options.image ? null : documentText,
       options.image ? 'needs_ocr' : 'parsed',
       options.image ? 'image-needs-ocr@1' : 'utf8@1',
       options.image ? 'Resume image requires background OCR.' : null,
@@ -175,8 +190,8 @@ async function setup(
   const ocrEngine: ResumeOcrEngine = {
     recognize: () =>
       Promise.resolve({
-        text: resumeText,
-        characterCount: resumeText.length,
+        text: documentText,
+        characterCount: documentText.length,
         engineVersion: 'fake-ocr@1',
       }),
   };
@@ -187,7 +202,7 @@ async function setup(
     handle,
     profiles,
     handler: createResumeProfileTaskHandler({
-      runner,
+      ...(options.withoutRunner ? {} : { runner }),
       documents: new SqliteResumeDocumentRepository(handle.client),
       profiles,
       ...(options.image ? { ocr: { engine: ocrEngine, artifacts } } : {}),
@@ -219,6 +234,7 @@ describe('resume profile Agent pipeline', () => {
     });
 
     expect(result.cacheHit).toBe(false);
+    expect(result.extractionMethod).toBe('llm');
     expect(profiles.getCurrent(profile.id)?.effective).toMatchObject({
       targetRoles: ['Agent 开发'],
       skills: [{ name: 'ReAct' }, { name: 'RAG' }],
@@ -230,6 +246,53 @@ describe('resume profile Agent pipeline', () => {
     );
     expect(persistedRun).not.toContain(resumeText);
     expect(persistedRun).not.toContain('resume-agent');
+  });
+
+  it('uses deterministic rules without creating an AgentRun when sections are clear', async () => {
+    const model = new FakeModelClient([]);
+    const { handle, profiles, handler, context } = await setup(model, {
+      text: structuredResumeText,
+      withoutRunner: true,
+    });
+    const profile = profiles.createProfile('规则提取候选人');
+    const result = await handler.execute(context, {
+      profileId: profile.id,
+      resumeDocumentId: documentId,
+      expectedCurrentVersionId: null,
+    });
+
+    expect(result).toMatchObject({ extractionMethod: 'rules', agentRunId: null, cacheHit: false });
+    expect(profiles.getCurrent(profile.id)).toMatchObject({
+      agentRunId: null,
+      effective: {
+        targetRoles: ['后端研发'],
+        projects: [{ name: '任务调度系统', role: '后端负责人' }],
+        skills: [{ name: 'TypeScript' }, { name: 'Python' }],
+      },
+    });
+    expect(model.requests).toHaveLength(0);
+    expect(handle.client.prepare('SELECT count(*) FROM agent_runs').pluck().get()).toBe(0);
+  });
+
+  it('runs OCR and then uses deterministic rules without a configured model', async () => {
+    const { handle, profiles, handler, context } = await setup(new FakeModelClient([]), {
+      image: true,
+      text: structuredResumeText,
+      withoutRunner: true,
+    });
+    const profile = profiles.createProfile('图片规则提取候选人');
+    const result = await handler.execute(context, {
+      profileId: profile.id,
+      resumeDocumentId: documentId,
+      expectedCurrentVersionId: null,
+    });
+
+    expect(result.extractionMethod).toBe('rules');
+    expect(profiles.getCurrent(profile.id)?.effective.projects[0]?.name).toBe('任务调度系统');
+    expect(
+      handle.client.prepare('SELECT parse_status, parser_version FROM resume_documents').get(),
+    ).toEqual({ parse_status: 'parsed', parser_version: 'fake-ocr@1' });
+    expect(handle.client.prepare('SELECT count(*) FROM agent_runs').pluck().get()).toBe(0);
   });
 
   it('does not create a profile version when output remains invalid after one repair', async () => {

@@ -55,6 +55,14 @@ API_KEY=your-api-key
 MODEL=your-model-name
 ```
 
+Anthropic 原生 Messages API 可以这样配置（`ANTHROPIC_BASE_URL` 不填时使用官方地址）：
+
+```dotenv
+JOBHUNTER_MODEL_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your-api-key
+ANTHROPIC_MODEL=your-claude-model
+```
+
 模型配置是可选的。只有执行简历画像、岗位理解或匹配建议等模型任务时才需要填写。
 
 ### 浏览器运行时

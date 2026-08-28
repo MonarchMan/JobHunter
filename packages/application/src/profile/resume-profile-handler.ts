@@ -2,6 +2,7 @@ import { AgentRuntimeError, type AgentRunner } from '@jobhunter/agent-core';
 import { parseId } from '@jobhunter/domain';
 import {
   isResumeOcrMediaType,
+  extractResumeProfileByRules,
   parseResumeProfileAgentOutput,
   ResumeOcrError,
   resumeProfileAgentDefinition,
@@ -30,9 +31,10 @@ export const resumeProfileTaskPayloadSchema = z
 
 export const resumeProfileTaskOutputSchema = z
   .object({
-    agentRunId: z.string().trim().min(1),
+    agentRunId: z.string().trim().min(1).nullable(),
     profileVersionId: z.string().trim().min(1),
     cacheHit: z.boolean(),
+    extractionMethod: z.enum(['rules', 'llm']),
   })
   .strict();
 
@@ -47,7 +49,7 @@ const emptyPreferences: CandidatePreferences = {
 export function createResumeProfileTaskHandler(
   input:
     | {
-        readonly runner: AgentRunner;
+        readonly runner?: AgentRunner;
         readonly documents: ResumeDocumentRepository;
         readonly profiles: CandidateProfileService;
         readonly ocr?: {
@@ -71,9 +73,11 @@ export function createResumeProfileTaskHandler(
     leaseDurationMs: 180_000,
     concurrencyKey: (payload) => `resume-profile:${payload.profileId}`,
     async execute(context, payload) {
-      if ('unavailable' in input) {
-        throw new TaskExecutionError('invalid_config', 'Resume profile model is not configured.');
-      }
+      if ('unavailable' in input)
+        throw new TaskExecutionError(
+          'invalid_config',
+          'Resume profile extraction is not available.',
+        );
       let document = input.documents.getById(payload.resumeDocumentId);
       if (document?.parseStatus === 'needs_ocr') {
         document = await completeDocumentOcr(input, document, context.signal);
@@ -84,6 +88,32 @@ export function createResumeProfileTaskHandler(
           'Resume document is missing or has no parsed text.',
         );
       }
+      const profileId = parseId(payload.profileId, 'CandidateProfile');
+      const preferences =
+        input.profiles.getCurrent(profileId)?.effective.preferences ?? emptyPreferences;
+      const ruled = extractResumeProfileByRules(document.extractedText, preferences);
+      if (ruled.kind === 'extracted') {
+        const version = input.profiles.applyExtraction({
+          profileId,
+          expectedCurrentVersionId:
+            payload.expectedCurrentVersionId === null
+              ? null
+              : parseId(payload.expectedCurrentVersionId, 'ProfileVersion'),
+          resumeDocumentId: document.id,
+          agentRunId: null,
+          extracted: ruled.profile,
+        });
+        return {
+          agentRunId: null,
+          profileVersionId: version.id,
+          cacheHit: false,
+          extractionMethod: 'rules',
+        };
+      }
+      context.logger.info('resume.profile.rules_fallback', { reason: ruled.reason });
+      if (!input.runner) {
+        throw new TaskExecutionError('invalid_config', 'Resume profile model is not configured.');
+      }
       try {
         const result = await input.runner.run({
           definition: resumeProfileAgentDefinition,
@@ -91,9 +121,6 @@ export function createResumeProfileTaskHandler(
           signal: context.signal,
         });
         const facts = parseResumeProfileAgentOutput(result.output, document.extractedText);
-        const profileId = parseId(payload.profileId, 'CandidateProfile');
-        const preferences =
-          input.profiles.getCurrent(profileId)?.effective.preferences ?? emptyPreferences;
         const version = input.profiles.applyExtraction({
           profileId,
           expectedCurrentVersionId:
@@ -108,6 +135,7 @@ export function createResumeProfileTaskHandler(
           agentRunId: result.run.id,
           profileVersionId: version.id,
           cacheHit: result.cacheHit,
+          extractionMethod: 'llm',
         };
       } catch (error) {
         if (error instanceof AgentRuntimeError) {
