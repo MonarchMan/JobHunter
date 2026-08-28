@@ -16,6 +16,7 @@ interface ApiFailure {
 
 export function SettingsForm({ settings }: SettingsFormProperties): ReactElement {
   const [enabled, setEnabled] = useState(settings.jobUnderstanding.enabled);
+  const [sourceSyncChannel, setSourceSyncChannel] = useState(settings.sourceSync.channel);
   const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(
     null,
   );
@@ -29,7 +30,7 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
       const response = await fetch('/api/settings', {
         method: 'PATCH',
         headers: await mutationHeaders(),
-        body: JSON.stringify({ jobUnderstandingEnabled: enabled }),
+        body: JSON.stringify({ jobUnderstandingEnabled: enabled, sourceSyncChannel }),
       });
       const body = (await response.json()) as ApiFailure;
       if (!response.ok) throw new Error(body.error?.message ?? '设置保存失败。');
@@ -52,6 +53,37 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
       }}
       noValidate
     >
+      <fieldset className={styles.channelFieldset}>
+        <legend>同步招聘渠道</legend>
+        <p className={styles.fieldHelp}>
+          系统一次只同步一种招聘渠道。切换后，旧渠道尚未执行的同步任务会取消。
+        </p>
+        <div className={styles.channelOptions}>
+          {(
+            [
+              ['intern', '实习', '默认，优先同步日常实习和项目实习岗位'],
+              ['campus', '校招', '同步应届毕业生和校园招聘正式岗位'],
+              ['social', '社招', '同步面向有工作经验候选人的岗位'],
+            ] as const
+          ).map(([value, label, description]) => (
+            <label className={styles.channelOption} key={value}>
+              <input
+                type="radio"
+                name="source-sync-channel"
+                value={value}
+                checked={sourceSyncChannel === value}
+                onChange={() => {
+                  setSourceSyncChannel(value);
+                }}
+              />
+              <span>
+                <strong>{label}</strong>
+                <small>{description}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <label className={styles.settingsToggle}>
         <input
           type="checkbox"

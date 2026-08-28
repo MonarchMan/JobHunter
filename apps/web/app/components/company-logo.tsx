@@ -12,6 +12,11 @@ const companyLogoPaths: Readonly<Record<string, string>> = {
   小红书: '/assets/company-logos/xiaohongshu.ico',
   京东: '/assets/company-logos/jd.ico',
   华为: '/assets/company-logos/huawei.png',
+  '360': '/assets/company-logos/qihoo360.png',
+  OPPO: '/assets/company-logos/oppo.svg',
+  vivo: '/assets/company-logos/vivo.png',
+  小米: '/assets/company-logos/xiaomi.ico',
+  网易: '/assets/company-logos/netease.ico',
 };
 
 export function CompanyLogo({

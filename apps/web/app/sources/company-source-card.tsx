@@ -59,7 +59,13 @@ function SourcePanel({
       <header className={styles['company-source-panel-header']}>
         <div>
           <p className={styles['source-channel-kicker']}>{label}渠道</p>
-          <h3>{source.enabled ? '自动同步已启用' : '当前来源已停用'}</h3>
+          <h3>
+            {source.effectiveEnabled
+              ? '当前同步已启用'
+              : source.enabled
+                ? '当前同步渠道未选中'
+                : '当前来源已停用'}
+          </h3>
           <p className={styles['source-technical-name']}>{source.slug}</p>
         </div>
         <div className={styles['source-badges']}>
@@ -145,7 +151,7 @@ function CompanyOverview({
   sources: readonly WebSource[];
   channels: readonly WebSourceChannel[];
 }>): ReactElement {
-  const enabledCount = sources.filter((source) => source.enabled).length;
+  const enabledCount = sources.filter((source) => source.effectiveEnabled).length;
   const healthyCount = sources.filter((source) => source.healthStatus === 'healthy').length;
   const latestSuccessAt = sources
     .flatMap((source) => (source.lastSuccessAt ? [source.lastSuccessAt] : []))
@@ -167,7 +173,7 @@ function CompanyOverview({
           <dd>{channels.length}</dd>
         </div>
         <div>
-          <dt>启用来源</dt>
+          <dt>当前同步来源</dt>
           <dd>
             {enabledCount} / {sources.length}
           </dd>
@@ -217,10 +223,17 @@ export function CompanySourceCard({
         : companyName;
 
   return (
-    <article className={styles['company-source-card']} data-company-source-card>
+    <article
+      className={classNames(
+        styles['company-source-card'],
+        styles[`company-health-${companyHealth}`],
+      )}
+      data-company-source-card
+      data-health-status={companyHealth}
+    >
       <header className={styles['company-source-header']} data-company-source-header>
         <div className={styles['company-source-heading-block']}>
-          <div className={styles['company-name-channel-row']} data-company-name-channel-row>
+          <div className={styles['company-name-row']} data-company-name-row>
             <CompanyLogo name={companyName} variant="source-heading" />
             {officialUrl ? (
               <a
@@ -235,6 +248,23 @@ export function CompanySourceCard({
             ) : (
               <h2>{companyName}</h2>
             )}
+          </div>
+          <p className={styles['company-source-meta']}>
+            {channels.length} 个逻辑渠道 · {sources.length} 个物理来源
+          </p>
+        </div>
+        <div
+          className={styles['company-health-indicator']}
+          data-company-health-indicator
+          role="img"
+          aria-label={`综合状态：${healthLabels[companyHealth]}`}
+        >
+          <span className={styles['company-health-dot']} aria-hidden="true" />
+          <strong>{healthLabels[companyHealth]}</strong>
+        </div>
+        <div className={styles['company-source-controls']} data-company-source-controls>
+          <label className={styles['company-channel-selector']} data-company-channel-selector>
+            <span>招聘渠道</span>
             <select
               aria-label={`${companyName}招聘渠道`}
               value={selected}
@@ -249,23 +279,17 @@ export function CompanySourceCard({
                 </option>
               ))}
             </select>
-          </div>
-          <p className={styles['company-source-meta']}>
-            {channels.length} 个逻辑渠道 · {sources.length} 个物理来源
-          </p>
-        </div>
-        <div className={styles['company-source-header-actions']} data-company-source-header-actions>
-          <SourceChannelSyncAction
-            channels={visibleChannels}
-            contextLabel={syncContextLabel}
-            syncReady={syncReady}
-          />
-          {selectedChannel ? <SourceChannelToggle channel={selectedChannel} /> : null}
-          <div className={styles['company-health-summary']} data-company-health-summary>
-            <span>综合状态</span>
-            <strong className={styles[`health-text-${companyHealth}`]}>
-              {healthLabels[companyHealth]}
-            </strong>
+          </label>
+          <div
+            className={styles['company-source-header-actions']}
+            data-company-source-header-actions
+          >
+            <SourceChannelSyncAction
+              channels={visibleChannels}
+              contextLabel={syncContextLabel}
+              syncReady={syncReady}
+            />
+            {selectedChannel ? <SourceChannelToggle channel={selectedChannel} /> : null}
           </div>
         </div>
       </header>

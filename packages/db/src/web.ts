@@ -15,3 +15,4 @@ export * from './artifact-store.js';
 export * from './resume-file-reader.js';
 export * from './repositories/resume-deletion-repository.js';
 export * from './settings.js';
+export * from './seeding/source-catalog.js';

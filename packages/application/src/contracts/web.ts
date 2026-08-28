@@ -466,6 +466,11 @@ export const webSettingsSchema = z
         enabled: z.boolean(),
       })
       .strict(),
+    sourceSync: z
+      .object({
+        channel: z.enum(['intern', 'campus', 'social']),
+      })
+      .strict(),
   })
   .strict();
 
@@ -474,6 +479,7 @@ export type WebSettings = z.infer<typeof webSettingsSchema>;
 export const webSettingsMutationSchema = z
   .object({
     jobUnderstandingEnabled: z.boolean(),
+    sourceSyncChannel: z.enum(['intern', 'campus', 'social']),
   })
   .strict();
 

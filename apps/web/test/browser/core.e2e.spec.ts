@@ -7,7 +7,11 @@ test.describe('校招实习管理台核心流程', () => {
 
     await expect(page.getByRole('link', { name: '大模型应用实习生' })).toBeVisible();
     await expect(page.getByRole('link', { name: '历史算法实习生' })).toHaveCount(0);
-    await page.locator('.job-filter-panel summary').click();
+    await page
+      .locator('details')
+      .filter({ hasText: '筛选职位' })
+      .getByText(/^筛选职位/)
+      .click();
     await page.getByLabel('关键词').fill('大模型');
     await page.getByRole('button', { name: '应用筛选' }).click();
     await expect(page).toHaveURL(/q=%E5%A4%A7%E6%A8%A1%E5%9E%8B/);
@@ -105,17 +109,17 @@ test.describe('校招实习管理台核心流程', () => {
     await page.setViewportSize({ width: 1920, height: 900 });
     await page.goto('/jobs');
     await page.getByLabel('选择职位：大模型应用实习生').first().check();
-    const toolbar = page.locator('.job-selection-toolbar');
-    await toolbar.getByText('批量评分（1）').click();
+    const scoreTrigger = page.getByRole('button', { name: '批量评分（1）' });
+    await scoreTrigger.click();
     const scorePanel = page.getByRole('dialog', { name: '选择评分方式' });
     await expect(scorePanel).toBeVisible();
-    const triggerBox = await toolbar.getByRole('button', { name: '批量评分（1）' }).boundingBox();
+    const triggerBox = await scoreTrigger.boundingBox();
     const panelBox = await scorePanel.boundingBox();
     expect(triggerBox).not.toBeNull();
     expect(panelBox).not.toBeNull();
     if (triggerBox && panelBox) expect(Math.abs(panelBox.y - triggerBox.y)).toBeLessThan(12);
     await scorePanel.getByRole('button', { name: /^规则评分/ }).click();
-    await expect(toolbar.getByRole('status')).toContainText('已为 1 个职位创建规则评分任务');
+    await expect(page.getByRole('status')).toContainText('已为 1 个职位创建规则评分任务');
   });
 
   test('keeps job actions aligned and exposes complete truncated locations', async ({ page }) => {
@@ -133,9 +137,8 @@ test.describe('校招实习管理台核心流程', () => {
     );
     await expect(titleLink).toHaveAttribute('target', '_blank');
     await expect(titleLink).toHaveAttribute('rel', 'noopener noreferrer');
-    const actions = row.locator('.job-row-actions');
-    const applyBox = await actions.getByRole('link', { name: '官网投递' }).boundingBox();
-    const scoreBox = await actions.getByRole('button', { name: '评分' }).boundingBox();
+    const applyBox = await row.getByRole('link', { name: '官网投递' }).boundingBox();
+    const scoreBox = await row.getByRole('button', { name: '评分' }).boundingBox();
     expect(applyBox?.y).toBe(scoreBox?.y);
 
     const location = row.locator('.location-truncate');
@@ -145,20 +148,42 @@ test.describe('校招实习管理台核心流程', () => {
   });
 
   test('queues an idempotent source sync without waiting for collection', async ({ page }) => {
-    await page.goto('/sources');
-    const sourceCard = page.locator('[data-company-source-card]').first();
-    await expect(sourceCard.getByRole('heading', { name: '腾讯校招' })).toBeVisible();
+    await page.goto('/sources?page=2');
+    const sourceCard = page.locator('[data-company-source-card]').filter({
+      has: page.getByRole('heading', { name: '腾讯校招' }),
+    });
+    await expect(sourceCard).toHaveCount(1);
     const sync = sourceCard.getByRole('button', { name: /^立即同步 / });
     await expect(sync).toBeEnabled();
     await expect(sync.locator('svg')).toBeVisible();
     await sync.hover();
     await expect(sync.getByRole('tooltip', { name: '立即同步' })).toBeVisible();
     const sourceHeader = sourceCard.locator('[data-company-source-header]');
+    const sourceCardBox = await sourceCard.boundingBox();
     const syncBox = await sync.boundingBox();
-    const healthBox = await sourceHeader.locator('[data-company-health-summary]').boundingBox();
+    const health = sourceHeader.locator('[data-company-health-indicator]');
+    const healthBox = await health.boundingBox();
     expect(syncBox).not.toBeNull();
     expect(healthBox).not.toBeNull();
-    if (syncBox && healthBox) expect(syncBox.x).toBeLessThan(healthBox.x);
+    expect(sourceCardBox).not.toBeNull();
+    if (sourceCardBox) expect(sourceCardBox.height).toBeLessThan(560);
+    await expect(sourceCard).toHaveAttribute('data-health-status', 'healthy');
+    await expect(health).toHaveAccessibleName('综合状态：健康');
+    await expect(health).toContainText('健康');
+    expect(await sourceCard.evaluate((element) => getComputedStyle(element).boxShadow)).toContain(
+      'inset',
+    );
+    const selectorBox = await sourceHeader.locator('[data-company-channel-selector]').boundingBox();
+    const actionsBox = await sourceHeader
+      .locator('[data-company-source-header-actions]')
+      .boundingBox();
+    expect(selectorBox).not.toBeNull();
+    expect(actionsBox).not.toBeNull();
+    if (selectorBox && actionsBox) {
+      expect(
+        Math.abs(selectorBox.y + selectorBox.height / 2 - (actionsBox.y + actionsBox.height / 2)),
+      ).toBeLessThan(1);
+    }
     await sync.click();
     await expect(page.getByRole('status')).toContainText('同步任务已创建');
     const firstFeedback = await page.getByRole('status').textContent();

@@ -113,6 +113,13 @@
       "when": 1787896800000,
       "tag": "0015_logical_source_channels",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787980000000,
+      "tag": "0016_single_active_source_channel",
+      "breakpoints": true
     }
   ]
 }

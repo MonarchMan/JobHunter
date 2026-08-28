@@ -67,8 +67,12 @@ export class WebSourceService {
   public mutateChannel(input: WebSourceChannelMutation): WebSourceMutationResult {
     const mutation = webSourceChannelMutationSchema.parse(input);
     const channelId = parseId(mutation.channelId, 'SourceChannel');
-    if (!this.#repository.getChannel(channelId)) throw new TypeError('Source channel not found.');
+    const channel = this.#repository.getChannel(channelId);
+    if (!channel) throw new TypeError('Source channel not found.');
     if (mutation.kind === 'enable') {
+      if (mutation.enabled && channel.channel !== this.#sources.activeChannel()) {
+        throw new TypeError('请先在设置中切换同步招聘渠道。');
+      }
       return {
         kind: 'channel',
         channel: this.#repository.setChannelEnabled(channelId, mutation.enabled),
@@ -110,6 +114,12 @@ export class WebSourceService {
           source: webSourceSchema.parse(this.#repository.setEnabled(sourceId, mutation.enabled)),
         };
       case 'schedule':
+        if (
+          mutation.enabled &&
+          this.#sources.get(sourceId)?.channel !== this.#sources.activeChannel()
+        ) {
+          throw new TypeError('请先在设置中切换同步招聘渠道。');
+        }
         if (mutation.enabled) this.#sources.requireSyncReady();
         this.#schedules.upsert({
           id: this.#ids.generate(),

@@ -22,6 +22,14 @@
   --warning-soft: #fff3d8;
   --danger: #a13d32;
   --danger-soft: #fcebe8;
+  --health-healthy: #2f7d57;
+  --health-healthy-soft: #eef8f2;
+  --health-degraded: #8f5b0c;
+  --health-degraded-soft: #fff7e5;
+  --health-unhealthy: #b5473c;
+  --health-unhealthy-soft: #fdf0ee;
+  --health-unknown: #596275;
+  --health-unknown-soft: #f2f4f7;
   --neutral-soft: #eef0f4;
   --violet: #6655a6;
   --violet-soft: #eeefff;

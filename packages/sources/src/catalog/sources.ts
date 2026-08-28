@@ -899,7 +899,8 @@ export const firstPartySourceCatalog: readonly FirstPartySourceChannelSeed[] =
           id: channelId(company.companyId, channel),
           slug: `${company.slug}-${channel}`,
           type: channel,
-          enabledByDefault: members.some((input) => input.supportStatus === 'supported'),
+          enabledByDefault:
+            channel === 'intern' && members.some((input) => input.supportStatus === 'supported'),
           supportNote:
             members.length === 0
               ? '尚未发现可验证的官方物理来源。'

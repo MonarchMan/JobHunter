@@ -83,8 +83,124 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      16,
+      17,
     );
+  });
+
+  it('migrates existing sync work to one active recruitment channel', async () => {
+    const handle = await openTestDatabase();
+    const companyId = '018f0000-0000-7000-8000-000000000901';
+    const internChannelId = '018f0000-0000-7000-8200-000000010901';
+    const socialChannelId = '018f0000-0000-7000-8200-000000010903';
+    const internSourceId = '018f0000-0000-7000-8000-000000000901';
+    const socialSourceId = '018f0000-0000-7000-8000-000000000903';
+    handle.client
+      .prepare(
+        `INSERT INTO companies
+         (id, slug, name, aliases_json, enabled, created_at, updated_at)
+         VALUES (?, 'single-channel-fixture', 'Single channel fixture', '[]', 1, 1, 1)`,
+      )
+      .run(companyId);
+    const insertChannel = handle.client.prepare(
+      `INSERT INTO source_channels
+       (id, company_id, channel, slug, enabled, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, 1, 1)`,
+    );
+    insertChannel.run(internChannelId, companyId, 'intern', 'single-channel-fixture-intern');
+    insertChannel.run(socialChannelId, companyId, 'social', 'single-channel-fixture-social');
+    const insertSource = handle.client.prepare(
+      `INSERT INTO job_sources
+       (id, company_id, channel_id, slug, adapter_key, coverage_role, recruitment_type,
+        base_url, config_json, sync_policy_version, sync_policy_json, enabled,
+        support_status, health_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'required', ?, 'https://example.com', '{}', 'v1', '{}', 1,
+               'supported', 'unknown', 1, 1)`,
+    );
+    insertSource.run(
+      internSourceId,
+      companyId,
+      internChannelId,
+      'single-channel-fixture-intern',
+      'fixture.intern',
+      'campus',
+    );
+    insertSource.run(
+      socialSourceId,
+      companyId,
+      socialChannelId,
+      'single-channel-fixture-social',
+      'fixture.social',
+      'social',
+    );
+    const insertSchedule = handle.client.prepare(
+      `INSERT INTO schedules
+       (id, schedule_key, task_type, payload_json, cron_expression, timezone, enabled,
+        next_run_at, created_at, updated_at)
+       VALUES (?, ?, 'source.sync', ?, '0 9 * * *', 'Asia/Shanghai', 1, 1, 1, 1)`,
+    );
+    insertSchedule.run(
+      'schedule-intern',
+      `source.sync:${internSourceId}`,
+      JSON.stringify({ sourceId: internSourceId, trigger: 'schedule' }),
+    );
+    insertSchedule.run(
+      'schedule-social',
+      `source.sync:${socialSourceId}`,
+      JSON.stringify({ sourceId: socialSourceId, trigger: 'schedule' }),
+    );
+    const insertTask = handle.client.prepare(
+      `INSERT INTO tasks
+       (id, task_type, payload_json, status, idempotency_key, max_attempts,
+        available_at, created_at)
+       VALUES (?, 'source.sync', ?, 'pending', ?, 3, 1, 1)`,
+    );
+    insertTask.run(
+      'task-intern',
+      JSON.stringify({ sourceId: internSourceId, trigger: 'manual' }),
+      'task-intern',
+    );
+    insertTask.run(
+      'task-social',
+      JSON.stringify({ sourceId: socialSourceId, trigger: 'manual' }),
+      'task-social',
+    );
+
+    const migration = await readFile(
+      new URL('../migrations/0016_single_active_source_channel.sql', import.meta.url),
+      'utf8',
+    );
+    handle.client
+      .prepare("DELETE FROM application_settings WHERE key = 'sources.activeChannel'")
+      .run();
+    for (const statement of migration.split('--> statement-breakpoint')) {
+      if (statement.trim()) handle.client.exec(statement);
+    }
+
+    expect(
+      handle.client
+        .prepare("SELECT value_json FROM application_settings WHERE key = 'sources.activeChannel'")
+        .pluck()
+        .get(),
+    ).toBe('{"channel":"intern"}');
+    expect(
+      handle.client
+        .prepare(
+          `SELECT channel, enabled FROM source_channels
+           WHERE company_id = ? ORDER BY channel`,
+        )
+        .all(companyId),
+    ).toEqual([
+      { channel: 'intern', enabled: 1 },
+      { channel: 'social', enabled: 0 },
+    ]);
+    expect(handle.client.prepare('SELECT id, enabled FROM schedules ORDER BY id').all()).toEqual([
+      { id: 'schedule-intern', enabled: 1 },
+      { id: 'schedule-social', enabled: 0 },
+    ]);
+    expect(handle.client.prepare('SELECT id, status FROM tasks ORDER BY id').all()).toEqual([
+      { id: 'task-intern', status: 'pending' },
+      { id: 'task-social', status: 'cancelled' },
+    ]);
   });
 
   it('upgrades the minimal previous-schema fixture without losing its data', async () => {

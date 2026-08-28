@@ -242,7 +242,7 @@ describe('first-party source catalog', () => {
     );
     expect(record).toBeDefined();
     if (!record) return;
-    expect(record.channel.enabledByDefault).toBe(true);
+    expect(record.channel.enabledByDefault).toBe(false);
     expect(record.sources.map((source) => source.adapterKey)).toEqual(['tencent.campus']);
     expect(registry.keys()).toContain('tencent.campus');
   });

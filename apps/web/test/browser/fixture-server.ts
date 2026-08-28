@@ -13,9 +13,9 @@ import {
 } from '@jobhunter/domain';
 
 const ids = {
-  company: '018f0000-0000-7000-8000-000000000101',
-  channel: '018f0000-0000-7000-8200-000000010102',
-  source: '018f0000-0000-7000-8000-000000000201',
+  company: '018f0000-0000-7000-8f00-000000000101',
+  channel: '018f0000-0000-7000-8f00-000000000102',
+  source: '018f0000-0000-7000-8f00-000000000201',
   syncRun: '018f0000-0000-7000-8000-000000000301',
   activeJob: '018f0000-0000-7000-8000-000000000401',
   staleJob: '018f0000-0000-7000-8000-000000000402',
@@ -96,7 +96,7 @@ class FakeAdapter {
 async function loadProfileFromFakeModel(): Promise<CandidateProfileData> {
   const model = new FakeModel<{ readonly resume: string }, CandidateProfileData>();
   const profile = makeCandidateProfile({
-    targetRoles: ['大模型应用实习生', 'Agent 实习生'],
+    targetRoles: ['研发', '大模型应用实习生', 'Agent 实习生'],
     preferences: {
       locations: ['深圳'],
       companySizes: ['large'],
@@ -213,15 +213,25 @@ async function seedFixture(dataRoot: string): Promise<void> {
   try {
     database.client
       .prepare(
+        `INSERT INTO application_settings (key, value_json, schema_version, updated_at)
+         VALUES ('sources.activeChannel', '{"channel":"campus"}', '1', 1)
+         ON CONFLICT(key) DO UPDATE SET
+           value_json = excluded.value_json,
+           schema_version = excluded.schema_version,
+           updated_at = excluded.updated_at`,
+      )
+      .run();
+    database.client
+      .prepare(
         `INSERT INTO companies (id, slug, name, aliases_json, enabled, created_at, updated_at)
-         VALUES (?, 'tencent-campus', '腾讯校招', '[]', 1, 1, 1)`,
+         VALUES (?, 'browser-fixture-tencent', '腾讯校招', '[]', 1, 1, 1)`,
       )
       .run(ids.company);
     database.client
       .prepare(
         `INSERT INTO source_channels
          (id, company_id, channel, slug, enabled, created_at, updated_at)
-         VALUES (?, ?, 'campus', 'tencent-campus', 1, 1, 1)`,
+         VALUES (?, ?, 'campus', 'browser-fixture-tencent-campus', 1, 1, 1)`,
       )
       .run(ids.channel, ids.company);
     database.client
@@ -230,7 +240,7 @@ async function seedFixture(dataRoot: string): Promise<void> {
          (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
           sync_policy_version, sync_policy_json, enabled, support_status, health_status,
           consecutive_failures, last_success_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'tencent-campus', 'fake.campus', 'campus',
+         VALUES (?, ?, ?, 'browser-fixture-tencent-campus', 'fake.campus', 'campus',
           'https://careers.tencent.com/campus', '{}', 'fake-v1', '{}', 1,
           'supported', 'healthy', 0, 2, 1, 2)`,
       )

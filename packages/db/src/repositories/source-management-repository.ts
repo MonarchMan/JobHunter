@@ -10,6 +10,7 @@ interface SourceOverviewRow {
   readonly id: string;
   readonly company_id: string;
   readonly channel_id: string;
+  readonly channel: SourceOverview['channel'];
   readonly company_name: string;
   readonly slug: string;
   readonly adapter_key: string;
@@ -28,7 +29,7 @@ interface SourceOverviewRow {
 
 const query = `
   SELECT source.id, source.company_id, source.channel_id, company.name AS company_name,
-         source.slug, source.adapter_key, source.coverage_role,
+         source.slug, source.adapter_key, source.coverage_role, channel.channel,
          source.enabled, company.enabled AS company_enabled, channel.enabled AS channel_enabled,
          source.support_status, source.health_status,
          run.id AS run_id, run.status AS run_status, run.coverage,
@@ -47,6 +48,7 @@ function overview(row: SourceOverviewRow): SourceOverview {
     id: parseId(row.id, 'JobSource'),
     companyId: parseId(row.company_id, 'Company'),
     channelId: parseId(row.channel_id, 'SourceChannel'),
+    channel: row.channel,
     companyName: row.company_name,
     slug: row.slug,
     adapterKey: row.adapter_key,

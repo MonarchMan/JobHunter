@@ -51,8 +51,10 @@ import {
   SqliteResumeDocumentRepository,
   SqliteResumePolishSuggestionRepository,
   SqliteSettingsStore,
+  seedSourceCatalog,
   NodeResumeFileReader,
 } from '@jobhunter/db/web';
+import { firstPartySourceCatalog } from '@jobhunter/sources';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
 import path from 'node:path';
 import { loadWebRuntimeConfig } from './config.js';
@@ -93,12 +95,14 @@ export function createLocalWebContainer(
     ...(options.migrationsFolder ? { migrationsFolder: options.migrationsFolder } : {}),
   });
   try {
+    seedSourceCatalog(database.client, firstPartySourceCatalog);
     const ids = new SystemIdGenerator();
     const clock = { now: () => utcInstant(Date.now()) };
     const settings = new SystemSettingsService({
       repository: new SqliteSettingsStore(database.client),
       clock,
     });
+    settings.applySourceSyncChannelSelection();
     const registry = new HandlerRegistry();
     const resumeDeletion = new ResumeDeletionService({
       repository: new SqliteResumeDeletionRepository(database.client),
@@ -171,6 +175,7 @@ export function createLocalWebContainer(
       tasks,
       ids,
       jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
+      activeChannel: () => settings.get().sourceSync.channel,
     });
     const services: WebApplicationServices = {
       dashboard: new DashboardQueryService(new SqliteDashboardReadModel(database.client)),

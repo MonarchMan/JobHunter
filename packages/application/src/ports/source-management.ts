@@ -1,9 +1,11 @@
 import type { CompanyId, JobSourceId, SourceChannelId, UtcInstant } from '@jobhunter/domain';
+import type { SourceSyncChannel } from './settings.js';
 
 export interface SourceOverview {
   readonly id: JobSourceId;
   readonly companyId: CompanyId;
   readonly channelId: SourceChannelId;
+  readonly channel: SourceSyncChannel;
   readonly companyName: string;
   readonly slug: string;
   readonly adapterKey: string;

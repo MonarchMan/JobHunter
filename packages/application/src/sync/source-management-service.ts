@@ -7,6 +7,7 @@ import type {
 import type { EnqueueTaskResult, TaskRecord } from '../tasks/model.js';
 import type { TaskService } from '../tasks/task-service.js';
 import type { JobIntakePolicy } from './job-intake-policy.js';
+import type { SourceSyncChannel } from '../ports/settings.js';
 
 export class SourceSyncTargetRequiredError extends TypeError {
   public constructor() {
@@ -20,17 +21,20 @@ export class SourceManagementService {
   readonly #tasks: TaskService;
   readonly #ids: IdGenerator;
   readonly #jobIntakePolicy: JobIntakePolicy;
+  readonly #activeChannel: () => SourceSyncChannel;
 
   public constructor(input: {
     readonly sources: SourceManagementRepository;
     readonly tasks: TaskService;
     readonly ids: IdGenerator;
     readonly jobIntakePolicy: JobIntakePolicy;
+    readonly activeChannel?: () => SourceSyncChannel;
   }) {
     this.#sources = input.sources;
     this.#tasks = input.tasks;
     this.#ids = input.ids;
     this.#jobIntakePolicy = input.jobIntakePolicy;
+    this.#activeChannel = input.activeChannel ?? (() => 'intern');
   }
 
   public isSyncReady(): boolean {
@@ -39,6 +43,10 @@ export class SourceManagementService {
 
   public requireSyncReady(): void {
     if (!this.isSyncReady()) throw new SourceSyncTargetRequiredError();
+  }
+
+  public activeChannel(): SourceSyncChannel {
+    return this.#activeChannel();
   }
 
   public list(): readonly SourceOverview[] {
@@ -64,10 +72,17 @@ export class SourceManagementService {
     this.requireSyncReady();
     const channels =
       input.channelIds === 'all'
-        ? this.#sources.listChannels().filter((channel) => channel.effectiveEnabled)
+        ? this.#sources
+            .listChannels()
+            .filter(
+              (channel) => channel.effectiveEnabled && channel.channel === this.activeChannel(),
+            )
         : input.channelIds.map((id) => {
             const channel = this.#sources.getChannel(id);
             if (!channel) throw new TypeError(`Source channel not found: ${id}`);
+            if (channel.channel !== this.activeChannel()) {
+              throw new TypeError('该渠道不是当前选择的同步招聘渠道。');
+            }
             if (!channel.effectiveEnabled) throw new TypeError(`Source channel is disabled: ${id}`);
             return channel;
           });
@@ -92,6 +107,9 @@ export class SourceManagementService {
         : input.sourceIds.map((id) => {
             const source = this.#sources.get(id);
             if (!source) throw new TypeError(`Source not found: ${id}`);
+            if (source.channel !== this.activeChannel()) {
+              throw new TypeError('该来源不属于当前选择的同步招聘渠道。');
+            }
             if (!source.effectiveEnabled) throw new TypeError(`Source is disabled: ${id}`);
             return source;
           });

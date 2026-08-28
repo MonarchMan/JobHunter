@@ -27,6 +27,7 @@ import {
   ResumeProfileWorkflow,
   ScheduleService,
   SourceManagementService,
+  SystemSettingsService,
   TaskService,
   TaskWaitService,
   createSourceSyncTaskHandler,
@@ -50,6 +51,7 @@ import {
   SqliteResumeDocumentRepository,
   SqliteSystemInitializer,
   SqliteTaskRepository,
+  SqliteSettingsStore,
   type SqliteDatabaseHandle,
   NodeJobExportFileStore,
 } from '@jobhunter/db';
@@ -164,6 +166,11 @@ export function createLocalCliContainer(
       });
     }
     database = openSqliteDatabase({ dataRoot: config.bootstrap.dataRoot.value });
+    const systemSettings = new SystemSettingsService({
+      repository: new SqliteSettingsStore(database.client),
+      clock: { now: () => utcInstant(Date.now()) },
+    });
+    systemSettings.applySourceSyncChannelSelection();
     const queue = new SqliteTaskRepository(database.client);
     const registry = new HandlerRegistry();
     registry.register(
@@ -203,6 +210,7 @@ export function createLocalCliContainer(
       tasks,
       ids,
       jobIntakePolicy,
+      activeChannel: () => systemSettings.get().sourceSync.channel,
     });
     const jobRepository = new SqliteJobQueryRepository(database.client);
     const jobs = new JobQueryService({
@@ -317,7 +325,9 @@ export function createLocalCliContainer(
           : [];
         let schedules = 0;
         if (sourceSyncReady) {
-          for (const source of runtime.sources.list().filter((candidate) => candidate.enabled)) {
+          for (const source of runtime.sources
+            .list()
+            .filter((candidate) => candidate.effectiveEnabled)) {
             runtime.schedules.upsert({
               id: source.id,
               scheduleKey: `source.sync:${source.id}`,

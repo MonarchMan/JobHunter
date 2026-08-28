@@ -65,6 +65,11 @@ export const defaultSettingsRegistry = new SettingsRegistry([
     schemaVersion: '1',
     schema: z.object({ enabled: z.boolean() }).strict(),
   },
+  {
+    key: 'sources.activeChannel',
+    schemaVersion: '1',
+    schema: z.object({ channel: z.enum(['intern', 'campus', 'social']) }).strict(),
+  },
 ]);
 
 interface SettingRow {
@@ -111,5 +116,56 @@ export class SqliteSettingsStore {
       );
     }
     return definition.schema.parse(JSON.parse(row.value_json) as unknown);
+  }
+
+  public setSourceSyncChannel(
+    channel: 'intern' | 'campus' | 'social',
+    updatedAt: UtcInstant,
+  ): void {
+    this.#client.transaction(() => {
+      this.set('sources.activeChannel', { channel }, updatedAt);
+      this.#client
+        .prepare(
+          `UPDATE source_channels
+           SET enabled = CASE
+             WHEN channel = ? AND EXISTS (
+               SELECT 1 FROM job_sources source
+               WHERE source.channel_id = source_channels.id
+                 AND source.support_status = 'supported'
+             ) THEN 1 ELSE 0 END,
+             updated_at = ?`,
+        )
+        .run(channel, updatedAt);
+      this.#client
+        .prepare(
+          `UPDATE schedules
+           SET enabled = CASE WHEN EXISTS (
+             SELECT 1 FROM job_sources source
+             JOIN source_channels selected ON selected.id = source.channel_id
+             WHERE schedules.schedule_key = 'source.sync:' || source.id
+               AND selected.channel = ?
+               AND selected.enabled = 1
+               AND source.enabled = 1
+               AND source.support_status = 'supported'
+           ) THEN 1 ELSE 0 END,
+           updated_at = ?
+           WHERE task_type = 'source.sync'`,
+        )
+        .run(channel, updatedAt);
+      this.#client
+        .prepare(
+          `UPDATE tasks
+           SET status = 'cancelled', error_category = 'cancelled',
+               error_summary = 'The selected recruitment channel changed.', finished_at = ?
+           WHERE task_type = 'source.sync' AND status = 'pending'
+             AND EXISTS (
+               SELECT 1 FROM job_sources source
+               JOIN source_channels previous ON previous.id = source.channel_id
+               WHERE source.id = json_extract(tasks.payload_json, '$.sourceId')
+                 AND previous.channel != ?
+             )`,
+        )
+        .run(updatedAt, channel);
+    })();
   }
 }
