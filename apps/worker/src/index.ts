@@ -8,6 +8,9 @@ import {
   createCleanupTaskHandler,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
+  createProjectAnswerDigestTaskHandler,
+  createProjectNotebookTaskHandler,
+  createProjectQuestionTaskHandler,
   createResumeProfileTaskHandler,
   createResumePolishTaskHandler,
   createResumeDeletionTaskHandler,
@@ -24,6 +27,9 @@ import {
   RetryPolicy,
   ScheduleService,
   SourceHealthCheckService,
+  SourceScheduleReconciliationService,
+  SystemSettingsService,
+  TaskService,
   ProfileJobIntakePolicy,
   ResumeDeletionService,
   WorkerEngine,
@@ -42,16 +48,19 @@ import {
   SqliteCandidateProfileRepository,
   SqliteCleanupRepository,
   SqliteMatchingRepository,
+  SqliteInterviewProjectRepository,
   SqliteResumeDocumentRepository,
   SqliteResumePolishSuggestionRepository,
   SqliteResumeArtifactReader,
   SqliteResumeDeletionRepository,
   SqliteSourceHealthWriter,
+  SqliteSourceManagementRepository,
+  SqliteSettingsStore,
   SqliteSyncRepository,
   SqliteTaskRepository,
   SqliteUnitOfWork,
 } from '@jobhunter/db';
-import { SystemIdGenerator, utcInstant, type Clock, type IdGenerator } from '@jobhunter/domain';
+import { parseId, SystemIdGenerator, utcInstant, type Clock, type IdGenerator } from '@jobhunter/domain';
 import { createConfiguredModelClient } from '@jobhunter/llm';
 import { TesseractResumeOcrEngine } from '@jobhunter/resume';
 import {
@@ -286,6 +295,25 @@ export function createProductionWorkerApplication(input: {
     options: { normalizerVersion: 'normalize-v1' },
   });
   const registry = new HandlerRegistry();
+  const interviewRepository = new SqliteInterviewProjectRepository(database.client);
+  const interviewArtifacts = new SqliteArtifactStore(database.client, input.dataRoot);
+  let interviewTasks: TaskService | null = null;
+  const enqueueInterviewNotebook = (dossierId: string): void => {
+    const detail = interviewRepository.getDossier(parseId(dossierId, 'ProjectDossier'));
+    if (!detail || !interviewTasks) return;
+    interviewTasks.enqueue({
+      taskType: 'interview.project-notebook.render',
+      payload: { dossierId, sourceRevision: detail.dossier.revision },
+      idempotencyKey: `interview.project-notebook:${dossierId}:${String(detail.dossier.revision)}`,
+    });
+  };
+  registry.register(
+    createProjectNotebookTaskHandler({
+      repository: interviewRepository,
+      artifacts: interviewArtifacts,
+      ids,
+    }),
+  );
   registry.register(createSourceSyncTaskHandler(sync));
   registry.register(
     createSourceJobDetailTaskHandler(
@@ -394,6 +422,21 @@ export function createProductionWorkerApplication(input: {
     });
     registry.register(understandingHandler);
     registry.register(adviceHandler);
+    registry.register(
+      createProjectQuestionTaskHandler({
+        runner,
+        repository: interviewRepository,
+        onCommitted: enqueueInterviewNotebook,
+      }),
+    );
+    registry.register(
+      createProjectAnswerDigestTaskHandler({
+        runner,
+        repository: interviewRepository,
+        ids,
+        onCommitted: enqueueInterviewNotebook,
+      }),
+    );
   } else {
     registry.register(
       createResumeProfileTaskHandler({
@@ -410,6 +453,8 @@ export function createProductionWorkerApplication(input: {
     adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
     registry.register(understandingHandler);
     registry.register(adviceHandler);
+    registry.register(createProjectQuestionTaskHandler({ unavailable: true }));
+    registry.register(createProjectAnswerDigestTaskHandler({ unavailable: true }));
   }
   registry.register(
     createManualJobScoreTaskHandler({
@@ -419,7 +464,19 @@ export function createProductionWorkerApplication(input: {
     }),
   );
   const queue = new SqliteTaskRepository(database.client);
+  interviewTasks = new TaskService({ queue, clock, ids }, registry);
   const scheduleService = new ScheduleService({ queue, clock, ids }, registry);
+  const settings = new SystemSettingsService({
+    repository: new SqliteSettingsStore(database.client),
+    clock,
+  });
+  settings.applySourceSyncChannelSelection();
+  new SourceScheduleReconciliationService({
+    sources: new SqliteSourceManagementRepository(database.client),
+    schedules: scheduleService,
+    jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
+    activeChannel: () => settings.get().sourceSync.channel,
+  }).reconcile();
   const engine = new WorkerEngine({
     queue,
     registry,

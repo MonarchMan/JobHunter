@@ -23,6 +23,7 @@ export const agentRunStatusLabels = {
 export const taskTypeLabels: Readonly<Record<string, string>> = {
   'source.sync': '来源同步',
   'source.health-check': '来源健康检查',
+  'source.job-detail': '职位详情同步',
   'resume.profile.extract': '简历画像提取',
   'job.enrich': '职位理解',
   'match.compute-revision': '职位匹配',

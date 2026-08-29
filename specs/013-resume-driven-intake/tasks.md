@@ -10,3 +10,4 @@
 - [x] **INTAKE-T006** 暴露 Web/CLI 手动刷新路径，更新个人资料页面文案和状态，并补浏览器/端到端测试。（INTAKE-009, INTAKE-010, INTAKE-Q01）
 - [x] **INTAKE-T007** 运行格式、类型、应用/数据库/Web/Worker 风险匹配测试，核对契约追踪并将规格更新为 Implemented。（INTAKE-001, INTAKE-002, INTAKE-003, INTAKE-004, INTAKE-005, INTAKE-006, INTAKE-007, INTAKE-008, INTAKE-009, INTAKE-010, INTAKE-Q01, INTAKE-Q02, INTAKE-Q03, INTAKE-Q04）
 - [x] **INTAKE-T008** 增加目标岗位大类单选与确认门禁：Web/API 阻止未确认时创建或启用同步，Worker 拒绝执行既有计划，并补应用、Web 与浏览器回归测试。（INTAKE-011）
+- [x] **INTAKE-T009** 增加跨进程复用的来源同步计划对账，启动时为新增物理来源补齐计划并按当前渠道和目标岗位门禁启停。（INTAKE-012, INTAKE-Q03）

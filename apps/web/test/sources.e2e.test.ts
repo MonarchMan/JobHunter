@@ -275,6 +275,19 @@ describe('Web source management', () => {
       const config = resolveAppConfig({ bootstrap, environment: {}, file: {} });
       createLocalWebContainer(config).close();
 
+      const initial = openSqliteDatabase({ dataRoot: root.path });
+      try {
+        expect(initial.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(47);
+        expect(
+          initial.client
+            .prepare("SELECT count(*) FROM schedules WHERE task_type = 'source.sync' AND enabled = 1")
+            .pluck()
+            .get(),
+        ).toBe(0);
+      } finally {
+        initial.close();
+      }
+
       const customized = openSqliteDatabase({ dataRoot: root.path });
       try {
         customized.client
@@ -306,6 +319,7 @@ describe('Web source management', () => {
           45,
         );
         expect(database.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(47);
+        expect(database.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(47);
         expect(
           database.client
             .prepare('SELECT DISTINCT channel FROM source_channels WHERE enabled = 1')
@@ -350,6 +364,20 @@ describe('Web source management', () => {
         resolveAppConfig({ bootstrap, environment: {}, file: {} }),
       );
       try {
+        const schedules = openSqliteDatabase({ dataRoot: root.path });
+        try {
+          expect(schedules.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(48);
+          expect(
+            schedules.client
+              .prepare(
+                "SELECT count(*) FROM schedules WHERE task_type = 'source.sync' AND enabled = 1",
+              )
+              .pluck()
+              .get(),
+          ).toBe(16);
+        } finally {
+          schedules.close();
+        }
         expect(
           container.services.webSources.list().find((source) => source.id === sourceId),
         ).toMatchObject({
@@ -363,7 +391,11 @@ describe('Web source management', () => {
             coverage: 'complete',
             stats: { created: 3, updated: 1 },
           },
-          schedule: null,
+          schedule: {
+            cronExpression: '0 3 * * *',
+            timezone: 'Asia/Shanghai',
+            enabled: true,
+          },
         });
         expect(
           container.services.webSources.listChannels().find((channel) => channel.id === channelId),

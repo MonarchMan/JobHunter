@@ -37,6 +37,7 @@ CLI `init` 在幂等 seed 后：
 1. 若参考图片 `docs/resumes/nowcoder_1787802316450.jpeg` 存在则优先调用同一导入工作流，否则兼容旧的 `agent简历 - 新.docx`；固定内容哈希使重复执行返回同一文档/任务。
 2. 若已有画像已确认目标岗位，为所有启用来源入队固定幂等键的 `source.sync` 任务。
 3. 同一前提下，为每个来源 upsert `source.sync:<sourceId>` 每日 `03:00 Asia/Shanghai` 计划；否则等待用户在来源页确认后显式创建或启用。
+4. Web、CLI 和 Worker 组合根在来源目录与当前招聘渠道投影完成后执行同一计划对账服务：为目录内每个物理来源 upsert 固定 schedule key，且仅对“目标岗位已确认 + 当前渠道 + 三层开关有效”的来源启用。这样目录后续增加公司时无需重新初始化数据目录。
 4. upsert `maintenance.cleanup:weekly` 每周日 `04:00 Asia/Shanghai` 计划。
 
 计划只存任务 payload 和下一次执行时间；官网请求和清理均由 Worker 执行。Web 手动调度仍可覆盖来源计划。

@@ -18,6 +18,7 @@ import {
 import { TaskActions } from './task-actions.js';
 import { TaskAutoRefresh } from './task-auto-refresh.js';
 import { AgentRunDetailsDialog, TaskDetailsDialog } from './diagnostic-details.js';
+import { SelectField } from '../components/select-field.js';
 import dataTableStyles from '../components/data-table.module.css';
 import styles from './page.module.css';
 
@@ -76,25 +77,31 @@ export default async function TasksPage({
       >
         <label>
           状态
-          <select name="status" defaultValue={status ?? ''}>
-            <option value="">全部状态</option>
-            <option value="pending">待处理</option>
-            <option value="running">运行中</option>
-            <option value="failed">失败</option>
-            <option value="succeeded">已完成</option>
-            <option value="cancelled">已取消</option>
-          </select>
+          <SelectField
+            name="status"
+            label="状态"
+            defaultValue={status ?? ''}
+            options={[
+              { value: '', label: '全部状态' },
+              { value: 'pending', label: '待处理' },
+              { value: 'running', label: '运行中' },
+              { value: 'failed', label: '失败' },
+              { value: 'succeeded', label: '已完成' },
+              { value: 'cancelled', label: '已取消' },
+            ]}
+          />
         </label>
         <label>
           类型
-          <select name="type" defaultValue={taskType ?? ''}>
-            <option value="">全部类型</option>
-            {Object.entries(taskTypeLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            name="type"
+            label="类型"
+            defaultValue={taskType ?? ''}
+            options={[
+              { value: '', label: '全部类型' },
+              ...Object.entries(taskTypeLabels).map(([value, label]) => ({ value, label })),
+            ]}
+          />
         </label>
         <button type="submit">应用筛选</button>
         <a className="button-secondary" href="/tasks">
@@ -139,7 +146,11 @@ export default async function TasksPage({
                       <strong>
                         <TaskDetailsDialog task={task} />
                       </strong>
-                      <small>{taskTypeLabels[task.taskType] ?? task.taskType}</small>
+                      <small>
+                        {task.jobDetailBatch
+                          ? `成功 ${String(task.jobDetailBatch.counts.succeeded)} / ${String(task.jobDetailBatch.counts.total)}`
+                          : (taskTypeLabels[task.taskType] ?? task.taskType)}
+                      </small>
                       <small>
                         <code>{task.id.slice(0, 8)}…</code>
                       </small>
@@ -151,7 +162,9 @@ export default async function TasksPage({
                       {task.cancelRequested ? <small>等待 Worker 取消</small> : null}
                     </td>
                     <td>
-                      {task.attemptCount} / {task.maxAttempts}
+                      {task.jobDetailBatch
+                        ? `${String(task.jobDetailBatch.counts.succeeded)} / ${String(task.jobDetailBatch.counts.total)}`
+                        : `${String(task.attemptCount)} / ${String(task.maxAttempts)}`}
                     </td>
                     <td>
                       <TruncatedText
@@ -167,7 +180,11 @@ export default async function TasksPage({
                       <small>{time(task.finishedAt)}</small>
                     </td>
                     <td>
-                      <TaskActions taskId={task.id} status={task.status} />
+                      {task.kind === 'task' ? (
+                        <TaskActions taskId={task.id} status={task.status} />
+                      ) : (
+                        '—'
+                      )}
                     </td>
                   </tr>
                 ))
@@ -192,7 +209,14 @@ export default async function TasksPage({
                   ? `${task.errorCategory}: ${task.errorSummary ?? '无错误摘要'}`
                   : '暂无错误'}
               </p>
-              <TaskActions taskId={task.id} status={task.status} />
+              {task.jobDetailBatch ? (
+                <p>
+                  总数 {String(task.jobDetailBatch.counts.total)}，成功{' '}
+                  {String(task.jobDetailBatch.counts.succeeded)}，失败{' '}
+                  {String(task.jobDetailBatch.counts.failed)}
+                </p>
+              ) : null}
+              {task.kind === 'task' ? <TaskActions taskId={task.id} status={task.status} /> : null}
             </article>
           ))}
         </div>

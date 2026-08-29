@@ -6,6 +6,9 @@ export type Id<TName extends string> = string & { readonly [idBrand]: TName };
 
 export type AgentRunId = Id<'AgentRun'>;
 export type CandidateProfileId = Id<'CandidateProfile'>;
+export type DrillAnswerRevisionId = Id<'DrillAnswerRevision'>;
+export type DrillSessionId = Id<'DrillSession'>;
+export type DrillTurnId = Id<'DrillTurn'>;
 export type CompanyId = Id<'Company'>;
 export type JobEnrichmentId = Id<'JobEnrichment'>;
 export type JobId = Id<'Job'>;
@@ -16,6 +19,9 @@ export type MatchAdviceId = Id<'MatchAdvice'>;
 export type MatchResultId = Id<'MatchResult'>;
 export type MatchRulesetId = Id<'MatchRuleset'>;
 export type ProfileVersionId = Id<'ProfileVersion'>;
+export type ProjectDossierId = Id<'ProjectDossier'>;
+export type ProjectKnowledgeItemId = Id<'ProjectKnowledgeItem'>;
+export type ResumeProjectSnapshotId = Id<'ResumeProjectSnapshot'>;
 export type SyncRunId = Id<'SyncRun'>;
 export type TaskId = Id<'Task'>;
 

@@ -19,6 +19,13 @@ const requiredTables = [
   'agent_runs',
   'match_results',
   'operation_audit_events',
+  'resume_project_snapshots',
+  'project_dossiers',
+  'drill_sessions',
+  'drill_turns',
+  'drill_answer_revisions',
+  'project_knowledge_items',
+  'drill_coverage',
 ] as const;
 
 export function sqliteDoctorCheck(client: Database.Database): OfflineDoctorCheck {

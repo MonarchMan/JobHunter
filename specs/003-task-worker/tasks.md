@@ -1,7 +1,7 @@
 # 003 持久化任务与 Worker 任务
 
 > 状态：Implemented
-> 显式覆盖：WRK-001, WRK-002, WRK-003, WRK-004, WRK-005, WRK-006, WRK-007, WRK-008, WRK-009, WRK-010, WRK-011, WRK-012, WRK-013, WRK-014, WRK-015, WRK-Q01, WRK-Q02, WRK-Q03
+> 显式覆盖：WRK-001, WRK-002, WRK-003, WRK-004, WRK-005, WRK-006, WRK-007, WRK-008, WRK-009, WRK-010, WRK-011, WRK-012, WRK-013, WRK-014, WRK-015, WRK-016, WRK-017, WRK-Q01, WRK-Q02, WRK-Q03
 
 - [x] **WRK-T001** 实现 HandlerRegistry、payload Schema 和任务应用端口。（WRK-001, WRK-Q03）
 - [x] **WRK-T002** 实现入队、幂等冲突返回和任务查询。（WRK-001,010）
@@ -16,3 +16,5 @@
 - [x] **WRK-T011** 支持按 task type 配置消费槽位数量，并验证同类型并发与默认单消费者行为。（WRK-012）
 - [x] **WRK-T012** 将 `maxConcurrentNetworkTasks` 接为来源 HTTP、浏览器和模型调用共享的可取消 FIFO 异步信号量，并验证全局上限与排队取消。（WRK-013）
 - [x] **WRK-T013** 接入按来源元数据配置的可取消 Token Bucket、I/O 任务默认消费槽位和无敏感内容的 Worker 运行时指标。（WRK-014,015, WRK-Q02）
+- [x] **WRK-T014** 为来源同步任务详情增加公司、渠道、物理来源和对应同步运行统计的脱敏投影。（WRK-016, WRK-Q02）
+- [x] **WRK-T015** 在诊断读模型中按来源同步运行聚合职位详情任务，并实现批次统计、状态、筛选与分页展示。（WRK-017）

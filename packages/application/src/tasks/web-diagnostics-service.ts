@@ -1,4 +1,5 @@
 import { parseId } from '@jobhunter/domain';
+import { z } from 'zod';
 import {
   webAgentRunDetailSchema,
   webDiagnosticsSchema,
@@ -6,6 +7,8 @@ import {
   webTaskAcceptedSchema,
   webTaskMutationSchema,
   webTaskSchema,
+  type WebSourceSyncTaskDetail,
+  type WebJobDetailBatch,
   type WebAgentRunDetail,
   type WebAgentRunSummary,
   type WebDiagnostics,
@@ -17,12 +20,40 @@ import type { TaskRecord } from './model.js';
 import type { TaskService } from './task-service.js';
 
 export interface WebDiagnosticsRepository {
+  listTaskEntries(input: {
+    readonly status?: TaskRecord['status'];
+    readonly taskType?: string;
+    readonly limit: number;
+    readonly offset: number;
+  }): {
+    readonly items: readonly WebTaskListEntry[];
+    readonly total: number;
+  };
   listAgentRuns(input: { readonly limit: number; readonly offset: number }): {
     readonly items: readonly WebAgentRunSummary[];
     readonly total: number;
   };
   getAgentRun(id: string): WebAgentRunDetail | null;
+  getSourceSyncTaskDetail(input: {
+    readonly sourceId: string;
+    readonly trigger: 'manual' | 'schedule' | 'retry';
+    readonly windowStartedAt: number;
+    readonly windowFinishedAt: number | null;
+  }): WebSourceSyncTaskDetail | null;
 }
+
+export type WebTaskListEntry =
+  | { readonly kind: 'task'; readonly taskId: string }
+  | {
+      readonly kind: 'source_job_detail_batch';
+      readonly id: string;
+      readonly status: TaskRecord['status'];
+      readonly createdAt: number;
+      readonly startedAt: number | null;
+      readonly finishedAt: number | null;
+      readonly cancelRequested: boolean;
+      readonly batch: WebJobDetailBatch;
+    };
 
 export type WebTaskMutationResult =
   | { readonly kind: 'task'; readonly task: WebTask }
@@ -33,8 +64,19 @@ function instant(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
 }
 
-function presentTask(task: TaskRecord): WebTask {
+function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): WebTask {
+  const sourceSyncPayload =
+    task.taskType === 'source.sync'
+      ? z
+          .object({
+            sourceId: z.string().trim().min(1),
+            trigger: z.enum(['manual', 'schedule', 'retry']),
+          })
+          .strict()
+          .safeParse(task.payload)
+      : null;
   return webTaskSchema.parse({
+    kind: 'task',
     id: task.id,
     taskType: task.taskType,
     status: task.status,
@@ -47,6 +89,47 @@ function presentTask(task: TaskRecord): WebTask {
     createdAt: new Date(task.createdAt).toISOString(),
     startedAt: instant(task.startedAt),
     finishedAt: instant(task.finishedAt),
+    sourceSync:
+      sourceSyncPayload?.success === true
+        ? repository.getSourceSyncTaskDetail({
+            sourceId: sourceSyncPayload.data.sourceId,
+            trigger: sourceSyncPayload.data.trigger,
+            windowStartedAt: task.startedAt ?? task.createdAt,
+            windowFinishedAt: task.finishedAt,
+          })
+        : null,
+    jobDetailBatch: null,
+  });
+}
+
+function presentTaskEntry(
+  entry: WebTaskListEntry,
+  tasks: Pick<TaskService, 'get'>,
+  repository: WebDiagnosticsRepository,
+): WebTask | null {
+  if (entry.kind === 'task') {
+    const task = tasks.get(parseId(entry.taskId, 'Task'));
+    return task ? presentTask(task, repository) : null;
+  }
+  return webTaskSchema.parse({
+    kind: entry.kind,
+    id: entry.id,
+    taskType: 'source.job-detail',
+    status: entry.status,
+    attemptCount: 0,
+    maxAttempts: 3,
+    retryOfTaskId: null,
+    errorCategory: entry.batch.counts.failed > 0 ? 'batch_partial_failure' : null,
+    errorSummary:
+      entry.batch.counts.failed > 0
+        ? `${String(entry.batch.counts.failed)} 个职位详情任务失败。`
+        : null,
+    cancelRequested: entry.cancelRequested,
+    createdAt: new Date(entry.createdAt).toISOString(),
+    startedAt: instant(entry.startedAt),
+    finishedAt: instant(entry.finishedAt),
+    sourceSync: null,
+    jobDetailBatch: entry.batch,
   });
 }
 
@@ -76,24 +159,31 @@ export class WebDiagnosticsService {
     const taskPage = input.taskPage ?? 1;
     const agentPage = input.agentPage ?? 1;
     const taskFilter = {
-      ...(input.status ? { statuses: [input.status] } : {}),
+      ...(input.status ? { status: input.status } : {}),
       ...(input.taskType ? { taskType: input.taskType } : {}),
     };
-    const taskTotal = this.#tasks.count(taskFilter);
-    const taskPagination = webPagination(taskTotal, taskPage, pageSize);
+    let taskPageResult = this.#repository.listTaskEntries({
+      ...taskFilter,
+      limit: pageSize,
+      offset: (taskPage - 1) * pageSize,
+    });
+    const taskPagination = webPagination(taskPageResult.total, taskPage, pageSize);
+    if (taskPagination.current !== taskPage) {
+      taskPageResult = this.#repository.listTaskEntries({
+        ...taskFilter,
+        limit: pageSize,
+        offset: (taskPagination.current - 1) * pageSize,
+      });
+    }
     const agentPageResult = this.#repository.listAgentRuns({
       limit: pageSize,
       offset: (agentPage - 1) * pageSize,
     });
     const agentPagination = webPagination(agentPageResult.total, agentPage, pageSize);
     return webDiagnosticsSchema.parse({
-      tasks: this.#tasks
-        .list({
-          ...taskFilter,
-          limit: pageSize,
-          offset: (taskPagination.current - 1) * pageSize,
-        })
-        .map(presentTask),
+      tasks: taskPageResult.items
+        .map((entry) => presentTaskEntry(entry, this.#tasks, this.#repository))
+        .filter((task): task is WebTask => task !== null),
       taskPagination,
       agentRuns: agentPageResult.items,
       agentPagination,
@@ -102,7 +192,7 @@ export class WebDiagnosticsService {
 
   public getTask(id: string): WebTask | null {
     const task = this.#tasks.get(parseId(id, 'Task'));
-    return task ? presentTask(task) : null;
+    return task ? presentTask(task, this.#repository) : null;
   }
 
   public getAgentRun(id: string): WebAgentRunDetail | null {
@@ -117,7 +207,7 @@ export class WebDiagnosticsService {
       const result = this.#tasks.cancel(taskId);
       return result.kind === 'not_found'
         ? { kind: 'not_found' }
-        : { kind: 'task', task: presentTask(result.task) };
+        : { kind: 'task', task: presentTask(result.task, this.#repository) };
     }
     if (!this.#tasks.get(taskId)) return { kind: 'not_found' };
     const result = this.#tasks.retryFailed(taskId, mutation.idempotencyToken);

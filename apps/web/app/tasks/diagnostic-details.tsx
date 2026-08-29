@@ -22,6 +22,17 @@ function time(value: string | null): string {
     : '—';
 }
 
+const sourceChannelLabels = { intern: '实习', campus: '校招', social: '社招' } as const;
+const sourceTriggerLabels = { manual: '手动', schedule: '定时', retry: '重试' } as const;
+const syncRunStatusLabels = {
+  running: '运行中',
+  succeeded: '成功',
+  partial: '退化',
+  failed: '失败',
+  cancelled: '已取消',
+} as const;
+const syncCoverageLabels = { complete: '完整', partial: '部分', unknown: '未知' } as const;
+
 function DialogShell({
   title,
   children,
@@ -70,6 +81,9 @@ function DialogShell({
 export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactElement {
   const [open, setOpen] = useState(false);
   const triggerReference = useRef<HTMLButtonElement>(null);
+  const displayName = task.jobDetailBatch
+    ? `${task.jobDetailBatch.companyName}职位详情同步`
+    : (taskTypeLabels[task.taskType] ?? task.taskType);
   return (
     <>
       <button
@@ -80,7 +94,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
           setOpen(true);
         }}
       >
-        {taskTypeLabels[task.taskType] ?? task.taskType}
+        {displayName}
       </button>
       {open ? (
         <DialogShell
@@ -95,7 +109,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
               <div>
                 <dt>任务类型</dt>
                 <dd>
-                  {taskTypeLabels[task.taskType] ?? task.taskType}
+                  {displayName}
                   <small>
                     <code>{task.taskType}</code>
                   </small>
@@ -110,15 +124,17 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                 </dd>
               </div>
               <div>
-                <dt>任务 ID</dt>
+                <dt>{task.jobDetailBatch ? '同步批次 ID' : '任务 ID'}</dt>
                 <dd>
                   <code>{task.id}</code>
                 </dd>
               </div>
               <div>
-                <dt>尝试次数</dt>
+                <dt>{task.jobDetailBatch ? '成功 / 总数' : '尝试次数'}</dt>
                 <dd>
-                  {task.attemptCount} / {task.maxAttempts}
+                  {task.jobDetailBatch
+                    ? `${String(task.jobDetailBatch.counts.succeeded)} / ${String(task.jobDetailBatch.counts.total)}`
+                    : `${String(task.attemptCount)} / ${String(task.maxAttempts)}`}
                 </dd>
               </div>
               <div>
@@ -132,6 +148,142 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                 </dd>
               </div>
             </dl>
+            {task.jobDetailBatch ? (
+              <section className={styles.batchDetail} aria-label="职位详情同步统计">
+                <dl className="facts">
+                  <div>
+                    <dt>公司 / 招聘渠道</dt>
+                    <dd>
+                      {task.jobDetailBatch.companyName} /{' '}
+                      {sourceChannelLabels[task.jobDetailBatch.channel]}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>物理来源</dt>
+                    <dd>{task.jobDetailBatch.sourceSlug}</dd>
+                  </div>
+                  <div>
+                    <dt>总数</dt>
+                    <dd>{task.jobDetailBatch.counts.total}</dd>
+                  </div>
+                  <div>
+                    <dt>等待 / 运行</dt>
+                    <dd>
+                      {String(task.jobDetailBatch.counts.pending)} /{' '}
+                      {String(task.jobDetailBatch.counts.running)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>成功 / 失败 / 取消</dt>
+                    <dd>
+                      {[
+                        task.jobDetailBatch.counts.succeeded,
+                        task.jobDetailBatch.counts.failed,
+                        task.jobDetailBatch.counts.cancelled,
+                      ]
+                        .map(String)
+                        .join(' / ')}
+                    </dd>
+                  </div>
+                </dl>
+              </section>
+            ) : null}
+            {task.sourceSync ? (
+              <section aria-labelledby={`source-sync-detail-${task.id}`}>
+                <h3 id={`source-sync-detail-${task.id}`}>官网同步信息</h3>
+                <dl className="facts">
+                  <div>
+                    <dt>公司 / 招聘渠道</dt>
+                    <dd>
+                      {task.sourceSync.companyName} / {sourceChannelLabels[task.sourceSync.channel]}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>物理来源</dt>
+                    <dd>
+                      {task.sourceSync.sourceSlug}
+                      <small>
+                        <code>{task.sourceSync.adapterKey}</code>
+                      </small>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>触发方式</dt>
+                    <dd>{sourceTriggerLabels[task.sourceSync.trigger]}</dd>
+                  </div>
+                  <div>
+                    <dt>同步运行 / 覆盖度</dt>
+                    <dd>
+                      {task.sourceSync.run
+                        ? `${syncRunStatusLabels[task.sourceSync.run.status]} / ${syncCoverageLabels[task.sourceSync.run.coverage]}`
+                        : '尚未开始同步运行'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>本次获取职位</dt>
+                    <dd>{task.sourceSync.run?.stats.discovered ?? '—'}</dd>
+                  </div>
+                  <div>
+                    <dt>新增 / 更新 / 未变化</dt>
+                    <dd>
+                      {task.sourceSync.run
+                        ? [
+                            task.sourceSync.run.stats.created,
+                            task.sourceSync.run.stats.revised,
+                            task.sourceSync.run.stats.unchanged,
+                          ]
+                            .map(String)
+                            .join(' / ')
+                        : '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>入库记录 / 后续详情任务</dt>
+                    <dd>
+                      {task.sourceSync.run
+                        ? [
+                            task.sourceSync.run.stats.rawStored,
+                            task.sourceSync.run.stats.followupEnqueued,
+                          ]
+                            .map(String)
+                            .join(' / ')
+                        : '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>意向外 / 非国内 / 地域未知</dt>
+                    <dd>
+                      {task.sourceSync.run
+                        ? [
+                            task.sourceSync.run.stats.skippedOutOfScope,
+                            task.sourceSync.run.stats.skippedNonDomestic,
+                            task.sourceSync.run.stats.skippedUnknownRegion,
+                          ]
+                            .map(String)
+                            .join(' / ')
+                        : '—'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>恢复 / 过期 / 关闭</dt>
+                    <dd>
+                      {task.sourceSync.run
+                        ? [
+                            task.sourceSync.run.stats.restored,
+                            task.sourceSync.run.stats.staled,
+                            task.sourceSync.run.stats.closed,
+                          ]
+                            .map(String)
+                            .join(' / ')
+                        : '—'}
+                    </dd>
+                  </div>
+                </dl>
+                {task.sourceSync.run?.errorSummary ? (
+                  <p>{task.sourceSync.run.errorSummary}</p>
+                ) : null}
+              </section>
+            ) : null}
             {task.status === 'failed' ? (
               <section className={styles.failureDetail} aria-labelledby="task-failure-heading">
                 <h3 id="task-failure-heading">失败原因</h3>
@@ -141,7 +293,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                 <p>{task.errorSummary ?? '系统未记录可展示的失败原因。'}</p>
               </section>
             ) : null}
-            <TaskActions taskId={task.id} status={task.status} />
+            {task.kind === 'task' ? <TaskActions taskId={task.id} status={task.status} /> : null}
           </div>
         </DialogShell>
       ) : null}

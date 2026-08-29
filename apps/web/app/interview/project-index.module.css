@@ -1,0 +1,152 @@
+.root {
+  display: grid;
+  gap: 2.5rem;
+}
+
+.source,
+.archive {
+  display: grid;
+  gap: 1rem;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.85rem;
+}
+
+.sectionHeading h2,
+.sectionHeading p {
+  margin: 0;
+}
+
+.sectionHeading > p {
+  max-width: 34rem;
+  color: var(--muted-ink);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.projectList {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.project {
+  display: flex;
+  min-width: 0;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.project:nth-child(odd) {
+  border-right: 1px solid var(--line-soft);
+}
+
+.projectCopy {
+  min-width: 0;
+}
+
+.projectCopy > span,
+.projectCopy > p,
+.projectCopy blockquote {
+  color: var(--muted-ink);
+  font-size: 0.85rem;
+}
+
+.projectCopy h3 {
+  margin: 0.25rem 0;
+}
+
+.projectCopy p {
+  margin: 0;
+}
+
+.projectCopy blockquote {
+  max-width: 34rem;
+  margin: 0.75rem 0 0;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--primary-soft);
+  line-height: 1.5;
+}
+
+.project > button,
+.project > a {
+  flex: 0 0 auto;
+}
+
+.emptyArchive {
+  margin: 0;
+  padding: 1.5rem 0;
+  color: var(--muted-ink);
+}
+
+.dossierList {
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.dossierList a {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  min-height: 4.5rem;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+}
+
+.dossierList a:hover {
+  background: var(--surface-muted);
+}
+
+.dossierList strong,
+.dossierList small {
+  display: block;
+}
+
+.dossierList small {
+  margin-top: 0.25rem;
+  color: var(--muted-ink);
+}
+
+.cursor {
+  width: 3px;
+  height: 2rem;
+  background: var(--action);
+}
+
+@media (max-width: 900px) {
+  .projectList {
+    grid-template-columns: 1fr;
+  }
+
+  .project:nth-child(odd) {
+    border-right: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .sectionHeading,
+  .project {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project > button,
+  .project > a {
+    width: 100%;
+  }
+}

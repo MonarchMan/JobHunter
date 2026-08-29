@@ -16,6 +16,16 @@ const datedExperience = {
   evidence: z.array(evidenceSchema),
 };
 
+export const candidateProjectSchema = z
+  .object({
+    name: normalizedText,
+    role: normalizedText.nullable(),
+    ...datedExperience,
+  })
+  .readonly();
+
+export type CandidateProject = z.infer<typeof candidateProjectSchema>;
+
 export const candidatePreferencesSchema = z
   .object({
     locations: z.array(normalizedText),
@@ -61,15 +71,7 @@ export const candidateProfileSchema = z
         })
         .readonly(),
     ),
-    projects: z.array(
-      z
-        .object({
-          name: normalizedText,
-          role: normalizedText.nullable(),
-          ...datedExperience,
-        })
-        .readonly(),
-    ),
+    projects: z.array(candidateProjectSchema),
     works: z
       .array(
         z.object({ name: normalizedText, description: optionalText, url: optionalText }).readonly(),

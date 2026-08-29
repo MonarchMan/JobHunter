@@ -114,7 +114,7 @@
     display: grid;
     width: 100%;
     height: calc(4.5rem + env(safe-area-inset-bottom));
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.25rem;
     padding: 0.45rem max(0.55rem, env(safe-area-inset-right))
       max(0.45rem, env(safe-area-inset-bottom)) max(0.55rem, env(safe-area-inset-left));

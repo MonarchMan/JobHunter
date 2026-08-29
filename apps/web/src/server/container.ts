@@ -5,6 +5,9 @@ import {
   createJobUnderstandingTaskHandler,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
+  createProjectAnswerDigestTaskHandler,
+  createProjectNotebookTaskHandler,
+  createProjectQuestionTaskHandler,
   createResumeProfileTaskHandler,
   createResumePolishTaskHandler,
   createResumeDeletionTaskHandler,
@@ -12,6 +15,7 @@ import {
   createSourceHealthTaskHandler,
   createCleanupTaskHandler,
   HandlerRegistry,
+  InterviewProjectService,
   JobQueryService,
   MatchWorkflowService,
   ProfileInspectionService,
@@ -19,6 +23,7 @@ import {
   ProfileJobIntakePolicy,
   ScheduleService,
   SourceManagementService,
+  SourceScheduleReconciliationService,
   SystemSettingsService,
   TaskService,
   WebJobQueryService,
@@ -47,6 +52,8 @@ import {
   SqliteWebSourceRepository,
   SqliteWebDiagnosticsRepository,
   SqliteArtifactStore,
+  SqliteInterviewProjectRepository,
+  SqliteProjectNotebookReader,
   SqliteResumeDeletionRepository,
   SqliteResumeDocumentRepository,
   SqliteResumePolishSuggestionRepository,
@@ -75,6 +82,7 @@ export interface WebApplicationServices {
   readonly resumePolish: ResumePolishService;
   readonly matches: MatchWorkflowService;
   readonly settings: SystemSettingsService;
+  readonly interview: InterviewProjectService;
 }
 
 export interface WebApplicationContainer {
@@ -104,6 +112,8 @@ export function createLocalWebContainer(
     });
     settings.applySourceSyncChannelSelection();
     const registry = new HandlerRegistry();
+    const artifacts = new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value);
+    const interviewRepository = new SqliteInterviewProjectRepository(database.client);
     const resumeDeletion = new ResumeDeletionService({
       repository: new SqliteResumeDeletionRepository(database.client),
       artifacts: new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value),
@@ -123,6 +133,11 @@ export function createLocalWebContainer(
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
     registry.register(createResumePolishTaskHandler({ unavailable: true }));
     registry.register(createResumeDeletionTaskHandler(resumeDeletion));
+    registry.register(createProjectQuestionTaskHandler({ unavailable: true }));
+    registry.register(createProjectAnswerDigestTaskHandler({ unavailable: true }));
+    registry.register(
+      createProjectNotebookTaskHandler({ repository: interviewRepository, artifacts, ids }),
+    );
     const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
     const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
     const matchingHandler = createMatchRevisionTaskHandler(null);
@@ -149,7 +164,7 @@ export function createLocalWebContainer(
     const resumes = new ResumeProfileWorkflow({
       files: new NodeResumeFileReader(),
       imports: new ResumeImportService({
-        artifacts: new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value),
+        artifacts,
         documents: new SqliteResumeDocumentRepository(database.client),
         clock,
         ids,
@@ -170,13 +185,22 @@ export function createLocalWebContainer(
       jobs: jobRepository,
       companies: new SqliteCompanyLookupRepository(database.client),
     });
+    const sourceRepository = new SqliteSourceManagementRepository(database.client);
+    const jobIntakePolicy = new ProfileJobIntakePolicy(profileRepository);
     const sources = new SourceManagementService({
-      sources: new SqliteSourceManagementRepository(database.client),
+      sources: sourceRepository,
       tasks,
       ids,
-      jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
+      jobIntakePolicy,
       activeChannel: () => settings.get().sourceSync.channel,
     });
+    const schedules = new ScheduleService({ queue, clock, ids }, registry);
+    new SourceScheduleReconciliationService({
+      sources: sourceRepository,
+      schedules,
+      jobIntakePolicy,
+      activeChannel: () => settings.get().sourceSync.channel,
+    }).reconcile();
     const services: WebApplicationServices = {
       dashboard: new DashboardQueryService(new SqliteDashboardReadModel(database.client)),
       jobs,
@@ -190,7 +214,7 @@ export function createLocalWebContainer(
         repository: new SqliteWebSourceRepository(database.client),
         sources,
         tasks,
-        schedules: new ScheduleService({ queue, clock, ids }, registry),
+        schedules,
         ids,
       }),
       diagnostics: new WebDiagnosticsService({
@@ -219,6 +243,18 @@ export function createLocalWebContainer(
         ids,
       }),
       settings,
+      interview: new InterviewProjectService({
+        profiles: profileRepository,
+        repository: interviewRepository,
+        tasks,
+        clock,
+        ids,
+        artifacts,
+        notebooks: new SqliteProjectNotebookReader(
+          database.client,
+          config.bootstrap.dataRoot.value,
+        ),
+      }),
     };
     return {
       services,

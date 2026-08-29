@@ -40,11 +40,22 @@ export class SqliteCleanupRepository implements CleanupRepository {
                        AND NOT EXISTS (
                          SELECT 1 FROM resume_documents resume WHERE resume.artifact_id = artifact.id
                        )
+                       AND NOT EXISTS (
+                         SELECT 1 FROM project_dossiers dossier
+                         WHERE dossier.latest_notebook_artifact_id = artifact.id
+                       )
                      THEN artifact.relative_path ELSE NULL END AS relative_path,
                 CASE WHEN artifact.id IS NOT NULL
                        AND NOT EXISTS (
                          SELECT 1 FROM raw_job_records other
                          WHERE other.artifact_id = artifact.id AND other.id <> raw.id
+                       )
+                       AND NOT EXISTS (
+                         SELECT 1 FROM resume_documents resume WHERE resume.artifact_id = artifact.id
+                       )
+                       AND NOT EXISTS (
+                         SELECT 1 FROM project_dossiers dossier
+                         WHERE dossier.latest_notebook_artifact_id = artifact.id
                        )
                      THEN artifact.byte_size ELSE NULL END AS byte_size,
                 raw.captured_at AS created_at
@@ -64,7 +75,11 @@ export class SqliteCleanupRepository implements CleanupRepository {
          WHERE run.status IN ('failed', 'cancelled') AND run.finished_at < ?
            AND NOT EXISTS (SELECT 1 FROM profile_versions value WHERE value.agent_run_id = run.id)
            AND NOT EXISTS (SELECT 1 FROM job_enrichments value WHERE value.agent_run_id = run.id)
-           AND NOT EXISTS (SELECT 1 FROM match_advices value WHERE value.agent_run_id = run.id)`,
+           AND NOT EXISTS (SELECT 1 FROM match_advices value WHERE value.agent_run_id = run.id)
+           AND NOT EXISTS (
+             SELECT 1 FROM drill_turns value
+             WHERE value.question_agent_run_id = run.id OR value.digest_agent_run_id = run.id
+           )`,
       )
       .all(cutoffs.agentRunsBefore) as CandidateRow[];
     return [
@@ -107,6 +122,10 @@ export class SqliteCleanupRepository implements CleanupRepository {
                    AND NOT EXISTS (
                      SELECT 1 FROM resume_documents value
                      WHERE value.artifact_id = file_artifacts.id
+                   )
+                   AND NOT EXISTS (
+                     SELECT 1 FROM project_dossiers value
+                     WHERE value.latest_notebook_artifact_id = file_artifacts.id
                    )`,
               )
               .run(artifact.artifact_id);

@@ -4,6 +4,7 @@ export * from './job-sync-handler.js';
 export * from './job-detail-service.js';
 export * from './job-detail-handler.js';
 export * from './source-management-service.js';
+export * from './source-schedule-reconciliation-service.js';
 export * from './source-health-handler.js';
 export * from './source-health-service.js';
 export * from './web-source-service.js';

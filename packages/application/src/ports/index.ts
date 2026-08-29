@@ -1,5 +1,6 @@
 export * from './artifact-store.js';
 export * from './jobs.js';
+export * from './interview-projects.js';
 export * from './matching.js';
 export * from './job-query.js';
 export * from './resume-documents.js';

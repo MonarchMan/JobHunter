@@ -113,6 +113,18 @@ describe('cleanup infrastructure', () => {
                 1, 1, NULL, 1, 1);
         INSERT INTO job_observations (job_id, sync_run_id, raw_record_id, observed_at)
         VALUES ('job', 'sync', 'raw', 1);
+        INSERT INTO file_artifacts
+          (id, kind, relative_path, media_type, sha256, byte_size, created_at)
+        VALUES ('shared-artifact', 'raw_job', 'artifacts/shared', 'application/json',
+                '${'d'.repeat(64)}', 12, 1);
+        UPDATE raw_job_records SET artifact_id = 'shared-artifact' WHERE id = 'raw';
+        INSERT INTO resume_project_snapshots
+          (id, source_profile_id, source_profile_version_id, project_index, project_json,
+           content_hash, created_at)
+        VALUES ('snapshot', 'profile', 'version', 0, '{}', '${'e'.repeat(64)}', 1);
+        INSERT INTO project_dossiers
+          (id, snapshot_id, latest_notebook_artifact_id, revision, created_at, updated_at)
+        VALUES ('dossier', 'snapshot', 'shared-artifact', 0, 1, 1);
       `);
       const repository = new SqliteCleanupRepository(handle.client);
       const cutoffs = { rawRecordsBefore: 10, observationsBefore: 10, agentRunsBefore: 10 };
@@ -120,9 +132,12 @@ describe('cleanup infrastructure', () => {
       expect(first).toMatchObject([{ kind: 'observation' }]);
       repository.deleteCandidates(first);
       const second = repository.listCandidates(cutoffs);
-      expect(second).toMatchObject([{ kind: 'raw_record', id: 'raw' }]);
+      expect(second).toMatchObject([
+        { kind: 'raw_record', id: 'raw', relativePath: null, bytes: 0 },
+      ]);
       repository.deleteCandidates(second);
       expect(handle.client.prepare('SELECT count(*) FROM raw_job_records').pluck().get()).toBe(0);
+      expect(handle.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(1);
     } finally {
       handle.close();
       await root.cleanup();

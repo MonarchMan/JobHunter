@@ -487,8 +487,69 @@ export type WebSettingsMutation = z.infer<typeof webSettingsMutationSchema>;
 
 const webTaskStatusSchema = z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled']);
 
+export const webSourceSyncTaskDetailSchema = z
+  .object({
+    companyName: z.string().trim().min(1),
+    channel: z.enum(['intern', 'campus', 'social']),
+    sourceSlug: z.string().trim().min(1),
+    adapterKey: z.string().trim().min(1),
+    trigger: z.enum(['manual', 'schedule', 'retry']),
+    run: z
+      .object({
+        id: z.string().trim().min(1),
+        status: z.enum(['running', 'succeeded', 'partial', 'failed', 'cancelled']),
+        coverage: z.enum(['complete', 'partial', 'unknown']),
+        stats: z
+          .object({
+            discovered: z.number().int().nonnegative(),
+            rawStored: z.number().int().nonnegative(),
+            created: z.number().int().nonnegative(),
+            revised: z.number().int().nonnegative(),
+            unchanged: z.number().int().nonnegative(),
+            skippedNonDomestic: z.number().int().nonnegative(),
+            skippedOutOfScope: z.number().int().nonnegative(),
+            skippedUnknownRegion: z.number().int().nonnegative(),
+            isolated: z.number().int().nonnegative(),
+            restored: z.number().int().nonnegative(),
+            staled: z.number().int().nonnegative(),
+            closed: z.number().int().nonnegative(),
+            followupEnqueued: z.number().int().nonnegative(),
+          })
+          .strict(),
+        errorCategory: z.string().nullable(),
+        errorSummary: z.string().nullable(),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+
+export type WebSourceSyncTaskDetail = z.infer<typeof webSourceSyncTaskDetailSchema>;
+
+export const webJobDetailBatchSchema = z
+  .object({
+    runId: z.string().trim().min(1),
+    companyName: z.string().trim().min(1),
+    channel: z.enum(['intern', 'campus', 'social']),
+    sourceSlug: z.string().trim().min(1),
+    counts: z
+      .object({
+        total: z.number().int().positive(),
+        pending: z.number().int().nonnegative(),
+        running: z.number().int().nonnegative(),
+        succeeded: z.number().int().nonnegative(),
+        failed: z.number().int().nonnegative(),
+        cancelled: z.number().int().nonnegative(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type WebJobDetailBatch = z.infer<typeof webJobDetailBatchSchema>;
+
 export const webTaskSchema = z
   .object({
+    kind: z.enum(['task', 'source_job_detail_batch']),
     id: z.uuid(),
     taskType: z.string(),
     status: webTaskStatusSchema,
@@ -501,6 +562,8 @@ export const webTaskSchema = z
     createdAt: z.iso.datetime(),
     startedAt: z.iso.datetime().nullable(),
     finishedAt: z.iso.datetime().nullable(),
+    sourceSync: webSourceSyncTaskDetailSchema.nullable(),
+    jobDetailBatch: webJobDetailBatchSchema.nullable(),
   })
   .strict();
 

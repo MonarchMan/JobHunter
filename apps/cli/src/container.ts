@@ -27,6 +27,7 @@ import {
   ResumeProfileWorkflow,
   ScheduleService,
   SourceManagementService,
+  SourceScheduleReconciliationService,
   SystemSettingsService,
   TaskService,
   TaskWaitService,
@@ -212,6 +213,12 @@ export function createLocalCliContainer(
       jobIntakePolicy,
       activeChannel: () => systemSettings.get().sourceSync.channel,
     });
+    new SourceScheduleReconciliationService({
+      sources: new SqliteSourceManagementRepository(database.client),
+      schedules,
+      jobIntakePolicy,
+      activeChannel: () => systemSettings.get().sourceSync.channel,
+    }).reconcile();
     const jobRepository = new SqliteJobQueryRepository(database.client);
     const jobs = new JobQueryService({
       jobs: jobRepository,

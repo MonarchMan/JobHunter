@@ -1,6 +1,39 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('校招实习管理台核心流程', () => {
+  test('creates a resume-project drill and exposes the real queued question task', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto('/interview');
+
+    await expect(page.getByRole('heading', { name: '简历项目拷打' })).toBeVisible();
+    const project = page.getByRole('article').filter({ hasText: '校招职位 Agent' });
+    await project.getByRole('button', { name: '建立准备档案' }).click();
+    await expect(page).toHaveURL(/\/interview\/projects\//);
+    await expect(page.getByText('浅档 · resume-only@v1')).toBeVisible();
+
+    await page.getByRole('button', { name: '开始拷打' }).click();
+    await expect(page.getByRole('status')).toContainText('新一轮拷打已建立');
+    await page.getByRole('button', { name: '生成第一题' }).click();
+    await expect(page.getByRole('heading', { name: '正在生成问题' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '查看任务状态' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '准备覆盖' })).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole('link', { name: '面试', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true);
+  });
+
   test('filters internship jobs and links titles to official details', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
     await page.goto('/jobs');
@@ -672,6 +705,14 @@ test.describe('校招实习管理台核心流程', () => {
   test('shows queued task and redacted Agent trace diagnostics', async ({ page }) => {
     await page.goto('/tasks');
     await expect(page.getByRole('heading', { name: '任务与 Agent 运行' })).toBeVisible();
+    const taskFilters = page.getByRole('form', { name: '任务筛选' });
+    await expect(taskFilters.locator('select:not([aria-hidden="true"])')).toHaveCount(0);
+    await expect(taskFilters.locator('[data-authored-select-trigger]')).toHaveCount(2);
+    await taskFilters.getByRole('combobox', { name: '状态' }).click();
+    await page.getByRole('option', { name: '失败' }).click();
+    await taskFilters.getByRole('button', { name: '应用筛选' }).click();
+    await expect(page).toHaveURL(/(?:\?|&)status=failed(?:&|$)/);
+    await page.goto('/tasks');
     await expect(page.getByRole('button', { name: '来源同步' }).first()).toBeVisible();
     await expect(page.getByRole('button', { name: 'job-understanding' })).toBeVisible();
     const taskTable = page.getByRole('table', { name: '后台任务列表' });

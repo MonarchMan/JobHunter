@@ -123,6 +123,10 @@ textarea {
   resize: vertical;
 }
 
+.resize-none {
+  resize: none;
+}
+
 .button-secondary {
   display: inline-grid;
   min-height: 2.75rem;

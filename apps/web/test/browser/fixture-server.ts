@@ -26,6 +26,8 @@ const ids = {
   staleRevision: '018f0000-0000-7000-8000-000000000504',
   profile: '018f0000-0000-7000-8000-000000000601',
   profileVersion: '018f0000-0000-7000-8000-000000000602',
+  interviewProfile: '018f0000-0000-7000-8000-000000000611',
+  interviewProfileVersion: '018f0000-0000-7000-8000-000000000612',
   ruleset: '018f0000-0000-7000-8000-000000000603',
   match: '018f0000-0000-7000-8000-000000000604',
   task: '018f0000-0000-7000-8000-000000000701',
@@ -210,6 +212,19 @@ async function seedFixture(dataRoot: string): Promise<void> {
   const database = openSqliteDatabase({ dataRoot });
   const adapter = new FakeAdapter();
   const profile = await loadProfileFromFakeModel();
+  const interviewProfile = makeCandidateProfile({
+    targetRoles: ['大模型应用实习生'],
+    projects: [
+      {
+        name: '校招职位 Agent',
+        role: '核心开发者',
+        startDate: '2026-03-01',
+        endDate: null,
+        highlights: ['实现可追溯的职位同步、匹配与后台任务恢复'],
+        evidence: [{ source: 'resume', quote: '校招职位 Agent 项目' }],
+      },
+    ],
+  });
   try {
     database.client
       .prepare(
@@ -300,6 +315,26 @@ async function seedFixture(dataRoot: string): Promise<void> {
         JSON.stringify(profile),
         JSON.stringify(profile),
         'd'.repeat(64),
+      );
+    database.client
+      .prepare(
+        `INSERT INTO candidate_profiles (id, name, created_at, updated_at)
+         VALUES (?, '面试准备画像', 2, 2)`,
+      )
+      .run(ids.interviewProfile);
+    database.client
+      .prepare(
+        `INSERT INTO profile_versions
+         (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+          content_hash, is_current, created_at)
+         VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 2)`,
+      )
+      .run(
+        ids.interviewProfileVersion,
+        ids.interviewProfile,
+        JSON.stringify(interviewProfile),
+        JSON.stringify(interviewProfile),
+        '9'.repeat(64),
       );
     database.client
       .prepare(

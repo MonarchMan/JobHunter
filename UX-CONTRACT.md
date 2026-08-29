@@ -12,13 +12,15 @@
 
 ## Business-context sources
 
-| Domain / scope     | Authoritative source                     | Source type | Reviewed date |
-| ------------------ | ---------------------------------------- | ----------- | ------------- |
-| Web 行为与安全     | `specs/011-web-console/spec.md`          | 产品规格    | 2026-08-24    |
-| Web 技术与异步任务 | `specs/011-web-console/design.md`        | 技术设计    | 2026-08-24    |
-| 删除与敏感数据     | `specs/013-resume-driven-intake/spec.md` | 产品规格    | 2026-08-24    |
-| 进程与任务职责     | `docs/arch/worker-and-concurrency.md`    | 架构文档    | 2026-08-24    |
-| UI 重设计          | `specs/014-ui-redesign/spec.md`          | 产品规格    | 2026-08-24    |
+| Domain / scope     | Authoritative source                        | Source type | Reviewed date |
+| ------------------ | ------------------------------------------- | ----------- | ------------- |
+| Web 行为与安全     | `specs/011-web-console/spec.md`             | 产品规格    | 2026-08-24    |
+| Web 技术与异步任务 | `specs/011-web-console/design.md`           | 技术设计    | 2026-08-24    |
+| 删除与敏感数据     | `specs/013-resume-driven-intake/spec.md`    | 产品规格    | 2026-08-24    |
+| 进程与任务职责     | `docs/arch/worker-and-concurrency.md`       | 架构文档    | 2026-08-24    |
+| UI 重设计          | `specs/014-ui-redesign/spec.md`             | 产品规格    | 2026-08-24    |
+| 项目拷打与面试准备 | `specs/020-interview-project-drill/spec.md` | 产品规格    | 2026-08-29    |
+| 个人面经导入       | `specs/021-interview-experience-intake/spec.md` | 产品规格 | 2026-08-30    |
 
 ## Visual contract
 
@@ -77,6 +79,11 @@
 | Confirm sync scope     | 来源页同步入口         | 目标岗位未确认时保持禁用       | 前往个人资料         | 已确认的目标大类 | 返回来源页后重试   | 聚焦个人资料中的目标岗位字段 | 013        |
 | Cancel task            | 取消按钮               | 禁止重复触发                   | 留在任务列表         | 内联状态更新     | 可重试失败操作     | 回到操作按钮                 | 011        |
 | Hard-delete resume     | 影响预览 + 输入 DELETE | 最终按钮 busy                  | 留在资料页并跟踪任务 | 删除任务已创建   | 影响变化时重新预览 | 初始聚焦取消，失败回确认字段 | 011/013    |
+| Start project drill    | 建立会话 / 生成下一题  | 显示真实任务并自动刷新         | 留在项目档案         | 持久内联任务状态 | 任务页诊断与重试   | 回到当前问题推进点           | 020        |
+| Submit drill answer    | 保存并分析 / 保存修订  | 原文先持久化，覆盖分析后台执行 | 留在当前项目档案     | 原文已保存       | 保留输入并允许重试 | 回到回答字段或下一步         | 020        |
+| Hard-delete dossier    | 影响预览 + 输入 DELETE | 最终按钮 busy                  | 返回准备档案列表     | 删除结果内联     | 影响变化时重新预览 | 取消恢复触发，成功到列表     | 020        |
+| Import personal experience | 上传文件 / 在线填写 | 保留所选文件或表单输入并阻止重复提交 | 前往草稿校对页 | 已生成草稿 | 内联说明并允许重试 | 草稿标题或首个警告 | 021 |
+| Review experience draft | 保存草稿 / 接受为历史 | 按钮尺寸稳定；CAS 冲突不清空输入 | 留在详情页 | 内联保存或接受状态 | 刷新后重新核对 | 首错字段或接受状态 | 021 |
 
 ## Navigation and responsive behavior
 
@@ -118,6 +125,8 @@
 - Version conflict and multi-tab behavior: 画像更新沿用版本条件，冲突时重新加载并保留可复制输入。
 - Session expiry/re-authentication: 当前本地单用户，无登录会话。
 - Long-running progress and return path: 页面显示任务状态，并链接到任务诊断。
+- Project drill pending ownership: 项目档案页是问题生成、回答分析和 Markdown 投影状态的唯一页面刷新所有者；只轮询真实 Task 状态，页面隐藏时不刷新。暂停或完成会话前必须先等待或取消当前任务，迟到 Agent 结果以会话修订号拒绝。
+- Personal experience intake: `/interview/experiences` 使用一个稳定整理台，包含模板预览/下载、单文件选择、在线填写、草稿与已接受历史。两种入口都进入相同的可编辑草稿详情；已接受记录只读。模板和不可信文档内容仅按纯文本渲染。删除沿用影响预览、应用内对话框与焦点恢复。
 - Source company card: 官网来源按 companyId 一家公司一卡；桌面端每行两张，860px 以下单列，卡片不随同排较高卡片拉伸。公司名称右侧使用原生单选下拉框，“全部”聚合视图始终存在，实习/校招/社招仅在实际接入时出现。多渠道公司的“全部”使用独立公司总览，不渲染具体渠道详情；只有选择具体渠道时才出现该渠道运行与高级设置。“全部”和具体渠道内容区使用一致的尺寸基线，切换不引起卡片明显跳变。公司名称以安全的新标签链接到当前选择对应的官方招聘入口；刷新图标按钮固定在右上角、综合状态左侧，并同步当前选择范围（“全部”表示全部启用来源），悬浮或键盘聚焦显示“立即同步”；官网来源分类栏右侧使用同一水平线上的“全部同步”刷新按钮，为所有启用官网来源分别创建幂等任务并保留统一 busy 与内联反馈；公司综合健康取最差渠道状态，渠道切换不改变 URL。
 - Source sync prerequisite: 当前画像没有可映射到规范大类的目标岗位时，来源页在标题下显示持久内联提示，所有同步按钮使用真实 disabled 状态并解释原因，唯一主要恢复行动链接到 `/profile#resume-intention`；API 和 Worker 使用同一门禁，不能仅依赖客户端禁用。
 - Stale-request cancellation/invalidation and pending-state ownership: 刷新由页面级单一所有者控制，页面隐藏时暂停。

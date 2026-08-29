@@ -625,6 +625,199 @@ export const operationAuditEvents = sqliteTable('operation_audit_events', {
   createdAt: epoch('created_at').notNull(),
 });
 
+export const resumeProjectSnapshots = sqliteTable(
+  'resume_project_snapshots',
+  {
+    id: text().primaryKey(),
+    sourceProfileId: text('source_profile_id').notNull(),
+    sourceProfileVersionId: text('source_profile_version_id').notNull(),
+    projectIndex: integer('project_index').notNull(),
+    projectJson: jsonText('project_json').notNull(),
+    contentHash: text('content_hash').notNull(),
+    createdAt: epoch('created_at').notNull(),
+  },
+  (table) => [
+    unique('resume_project_snapshots_source_unique').on(
+      table.sourceProfileVersionId,
+      table.projectIndex,
+      table.contentHash,
+    ),
+    check('resume_project_snapshots_index_check', sql`${table.projectIndex} >= 0`),
+  ],
+);
+
+export const projectDossiers = sqliteTable(
+  'project_dossiers',
+  {
+    id: text().primaryKey(),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .unique()
+      .references(() => resumeProjectSnapshots.id, { onDelete: 'restrict' }),
+    latestNotebookArtifactId: text('latest_notebook_artifact_id').references(
+      () => fileArtifacts.id,
+      { onDelete: 'restrict' },
+    ),
+    notebookSourceHash: text('notebook_source_hash'),
+    revision: integer().notNull().default(0),
+    createdAt: epoch('created_at').notNull(),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    index('project_dossiers_updated_idx').on(table.updatedAt),
+    check('project_dossiers_revision_check', sql`${table.revision} >= 0`),
+  ],
+);
+
+export const drillSessions = sqliteTable(
+  'drill_sessions',
+  {
+    id: text().primaryKey(),
+    dossierId: text('dossier_id')
+      .notNull()
+      .references(() => projectDossiers.id, { onDelete: 'cascade' }),
+    profileKey: text('profile_key').notNull(),
+    profileVersion: text('profile_version').notNull(),
+    profileDefinitionHash: text('profile_definition_hash').notNull(),
+    capabilitySummaryJson: jsonText('capability_summary_json').notNull(),
+    status: text().notNull(),
+    contextRevision: integer('context_revision').notNull().default(0),
+    createdAt: epoch('created_at').notNull(),
+    updatedAt: epoch('updated_at').notNull(),
+    completedAt: epoch('completed_at'),
+  },
+  (table) => [
+    uniqueIndex('drill_sessions_one_open_per_dossier_idx')
+      .on(table.dossierId)
+      .where(sql`${table.status} in ('active', 'paused')`),
+    check('drill_sessions_profile_key_check', sql`${table.profileKey} = 'resume-only'`),
+    check('drill_sessions_profile_version_check', sql`${table.profileVersion} = 'v1'`),
+    check(
+      'drill_sessions_status_check',
+      sql`${table.status} in ('active', 'paused', 'completed')`,
+    ),
+    check('drill_sessions_revision_check', sql`${table.contextRevision} >= 0`),
+  ],
+);
+
+export const drillTurns = sqliteTable(
+  'drill_turns',
+  {
+    id: text().primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => drillSessions.id, { onDelete: 'cascade' }),
+    turnNo: integer('turn_no').notNull(),
+    status: text().notNull(),
+    contextHash: text('context_hash').notNull(),
+    question: text(),
+    intent: text(),
+    primaryDimension: text('primary_dimension'),
+    guidanceSlotsJson: jsonText('guidance_slots_json').notNull().default('[]'),
+    evidenceRefsJson: jsonText('evidence_refs_json').notNull().default('[]'),
+    questionTaskId: text('question_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    questionAgentRunId: text('question_agent_run_id').references(() => agentRuns.id, {
+      onDelete: 'restrict',
+    }),
+    digestTaskId: text('digest_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    digestAgentRunId: text('digest_agent_run_id').references(() => agentRuns.id, {
+      onDelete: 'restrict',
+    }),
+    createdAt: epoch('created_at').notNull(),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    unique('drill_turns_session_number_unique').on(table.sessionId, table.turnNo),
+    index('drill_turns_session_status_idx').on(table.sessionId, table.status, table.turnNo),
+    check('drill_turns_number_check', sql`${table.turnNo} >= 1`),
+    check(
+      'drill_turns_status_check',
+      sql`${table.status} in ('question_pending', 'awaiting_answer', 'digest_pending', 'ready', 'skipped', 'cancelled')`,
+    ),
+  ],
+);
+
+export const drillAnswerRevisions = sqliteTable(
+  'drill_answer_revisions',
+  {
+    id: text().primaryKey(),
+    turnId: text('turn_id')
+      .notNull()
+      .references(() => drillTurns.id, { onDelete: 'cascade' }),
+    revisionNo: integer('revision_no').notNull(),
+    answerText: text('answer_text').notNull(),
+    contentHash: text('content_hash').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    createdAt: epoch('created_at').notNull(),
+  },
+  (table) => [
+    unique('drill_answer_revisions_number_unique').on(table.turnId, table.revisionNo),
+    unique('drill_answer_revisions_idempotency_unique').on(table.turnId, table.idempotencyKey),
+    check('drill_answer_revisions_number_check', sql`${table.revisionNo} >= 1`),
+  ],
+);
+
+export const projectKnowledgeItems = sqliteTable(
+  'project_knowledge_items',
+  {
+    id: text().primaryKey(),
+    dossierId: text('dossier_id')
+      .notNull()
+      .references(() => projectDossiers.id, { onDelete: 'cascade' }),
+    sourceAnswerRevisionId: text('source_answer_revision_id')
+      .notNull()
+      .references(() => drillAnswerRevisions.id, { onDelete: 'cascade' }),
+    kind: text().notNull(),
+    statement: text().notNull(),
+    quote: text().notNull(),
+    sourceStart: integer('source_start').notNull(),
+    sourceEnd: integer('source_end').notNull(),
+    status: text().notNull(),
+    createdAt: epoch('created_at').notNull(),
+  },
+  (table) => [
+    index('project_knowledge_items_dossier_status_idx').on(
+      table.dossierId,
+      table.status,
+      table.createdAt,
+    ),
+    check(
+      'project_knowledge_items_kind_check',
+      sql`${table.kind} in ('fact', 'decision', 'metric', 'incident', 'lesson', 'ambiguity', 'conflict')`,
+    ),
+    check(
+      'project_knowledge_items_status_check',
+      sql`${table.status} in ('active', 'superseded')`,
+    ),
+    check('project_knowledge_items_start_check', sql`${table.sourceStart} >= 0`),
+    check('project_knowledge_items_end_check', sql`${table.sourceEnd} > ${table.sourceStart}`),
+  ],
+);
+
+export const drillCoverage = sqliteTable(
+  'drill_coverage',
+  {
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => drillSessions.id, { onDelete: 'cascade' }),
+    dimension: text().notNull(),
+    status: text().notNull(),
+    evidenceItemIdsJson: jsonText('evidence_item_ids_json').notNull().default('[]'),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sessionId, table.dimension] }),
+    check(
+      'drill_coverage_dimension_check',
+      sql`${table.dimension} in ('background_goal', 'personal_responsibility', 'architecture_design', 'key_implementation', 'technical_tradeoff', 'data_metrics', 'incident_debugging', 'collaboration_delivery', 'security_quality', 'reflection_evolution')`,
+    ),
+    check(
+      'drill_coverage_status_check',
+      sql`${table.status} in ('unasked', 'asked', 'evidence_partial', 'evidence_sufficient', 'needs_clarification')`,
+    ),
+  ],
+);
+
 export const syncSeenJobs = sqliteTable(
   'sync_seen_jobs',
   {

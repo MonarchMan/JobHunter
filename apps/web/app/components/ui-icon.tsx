@@ -5,6 +5,7 @@ export type IconName =
   | 'dashboard'
   | 'jobs'
   | 'profile'
+  | 'interview'
   | 'sources'
   | 'tasks'
   | 'settings'
@@ -38,6 +39,12 @@ const paths: Readonly<Record<IconName, ReactElement>> = {
     <>
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21a8 8 0 0 1 16 0" />
+    </>
+  ),
+  interview: (
+    <>
+      <path d="M4 5h16v11H9l-5 4V5Z" />
+      <path d="M8 9h8M8 12h5" />
     </>
   ),
   sources: (
