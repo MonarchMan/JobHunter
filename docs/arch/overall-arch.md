@@ -1,9 +1,9 @@
 # JobHunter 总体架构
 
 > 状态：Accepted
-> 版本：1.4.0
-> 更新日期：2026-08-29
-> 适用阶段：首期 Agent 与数据内核，以及后续 Web 管理台和面试准备演进
+> 版本：1.5.0
+> 更新日期：2026-08-30
+> 适用阶段：数据内核、Web 管理台、面试准备与后续演进
 
 ## 1. 概述
 
@@ -15,7 +15,7 @@
 
 ### 1.2 产品目标与范围
 
-JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有简历，持续聚合企业招聘官网中的有效职位，对职位进行标准化、维护和匹配，并输出可解释的候选职位列表与官网投递入口；后续在同一本地数据和 Agent 内核上提供项目拷打、历史面经和网友面经等面试准备能力。
+JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有简历，持续聚合企业招聘官网中的有效职位，对职位进行标准化、维护和匹配，并输出可解释的候选职位列表与官网投递入口；同时在同一本地数据和 Agent 内核上提供项目拷打、历史面经和网友面经等面试准备能力。
 
 #### 1.2.1 首期目标
 
@@ -54,16 +54,16 @@ JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有�
 - 不在首期拆分微服务，不引入 Redis、Kafka 等额外基础设施。
 - 不保证采集所有历史职位，只维护系统开始运行后可观察到的数据。
 
-#### 1.2.4 面试准备演进范围
+#### 1.2.4 面试准备范围
 
-面试准备作为后续独立业务能力推进：
+面试准备作为独立业务能力推进；浅档、个人面经、规格 023 深档和规格 024 网友面经研究闭环均已有对应实现：
 
 - 围绕简历中的单个项目渐进式提问，按版本化档位选择简历、用户回答和显式项目资料作为上下文。
 - 导入并解析用户自己的面试经历文档，形成可审核的历史面经。
 - 按目标岗位生成公开面经研究 Brief，导入人工或外部 Agent 返回的带来源研究包，形成网友面经。
 - 将问答、事实缺口、矛盾和准备建议保存为结构化数据，并生成本地 Markdown 准备文档。
 
-该能力只负责提问、指出缺口和给出准备建议，不代替用户回答，不扫描项目源码，不修改或接管简历中的实际项目，也不提供真实面试中的实时提词或代答。详细设计见 [面试准备、简历项目拷打与面经知识库设计](./interview-preparation.md)。
+当前深档只接受用户在项目档案页显式上传的 Markdown/MDX，并由应用层选择有限片段；不接收或扫描项目目录，内部 Agent 工具集为空。当前自动研究执行器只有本机 `codex-local@v1`，人工 Prompt/Schema 导出和 JSON Bundle 导入始终可用。该能力只负责提问、指出缺口和给出准备建议，不代替用户回答，不修改或接管简历中的实际项目，也不提供真实面试中的实时提词或代答。详细设计见 [面试准备、简历项目拷打与面经知识库设计](./interview-preparation.md)。
 
 ## 2. 架构目标与原则
 
@@ -117,16 +117,16 @@ JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有�
 flowchart LR
     U["个人用户"]
     CLI["JobHunter CLI"]
-    WEB["Web 管理台（后续）"]
+    WEB["Web 管理台"]
     SYS["JobHunter 核心系统"]
     SITES["企业招聘官网"]
     LLM["LLM 服务"]
     FILES["本地简历文件"]
 
     U --> CLI
-    U -. 后续 .-> WEB
+    U --> WEB
     CLI --> SYS
-    WEB -. 后续 .-> SYS
+    WEB --> SYS
     FILES --> SYS
     SYS --> SITES
     SYS --> LLM
@@ -146,7 +146,7 @@ flowchart TB
     subgraph Entry["进程入口"]
         CLI["CLI"]
         WORKER["Worker"]
-        WEB["Web（后续）"]
+        WEB["Web"]
     end
 
     subgraph App["应用层"]
@@ -155,6 +155,7 @@ flowchart TB
         MATCH_APP["职位匹配用例"]
         TASK_APP["任务调度用例"]
         QUERY_APP["查询与导出用例"]
+        INTERVIEW_APP["面试准备用例"]
     end
 
     subgraph Domain["领域层"]
@@ -162,12 +163,14 @@ flowchart TB
         PROFILE_DOMAIN["候选人画像领域"]
         MATCH_DOMAIN["匹配领域"]
         TASK_DOMAIN["任务领域"]
+        INTERVIEW_DOMAIN["面试准备领域"]
     end
 
     subgraph Ports["端口"]
         APP_PORT["应用端口：Repository / Parser / Logger"]
         SOURCE_PORT["来源契约：JobSourceAdapter"]
         AGENT_PORT["Agent 契约：ModelClient / Tool"]
+        RESEARCH_PORT["应用端口：ExternalResearchExecutor"]
         DOMAIN_PORT["领域抽象：Clock / ID"]
     end
 
@@ -177,11 +180,12 @@ flowchart TB
         MODELS["模型供应商适配器"]
         PARSERS["PDF / DOCX / Text 解析"]
         LOGGING["Pino 日志与运行记录"]
+        CODEX["Codex 本机研究适配器"]
     end
 
     CLI --> App
     WORKER --> App
-    WEB -. 后续 .-> App
+    WEB --> App
     App --> Domain
     App --> Ports
     SOURCES --> SOURCE_PORT
@@ -189,6 +193,7 @@ flowchart TB
     MODELS --> AGENT_PORT
     PARSERS --> APP_PORT
     LOGGING --> APP_PORT
+    CODEX --> RESEARCH_PORT
 ```
 
 依赖方向必须保持为：
@@ -209,20 +214,18 @@ flowchart TB
 JobHunter/
 ├─ apps/
 │  ├─ cli/                    # 面向用户的命令行入口
-│  ├─ worker/                 # 调度、同步、重试和后台计算
-│  └─ web/                    # 第二阶段加入
+│  ├─ worker/                 # 调度、同步、重试、后台计算与 Codex 研究适配器
+│  └─ web/                    # 管理台与面试准备交互
 ├─ packages/
-│  ├─ domain/                 # 纯领域实体、值对象、规则、Clock/ID 抽象
-│  ├─ application/            # 用例编排、应用端口和事务边界
-│  ├─ db/                     # Drizzle schema、迁移和仓储实现
+│  ├─ domain/                 # 纯领域实体、值对象、面试 Schema、Clock/ID 抽象
+│  ├─ application/            # 用例编排、面试上下文构建、应用端口和事务边界
+│  ├─ db/                     # Drizzle schema、通用文件实体、迁移和仓储实现
 │  ├─ source-core/            # 来源协议、同步引擎、限流和标准化
 │  ├─ sources/                # 企业官网或通用 ATS 适配器
 │  ├─ resume/                 # 文件解析、画像提取和人工修正规则
 │  ├─ matching/               # 硬过滤、评分、排序和解释数据
-│  ├─ interview/              # 项目拷打档位、面经解析、研究包和检索策略
 │  ├─ agent-core/             # 轻量 Agent 运行时
 │  ├─ llm/                    # 模型供应商、结构化输出和缓存
-│  ├─ external-agents/        # 后续可选的本地外部 Agent 执行适配器
 │  ├─ observability/          # 日志、事件、指标和脱敏
 │  └─ testkit/                # 固定样本、伪时钟、假模型和测试工厂
 ├─ docs/
@@ -244,19 +247,19 @@ JobHunter/
 
 内部包依赖必须符合：
 
-| 包                                       | 允许依赖的内部包                                       |
-| ---------------------------------------- | ------------------------------------------------------ |
-| `domain`                                 | 无                                                     |
-| `source-core`                            | `domain`                                               |
-| `agent-core`                             | 无业务包                                               |
-| `resume`、`matching`、`interview`        | `domain`、`agent-core` 的公开协议                      |
-| `application`                            | `domain`、`source-core`、`agent-core`、业务能力包      |
-| `sources`                                | `domain`、`source-core`                                |
-| `llm`                                    | `agent-core`                                           |
-| `db`、`observability`、`external-agents` | `domain`、`application`、`agent-core` 中需要实现的端口 |
-| `apps/*`                                 | 仅用于装配，可依赖所需包                               |
+| 包                    | 允许依赖的内部包                                       |
+| --------------------- | ------------------------------------------------------ |
+| `domain`              | 无                                                     |
+| `source-core`         | `domain`                                               |
+| `agent-core`          | 无业务包                                               |
+| `resume`、`matching`  | `domain`、`agent-core` 的公开协议                      |
+| `application`         | `domain`、`source-core`、`agent-core`、业务能力包      |
+| `sources`             | `domain`、`source-core`                                |
+| `llm`                 | `agent-core`                                           |
+| `db`、`observability` | `domain`、`application`、`agent-core` 中需要实现的端口 |
+| `apps/*`              | 仅用于装配，可依赖所需包                               |
 
-任何内部包都不得依赖 `apps/*`；`application` 不得依赖 `db`、`sources`、`llm`、`observability` 或 `external-agents` 的具体实现。
+任何内部包都不得依赖 `apps/*`；`application` 不得依赖 `db`、`sources`、`llm`、`observability` 或 Codex CLI 的具体实现。当前 Codex 研究适配器位于 Worker 进程入口并实现 application 端口；需要跨入口复用时再提取独立基础设施包。
 
 ### 4.2 技术基线
 
@@ -265,7 +268,7 @@ JobHunter/
 | 运行时与语言 | Node.js 24 LTS、TypeScript strict       |
 | Workspace    | pnpm workspace                          |
 | Schema       | Zod                                     |
-| SQLite       | better-sqlite3、Drizzle ORM、FTS5       |
+| SQLite       | better-sqlite3、Drizzle ORM             |
 | CLI          | Commander.js                            |
 | 采集         | fetch、HTML 解析；必要时 Playwright     |
 | 日志         | Pino，经 SafeLogger 脱敏包装            |
@@ -287,7 +290,6 @@ CLI 用于：
 - 手动触发单个或全部来源同步。
 - 查询、筛选和导出职位。
 - 运行匹配和查看解释。
-- 管理项目拷打会话、导入历史面经并导出网友面经研究 Prompt。
 - 查看任务、来源健康度和失败信息。
 
 CLI 调用应用层用例，不得复制 Worker 中的业务逻辑。
@@ -299,15 +301,16 @@ Worker 用于：
 - 轮询 SQLite 中的到期任务。
 - 按计划执行来源同步。
 - 执行失败重试、语义增强和匹配重算。
-- 执行面试问题生成、回答摘要、面经解析、资料索引和可选的外部研究任务。
+- 执行面试问题生成、回答摘要、Markdown 准备文档投影和外部网友面经研究任务。
 - 恢复进程异常退出时遗留的超时任务。
 - 维护来源健康状态和同步游标。
 
 Worker 可以并发执行网络读取，但写入 SQLite 时必须使用短事务并限制写并发。
+外部 Codex 研究除使用 ResearchRequest 级任务并发键外，还在 Worker 进程内施加全局单并发，避免多个 CLI 子进程同时扩大网络与本机资源占用。
 
 #### 4.3.3 Web 启动器与 Web 进程
 
-Web 启动器负责启动 Web 进程和独立 Worker 子进程，并在任一子进程退出时联动关闭另一个。Web 管理台复用应用层与仓储端口，主要提供查询、筛选、配置和手动操作；后续也承载项目拷打交互、面经导入预览和研究结果审核。耗时采集、模型、文档解析或外部 Agent 任务只入队，不在 HTTP 请求中执行。
+Web 启动器负责启动 Web 进程和独立 Worker 子进程，并在任一子进程退出时联动关闭另一个。Web 管理台复用应用层与仓储端口，提供查询、筛选、配置、项目拷打、个人面经导入和网友面经研究审核。模型或外部 Agent 等耗时任务只入队，不在 HTTP 请求中执行；显式 Markdown 上传只在边界完成有上限的清洗、分块和文件版本登记，不产生专用后台预处理任务。
 
 ```mermaid
 flowchart LR
@@ -319,6 +322,7 @@ flowchart LR
     APP --> DB[("SQLite WAL")]
     WORKER --> SITE["招聘官网"]
     WORKER --> MODEL["LLM 服务"]
+    WORKER --> RESEARCH["本机 Codex / 公开网页"]
 ```
 
 ## 5. 核心领域模型
@@ -606,6 +610,8 @@ Agent 用于提取隐含要求、识别加分项、解释匹配依据以及生�
 - `ResumeProfileAgent`：将简历文本转为结构化候选人画像。
 - `JobUnderstandingAgent`：提取规则难以稳定获得的 JD 语义信息。
 - `JobAdviceAgent`：基于职位、画像和确定性评分生成解释与建议。
+- `interview.project-question@v1` / `interview.project-question-docs@v1`：在浅档或已选 Markdown 片段上生成一个可追溯问题，二者工具集均为空。
+- `interview.project-answer-digest@v1`：只从用户回答中抽取知识项、歧义、冲突和覆盖变化，不生成代答。
 
 #### 7.3.3 运行约束
 
@@ -622,12 +628,15 @@ Agent 用于提取隐含要求、识别加分项、解释匹配依据以及生�
 面试准备复用候选人画像、Artifact Store、轻量 Agent 和 Worker，但拥有独立的数据生命周期：
 
 1. 用户从不可变 ProfileVersion 中选择项目并创建稳定 `ProjectDossier`，避免用画像项目数组下标作为长期身份。
-2. “浅”“深”等档位由版本化 Profile 声明允许的上下文、工具、指令包和预算；档位升级不隐式获得任意文件或网络权限。
-3. 深档只使用用户显式选择并生成内容快照的 Markdown 资料；内部 Agent 不获得项目目录、源码、Git 或 Shell 能力。
-4. 每轮问题、原始回答、回答修订、知识项、冲突和证据分开保存；模型推导不能覆盖用户回答或候选人画像。
-5. 个人面经的标准 Markdown 模板、文件导入和在线填写汇入同一版本化清洗管线；原文件与提取文本不可变，规则解析只生成可编辑草稿，用户确认后才进入历史面经。
-6. 个人面经和网友面经共享查询投影，但保留不同来源和审核策略。网友内容必须带 URL、时间和短摘录，并始终视为外部陈述。
-7. 网上搜集先支持 Prompt/Schema 导出和研究包导入；后续本地外部 Agent 通过应用端口和 Worker 调用，只能生成待审核 Artifact，不能直接写业务表。
+2. “浅”“深”等档位由版本化 Profile 声明允许的上下文和证据种类；档位升级不隐式获得任意文件或网络权限，当前浅档与深档 Agent 的工具集都为空。
+3. 深档只接受用户在档案页显式上传的 Markdown/MDX。资料版本复用 `files → file_entity_mappings → entities`；映射元数据保存标题分块，应用层按命中数、文件顺序和字符位置执行有界确定性排序，不建立专用资料表或预处理任务。
+4. 会话冻结 1–8 个精确 file/version/entity/hash 绑定；内部 Agent 只接收选中片段，不获得项目目录、源码、Git、Shell、任意文件或网络能力。
+5. 每轮问题、原始回答、回答修订、知识项、冲突和证据分开保存；模型推导不能覆盖用户回答或候选人画像。
+6. 个人面经的标准 Markdown 模板、文件导入和在线填写汇入同一版本化清洗管线；原文件与提取文本不可变，规则解析只生成可编辑草稿，用户确认后才进入历史面经。
+7. 个人面经和网友面经共享查询投影，但保留不同来源和审核策略。网友内容必须带 URL、时间和短摘录，并始终视为外部陈述。
+8. 网友面经以 `ExperienceResearchRequest` 保存研究意图，Prompt、JSON Schema 和 Bundle 都是通用文件版本；预览和执行读取请求冻结的精确 Prompt/Schema 版本，人工导包和 Worker 调用 `codex-local@v1` 汇入同一 Bundle Importer，只有人工接受后才出现在网友面经。
+9. 外部研究通过持久化 `Task` 执行，只能返回待审核文件；Codex 适配器只保留原生实时网页搜索并禁用本地读取、浏览器自动化和可扩展工具，不能直接访问 Repository 或写业务表。Bundle 以短租约 claim、事务外 staging 写入和短事务原子提升完成并发闭环。`experience-informed` Profile 尚未实现，不能把已接受面经自动加入项目拷打上下文。
+10. 面试问题、摘要和研究 Task 的首次入队与业务引用由 SQLite 协调器在同一短事务完成；手工重试原子重绑当前 Task。Worker 最终业务提交重验 Task 身份、running/未取消状态，回答已保存但摘要任务尚未发布时可按幂等 token 恢复。
 
 SQLite 是结构化状态的权威数据源；每个项目的 Markdown 准备文档是可重建投影，不形成双写权威。完整功能、数据对象、任务类型、安全约束与分阶段路线见 [面试准备、简历项目拷打与面经知识库设计](./interview-preparation.md)。
 
@@ -665,7 +674,7 @@ Worker 使用带过期时间的任务租约。进程异常退出后，其他 Wor
 
 #### 8.1.3 文件存储
 
-大体积原始响应、简历原文件、项目资料快照、面经原文件、研究包、面试准备 Markdown 和导出结果保存在本地 `var/`，SQLite 保存路径、哈希、媒体类型和元数据。小型结构化 JSON 可以直接存入 SQLite。
+简历原文件、项目 Markdown、面经原文件、研究 Prompt/Schema/Bundle、面试准备 Markdown 和导出结果统一使用通用文件实体：`files` 保存逻辑文件及业务属性，`file_entity_mappings` 保存最多 5 个版本、解析状态、规范化文本和类型相关元数据，`entities` 保存按 SHA-256 去重的物理文件路径、媒体类型和大小。项目资料的标题、字符范围和分块哈希位于 mapping metadata，不建立专用资料版本表。小型结构化 JSON 可以直接存入 SQLite。
 
 所有文件写入先写临时文件，再原子替换目标文件，避免进程中断留下半文件。
 
@@ -738,7 +747,7 @@ CLI 临时参数 > 环境变量 > 本地配置文件 > 内置默认值
 - 原始页面中与职位无关的个人信息不进入领域数据。
 - 简历默认仅保存在本地，发送给 LLM 的内容应限于当前任务所需字段。
 - 项目拷打默认只发送单个项目的最小快照；深档只增加当前问题命中的显式 Markdown 资料片段，不读取源码。
-- 外部研究 Agent 默认不接收完整简历、个人面经答案、项目目录或 SQLite 路径，输出必须经 Schema 校验和人工审核。
+- 外部研究 Agent 默认不接收完整简历、个人面经答案、项目目录或 SQLite 路径；当前 Codex 适配器以 strict config 禁用 Shell、统一执行、本地/外部浏览器、Computer Use、多 Agent/Goal、授权请求、插件、App、Skill、本地图片和工作区依赖工具，输出必须经 Schema 校验和人工审核。
 - 公开面经搜集遵守站点条款、robots、访问控制和频率限制，不绕过登录、付费墙或验证码，不默认镜像第三方全文。
 - 提供删除或清理简历、Agent 运行输入和导出文件的显式维护能力。
 - 官网投递链接必须保留原始来源，系统不伪装为招聘方。
@@ -787,18 +796,18 @@ CLI 临时参数 > 环境变量 > 本地配置文件 > 内置默认值
 
 ### 9.5 关键风险与缓解措施
 
-| 风险                     | 影响                       | 缓解措施                                                  |
-| ------------------------ | -------------------------- | --------------------------------------------------------- |
-| 官网接口或页面频繁变化   | 来源同步失败或字段错误     | 固定样本、健康检查、解析错误隔离、来源级开关              |
-| 页面缺失被误判为职位关闭 | 丢失有效候选职位           | 仅完整同步可增加缺失计数，引入 `stale` 过渡状态           |
-| SQLite 写锁竞争          | Worker 或后续 Web 请求超时 | WAL、短事务、单写并发、任务租约、可迁移仓储端口           |
-| LLM 输出不稳定           | 画像和建议不一致           | Schema 校验、版本化 Prompt、缓存、评测集、人工修正锁定    |
-| Agent 成本失控           | 批量职位分析费用过高       | 内容哈希缓存、先规则过滤、预算限制、只处理变化数据        |
-| 适配器重复实现           | 维护成本上升               | 先实现公司适配器，确认共同协议后提取 ATS 公共层           |
-| 敏感简历泄露             | 隐私风险                   | 本地存储、最小化发送、结构化脱敏、禁止正文日志            |
-| 项目拷打越权读取源码     | 扩大隐私与产品责任边界     | 显式资料清单、不可变 Markdown 快照、无 Shell/任意文件工具 |
-| 网友面经失真或来源污染   | 准备方向错误、混淆用户事实 | 来源引用、人工审核、近重复聚类、外部陈述与用户事实分层    |
-| 外部 Agent 权限过大      | 本地文件或凭证暴露         | 受控临时目录、最小权限、应用端口、结果隔离后再校验        |
+| 风险                     | 影响                       | 缓解措施                                               |
+| ------------------------ | -------------------------- | ------------------------------------------------------ |
+| 官网接口或页面频繁变化   | 来源同步失败或字段错误     | 固定样本、健康检查、解析错误隔离、来源级开关           |
+| 页面缺失被误判为职位关闭 | 丢失有效候选职位           | 仅完整同步可增加缺失计数，引入 `stale` 过渡状态        |
+| SQLite 写锁竞争          | Worker 或 Web 请求超时     | WAL、短事务、单写并发、任务租约、可迁移仓储端口        |
+| LLM 输出不稳定           | 画像和建议不一致           | Schema 校验、版本化 Prompt、缓存、评测集、人工修正锁定 |
+| Agent 成本失控           | 批量职位分析费用过高       | 内容哈希缓存、先规则过滤、预算限制、只处理变化数据     |
+| 适配器重复实现           | 维护成本上升               | 先实现公司适配器，确认共同协议后提取 ATS 公共层        |
+| 敏感简历泄露             | 隐私风险                   | 本地存储、最小化发送、结构化脱敏、禁止正文日志         |
+| 项目拷打越权读取源码     | 扩大隐私与产品责任边界     | 显式 Markdown 上传、冻结文件版本、空 Agent 工具集      |
+| 网友面经失真或来源污染   | 准备方向错误、混淆用户事实 | 来源引用、确定性指纹、人工审核、外部陈述与用户事实分层 |
+| 外部 Agent 权限过大      | 本地文件或凭证暴露         | 受控临时目录、最小权限、应用端口、结果隔离后再校验     |
 
 ## 10. 演进与架构治理
 
@@ -840,12 +849,17 @@ CLI 临时参数 > 环境变量 > 本地配置文件 > 内置默认值
 - 简历画像查看与修正。
 - 来源配置、同步记录和任务状态。
 
-#### 10.1.7 后续扩展
+#### 10.1.7 已实现的面试准备增量
+
+- 浅档项目拷打、问答文档和个人面经导入由规格 020、021 落地。
+- [规格 023](../../specs/023-deep-project-drill/spec.md) 已落地显式 Markdown/MDX、通用文件实体版本、`docs-grounded@v1`、应用内有界排序和深档 Web 闭环；当前代码位于 `packages/domain/src/interview/project-drill.ts`、`packages/application/src/interview`、`packages/db/src/repositories/interview-project-repository.ts` 与项目档案 Web 路由/工作台。
+- [规格 024](../../specs/024-community-experience-research/spec.md) 已落地 `ExperienceResearchRequest`、通用 Prompt/Schema/Bundle 文件、人工导包、Codex Task、候选审核和网友面经读取；当前代码位于 `packages/domain/src/interview/community-research.ts`、`packages/application/src/interview/` 的研究服务与 Handler、`packages/db/src/repositories/interview-research-repository.ts`、`apps/worker/src/codex-research-executor.ts` 与研究 Web 路由/页面。
+
+#### 10.1.8 后续扩展
 
 - BOSS 直聘等统一招聘渠道。
-- 面试准备 I1：浅档项目拷打、问答文档、个人面经导入、网友面经 Prompt/Bundle 闭环。
-- 面试准备 I2：显式 Markdown 资料快照、深档拷打和已审核面经辅助。
-- 面试准备 I3：受限的 Codex、Claude Code 等本地外部研究执行适配器。
+- 已接受面经辅助的 `experience-informed` Profile；该档位当前未实现。
+- Claude Code 等其他本地研究适配器、可靠续跑和授权协议；当前自动执行器只有 `codex-local@v1`。
 - 更细化的岗位建议、拷打档位与简历定制 Agent。
 - 浏览器辅助投递，但仍要求用户确认关键操作。
 - PostgreSQL 存储适配器和多用户能力。
@@ -901,7 +915,7 @@ specs/
 后续实现满足以下条件时，视为符合本总体架构：
 
 - 新增官网来源不需要修改职位、画像或匹配领域规则。
-- CLI 和未来 Web 复用同一应用层用例。
+- CLI 和 Web 复用同一应用层用例。
 - 官网或 LLM 暂时不可用时，已有数据仍可查询和评分。
 - 重复执行同步和匹配不会生成重复事实或无意义版本。
 - 任一职位状态与匹配结果都能追溯到来源、输入版本和规则版本。

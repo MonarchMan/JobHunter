@@ -502,7 +502,6 @@ export const webSourceSyncTaskDetailSchema = z
         stats: z
           .object({
             discovered: z.number().int().nonnegative(),
-            rawStored: z.number().int().nonnegative(),
             created: z.number().int().nonnegative(),
             revised: z.number().int().nonnegative(),
             unchanged: z.number().int().nonnegative(),

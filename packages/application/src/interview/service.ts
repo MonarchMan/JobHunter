@@ -9,6 +9,7 @@ import {
   parseId,
   type Clock,
   type ContentHash,
+  type DrillAnswerRevisionId,
   type DrillSessionId,
   type DrillTurnId,
   type IdGenerator,
@@ -24,11 +25,20 @@ import type {
   ProjectDossierDetail,
   ProjectDossierSummary,
 } from '../ports/interview-projects.js';
+import {
+  InterviewTaskPublicationConflictError,
+  type InterviewTaskPublisher,
+} from '../ports/interview-task-publisher.js';
 import type { EnqueueTaskResult, TaskRecord } from '../tasks/model.js';
 import type { TaskService } from '../tasks/task-service.js';
 import { latestTurn, questionContextHash } from './context.js';
-import { projectAnswerDigestAgentDefinition, projectQuestionAgentDefinition } from './agents.js';
-import { resumeOnlyDrillProfile, resumeOnlyDrillProfileDefinitionHash } from './profile.js';
+import {
+  docsGroundedProjectQuestionAgentDefinition,
+  projectAnswerDigestAgentDefinition,
+  projectQuestionAgentDefinition,
+} from './agents.js';
+import { ProjectMaterialService } from './material.js';
+import { drillProfile, drillProfileDefinitionHash, type DrillProfileKey } from './profile.js';
 
 export class ProjectDossierNotFoundError extends Error {
   public constructor() {
@@ -76,6 +86,8 @@ export interface DossierDeletionImpact {
     readonly answerRevisions: number;
     readonly knowledgeItems: number;
     readonly notebookArtifacts: number;
+    readonly materialFiles: number;
+    readonly materialArtifacts: number;
   };
 }
 
@@ -93,23 +105,50 @@ function impact(snapshot: DossierDeletionSnapshot): DossierDeletionImpact {
       answerRevisions: snapshot.answerRevisionIds.length,
       knowledgeItems: snapshot.knowledgeItemIds.length,
       notebookArtifacts: snapshot.notebookArtifactId && !snapshot.notebookShared ? 1 : 0,
+      materialFiles: snapshot.materialFileIds.length,
+      materialArtifacts: snapshot.materialArtifacts.filter((artifact) => !artifact.shared).length,
     },
   };
+}
+
+function exclusiveDeletionArtifacts(
+  snapshot: DossierDeletionSnapshot,
+): readonly { readonly id: string; readonly relativePath: string }[] {
+  const artifacts = new Map<string, string>();
+  const add = (id: string, relativePath: string): void => {
+    const existing = artifacts.get(id);
+    if (existing !== undefined && existing !== relativePath) {
+      throw new TypeError('Project deletion artifact path is inconsistent.');
+    }
+    artifacts.set(id, relativePath);
+  };
+  if (snapshot.notebookArtifactId && snapshot.notebookRelativePath && !snapshot.notebookShared) {
+    add(snapshot.notebookArtifactId, snapshot.notebookRelativePath);
+  }
+  for (const artifact of snapshot.materialArtifacts) {
+    if (!artifact.shared) add(artifact.id, artifact.relativePath);
+  }
+  return [...artifacts]
+    .map(([id, relativePath]) => ({ id, relativePath }))
+    .toSorted((left, right) => left.id.localeCompare(right.id));
 }
 
 export class InterviewProjectService {
   readonly #profiles: CandidateProfileRepository;
   readonly #repository: InterviewProjectRepository;
   readonly #tasks: TaskService;
+  readonly #taskPublisher: InterviewTaskPublisher;
   readonly #clock: Clock;
   readonly #ids: IdGenerator;
   readonly #artifacts: ArtifactStore | null;
   readonly #notebooks: ProjectNotebookReader | null;
+  readonly #materials: ProjectMaterialService | null;
 
   public constructor(input: {
     readonly profiles: CandidateProfileRepository;
     readonly repository: InterviewProjectRepository;
     readonly tasks: TaskService;
+    readonly taskPublisher: InterviewTaskPublisher;
     readonly clock: Clock;
     readonly ids: IdGenerator;
     readonly artifacts?: ArtifactStore;
@@ -118,10 +157,18 @@ export class InterviewProjectService {
     this.#profiles = input.profiles;
     this.#repository = input.repository;
     this.#tasks = input.tasks;
+    this.#taskPublisher = input.taskPublisher;
     this.#clock = input.clock;
     this.#ids = input.ids;
     this.#artifacts = input.artifacts ?? null;
     this.#notebooks = input.notebooks ?? null;
+    this.#materials = input.artifacts
+      ? new ProjectMaterialService({
+          repository: input.repository,
+          artifacts: input.artifacts,
+          ids: input.ids,
+        })
+      : null;
   }
 
   public listAvailableProjects(): readonly AvailableResumeProject[] {
@@ -196,28 +243,77 @@ export class InterviewProjectService {
     return { dossier: summary, deduplicated: created.deduplicated };
   }
 
-  public startSession(dossierIdValue: string): {
+  public async importMaterial(input: {
+    readonly dossierId: string;
+    readonly fileName: string;
+    readonly bytes: Uint8Array;
+    readonly signal: AbortSignal;
+  }): ReturnType<ProjectMaterialService['import']> {
+    if (!this.#materials) throw new TypeError('Project material import is unavailable.');
+    return this.#materials.import({
+      ...input,
+      dossierId: parseId(input.dossierId, 'ProjectDossier'),
+      createdAt: this.#clock.now(),
+    });
+  }
+
+  public startSession(
+    dossierIdValue: string,
+    input: {
+      readonly profileKey?: DrillProfileKey;
+      readonly materialFileIds?: readonly string[];
+    } = {},
+  ): {
     readonly sessionId: DrillSessionId;
     readonly deduplicated: boolean;
   } {
     const dossierId = parseId(dossierIdValue, 'ProjectDossier');
     const detail = this.#repository.getDossier(dossierId);
     if (!detail) throw new ProjectDossierNotFoundError();
+    const profileKey = input.profileKey ?? 'resume-only';
+    const profile = drillProfile(profileKey);
+    const fileIds = [...new Set(input.materialFileIds ?? [])];
+    if (profileKey === 'resume-only' && fileIds.length > 0) {
+      throw new InterviewProjectConflictError(
+        'Resume-only sessions cannot bind project materials.',
+      );
+    }
+    if (profileKey === 'docs-grounded' && (fileIds.length < 1 || fileIds.length > 8)) {
+      throw new InterviewProjectConflictError('Docs-grounded sessions require 1 to 8 materials.');
+    }
+    const materialBindings =
+      profileKey === 'docs-grounded'
+        ? this.#repository.resolveMaterialBindings(dossierId, fileIds)
+        : [];
+    if (materialBindings.length !== fileIds.length) {
+      throw new InterviewProjectConflictError('Selected project material is unavailable.');
+    }
     const existing = detail.sessionRecords.find((session) => session.status !== 'completed');
-    if (existing) return { sessionId: existing.id, deduplicated: true };
+    if (existing) {
+      if (
+        existing.profileKey === profileKey &&
+        JSON.stringify(existing.materialBindings) === JSON.stringify(materialBindings)
+      ) {
+        return { sessionId: existing.id, deduplicated: true };
+      }
+      throw new InterviewProjectConflictError(
+        'Complete the current drill session before changing profile or materials.',
+      );
+    }
     const now = this.#clock.now();
     const sessionId = parseId(this.#ids.generate(), 'DrillSession');
     this.#repository.createSession({
       session: {
         id: sessionId,
         dossierId,
-        profileKey: resumeOnlyDrillProfile.key,
-        profileVersion: resumeOnlyDrillProfile.version,
-        profileDefinitionHash: resumeOnlyDrillProfileDefinitionHash,
+        profileKey: profile.key,
+        profileVersion: profile.version,
+        profileDefinitionHash: drillProfileDefinitionHash(profileKey),
         capabilitySummary: {
-          evidenceKinds: resumeOnlyDrillProfile.evidenceKinds,
-          tools: resumeOnlyDrillProfile.tools,
+          evidenceKinds: profile.evidenceKinds,
+          tools: profile.tools,
         },
+        materialBindings,
         status: 'active',
         contextRevision: 0,
         createdAt: now,
@@ -290,22 +386,29 @@ export class InterviewProjectService {
     turnNo: number,
     contextHash: ContentHash,
   ): InterviewTaskAccepted {
-    const result = this.#tasks.enqueue({
-      taskType: 'interview.project-question',
-      payload: {
-        dossierId: session.dossierId,
-        sessionId: session.id,
+    let result: EnqueueTaskResult;
+    try {
+      result = this.#taskPublisher.publishProjectQuestion({
+        command: {
+          taskType: 'interview.project-question',
+          payload: {
+            dossierId: session.dossierId,
+            sessionId: session.id,
+            turnId,
+            expectedContextRevision: session.contextRevision,
+            contextHash,
+          },
+          idempotencyKey: `interview.project-question:${session.id}:${String(turnNo)}:${contextHash}`,
+        },
         turnId,
-        expectedContextRevision: session.contextRevision,
-        contextHash,
-      },
-      idempotencyKey: `interview.project-question:${session.id}:${String(turnNo)}:${contextHash}`,
-    });
-    this.#repository.attachQuestionTask({
-      turnId,
-      taskId: result.task.id,
-      now: this.#clock.now(),
-    });
+        now: this.#clock.now(),
+      });
+    } catch (error) {
+      if (error instanceof InterviewTaskPublicationConflictError) {
+        throw new InterviewProjectConflictError('另一个面试任务仍在收尾，请稍后重试。');
+      }
+      throw error;
+    }
     return accepted(result);
   }
 
@@ -335,6 +438,16 @@ export class InterviewProjectService {
       const task = this.#tasks.get(turn.digestTaskId);
       if (task) return { task, deduplicated: true };
     }
+    if (existingAnswer && turn.status === 'digest_pending' && turn.digestTaskId === null) {
+      const recovered = this.#enqueueAnswerDigest({
+        dossierId: session.dossierId,
+        sessionId,
+        turnId,
+        answerRevisionId: existingAnswer.id,
+      });
+      this.enqueueNotebook(session.dossierId);
+      return accepted(recovered);
+    }
     assertCanSubmitAnswer(session.status, turn.status);
     const now = this.#clock.now();
     const result = this.#repository.appendAnswer({
@@ -358,19 +471,43 @@ export class InterviewProjectService {
       const task = this.#tasks.get(refreshedTurn.digestTaskId);
       if (task) return { task, deduplicated: true };
     }
-    const queued = this.#tasks.enqueue({
-      taskType: 'interview.project-answer-digest',
-      payload: {
-        dossierId: session.dossierId,
-        sessionId,
-        turnId,
-        answerRevisionId: result.answer.id,
-      },
-      idempotencyKey: `interview.project-answer-digest:${result.answer.id}`,
+    const queued = this.#enqueueAnswerDigest({
+      dossierId: session.dossierId,
+      sessionId,
+      turnId,
+      answerRevisionId: result.answer.id,
     });
-    this.#repository.attachDigestTask({ turnId, taskId: queued.task.id, now: this.#clock.now() });
     this.enqueueNotebook(session.dossierId);
     return accepted(queued);
+  }
+
+  #enqueueAnswerDigest(input: {
+    readonly dossierId: ProjectDossierId;
+    readonly sessionId: DrillSessionId;
+    readonly turnId: DrillTurnId;
+    readonly answerRevisionId: DrillAnswerRevisionId;
+  }): EnqueueTaskResult {
+    try {
+      return this.#taskPublisher.publishProjectAnswerDigest({
+        command: {
+          taskType: 'interview.project-answer-digest',
+          payload: {
+            dossierId: input.dossierId,
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            answerRevisionId: input.answerRevisionId,
+          },
+          idempotencyKey: `interview.project-answer-digest:${input.answerRevisionId}`,
+        },
+        turnId: input.turnId,
+        now: this.#clock.now(),
+      });
+    } catch (error) {
+      if (error instanceof InterviewTaskPublicationConflictError) {
+        throw new InterviewProjectConflictError('另一个面试任务仍在收尾，请稍后重试。');
+      }
+      throw error;
+    }
   }
 
   public skipTurn(turnIdValue: string): void {
@@ -472,7 +609,11 @@ export class InterviewProjectService {
   public async deleteConfirmed(input: {
     readonly dossierId: string;
     readonly expectedImpactHash: string;
-  }): Promise<{ readonly impactHash: string; readonly pendingArtifactPurgeId: string | null }> {
+  }): Promise<{
+    readonly impactHash: string;
+    readonly pendingArtifactPurgeId: string | null;
+    readonly pendingArtifactPurgeIds: readonly string[];
+  }> {
     const current = this.previewDeletion(input.dossierId);
     if (current.impactHash !== input.expectedImpactHash) {
       throw new InterviewProjectConflictError('Project dossier deletion impact changed.');
@@ -485,43 +626,60 @@ export class InterviewProjectService {
         if (task?.status === 'pending' || task?.status === 'running') this.#tasks.cancel(task.id);
       }
     }
-    let quarantined: QuarantinedArtifact | null = null;
-    if (
-      !current.snapshot.notebookShared &&
-      current.snapshot.notebookArtifactId &&
-      current.snapshot.notebookRelativePath
-    ) {
-      if (!this.#artifacts) throw new TypeError('Project notebook deletion is unavailable.');
-      quarantined = await this.#artifacts.quarantine(
-        current.snapshot.notebookArtifactId,
-        current.snapshot.notebookRelativePath,
-      );
-    }
+    const deletionArtifacts = exclusiveDeletionArtifacts(current.snapshot);
+    const artifactStore = this.#artifacts;
+    const quarantined: QuarantinedArtifact[] = [];
     try {
+      if (deletionArtifacts.length > 0) {
+        if (!artifactStore) throw new TypeError('Project artifact deletion is unavailable.');
+        for (const artifact of deletionArtifacts) {
+          quarantined.push(await artifactStore.quarantine(artifact.id, artifact.relativePath));
+        }
+      }
       const deleted = this.#repository.deleteDossier({
         expected: current.snapshot,
-        quarantinedArtifact: quarantined,
+        quarantinedArtifacts: quarantined,
         deletedAt: this.#clock.now(),
       });
       if (!deleted)
         throw new InterviewProjectConflictError('Project dossier deletion impact changed.');
     } catch (error) {
-      if (quarantined && this.#artifacts) await this.#artifacts.restoreQuarantined(quarantined);
+      const restoreErrors: unknown[] = [];
+      for (const artifact of quarantined.toReversed()) {
+        try {
+          await this.#artifacts?.restoreQuarantined(artifact);
+        } catch (restoreError) {
+          restoreErrors.push(restoreError);
+        }
+      }
+      if (restoreErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...restoreErrors],
+          'Project dossier deletion rollback failed.',
+        );
+      }
       throw error;
     }
-    if (quarantined && this.#artifacts) {
+    const pendingArtifactPurgeIds: string[] = [];
+    for (const artifact of quarantined) {
       try {
-        await this.#artifacts.purgeQuarantined(quarantined);
-        this.#repository.removePurgedNotebookArtifact(quarantined.artifactId);
+        if (!artifactStore) throw new TypeError('Project artifact deletion is unavailable.');
+        await artifactStore.purgeQuarantined(artifact);
+        this.#repository.removePurgedArtifact(artifact.artifactId);
       } catch {
-        return { impactHash: current.impactHash, pendingArtifactPurgeId: quarantined.artifactId };
+        pendingArtifactPurgeIds.push(artifact.artifactId);
       }
     }
-    return { impactHash: current.impactHash, pendingArtifactPurgeId: null };
+    return {
+      impactHash: current.impactHash,
+      pendingArtifactPurgeId: pendingArtifactPurgeIds[0] ?? null,
+      pendingArtifactPurgeIds,
+    };
   }
 }
 
 export const interviewAgentVersions = {
   question: projectQuestionAgentDefinition.version,
+  docsQuestion: docsGroundedProjectQuestionAgentDefinition.version,
   answerDigest: projectAnswerDigestAgentDefinition.version,
 } as const;

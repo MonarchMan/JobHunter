@@ -8,6 +8,7 @@ import {
   createProjectAnswerDigestTaskHandler,
   createProjectNotebookTaskHandler,
   createProjectQuestionTaskHandler,
+  createExperienceResearchTaskHandler,
   createResumeProfileTaskHandler,
   createResumePolishTaskHandler,
   createResumeDeletionTaskHandler,
@@ -16,6 +17,8 @@ import {
   createCleanupTaskHandler,
   HandlerRegistry,
   InterviewProjectService,
+  InterviewExperienceService,
+  ExperienceResearchService,
   JobQueryService,
   MatchWorkflowService,
   ProfileInspectionService,
@@ -53,10 +56,13 @@ import {
   SqliteWebDiagnosticsRepository,
   SqliteArtifactStore,
   SqliteInterviewProjectRepository,
+  SqliteInterviewExperienceRepository,
+  SqliteInterviewResearchRepository,
+  SqliteInterviewTaskRetryCoordinator,
+  SqliteInterviewTaskPublisher,
   SqliteProjectNotebookReader,
   SqliteResumeDeletionRepository,
   SqliteResumeDocumentRepository,
-  SqliteResumePolishSuggestionRepository,
   SqliteSettingsStore,
   seedSourceCatalog,
   NodeResumeFileReader,
@@ -83,6 +89,8 @@ export interface WebApplicationServices {
   readonly matches: MatchWorkflowService;
   readonly settings: SystemSettingsService;
   readonly interview: InterviewProjectService;
+  readonly experiences: InterviewExperienceService;
+  readonly research: ExperienceResearchService;
 }
 
 export interface WebApplicationContainer {
@@ -114,6 +122,7 @@ export function createLocalWebContainer(
     const registry = new HandlerRegistry();
     const artifacts = new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value);
     const interviewRepository = new SqliteInterviewProjectRepository(database.client);
+    const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
     const resumeDeletion = new ResumeDeletionService({
       repository: new SqliteResumeDeletionRepository(database.client),
       artifacts: new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value),
@@ -135,6 +144,7 @@ export function createLocalWebContainer(
     registry.register(createResumeDeletionTaskHandler(resumeDeletion));
     registry.register(createProjectQuestionTaskHandler({ unavailable: true }));
     registry.register(createProjectAnswerDigestTaskHandler({ unavailable: true }));
+    registry.register(createExperienceResearchTaskHandler({ unavailable: true }));
     registry.register(
       createProjectNotebookTaskHandler({ repository: interviewRepository, artifacts, ids }),
     );
@@ -153,9 +163,20 @@ export function createLocalWebContainer(
     );
 
     const queue = new SqliteTaskRepository(database.client);
-    const tasks = new TaskService({ queue, clock, ids }, registry);
+    const tasks = new TaskService(
+      { queue, clock, ids },
+      registry,
+      null,
+      new SqliteInterviewTaskRetryCoordinator(database.client, queue),
+    );
+    const interviewTaskPublisher = new SqliteInterviewTaskPublisher({
+      client: database.client,
+      tasks,
+      projects: interviewRepository,
+      research: interviewResearchRepository,
+    });
     const profileRepository = new SqliteCandidateProfileRepository(database.client);
-    const resumePolishSuggestions = new SqliteResumePolishSuggestionRepository(database.client);
+    const agentRuns = new SqliteAgentRunStore(database.client);
     const candidateProfiles = new CandidateProfileService({
       repository: profileRepository,
       clock,
@@ -175,7 +196,7 @@ export function createLocalWebContainer(
     const jobRepository = new SqliteJobQueryRepository(database.client);
     const profileInspection = new ProfileInspectionService({
       profiles: profileRepository,
-      agentRuns: new SqliteAgentRunStore(database.client),
+      agentRuns,
     });
     const profiles = new ProfileManagementService({
       profiles: candidateProfiles,
@@ -225,7 +246,7 @@ export function createLocalWebContainer(
       resumes,
       resumePolish: new ResumePolishService({
         profiles: profileRepository,
-        suggestions: resumePolishSuggestions,
+        agentRuns,
         tasks,
         ids,
       }),
@@ -247,6 +268,7 @@ export function createLocalWebContainer(
         profiles: profileRepository,
         repository: interviewRepository,
         tasks,
+        taskPublisher: interviewTaskPublisher,
         clock,
         ids,
         artifacts,
@@ -254,6 +276,20 @@ export function createLocalWebContainer(
           database.client,
           config.bootstrap.dataRoot.value,
         ),
+      }),
+      experiences: new InterviewExperienceService({
+        repository: new SqliteInterviewExperienceRepository(database.client),
+        artifacts,
+        clock,
+        ids,
+      }),
+      research: new ExperienceResearchService({
+        repository: interviewResearchRepository,
+        artifacts,
+        tasks,
+        taskPublisher: interviewTaskPublisher,
+        clock,
+        ids,
       }),
     };
     return {

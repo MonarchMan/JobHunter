@@ -44,6 +44,15 @@ export function renderProjectNotebook(detail: ProjectDossierDetail): string {
       '| 维度 | 状态 |',
       '| --- | --- |',
     );
+    if (session.materialBindings.length > 0) {
+      lines.push('### 冻结项目资料', '');
+      for (const binding of session.materialBindings) {
+        lines.push(
+          `- ${clean(binding.fileName)} · v${String(binding.versionNo)} · ${binding.contentHash.slice(0, 12)}`,
+        );
+      }
+      lines.push('');
+    }
     const coverage = detail.coverage.filter((item) => item.sessionId === session.id);
     for (const dimension of drillCoverageDimensions) {
       lines.push(
@@ -58,6 +67,21 @@ export function renderProjectNotebook(detail: ProjectDossierDetail): string {
       lines.push(turn.question ? clean(turn.question) : `_${turn.status}_`);
       if (turn.guidanceSlots.length > 0) {
         lines.push('', `回答结构：${turn.guidanceSlots.map(clean).join(' / ')}`);
+      }
+      const materialEvidence = turn.evidenceRefs.filter(
+        (reference) => reference.kind === 'project_material',
+      );
+      if (materialEvidence.length > 0) {
+        lines.push('', '资料依据：');
+        for (const reference of materialEvidence) {
+          const source = detail.materials.find((material) =>
+            material.chunks.some((chunk) => chunk.id === reference.id),
+          );
+          const chunk = source?.chunks.find((item) => item.id === reference.id);
+          lines.push(
+            `- ${source ? clean(source.fileName) : '已冻结资料'}${chunk?.heading ? ` · ${clean(chunk.heading)}` : ''}`,
+          );
+        }
       }
       const answers = detail.answers
         .filter((answer) => answer.turnId === turn.id)

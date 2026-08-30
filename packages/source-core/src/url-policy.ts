@@ -47,7 +47,7 @@ export function canonicalizeOfficialUrl(value: string, allowedHosts: readonly st
   }
   url.searchParams.sort();
   if (hashRoute) {
-    const [pathname, query = ''] = hashRoute.slice(1).split('?', 2);
+    const [pathname = '', query = ''] = hashRoute.slice(1).split('?', 2);
     const parameters = new URLSearchParams(query);
     for (const key of [...parameters.keys()]) {
       const normalized = key.toLowerCase();

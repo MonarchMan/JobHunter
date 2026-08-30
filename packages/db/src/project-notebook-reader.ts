@@ -30,10 +30,14 @@ export class SqliteProjectNotebookReader implements ProjectNotebookReader {
     }
     const row = this.#client
       .prepare(
-        `SELECT artifact.relative_path, artifact.byte_size, artifact.media_type
-         FROM file_artifacts artifact
-         JOIN project_dossiers dossier ON dossier.latest_notebook_artifact_id = artifact.id
-         WHERE artifact.id = ? AND artifact.kind = 'export' AND artifact.deleted_at IS NULL`,
+        `SELECT entity.relative_path, entity.byte_size, entity.media_type
+         FROM files file
+         JOIN project_dossiers dossier ON dossier.notebook_file_id = file.id
+         JOIN file_entity_mappings version ON version.file_id = file.id
+         JOIN entities entity ON entity.id = version.entity_id
+         WHERE file.id = ? AND file.kind = 'project_notebook'
+           AND entity.deleted_at IS NULL
+         ORDER BY version.version_no DESC LIMIT 1`,
       )
       .get(artifactId) as ArtifactRow | undefined;
     if (!row) throw new TypeError('Project notebook was not found.');

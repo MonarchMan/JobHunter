@@ -9,6 +9,7 @@ import type {
   TaskQueue,
   TaskQueueSummary,
   TaskRecord,
+  TaskRetryCoordinator,
   TaskRuntimeDependencies,
 } from './model.js';
 
@@ -33,16 +34,19 @@ export class TaskService {
   readonly #registry: HandlerRegistry;
   readonly #dependencies: TaskRuntimeDependencies;
   readonly #cancellationNotifier: TaskCancellationNotifier | null;
+  readonly #retryCoordinator: TaskRetryCoordinator | null;
 
   public constructor(
     dependencies: TaskRuntimeDependencies,
     registry: HandlerRegistry,
     cancellationNotifier: TaskCancellationNotifier | null = null,
+    retryCoordinator: TaskRetryCoordinator | null = null,
   ) {
     this.#queue = dependencies.queue;
     this.#registry = registry;
     this.#dependencies = dependencies;
     this.#cancellationNotifier = cancellationNotifier;
+    this.#retryCoordinator = retryCoordinator;
   }
 
   public enqueue(command: EnqueueTaskCommand): EnqueueTaskResult {
@@ -109,7 +113,7 @@ export class TaskService {
     const handler = this.#registry.get(source.taskType);
     const payload = handler.payloadSchema.parse(source.payload);
     const now = this.#dependencies.clock.now();
-    return this.#queue.enqueue({
+    const retry: PersistedTaskInput = {
       id: parseId(this.#dependencies.ids.generate(), 'Task'),
       taskType: source.taskType,
       payload,
@@ -121,6 +125,7 @@ export class TaskService {
       maxAttempts: handler.defaultMaxAttempts,
       availableAt: now,
       createdAt: now,
-    });
+    };
+    return this.#retryCoordinator?.enqueueRetry({ source, retry }) ?? this.#queue.enqueue(retry);
   }
 }

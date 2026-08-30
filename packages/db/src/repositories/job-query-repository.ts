@@ -86,8 +86,8 @@ function placeholders(count: number): string {
   return Array.from({ length: count }, () => '?').join(', ');
 }
 
-function ftsPhrase(value: string): string {
-  return `"${value.replaceAll('"', '""')}"`;
+function likePattern(value: string): string {
+  return `%${value.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_')}%`;
 }
 
 export class SqliteJobQueryRepository implements JobQueryRepository {
@@ -117,8 +117,13 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     const selectParameters: unknown[] = filter.profileVersionId ? [filter.profileVersionId] : [];
 
     if (filter.search) {
-      innerConditions.push('j.rowid IN (SELECT rowid FROM jobs_fts WHERE jobs_fts MATCH ?)');
-      innerParameters.push(ftsPhrase(filter.search));
+      innerConditions.push(
+        `(j.title LIKE ? ESCAPE '!'
+          OR COALESCE(j.department, '') LIKE ? ESCAPE '!'
+          OR j.description LIKE ? ESCAPE '!')`,
+      );
+      const pattern = likePattern(filter.search);
+      innerParameters.push(pattern, pattern, pattern);
     }
     if (filter.companyIds && filter.companyIds.length > 0) {
       innerConditions.push(`j.company_id IN (${placeholders(filter.companyIds.length)})`);
@@ -192,15 +197,15 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       : undefined;
     const page =
       paged && total !== undefined
-        ? Math.min(requestedPage, Math.max(1, Math.ceil(total / (pageSize ?? 1))))
+        ? Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)))
         : requestedPage;
     const sql = `
       SELECT query.*, ${sortExpression} AS sort_value
       ${baseSql}
       ORDER BY sort_value DESC, id ASC
       LIMIT ?${paged ? ' OFFSET ?' : ''}`;
-    const limit = pageSize ?? filter.limit;
-    const queryLimit = limit + (paged ? 1 : 1);
+    const limit = pageSize;
+    const queryLimit = limit + 1;
     const rows = this.#client
       .prepare<unknown[], JobQueryRow>(sql)
       .all(

@@ -29,8 +29,13 @@ export class SqliteResumeArtifactReader implements ResumeArtifactReader {
     }
     const row = this.#client
       .prepare(
-        `SELECT relative_path, byte_size FROM file_artifacts
-         WHERE id = ? AND kind = 'resume' AND deleted_at IS NULL`,
+        `SELECT entity.relative_path, entity.byte_size
+         FROM entities entity
+         JOIN file_entity_mappings version ON version.entity_id = entity.id
+         JOIN files file ON file.id = version.file_id
+         WHERE entity.id = ? AND file.kind = 'resume'
+           AND entity.deleted_at IS NULL
+         LIMIT 1`,
       )
       .get(artifactId) as ArtifactRow | undefined;
     if (!row) throw new TypeError('Resume artifact was not found.');

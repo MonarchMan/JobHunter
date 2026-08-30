@@ -39,6 +39,7 @@
   --amber-soft: #fff3d8;
   --radius-control: 0.5rem;
   --radius-panel: 0.75rem;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
   --motion-fast: 120ms;
   --motion-standard: 180ms;
   --motion-emphasis: 260ms;

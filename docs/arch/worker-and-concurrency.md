@@ -121,4 +121,5 @@ match.compute:{profileVersionId}:{jobRevisionId}:{jobEnrichmentIdOrNone}:{rulese
 - 不可重试错误不会进入循环。
 - 调度器重启不会重复创建同一 occurrence。
 - 取消信号能传递到网络和模型调用。
+- running 取消默认优先于完成；只有最终业务事务已按 Task ID、running 与未取消条件门控的 Handler 才允许“提交先发生”时由完成获胜，避免业务结果已可见但 Task 状态为 cancelled。
 - 不同幂等键但相同并发键的任务不能同时处于 pending/running。

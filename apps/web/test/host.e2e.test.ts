@@ -40,7 +40,11 @@ describe('Web loopback startup policy', () => {
       );
       try {
         expect(container.services.jobs.list({ limit: 10 }).items).toEqual([]);
-        expect(container.services.sources.list()).toEqual([]);
+        expect(container.services.sources.list()).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ slug: 'tencent-intern', effectiveEnabled: true }),
+          ]),
+        );
         expect(container.services.tasks.list()).toEqual([]);
       } finally {
         container.close();

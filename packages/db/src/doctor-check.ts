@@ -18,7 +18,10 @@ const requiredTables = [
   'tasks',
   'agent_runs',
   'match_results',
-  'operation_audit_events',
+  'events',
+  'files',
+  'entities',
+  'file_entity_mappings',
   'resume_project_snapshots',
   'project_dossiers',
   'drill_sessions',
@@ -26,6 +29,8 @@ const requiredTables = [
   'drill_answer_revisions',
   'project_knowledge_items',
   'drill_coverage',
+  'interview_experiences',
+  'interview_question_entries',
 ] as const;
 
 export function sqliteDoctorCheck(client: Database.Database): OfflineDoctorCheck {
@@ -100,7 +105,7 @@ export function readLocalHealthSnapshot(
 } {
   const root = resolve(dataRoot);
   const artifacts = client
-    .prepare('SELECT relative_path FROM file_artifacts WHERE deleted_at IS NULL')
+    .prepare('SELECT relative_path FROM entities WHERE deleted_at IS NULL')
     .all() as { readonly relative_path: string }[];
   const missing = artifacts.filter((artifact) => {
     const path = resolve(root, artifact.relative_path);

@@ -135,11 +135,12 @@ describe('SQLite agent run store', () => {
       errorSummary: null,
     });
     const row = handle.client
-      .prepare('SELECT input_summary_json, output_summary_json FROM agent_tool_calls WHERE id = ?')
+      .prepare('SELECT sequence_no, payload_json FROM events WHERE id = ?')
       .get('tool-one');
-    expect(row).toEqual({
-      input_summary_json: '{"profileIdPresent":true}',
-      output_summary_json: '{"skillCount":3}',
+    expect(row).toMatchObject({ sequence_no: 1 });
+    expect(JSON.parse((row as { payload_json: string }).payload_json)).toMatchObject({
+      inputSummary: { profileIdPresent: true },
+      outputSummary: { skillCount: 3 },
     });
   });
 });

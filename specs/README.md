@@ -14,30 +14,33 @@ R1 是首个可运行闭环，R2 不改变领域和持久化边界。自动投�
 
 ## 2. 规格清单
 
-| 规格                             | 能力                               | 里程碑 | 依赖                         |
-| -------------------------------- | ---------------------------------- | ------ | ---------------------------- |
-| `000-engineering-foundation`     | Workspace、包边界和质量门禁        | R1     | 无                           |
-| `001-domain-model`               | 核心类型、状态和不变量             | R1     | 000                          |
-| `002-sqlite-persistence`         | SQLite、文件、迁移、查询与备份基础 | R1     | 001                          |
-| `003-task-worker`                | 持久化任务、计划、租约和恢复       | R1     | 001, 002                     |
-| `004-source-adapter-contract`    | 官网适配器 SDK 与契约测试          | R1     | 001                          |
-| `005-job-sync-pipeline`          | 原始记录、标准化、修订与职位状态   | R1     | 001–004                      |
-| `006-first-party-sources`        | 首批 10 家官网调查与适配器交付     | R1     | 004, 005                     |
-| `007-resume-profile`             | 简历导入、解析、画像和人工锁定     | R1     | 001–003, 008                 |
-| `008-agent-runtime`              | 模型端口、Agent Runner、缓存与评测 | R1     | 001–003                      |
-| `009-job-matching`               | 过滤、评分、排序与 Agent 建议      | R1     | 001–003, 007, 008            |
-| `010-cli`                        | R1 用户入口、机器输出与退出码      | R1     | 002–009                      |
-| `011-web-console`                | 本地管理台                         | R2     | 002–010                      |
-| `012-operations`                 | 配置、日志、健康、清理、备份恢复   | R1/R2  | 002, 003                     |
-| `013-resume-driven-intake`       | 简历驱动的异步摄取与目标岗位筛选   | R2/R3  | 007, 009, 011, 012           |
-| `014-ui-redesign`                | 全系统 UI 重设计                   | R2     | 011                          |
-| `015-resume-ocr`                 | 简历图片 OCR 与画像填充            | R2     | 003, 007, 008, 011, 013, 014 |
-| `016-official-source-expansion`  | 官网来源扩展与目录分层             | R1     | 004, 005, 006                |
-| `017-three-channel-sources`      | 官网实习、校招、社招三渠道矩阵     | R1     | 004, 005, 006, 016           |
-| `018-logical-source-mapping`     | 逻辑渠道与多物理来源映射           | R1     | 004, 005, 006, 017           |
-| `019-source-support-remediation` | 非 supported 官网渠道闭环          | R1     | 004, 005, 006, 016, 017, 018 |
-| `020-interview-project-drill`    | 简历项目浅档拷打与准备文档         | I1     | 003, 007, 008, 011, 012      |
-| `021-interview-experience-intake` | 个人面经导入、清洗与在线填写      | I1     | 002, 007, 011, 012, 020      |
+| 规格                                | 能力                               | 里程碑 | 依赖                              |
+| ----------------------------------- | ---------------------------------- | ------ | --------------------------------- |
+| `000-engineering-foundation`        | Workspace、包边界和质量门禁        | R1     | 无                                |
+| `001-domain-model`                  | 核心类型、状态和不变量             | R1     | 000                               |
+| `002-sqlite-persistence`            | SQLite、文件、迁移、查询与备份基础 | R1     | 001                               |
+| `003-task-worker`                   | 持久化任务、计划、租约和恢复       | R1     | 001, 002                          |
+| `004-source-adapter-contract`       | 官网适配器 SDK 与契约测试          | R1     | 001                               |
+| `005-job-sync-pipeline`             | 原始记录、标准化、修订与职位状态   | R1     | 001–004                           |
+| `006-first-party-sources`           | 首批 10 家官网调查与适配器交付     | R1     | 004, 005                          |
+| `007-resume-profile`                | 简历导入、解析、画像和人工锁定     | R1     | 001–003, 008                      |
+| `008-agent-runtime`                 | 模型端口、Agent Runner、缓存与评测 | R1     | 001–003                           |
+| `009-job-matching`                  | 过滤、评分、排序与 Agent 建议      | R1     | 001–003, 007, 008                 |
+| `010-cli`                           | R1 用户入口、机器输出与退出码      | R1     | 002–009                           |
+| `011-web-console`                   | 本地管理台                         | R2     | 002–010                           |
+| `012-operations`                    | 配置、日志、健康、清理、备份恢复   | R1/R2  | 002, 003                          |
+| `013-resume-driven-intake`          | 简历驱动的异步摄取与目标岗位筛选   | R2/R3  | 007, 009, 011, 012                |
+| `014-ui-redesign`                   | 全系统 UI 重设计                   | R2     | 011                               |
+| `015-resume-ocr`                    | 简历图片 OCR 与画像填充            | R2     | 003, 007, 008, 011, 013, 014      |
+| `016-official-source-expansion`     | 官网来源扩展与目录分层             | R1     | 004, 005, 006                     |
+| `017-three-channel-sources`         | 官网实习、校招、社招三渠道矩阵     | R1     | 004, 005, 006, 016                |
+| `018-logical-source-mapping`        | 逻辑渠道与多物理来源映射           | R1     | 004, 005, 006, 017                |
+| `019-source-support-remediation`    | 非 supported 官网渠道闭环          | R1     | 004, 005, 006, 016, 017, 018      |
+| `020-interview-project-drill`       | 简历项目浅档拷打与准备文档         | I1     | 003, 007, 008, 011, 012           |
+| `021-interview-experience-intake`   | 个人面经导入、清洗与在线填写       | I1     | 002, 007, 011, 012, 020           |
+| `022-storage-event-convergence`     | 通用事件与文件实体模型收敛         | I1     | 002, 003, 007, 008, 012, 021      |
+| `023-deep-project-drill`            | 显式 Markdown 资料与深档项目拷打   | I2     | 003, 007, 008, 011, 012, 020, 022 |
+| `024-community-experience-research` | 外部 Agent 研究与网友面经审核闭环  | I2/I3  | 002, 003, 011, 012, 021, 022      |
 
 `007` 在实现顺序上依赖 `008`，但两者设计可以并行评审。
 

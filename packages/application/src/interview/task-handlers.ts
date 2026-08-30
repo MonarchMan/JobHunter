@@ -13,7 +13,11 @@ import type { ArtifactStore } from '../ports/artifact-store.js';
 import type { InterviewProjectRepository } from '../ports/interview-projects.js';
 import type { TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
-import { projectAnswerDigestAgentDefinition, projectQuestionAgentDefinition } from './agents.js';
+import {
+  docsGroundedProjectQuestionAgentDefinition,
+  projectAnswerDigestAgentDefinition,
+  projectQuestionAgentDefinition,
+} from './agents.js';
 import { buildQuestionAgentInput, questionContextHash } from './context.js';
 import { renderProjectNotebook } from './notebook.js';
 
@@ -60,6 +64,10 @@ export const projectNotebookTaskOutputSchema = z
 
 type CommitCallback = (dossierId: string) => void;
 
+function taskSignalAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 export function createProjectQuestionTaskHandler(
   input:
     | {
@@ -78,6 +86,7 @@ export function createProjectQuestionTaskHandler(
     outputSchema: projectQuestionTaskOutputSchema,
     defaultMaxAttempts: 3,
     leaseDurationMs: 120_000,
+    lateCancellationPolicy: 'complete',
     concurrencyKey: (payload) => `interview-session:${payload.sessionId}`,
     async execute(context, payload) {
       if ('unavailable' in input) {
@@ -93,6 +102,7 @@ export function createProjectQuestionTaskHandler(
         source.session.id !== payload.sessionId ||
         source.session.contextRevision !== payload.expectedContextRevision ||
         source.turn.status !== 'question_pending' ||
+        (context.taskId !== undefined && source.turn.questionTaskId !== context.taskId) ||
         source.turn.contextHash !== payload.contextHash ||
         questionContextHash(source.session, source.turn.turnNo) !== payload.contextHash
       ) {
@@ -101,7 +111,10 @@ export function createProjectQuestionTaskHandler(
       const agentInput = buildQuestionAgentInput(source);
       try {
         const result = await input.runner.run({
-          definition: projectQuestionAgentDefinition,
+          definition:
+            source.session.profileKey === 'docs-grounded'
+              ? docsGroundedProjectQuestionAgentDefinition
+              : projectQuestionAgentDefinition,
           value: agentInput,
           signal: context.signal,
         });
@@ -109,8 +122,19 @@ export function createProjectQuestionTaskHandler(
           result.output,
           agentInput.allowedEvidenceRefs,
         );
+        if (
+          source.session.profileKey === 'docs-grounded' &&
+          !question.evidenceRefs.some((reference) => reference.kind === 'project_material')
+        ) {
+          throw new DomainError(
+            'INTERVIEW_EVIDENCE_INVALID',
+            'Docs-grounded question must reference selected project material.',
+          );
+        }
+        context.signal.throwIfAborted();
         const committed = input.repository.completeQuestion({
           turnId,
+          ...(context.taskId ? { expectedTaskId: context.taskId } : {}),
           expectedContextHash: source.turn.contextHash,
           expectedSessionRevision: source.session.contextRevision,
           ...question,
@@ -160,6 +184,7 @@ export function createProjectAnswerDigestTaskHandler(
     outputSchema: projectAnswerDigestTaskOutputSchema,
     defaultMaxAttempts: 3,
     leaseDurationMs: 120_000,
+    lateCancellationPolicy: 'complete',
     concurrencyKey: (payload) => `interview-session:${payload.sessionId}`,
     async execute(context, payload) {
       if ('unavailable' in input) {
@@ -172,6 +197,7 @@ export function createProjectAnswerDigestTaskHandler(
         source?.dossier.id !== payload.dossierId ||
         source.session.id !== payload.sessionId ||
         source.turn.status !== 'digest_pending' ||
+        (context.taskId !== undefined && source.turn.digestTaskId !== context.taskId) ||
         source.turn.question === null
       ) {
         throw new TaskExecutionError('cancelled', 'Interview answer context is stale.');
@@ -234,8 +260,10 @@ export function createProjectAnswerDigestTaskHandler(
           }),
           updatedAt: now,
         }));
+        context.signal.throwIfAborted();
         const committed = input.repository.completeAnswerDigest({
           turnId,
+          ...(context.taskId ? { expectedTaskId: context.taskId } : {}),
           answerRevisionId,
           expectedSessionRevision: source.session.contextRevision,
           agentRunId: parseId(result.run.id, 'AgentRun'),
@@ -287,7 +315,10 @@ export function createProjectNotebookTaskHandler(input: {
     outputSchema: projectNotebookTaskOutputSchema,
     defaultMaxAttempts: 3,
     leaseDurationMs: 60_000,
-    concurrencyKey: (payload) => `interview-dossier:${payload.dossierId}`,
+    lateCancellationPolicy: (output) =>
+      output.rendered && output.artifactId !== null ? 'complete' : 'cancel',
+    concurrencyKey: (payload) =>
+      `interview-dossier:${payload.dossierId}:revision:${String(payload.sourceRevision)}`,
     async execute(context, payload) {
       const dossierId = parseId(payload.dossierId, 'ProjectDossier');
       const detail = input.repository.getDossier(dossierId);
@@ -307,21 +338,44 @@ export function createProjectNotebookTaskHandler(input: {
           artifactId: detail.dossier.latestNotebookArtifactId,
         };
       }
+      if (taskSignalAborted(context.signal)) {
+        throw new TaskExecutionError('cancelled', 'Project notebook rendering was cancelled.');
+      }
       const artifact = await input.artifacts.put({
         id: input.ids.generate(),
-        kind: 'export',
+        kind: 'project_notebook',
+        name: `${dossierId}.md`,
         mediaType: 'text/markdown; charset=utf-8',
         content: new TextEncoder().encode(markdown),
         createdAt: context.clock.now(),
+        logicalFile: 'new',
       });
+      if (taskSignalAborted(context.signal)) {
+        input.repository.discardNotebookArtifact(artifact.id);
+        throw new TaskExecutionError('cancelled', 'Project notebook rendering was cancelled.');
+      }
       const committed = input.repository.updateNotebook({
         dossierId,
         expectedRevision: payload.sourceRevision,
+        ...(context.taskId ? { expectedTaskId: context.taskId } : {}),
         artifactId: artifact.id,
         sourceHash,
         now: context.clock.now(),
       });
-      return { dossierId, rendered: committed, artifactId: committed ? artifact.id : null };
+      if (!committed) {
+        if (taskSignalAborted(context.signal)) {
+          throw new TaskExecutionError('cancelled', 'Project notebook rendering was cancelled.');
+        }
+        const current = input.repository.getDossier(dossierId);
+        if (current?.dossier.revision !== payload.sourceRevision) {
+          return { dossierId, rendered: false, artifactId: null };
+        }
+        throw new TaskExecutionError(
+          'cancelled',
+          'Project notebook task is no longer allowed to publish.',
+        );
+      }
+      return { dossierId, rendered: true, artifactId: artifact.id };
     },
   };
 }

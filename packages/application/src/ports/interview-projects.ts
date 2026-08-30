@@ -15,6 +15,7 @@ import type {
   ProjectDossierId,
   ProjectKnowledgeItemId,
   ProjectKnowledgeKind,
+  ProjectMaterialChunkId,
   ResumeProjectSnapshotId,
   TaskId,
   UtcInstant,
@@ -44,18 +45,50 @@ export interface ProjectDossierRecord {
 export interface DrillSessionRecord {
   readonly id: DrillSessionId;
   readonly dossierId: ProjectDossierId;
-  readonly profileKey: 'resume-only';
+  readonly profileKey: 'resume-only' | 'docs-grounded';
   readonly profileVersion: 'v1';
   readonly profileDefinitionHash: ContentHash;
   readonly capabilitySummary: Readonly<{
-    evidenceKinds: readonly ['resume_project', 'user_answer', 'derived_claim'];
-    tools: readonly [];
+    evidenceKinds: readonly (
+      'resume_project' | 'user_answer' | 'derived_claim' | 'project_material'
+    )[];
+    tools: readonly string[];
   }>;
+  readonly materialBindings: readonly ProjectMaterialBinding[];
   readonly status: DrillSessionStatus;
   readonly contextRevision: number;
   readonly createdAt: UtcInstant;
   readonly updatedAt: UtcInstant;
   readonly completedAt: UtcInstant | null;
+}
+
+export interface ProjectMaterialChunkRecord {
+  readonly id: ProjectMaterialChunkId;
+  readonly heading: string | null;
+  readonly start: number;
+  readonly end: number;
+  readonly contentHash: ContentHash;
+}
+
+export interface ProjectMaterialBinding {
+  readonly fileId: string;
+  readonly entityId: string;
+  readonly versionNo: number;
+  readonly fileName: string;
+  readonly contentHash: ContentHash;
+}
+
+export interface ProjectMaterialRecord extends ProjectMaterialBinding {
+  readonly dossierId: ProjectDossierId;
+  readonly mediaType: 'text/markdown; charset=utf-8';
+  readonly byteSize: number;
+  readonly chunks: readonly ProjectMaterialChunkRecord[];
+  readonly createdAt: UtcInstant;
+  readonly updatedAt: UtcInstant;
+}
+
+export interface ProjectMaterialContext extends ProjectMaterialRecord {
+  readonly chunks: readonly (ProjectMaterialChunkRecord & { readonly text: string })[];
 }
 
 export interface DrillTurnRecord {
@@ -122,6 +155,7 @@ export interface ProjectDossierDetail extends ProjectDossierSummary {
   readonly answers: readonly DrillAnswerRevisionRecord[];
   readonly knowledgeItems: readonly ProjectKnowledgeItemRecord[];
   readonly coverage: readonly DrillCoverageRecord[];
+  readonly materials: readonly ProjectMaterialRecord[];
 }
 
 export interface ProjectQuestionContext {
@@ -137,6 +171,7 @@ export interface ProjectQuestionContext {
   }[];
   readonly knowledgeItems: readonly ProjectKnowledgeItemRecord[];
   readonly coverage: readonly DrillCoverageRecord[];
+  readonly materials: readonly ProjectMaterialContext[];
 }
 
 export interface ProjectAnswerContext {
@@ -145,6 +180,12 @@ export interface ProjectAnswerContext {
   readonly session: DrillSessionRecord;
   readonly turn: DrillTurnRecord;
   readonly answerRevision: DrillAnswerRevisionRecord;
+}
+
+export interface DossierDeletionArtifact {
+  readonly id: string;
+  readonly relativePath: string;
+  readonly shared: boolean;
 }
 
 export interface DossierDeletionSnapshot {
@@ -158,6 +199,8 @@ export interface DossierDeletionSnapshot {
   readonly notebookArtifactId: string | null;
   readonly notebookRelativePath: string | null;
   readonly notebookShared: boolean;
+  readonly materialFileIds: readonly string[];
+  readonly materialArtifacts: readonly DossierDeletionArtifact[];
 }
 
 export interface ProjectNotebookReader {
@@ -175,6 +218,27 @@ export interface InterviewProjectRepository {
   }): { readonly dossier: ProjectDossierRecord; readonly deduplicated: boolean };
   listDossiers(): readonly ProjectDossierSummary[];
   getDossier(id: ProjectDossierId): ProjectDossierDetail | null;
+  findMaterialByName(dossierId: ProjectDossierId, fileName: string): ProjectMaterialRecord | null;
+  claimMaterialFile(input: {
+    readonly dossierId: ProjectDossierId;
+    readonly fileName: string;
+    readonly proposedFileId: string;
+    readonly now: UtcInstant;
+  }): string;
+  registerMaterial(input: {
+    readonly dossierId: ProjectDossierId;
+    readonly fileId: string;
+    readonly entityId: string;
+    readonly fileName: string;
+    readonly normalizedText: string;
+    readonly parserVersion: string;
+    readonly chunks: readonly ProjectMaterialChunkRecord[];
+    readonly now: UtcInstant;
+  }): { readonly material: ProjectMaterialRecord; readonly deduplicated: boolean };
+  resolveMaterialBindings(
+    dossierId: ProjectDossierId,
+    fileIds: readonly string[],
+  ): readonly ProjectMaterialBinding[];
   createSession(input: {
     readonly session: DrillSessionRecord;
     readonly coverage: readonly DrillCoverageRecord[];
@@ -199,6 +263,7 @@ export interface InterviewProjectRepository {
   getQuestionContext(turnId: DrillTurnId): ProjectQuestionContext | null;
   completeQuestion(input: {
     readonly turnId: DrillTurnId;
+    readonly expectedTaskId?: TaskId;
     readonly expectedContextHash: ContentHash;
     readonly expectedSessionRevision: number;
     readonly question: string;
@@ -227,6 +292,7 @@ export interface InterviewProjectRepository {
   ): ProjectAnswerContext | null;
   completeAnswerDigest(input: {
     readonly turnId: DrillTurnId;
+    readonly expectedTaskId?: TaskId;
     readonly answerRevisionId: DrillAnswerRevisionId;
     readonly expectedSessionRevision: number;
     readonly agentRunId: AgentRunId;
@@ -242,15 +308,17 @@ export interface InterviewProjectRepository {
   updateNotebook(input: {
     readonly dossierId: ProjectDossierId;
     readonly expectedRevision: number;
+    readonly expectedTaskId?: TaskId;
     readonly artifactId: string;
     readonly sourceHash: ContentHash;
     readonly now: UtcInstant;
   }): boolean;
+  discardNotebookArtifact(artifactId: string): void;
   previewDeletion(dossierId: ProjectDossierId): DossierDeletionSnapshot | null;
   deleteDossier(input: {
     readonly expected: DossierDeletionSnapshot;
-    readonly quarantinedArtifact: QuarantinedArtifact | null;
+    readonly quarantinedArtifacts: readonly QuarantinedArtifact[];
     readonly deletedAt: UtcInstant;
   }): boolean;
-  removePurgedNotebookArtifact(artifactId: string): void;
+  removePurgedArtifact(artifactId: string): void;
 }

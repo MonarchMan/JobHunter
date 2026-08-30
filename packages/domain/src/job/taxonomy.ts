@@ -29,10 +29,10 @@ export const canonicalJobSubfamilies = [
 
 export type CanonicalJobSubfamily = (typeof canonicalJobSubfamilies)[number];
 
-export type JobTaxonomy = {
+export interface JobTaxonomy {
   readonly jobFamily: CanonicalJobFamily;
   readonly jobSubfamily: CanonicalJobSubfamily | null;
-};
+}
 
 const familyRules: readonly [CanonicalJobFamily, readonly string[]][] = [
   [

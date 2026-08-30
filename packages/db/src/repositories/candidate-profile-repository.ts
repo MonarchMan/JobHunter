@@ -33,7 +33,8 @@ interface VersionRow {
   readonly created_at: number;
 }
 
-const versionSelection = `SELECT id, profile_id, version_no, resume_document_id, agent_run_id,
+const versionSelection = `SELECT id, profile_id, version_no,
+                                 resume_file_id AS resume_document_id, agent_run_id,
                                  extracted_json, effective_json, locked_paths_json, content_hash,
                                  is_current, created_at
                           FROM profile_versions`;
@@ -138,7 +139,7 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
       this.#client
         .prepare(
           `INSERT INTO profile_versions
-             (id, profile_id, version_no, resume_document_id, agent_run_id, extracted_json,
+             (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
               effective_json, locked_paths_json, content_hash, is_current, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
         )

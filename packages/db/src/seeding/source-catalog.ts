@@ -79,16 +79,15 @@ export function seedSourceCatalog(
     .pluck();
   const insertSource = database.prepare(
     `INSERT INTO job_sources
-       (id, company_id, channel_id, slug, adapter_key, coverage_role, recruitment_type, base_url, config_json,
+       (id, company_id, channel_id, slug, adapter_key, coverage_role, base_url, config_json,
         sync_policy_version, sync_policy_json, enabled, support_status, support_note,
         health_status, consecutive_failures, last_success_at, last_failure_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown', 0, NULL, NULL, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'unknown', 0, NULL, NULL, ?, ?)
      ON CONFLICT(slug) DO UPDATE SET
        company_id = excluded.company_id,
        channel_id = excluded.channel_id,
        adapter_key = excluded.adapter_key,
        coverage_role = excluded.coverage_role,
-       recruitment_type = excluded.recruitment_type,
        base_url = excluded.base_url,
        support_status = excluded.support_status,
        support_note = excluded.support_note,
@@ -133,7 +132,6 @@ export function seedSourceCatalog(
           source.slug,
           source.adapterKey,
           source.coverageRole,
-          source.recruitmentType,
           source.baseUrl,
           JSON.stringify(source.config),
           syncPolicyVersion,

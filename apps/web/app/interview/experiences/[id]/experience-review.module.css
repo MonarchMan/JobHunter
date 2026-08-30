@@ -1,0 +1,384 @@
+.root {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 70rem;
+  margin: 0 auto;
+}
+
+.reviewLead,
+.acceptedBanner {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: start;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.reviewLead > span,
+.acceptedBanner > span {
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--action);
+}
+
+.reviewLead h2,
+.acceptedBanner h2 {
+  margin: 0.25rem 0 0;
+  font-size: 1.55rem;
+}
+
+.reviewLead p:last-child,
+.acceptedBanner p:last-child {
+  margin-bottom: 0;
+  color: var(--muted-ink);
+  line-height: 1.6;
+}
+
+.reviewLead dl {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 16rem;
+  margin: 0;
+}
+
+.reviewLead dl div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.reviewLead dt {
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+}
+
+.reviewLead dd {
+  max-width: 24rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.warnings {
+  padding: 1rem 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--line));
+  border-radius: var(--radius-panel);
+  background: var(--warning-soft);
+}
+
+.warnings h3 {
+  margin: 0;
+  color: var(--warning);
+}
+
+.warnings ul {
+  margin: 0.6rem 0 0;
+  padding-left: 1.2rem;
+  color: #684711;
+  line-height: 1.6;
+}
+
+.form,
+.experience {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.experience {
+  padding: 1.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.experienceHeading {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.experienceHeading > span,
+.readOnly header > span {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 1.2rem;
+  font-weight: 750;
+}
+
+.experienceHeading p {
+  margin: 0;
+  color: var(--muted-ink);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.experienceHeading h3 {
+  margin: 0.2rem 0 0;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+}
+
+.fieldGrid label,
+.questionList label,
+.notes,
+.dialogPanel label {
+  display: grid;
+  gap: 0.45rem;
+  color: #50586a;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.fullField {
+  grid-column: 1 / -1;
+}
+
+.questionHeading,
+.questionLabel,
+.actionBar,
+.dangerZone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.questionHeading {
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.questionHeading h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.questionHeading p {
+  margin: 0.2rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.82rem;
+}
+
+.questionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.questionList > li {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1.15rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.questionList > li:first-child {
+  border-top: 0;
+}
+
+.questionLabel > span {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.questionList textarea,
+.notes textarea {
+  resize: none;
+}
+
+.actionBar {
+  position: sticky;
+  z-index: 10;
+  bottom: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.actionBar > div {
+  display: flex;
+  gap: 0.7rem;
+}
+
+.actionBar > span {
+  color: var(--muted-ink);
+  font-size: 0.82rem;
+}
+
+.readOnly {
+  display: grid;
+  gap: 1rem;
+}
+
+.readOnly > article {
+  padding: 1.35rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.readOnly header {
+  display: flex;
+  gap: 1rem;
+  align-items: start;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.readOnly header h3 {
+  margin: 0;
+}
+
+.readOnly header p {
+  margin: 0.25rem 0 0;
+  color: var(--muted-ink);
+}
+
+.readOnly ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.readOnly li {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.readOnly li h4 {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.readOnly li > p,
+.readOnly aside p,
+.readOnly footer p {
+  margin: 0.55rem 0 0;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.readOnly aside,
+.readOnly footer {
+  margin-top: 0.8rem;
+  padding: 0.85rem;
+  border-left: 3px solid var(--primary);
+  background: var(--canvas);
+}
+
+.dangerZone {
+  align-items: start;
+  margin-top: 1rem;
+  padding: 1.25rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--line));
+  border-radius: var(--radius-panel);
+  background: var(--danger-soft);
+}
+
+.dangerZone h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.dangerZone p {
+  margin: 0.35rem 0 0;
+  color: #71352e;
+  line-height: 1.55;
+}
+
+.dialog {
+  width: min(34rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  box-shadow: 0 1.5rem 4rem rgb(28 33 48 / 20%);
+}
+
+.dialog::backdrop {
+  background: rgb(28 33 48 / 48%);
+}
+
+.dialogPanel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.35rem;
+}
+
+.dialogPanel h2,
+.dialogPanel p {
+  margin: 0;
+}
+
+.dialogPanel > small {
+  color: var(--muted-ink);
+  line-height: 1.5;
+}
+
+.dialogPanel > div {
+  display: flex;
+  justify-content: end;
+  gap: 0.7rem;
+  padding-top: 0.25rem;
+}
+
+@media (max-width: 760px) {
+  .reviewLead,
+  .acceptedBanner {
+    grid-template-columns: 3px minmax(0, 1fr);
+  }
+
+  .reviewLead dl {
+    grid-column: 2;
+    min-width: 0;
+  }
+
+  .fieldGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .fullField {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 600px) {
+  .experience {
+    padding: 1rem;
+  }
+
+  .questionHeading,
+  .actionBar,
+  .dangerZone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .actionBar {
+    position: static;
+  }
+
+  .actionBar > div,
+  .dialogPanel > div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

@@ -45,11 +45,12 @@ export function SourceChannelSyncAction({
     setBusy(true);
     setFeedback(null);
     try {
+      const headers = await mutationHeaders();
       const responses = await Promise.allSettled(
         enabledChannels.map(async (channel) => {
           const response = await fetch(`/api/source-channels/${channel.id}/sync`, {
             method: 'POST',
-            headers: await mutationHeaders(),
+            headers,
             body: JSON.stringify({ idempotencyToken: tokens[channel.id] }),
           });
           const result = (await response.json()) as ActionResponse;

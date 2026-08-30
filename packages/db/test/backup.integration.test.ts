@@ -44,7 +44,7 @@ describe('database and artifact backup', () => {
 
     const backupDirectory = path.join(root, 'backup');
     const manifest = await createBackup(source, backupDirectory);
-    expect(manifest.artifacts.map((artifact) => artifact.id)).toEqual([first.id]);
+    expect(manifest.artifacts.map((artifact) => artifact.id)).toEqual([first.entityId]);
     await expect(verifyBackup(backupDirectory)).resolves.toEqual(manifest);
     await expect(listBackups(root)).resolves.toMatchObject([
       {
@@ -70,7 +70,7 @@ describe('database and artifact backup', () => {
     await restoreBackup(backupDirectory, restoredRoot, restorePlan.confirmationToken);
     const restored = openSqliteDatabase({ dataRoot: restoredRoot, runMigrations: false });
     handles.push(restored);
-    expect(restored.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(1);
+    expect(restored.client.prepare('SELECT count(*) FROM entities').pluck().get()).toBe(1);
     expect(await readFile(path.join(restoredRoot, first.relativePath), 'utf8')).toBe(
       'before snapshot',
     );

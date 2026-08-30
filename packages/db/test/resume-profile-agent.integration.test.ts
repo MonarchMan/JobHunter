@@ -153,27 +153,31 @@ async function setup(
   const documentText = options.text ?? resumeText;
   handle.client
     .prepare(
-      `INSERT INTO file_artifacts
-       (id, kind, relative_path, media_type, sha256, byte_size, created_at, deleted_at)
-       VALUES ('018f0000-0000-7000-8000-00000000b001', 'resume', 'artifacts/resume-agent',
+      `INSERT INTO entities
+       (id, relative_path, media_type, sha256, byte_size, created_at, deleted_at)
+       VALUES ('018f0000-0000-7000-8000-00000000b001', 'artifacts/resume-agent',
                ?, ?, ?, 1, NULL)`,
     )
     .run(options.image ? 'image/jpeg' : 'text/plain', 'd'.repeat(64), documentText.length);
   handle.client
     .prepare(
-      `INSERT INTO resume_documents
-       (id, artifact_id, content_hash, media_type, extracted_text, parse_status,
-        parser_version, error_summary, created_at)
-       VALUES (?, '018f0000-0000-7000-8000-00000000b001', ?, ?, ?,
-               ?, ?, ?, 1)`,
+      `INSERT INTO files
+       (id, kind, name, state, revision, properties_json, created_at, updated_at)
+       VALUES (?, 'resume', 'resume-agent-fixture', ?, 0, '{}', 1, 1)`,
+    )
+    .run(documentId, options.image ? 'needs_ocr' : 'parsed');
+  handle.client
+    .prepare(
+      `INSERT INTO file_entity_mappings
+       (file_id, entity_id, version_no, parser_version, parse_status, extracted_text,
+        error_summary, metadata_json, created_at)
+       VALUES (?, '018f0000-0000-7000-8000-00000000b001', 1, ?, ?, ?, ?, '{}', 1)`,
     )
     .run(
       documentId,
-      'd'.repeat(64),
-      options.image ? 'image/jpeg' : 'text/plain',
-      options.image ? null : documentText,
-      options.image ? 'needs_ocr' : 'parsed',
       options.image ? 'image-needs-ocr@1' : 'utf8@1',
+      options.image ? 'needs_ocr' : 'parsed',
+      options.image ? null : documentText,
       options.image ? 'Resume image requires background OCR.' : null,
     );
   const profiles = new CandidateProfileService({
@@ -290,7 +294,7 @@ describe('resume profile Agent pipeline', () => {
     expect(result.extractionMethod).toBe('rules');
     expect(profiles.getCurrent(profile.id)?.effective.projects[0]?.name).toBe('任务调度系统');
     expect(
-      handle.client.prepare('SELECT parse_status, parser_version FROM resume_documents').get(),
+      handle.client.prepare('SELECT parse_status, parser_version FROM file_entity_mappings').get(),
     ).toEqual({ parse_status: 'parsed', parser_version: 'fake-ocr@1' });
     expect(handle.client.prepare('SELECT count(*) FROM agent_runs').pluck().get()).toBe(0);
   });
@@ -342,7 +346,7 @@ describe('resume profile Agent pipeline', () => {
       projects: [{ name: 'Coding Agent' }],
     });
     expect(
-      handle.client.prepare('SELECT parse_status, parser_version FROM resume_documents').get(),
+      handle.client.prepare('SELECT parse_status, parser_version FROM file_entity_mappings').get(),
     ).toEqual({ parse_status: 'parsed', parser_version: 'fake-ocr@1' });
     expect(model.requests[0]?.input).toEqual({ extractedText: resumeText });
   });

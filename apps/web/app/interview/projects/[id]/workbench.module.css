@@ -48,10 +48,84 @@
 
 .drill,
 .coverage,
-.history {
+.history,
+.materials {
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
+}
+
+.materials {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.materials > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.materials h2,
+.materials p {
+  margin: 0;
+}
+
+.materialUpload {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  align-items: end;
+  gap: 0.6rem 1rem;
+}
+
+.materialUpload label {
+  grid-column: 1 / -1;
+}
+
+.materialList {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line-soft);
+}
+
+.materialList li {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) auto auto auto;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.profileChooser {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.profileChooser fieldset {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+}
+
+.evidence {
+  margin-top: 1rem;
+  padding: 0.8rem 1rem;
+  border-left: 3px solid var(--primary);
+  background: var(--primary-soft);
+}
+
+.evidence ul,
+.historyEvidence {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
 }
 
 .drill {
@@ -512,6 +586,15 @@
 
   .question {
     grid-template-columns: 1fr;
+  }
+
+  .materialUpload,
+  .materialList li {
+    grid-template-columns: 1fr;
+  }
+
+  .materialUpload label {
+    grid-column: auto;
   }
 
   .nextStep,

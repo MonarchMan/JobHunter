@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto';
-import { access, readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { decideJobMerge, parseId, utcInstant, type NormalizedJob } from '@jobhunter/domain';
 import { createTemporaryDataRoot, makeNormalizedJob } from '@jobhunter/testkit';
@@ -46,13 +45,13 @@ function seedSync(handle: SqliteDatabaseHandle): void {
       ('018f0000-0000-7000-8200-000000000103',
        '018f0000-0000-7000-8000-000000000001', 'social', 'fixture-social', 1, 1, 1);
     INSERT INTO job_sources
-      (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
+      (id, company_id, channel_id, slug, adapter_key, base_url, config_json,
        sync_policy_version, sync_policy_json, enabled, support_status, health_status,
        created_at, updated_at)
     VALUES
       ('018f0000-0000-7000-8000-000000000002',
        '018f0000-0000-7000-8000-000000000001',
-       '018f0000-0000-7000-8200-000000000103', 'fixture', 'fixture', 'social',
+       '018f0000-0000-7000-8200-000000000103', 'fixture', 'fixture',
        'https://example.com', '{}', '1', '{}', 1, 'supported', 'healthy', 1, 1);
     INSERT INTO sync_runs
       (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
@@ -61,14 +60,6 @@ function seedSync(handle: SqliteDatabaseHandle): void {
       ('018f0000-0000-7000-8000-000000000010',
        '018f0000-0000-7000-8000-000000000002', 'manual', 'running', 'unknown',
        '1', '1', '1', 'hash', '{}', 1);
-    INSERT INTO raw_job_records
-      (id, source_id, first_sync_run_id, external_job_id, identity_key, source_url,
-       content_hash, payload_json, captured_at)
-    VALUES
-      ('018f0000-0000-7000-8000-000000000011',
-       '018f0000-0000-7000-8000-000000000002',
-       '018f0000-0000-7000-8000-000000000010', 'fixture-job-1', 'fixture-job-1',
-       'https://example.com/job/1', 'raw-hash', '{}', 1);
   `);
 }
 
@@ -85,14 +76,15 @@ describe('SqliteUnitOfWork and job repository', () => {
         jobId: parseId('018f0000-0000-7000-8000-000000000003', 'Job'),
         revisionId: '018f0000-0000-7000-8000-000000000004',
         statusEventId: '018f0000-0000-7000-8000-000000000005',
-        rawRecordId: '018f0000-0000-7000-8000-000000000011',
+        sourcePayloadHash: 'a'.repeat(64),
+        sourceUrl: 'https://example.com/job/1',
         normalizerVersion: '1',
         syncRunId: parseId('018f0000-0000-7000-8000-000000000010', 'SyncRun'),
         observedAt: utcInstant(1_700_000_000_000),
       });
     });
 
-    for (const table of ['jobs', 'job_revisions', 'job_observations', 'job_status_events']) {
+    for (const table of ['jobs', 'job_revisions', 'job_observations', 'events']) {
       expect(handle.client.prepare(`SELECT count(*) FROM ${table}`).pluck().get()).toBe(1);
     }
     const current = uow.run(({ jobs }) =>
@@ -115,7 +107,8 @@ describe('SqliteUnitOfWork and job repository', () => {
           jobId: parseId('018f0000-0000-7000-8000-000000000020', 'Job'),
           revisionId: '018f0000-0000-7000-8000-000000000021',
           statusEventId: '018f0000-0000-7000-8000-000000000022',
-          rawRecordId: 'missing-raw-record',
+          sourcePayloadHash: 'invalid',
+          sourceUrl: 'https://example.com/job/2',
           normalizerVersion: '1',
           syncRunId: parseId('018f0000-0000-7000-8000-000000000010', 'SyncRun'),
           observedAt: utcInstant(1_700_000_000_000),
@@ -130,9 +123,7 @@ describe('SqliteUnitOfWork and job repository', () => {
     ).toBe(0);
     expect(
       handle.client
-        .prepare(
-          "SELECT count(*) FROM job_status_events WHERE id = '018f0000-0000-7000-8000-000000000022'",
-        )
+        .prepare("SELECT count(*) FROM events WHERE id = '018f0000-0000-7000-8000-000000000022'")
         .pluck()
         .get(),
     ).toBe(0);
@@ -166,7 +157,8 @@ describe('SqliteArtifactStore', () => {
     });
     expect(second.id).toBe(first.id);
     expect(await readFile(store.resolve(first.relativePath), 'utf8')).toBe('same content');
-    expect(handle.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(1);
+    expect(handle.client.prepare('SELECT count(*) FROM entities').pluck().get()).toBe(1);
+    expect(handle.client.prepare('SELECT count(*) FROM files').pluck().get()).toBe(1);
   });
 
   it('rejects absolute and parent traversal paths', async () => {
@@ -176,7 +168,7 @@ describe('SqliteArtifactStore', () => {
     expect(() => store.resolve(path.resolve('outside'))).toThrow(PersistenceError);
   });
 
-  it('removes a newly written file when database registration fails', async () => {
+  it('appends a new entity version to an existing logical file', async () => {
     const handle = await setup();
     const store = new SqliteArtifactStore(handle.client, handle.dataRoot);
     const duplicateId = '018f0000-0000-7000-8000-000000000032';
@@ -189,22 +181,70 @@ describe('SqliteArtifactStore', () => {
     });
 
     const orphanContent = new TextEncoder().encode('must be cleaned up');
-    const orphanHash = createHash('sha256').update(orphanContent).digest('hex');
-    const orphanPath = store.resolve(
-      path.posix.join('artifacts', orphanHash.slice(0, 2), orphanHash),
-    );
-    await expect(
-      store.put({
-        id: duplicateId,
-        kind: 'resume',
-        mediaType: 'text/plain',
-        content: orphanContent,
-        createdAt: utcInstant(2),
-      }),
-    ).rejects.toThrow();
+    const second = await store.put({
+      id: duplicateId,
+      kind: 'resume',
+      mediaType: 'text/plain',
+      content: orphanContent,
+      createdAt: utcInstant(2),
+    });
 
-    await expect(access(orphanPath)).rejects.toThrow();
-    expect(handle.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(1);
+    expect(second.id).toBe(duplicateId);
+    expect(handle.client.prepare('SELECT count(*) FROM entities').pluck().get()).toBe(2);
+    expect(handle.client.prepare('SELECT count(*) FROM file_entity_mappings').pluck().get()).toBe(
+      2,
+    );
+  });
+
+  it('reads and verifies an exact logical file version', async () => {
+    const handle = await setup();
+    const store = new SqliteArtifactStore(handle.client, handle.dataRoot);
+    const fileId = '018f0000-0000-7000-8000-000000000033';
+    await store.put({
+      id: fileId,
+      kind: 'interview_research',
+      mediaType: 'text/markdown; charset=utf-8',
+      content: new TextEncoder().encode('frozen prompt v1'),
+      createdAt: utcInstant(1),
+      logicalFile: 'new',
+    });
+    const second = await store.put({
+      id: fileId,
+      kind: 'interview_research',
+      mediaType: 'text/markdown; charset=utf-8',
+      content: new TextEncoder().encode('frozen prompt v2'),
+      createdAt: utcInstant(2),
+      logicalFile: 'reuse',
+    });
+
+    const firstContent = await store.read({
+      id: fileId,
+      versionNo: 1,
+      kind: 'interview_research',
+      maximumBytes: 1_024,
+    });
+    expect(new TextDecoder().decode(firstContent.content)).toBe('frozen prompt v1');
+    await expect(
+      store.read({ id: fileId, versionNo: 1, kind: 'resume', maximumBytes: 1_024 }),
+    ).rejects.toThrow(/not found/u);
+    await expect(
+      store.read({
+        id: fileId,
+        versionNo: 2,
+        kind: 'interview_research',
+        maximumBytes: 4,
+      }),
+    ).rejects.toThrow(/size/u);
+
+    await writeFile(store.resolve(second.relativePath), 'tampered content', 'utf8');
+    await expect(
+      store.read({
+        id: fileId,
+        versionNo: 2,
+        kind: 'interview_research',
+        maximumBytes: 1_024,
+      }),
+    ).rejects.toThrow(/stored metadata|content hash/u);
   });
 });
 
@@ -231,7 +271,7 @@ describe('SqliteSettingsStore', () => {
 });
 
 describe('SqliteJobQueryRepository', () => {
-  it('combines FTS and structured filters with stable cursor pagination', async () => {
+  it('combines escaped keyword search and structured filters with stable cursor pagination', async () => {
     const handle = await setup();
     seedSync(handle);
     const insert = handle.client.prepare(
@@ -311,7 +351,8 @@ describe('SqliteJobQueryRepository', () => {
         jobId: parseId('018f0000-0000-7000-8000-000000000050', 'Job'),
         revisionId: '018f0000-0000-7000-8000-000000000051',
         statusEventId: '018f0000-0000-7000-8000-000000000052',
-        rawRecordId: '018f0000-0000-7000-8000-000000000011',
+        sourcePayloadHash: 'a'.repeat(64),
+        sourceUrl: 'https://example.com/job/1',
         normalizerVersion: '1',
         syncRunId: parseId('018f0000-0000-7000-8000-000000000010', 'SyncRun'),
         observedAt: utcInstant(1),

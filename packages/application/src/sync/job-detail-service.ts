@@ -118,19 +118,7 @@ export class JobDetailService {
           detail,
           fetchedAt: occurredAt,
         });
-        const payload = { discovered: discovered.raw, detail };
-        const rawRecordId = sync.persistRawJob({
-          id: this.#ids.generate(),
-          sourceId: source.id,
-          syncRunId: command.runId,
-          externalJobId: discovered.externalJobId,
-          identityKey: discovered.externalJobId,
-          sourceUrl: discovered.sourceUrl,
-          contentHash: contentHash(payload),
-          payload,
-          artifactId: null,
-          capturedAt: occurredAt,
-        }).id;
+        const sourcePayloadHash = contentHash({ discovered: discovered.raw, detail });
         const current = jobs.findCurrent({
           sourceId: source.id,
           externalJobId: discovered.externalJobId,
@@ -141,7 +129,8 @@ export class JobDetailService {
         jobs.persistDetailRevision({
           decision,
           revisionId: this.#ids.generate(),
-          rawRecordId,
+          sourcePayloadHash,
+          sourceUrl: discovered.sourceUrl,
           normalizerVersion: this.#normalizerVersion,
           occurredAt,
         });

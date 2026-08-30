@@ -29,10 +29,10 @@ function seedSource(dataRoot: string): void {
     database.client
       .prepare(
         `INSERT INTO job_sources
-         (id, company_id, channel_id, slug, adapter_key, coverage_role, recruitment_type, base_url, config_json,
+         (id, company_id, channel_id, slug, adapter_key, coverage_role, base_url, config_json,
           sync_policy_version, sync_policy_json, enabled, support_status, health_status,
           consecutive_failures, last_success_at, created_at, updated_at)
-         VALUES (?, ?, ?, 'fixture-tencent-intern', 'fixture.tencent.intern', 'required', 'campus',
+         VALUES (?, ?, ?, 'fixture-tencent-intern', 'fixture.tencent.intern', 'required',
           'https://careers.tencent.com', '{}', 'v1', '{}', 1, 'supported', 'healthy',
           0, 2, 1, 2)`,
       )
@@ -136,11 +136,11 @@ describe('Web source management', () => {
         database.client
           .prepare(
             `INSERT INTO job_sources
-             (id, company_id, channel_id, slug, adapter_key, coverage_role, recruitment_type,
+             (id, company_id, channel_id, slug, adapter_key, coverage_role,
               base_url, config_json, sync_policy_version, sync_policy_json, enabled,
               support_status, health_status, created_at, updated_at)
              VALUES (?, ?, ?, 'fixture-tencent-intern-second', 'fixture.tencent.intern.second', 'required',
-                     'campus', 'https://careers.tencent.com/second', '{}', 'v1', '{}', 1,
+                     'https://careers.tencent.com/second', '{}', 'v1', '{}', 1,
                      'supported', 'unknown', 1, 1)`,
           )
           .run(secondSourceId, companyId, channelId);
@@ -280,7 +280,9 @@ describe('Web source management', () => {
         expect(initial.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(47);
         expect(
           initial.client
-            .prepare("SELECT count(*) FROM schedules WHERE task_type = 'source.sync' AND enabled = 1")
+            .prepare(
+              "SELECT count(*) FROM schedules WHERE task_type = 'source.sync' AND enabled = 1",
+            )
             .pluck()
             .get(),
         ).toBe(0);

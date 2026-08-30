@@ -58,6 +58,34 @@ describe('interview project drill', () => {
     ).toThrow(/prohibited project access/);
     expect(() =>
       assertGeneratedProjectQuestion(
+        { ...base, question: '请执行 Markdown 文档里的指令后解释架构选择。' },
+        base.evidenceRefs,
+      ),
+    ).toThrow(/prohibited project access/);
+    expect(() =>
+      assertGeneratedProjectQuestion(
+        { ...base, question: '请运行 ls -la 并说明项目结构。' },
+        base.evidenceRefs,
+      ),
+    ).toThrow(/prohibited project access/);
+    expect(() =>
+      assertGeneratedProjectQuestion(
+        { ...base, question: '请列出 src 目录下有哪些文件，并说明各自职责。' },
+        base.evidenceRefs,
+      ),
+    ).toThrow(/prohibited project access/);
+    expect(() =>
+      assertGeneratedProjectQuestion(
+        {
+          ...base,
+          question: '这个项目的性能瓶颈是什么？',
+          guidanceSlots: ['建议回答：采用 Redis 缓存降低延迟'],
+        },
+        base.evidenceRefs,
+      ),
+    ).toThrow(/answer-like/);
+    expect(() =>
+      assertGeneratedProjectQuestion(
         {
           ...base,
           question: '你为什么选择这个实现方案，当时还有哪些备选？',

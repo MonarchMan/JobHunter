@@ -70,7 +70,6 @@ export const jobSources = sqliteTable(
     slug: text().notNull().unique(),
     adapterKey: text('adapter_key').notNull().unique(),
     coverageRole: text('coverage_role').notNull().default('required'),
-    recruitmentType: text('recruitment_type').notNull(),
     baseUrl: text('base_url').notNull(),
     configJson: jsonText('config_json').notNull().default('{}'),
     syncPolicyVersion: text('sync_policy_version').notNull(),
@@ -94,10 +93,6 @@ export const jobSources = sqliteTable(
     check(
       'job_sources_coverage_role_check',
       sql`${table.coverageRole} in ('required', 'supplemental')`,
-    ),
-    check(
-      'job_sources_recruitment_check',
-      sql`${table.recruitmentType} in ('social', 'campus', 'mixed')`,
     ),
     check(
       'job_sources_support_check',
@@ -147,11 +142,40 @@ export const syncRuns = sqliteTable(
   ],
 );
 
-export const fileArtifacts = sqliteTable(
-  'file_artifacts',
+export const files = sqliteTable(
+  'files',
   {
     id: text().primaryKey(),
     kind: text().notNull(),
+    name: text().notNull(),
+    state: text().notNull(),
+    revision: integer().notNull().default(0),
+    propertiesJson: jsonText('properties_json').notNull().default('{}'),
+    createdAt: epoch('created_at').notNull(),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    index('files_kind_updated_idx').on(table.kind, table.updatedAt),
+    uniqueIndex('files_project_material_dossier_name_idx')
+      .on(
+        sql`json_extract(${table.propertiesJson}, '$.dossierId')`,
+        sql`json_extract(${table.propertiesJson}, '$.fileName')`,
+      )
+      .where(
+        sql`${table.kind} = 'project_material'
+            AND json_valid(${table.propertiesJson})
+            AND json_type(${table.propertiesJson}, '$.dossierId') = 'text'
+            AND json_type(${table.propertiesJson}, '$.fileName') = 'text'`,
+      ),
+    check('files_name_check', sql`length(trim(${table.name})) > 0`),
+    check('files_revision_check', sql`${table.revision} >= 0`),
+  ],
+);
+
+export const entities = sqliteTable(
+  'entities',
+  {
+    id: text().primaryKey(),
     relativePath: text('relative_path').notNull().unique(),
     mediaType: text('media_type').notNull(),
     sha256: text().notNull(),
@@ -160,43 +184,37 @@ export const fileArtifacts = sqliteTable(
     deletedAt: epoch('deleted_at'),
   },
   (table) => [
-    index('file_artifacts_sha256_idx').on(table.sha256),
-    check(
-      'file_artifacts_kind_check',
-      sql`${table.kind} in ('raw_job', 'resume', 'export', 'fixture_candidate')`,
-    ),
-    check('file_artifacts_size_check', sql`${table.byteSize} >= 0`),
+    uniqueIndex('entities_active_sha256_idx')
+      .on(table.sha256)
+      .where(sql`${table.deletedAt} is null`),
+    check('entities_hash_check', sql`length(${table.sha256}) = 64`),
+    check('entities_size_check', sql`${table.byteSize} >= 0`),
   ],
 );
 
-export const rawJobRecords = sqliteTable(
-  'raw_job_records',
+export const fileEntityMappings = sqliteTable(
+  'file_entity_mappings',
   {
-    id: text().primaryKey(),
-    sourceId: text('source_id')
+    fileId: text('file_id')
       .notNull()
-      .references(() => jobSources.id, { onDelete: 'restrict' }),
-    firstSyncRunId: text('first_sync_run_id')
+      .references(() => files.id, { onDelete: 'cascade' }),
+    entityId: text('entity_id')
       .notNull()
-      .references(() => syncRuns.id, { onDelete: 'restrict' }),
-    externalJobId: text('external_job_id'),
-    identityKey: text('identity_key').notNull(),
-    sourceUrl: text('source_url').notNull(),
-    contentHash: text('content_hash').notNull(),
-    payloadJson: jsonText('payload_json'),
-    artifactId: text('artifact_id').references(() => fileArtifacts.id, { onDelete: 'restrict' }),
-    capturedAt: epoch('captured_at').notNull(),
+      .references(() => entities.id, { onDelete: 'restrict' }),
+    versionNo: integer('version_no').notNull(),
+    parserVersion: text('parser_version'),
+    parseStatus: text('parse_status'),
+    extractedText: text('extracted_text'),
+    normalizedText: text('normalized_text'),
+    errorSummary: text('error_summary'),
+    metadataJson: jsonText('metadata_json').notNull().default('{}'),
+    createdAt: epoch('created_at').notNull(),
   },
   (table) => [
-    unique('raw_job_records_identity_content_unique').on(
-      table.sourceId,
-      table.identityKey,
-      table.contentHash,
-    ),
-    check(
-      'raw_job_records_payload_check',
-      sql`${table.payloadJson} is not null or ${table.artifactId} is not null`,
-    ),
+    primaryKey({ columns: [table.fileId, table.versionNo] }),
+    unique('file_entity_mappings_file_entity_unique').on(table.fileId, table.entityId),
+    index('file_entity_mappings_entity_idx').on(table.entityId, table.fileId),
+    check('file_entity_mappings_number_check', sql`${table.versionNo} between 1 and 5`),
   ],
 );
 
@@ -222,26 +240,23 @@ export const sourceJobDetails = sqliteTable(
   ],
 );
 
-export const syncItemFailures = sqliteTable(
-  'sync_item_failures',
+export const events = sqliteTable(
+  'events',
   {
     id: text().primaryKey(),
-    syncRunId: text('sync_run_id')
-      .notNull()
-      .references(() => syncRuns.id, { onDelete: 'cascade' }),
-    sourceId: text('source_id')
-      .notNull()
-      .references(() => jobSources.id, { onDelete: 'cascade' }),
-    externalJobId: text('external_job_id').notNull(),
-    stage: text().notNull(),
-    errorCategory: text('error_category').notNull(),
-    errorSummary: text('error_summary').notNull(),
-    rawRecordId: text('raw_record_id')
-      .notNull()
-      .references(() => rawJobRecords.id, { onDelete: 'restrict' }),
-    createdAt: epoch('created_at').notNull(),
+    streamType: text('stream_type').notNull(),
+    streamId: text('stream_id').notNull(),
+    sequenceNo: integer('sequence_no').notNull(),
+    eventType: text('event_type').notNull(),
+    payloadJson: jsonText('payload_json').notNull().default('{}'),
+    occurredAt: epoch('occurred_at').notNull(),
   },
-  (table) => [index('sync_item_failures_run_idx').on(table.syncRunId, table.createdAt)],
+  (table) => [
+    unique('events_stream_sequence_unique').on(table.streamType, table.streamId, table.sequenceNo),
+    index('events_stream_occurred_idx').on(table.streamType, table.streamId, table.occurredAt),
+    index('events_type_occurred_idx').on(table.eventType, table.occurredAt),
+    check('events_sequence_check', sql`${table.sequenceNo} >= 1`),
+  ],
 );
 
 export const jobs = sqliteTable(
@@ -298,17 +313,17 @@ export const jobRevisions = sqliteTable(
     revisionNo: integer('revision_no').notNull(),
     contentHash: text('content_hash').notNull(),
     normalizerVersion: text('normalizer_version').notNull(),
+    sourcePayloadHash: text('source_payload_hash').notNull(),
+    sourceUrl: text('source_url').notNull(),
     snapshotJson: jsonText('snapshot_json').notNull(),
     changeSetJson: jsonText('change_set_json').notNull(),
-    rawRecordId: text('raw_record_id')
-      .notNull()
-      .references(() => rawJobRecords.id, { onDelete: 'restrict' }),
     createdAt: epoch('created_at').notNull(),
   },
   (table) => [
     unique('job_revisions_number_unique').on(table.jobId, table.revisionNo),
     unique('job_revisions_content_unique').on(table.jobId, table.contentHash),
     check('job_revisions_number_check', sql`${table.revisionNo} >= 1`),
+    check('job_revisions_source_hash_check', sql`length(${table.sourcePayloadHash}) = 64`),
   ],
 );
 
@@ -321,45 +336,16 @@ export const jobObservations = sqliteTable(
     syncRunId: text('sync_run_id')
       .notNull()
       .references(() => syncRuns.id, { onDelete: 'restrict' }),
-    rawRecordId: text('raw_record_id')
+    jobRevisionId: text('job_revision_id')
       .notNull()
-      .references(() => rawJobRecords.id, { onDelete: 'restrict' }),
+      .references(() => jobRevisions.id, { onDelete: 'restrict' }),
     observedAt: epoch('observed_at').notNull(),
   },
-  (table) => [primaryKey({ columns: [table.jobId, table.syncRunId] })],
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.syncRunId] }),
+    index('job_observations_revision_idx').on(table.jobRevisionId, table.observedAt),
+  ],
 );
-
-export const jobStatusEvents = sqliteTable(
-  'job_status_events',
-  {
-    id: text().primaryKey(),
-    jobId: text('job_id')
-      .notNull()
-      .references(() => jobs.id, { onDelete: 'cascade' }),
-    syncRunId: text('sync_run_id').references(() => syncRuns.id, { onDelete: 'restrict' }),
-    fromStatus: text('from_status'),
-    toStatus: text('to_status').notNull(),
-    reasonCode: text('reason_code').notNull(),
-    evidenceJson: jsonText('evidence_json').notNull(),
-    createdAt: epoch('created_at').notNull(),
-  },
-  (table) => [index('job_status_events_job_created_idx').on(table.jobId, table.createdAt)],
-);
-
-export const resumeDocuments = sqliteTable('resume_documents', {
-  id: text().primaryKey(),
-  artifactId: text('artifact_id')
-    .notNull()
-    .unique()
-    .references(() => fileArtifacts.id, { onDelete: 'restrict' }),
-  contentHash: text('content_hash').notNull().unique(),
-  mediaType: text('media_type').notNull(),
-  extractedText: text('extracted_text'),
-  parseStatus: text('parse_status').notNull(),
-  parserVersion: text('parser_version'),
-  errorSummary: text('error_summary'),
-  createdAt: epoch('created_at').notNull(),
-});
 
 export const candidateProfiles = sqliteTable('candidate_profiles', {
   id: text().primaryKey(),
@@ -405,7 +391,7 @@ export const profileVersions = sqliteTable(
       .notNull()
       .references(() => candidateProfiles.id, { onDelete: 'cascade' }),
     versionNo: integer('version_no').notNull(),
-    resumeDocumentId: text('resume_document_id').references(() => resumeDocuments.id, {
+    resumeDocumentId: text('resume_file_id').references(() => files.id, {
       onDelete: 'restrict',
     }),
     agentRunId: text('agent_run_id').references(() => agentRuns.id, { onDelete: 'restrict' }),
@@ -422,26 +408,6 @@ export const profileVersions = sqliteTable(
       .on(table.profileId)
       .where(sql`${table.isCurrent} = 1`),
   ],
-);
-
-export const resumePolishSuggestions = sqliteTable(
-  'resume_polish_suggestions',
-  {
-    id: text().primaryKey(),
-    profileId: text('profile_id')
-      .notNull()
-      .references(() => candidateProfiles.id, { onDelete: 'cascade' }),
-    sourceVersionId: text('source_version_id')
-      .notNull()
-      .references(() => profileVersions.id, { onDelete: 'cascade' }),
-    sectionsJson: jsonText('sections_json').notNull(),
-    resultJson: jsonText('result_json').notNull(),
-    agentRunId: text('agent_run_id')
-      .notNull()
-      .references(() => agentRuns.id, { onDelete: 'restrict' }),
-    createdAt: epoch('created_at').notNull(),
-  },
-  (table) => [index('resume_polish_suggestions_profile_idx').on(table.profileId, table.createdAt)],
 );
 
 export const jobEnrichments = sqliteTable(
@@ -534,24 +500,6 @@ export const matchAdvices = sqliteTable(
   (table) => [unique('match_advices_run_unique').on(table.matchResultId, table.agentRunId)],
 );
 
-export const agentToolCalls = sqliteTable(
-  'agent_tool_calls',
-  {
-    id: text().primaryKey(),
-    agentRunId: text('agent_run_id')
-      .notNull()
-      .references(() => agentRuns.id, { onDelete: 'cascade' }),
-    sequenceNo: integer('sequence_no').notNull(),
-    toolKey: text('tool_key').notNull(),
-    inputSummaryJson: jsonText('input_summary_json').notNull(),
-    outputSummaryJson: jsonText('output_summary_json'),
-    status: text().notNull(),
-    durationMs: integer('duration_ms'),
-    errorSummary: text('error_summary'),
-  },
-  (table) => [unique('agent_tool_calls_sequence_unique').on(table.agentRunId, table.sequenceNo)],
-);
-
 export const schedules = sqliteTable('schedules', {
   id: text().primaryKey(),
   scheduleKey: text('schedule_key').notNull().unique(),
@@ -589,6 +537,7 @@ export const tasks = sqliteTable(
     cancelRequestedAt: epoch('cancel_requested_at'),
     errorCategory: text('error_category'),
     errorSummary: text('error_summary'),
+    resultJson: jsonText('result_json'),
     createdAt: epoch('created_at').notNull(),
     startedAt: epoch('started_at'),
     finishedAt: epoch('finished_at'),
@@ -615,14 +564,6 @@ export const applicationSettings = sqliteTable('application_settings', {
   valueJson: jsonText('value_json').notNull(),
   schemaVersion: text('schema_version').notNull(),
   updatedAt: epoch('updated_at').notNull(),
-});
-
-export const operationAuditEvents = sqliteTable('operation_audit_events', {
-  eventKey: text('event_key').primaryKey(),
-  eventType: text('event_type').notNull(),
-  subjectHash: text('subject_hash').notNull(),
-  detailsJson: jsonText('details_json').notNull(),
-  createdAt: epoch('created_at').notNull(),
 });
 
 export const resumeProjectSnapshots = sqliteTable(
@@ -654,10 +595,9 @@ export const projectDossiers = sqliteTable(
       .notNull()
       .unique()
       .references(() => resumeProjectSnapshots.id, { onDelete: 'restrict' }),
-    latestNotebookArtifactId: text('latest_notebook_artifact_id').references(
-      () => fileArtifacts.id,
-      { onDelete: 'restrict' },
-    ),
+    latestNotebookArtifactId: text('notebook_file_id').references(() => files.id, {
+      onDelete: 'restrict',
+    }),
     notebookSourceHash: text('notebook_source_hash'),
     revision: integer().notNull().default(0),
     createdAt: epoch('created_at').notNull(),
@@ -680,6 +620,7 @@ export const drillSessions = sqliteTable(
     profileVersion: text('profile_version').notNull(),
     profileDefinitionHash: text('profile_definition_hash').notNull(),
     capabilitySummaryJson: jsonText('capability_summary_json').notNull(),
+    materialBindingsJson: jsonText('material_bindings_json').notNull().default('[]'),
     status: text().notNull(),
     contextRevision: integer('context_revision').notNull().default(0),
     createdAt: epoch('created_at').notNull(),
@@ -690,13 +631,75 @@ export const drillSessions = sqliteTable(
     uniqueIndex('drill_sessions_one_open_per_dossier_idx')
       .on(table.dossierId)
       .where(sql`${table.status} in ('active', 'paused')`),
-    check('drill_sessions_profile_key_check', sql`${table.profileKey} = 'resume-only'`),
-    check('drill_sessions_profile_version_check', sql`${table.profileVersion} = 'v1'`),
     check(
-      'drill_sessions_status_check',
-      sql`${table.status} in ('active', 'paused', 'completed')`,
+      'drill_sessions_profile_key_check',
+      sql`${table.profileKey} in ('resume-only', 'docs-grounded')`,
     ),
+    check('drill_sessions_profile_version_check', sql`${table.profileVersion} = 'v1'`),
+    check('drill_sessions_status_check', sql`${table.status} in ('active', 'paused', 'completed')`),
     check('drill_sessions_revision_check', sql`${table.contextRevision} >= 0`),
+    check(
+      'drill_sessions_material_bindings_check',
+      sql`json_valid(${table.materialBindingsJson}) and json_type(${table.materialBindingsJson}) = 'array' and ((${table.profileKey} = 'resume-only' and json_array_length(${table.materialBindingsJson}) = 0) or (${table.profileKey} = 'docs-grounded' and json_array_length(${table.materialBindingsJson}) between 1 and 8))`,
+    ),
+  ],
+);
+
+export const experienceResearchRequests = sqliteTable(
+  'experience_research_requests',
+  {
+    id: text().primaryKey(),
+    briefJson: jsonText('brief_json').notNull(),
+    requestFingerprint: text('request_fingerprint').notNull().unique(),
+    promptVersion: text('prompt_version').notNull(),
+    schemaVersion: text('schema_version').notNull(),
+    promptFileId: text('prompt_file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'restrict' }),
+    promptFileVersionNo: integer('prompt_file_version_no').notNull(),
+    schemaFileId: text('schema_file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'restrict' }),
+    schemaFileVersionNo: integer('schema_file_version_no').notNull(),
+    bundleFileId: text('bundle_file_id').references(() => files.id, { onDelete: 'restrict' }),
+    bundleFileVersionNo: integer('bundle_file_version_no'),
+    bundleImportToken: text('bundle_import_token'),
+    bundleImportClaimedAt: epoch('bundle_import_claimed_at'),
+    bundleImportFileId: text('bundle_import_file_id'),
+    currentTaskId: text('current_task_id').references(() => tasks.id, { onDelete: 'set null' }),
+    state: text().notNull(),
+    revision: integer().notNull().default(0),
+    createdAt: epoch('created_at').notNull(),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    index('experience_research_requests_state_updated_idx').on(table.state, table.updatedAt),
+    check('experience_research_requests_brief_check', sql`json_valid(${table.briefJson})`),
+    check(
+      'experience_research_requests_fingerprint_check',
+      sql`length(${table.requestFingerprint}) = 64`,
+    ),
+    check(
+      'experience_research_requests_state_check',
+      sql`${table.state} in ('ready', 'needs_review', 'completed')`,
+    ),
+    check(
+      'experience_research_requests_prompt_version_no_check',
+      sql`${table.promptFileVersionNo} between 1 and 5`,
+    ),
+    check(
+      'experience_research_requests_schema_version_no_check',
+      sql`${table.schemaFileVersionNo} between 1 and 5`,
+    ),
+    check('experience_research_requests_revision_check', sql`${table.revision} >= 0`),
+    check(
+      'experience_research_requests_bundle_check',
+      sql`((${table.bundleFileId} is null and ${table.bundleFileVersionNo} is null) or (${table.bundleFileId} is not null and ${table.bundleFileVersionNo} between 1 and 5))`,
+    ),
+    check(
+      'experience_research_requests_bundle_claim_check',
+      sql`((${table.bundleImportToken} is null and ${table.bundleImportClaimedAt} is null and ${table.bundleImportFileId} is null) or (${table.bundleImportToken} is not null and length(trim(${table.bundleImportToken})) > 0 and ${table.bundleImportClaimedAt} >= 0 and ${table.bundleImportFileId} is not null and length(trim(${table.bundleImportFileId})) > 0))`,
+    ),
   ],
 );
 
@@ -785,10 +788,7 @@ export const projectKnowledgeItems = sqliteTable(
       'project_knowledge_items_kind_check',
       sql`${table.kind} in ('fact', 'decision', 'metric', 'incident', 'lesson', 'ambiguity', 'conflict')`,
     ),
-    check(
-      'project_knowledge_items_status_check',
-      sql`${table.status} in ('active', 'superseded')`,
-    ),
+    check('project_knowledge_items_status_check', sql`${table.status} in ('active', 'superseded')`),
     check('project_knowledge_items_start_check', sql`${table.sourceStart} >= 0`),
     check('project_knowledge_items_end_check', sql`${table.sourceEnd} > ${table.sourceStart}`),
   ],
@@ -814,6 +814,108 @@ export const drillCoverage = sqliteTable(
     check(
       'drill_coverage_status_check',
       sql`${table.status} in ('unasked', 'asked', 'evidence_partial', 'evidence_sufficient', 'needs_clarification')`,
+    ),
+  ],
+);
+
+export const interviewExperiences = sqliteTable(
+  'interview_experiences',
+  {
+    id: text().primaryKey(),
+    documentId: text('file_id')
+      .notNull()
+      .references(() => files.id, { onDelete: 'cascade' }),
+    sequenceNo: integer('sequence_no').notNull(),
+    sourceType: text('source_type').notNull().default('personal'),
+    reviewStatus: text('review_status').notNull().default('draft'),
+    researchRequestId: text('research_request_id').references(() => experienceResearchRequests.id, {
+      onDelete: 'cascade',
+    }),
+    company: text(),
+    role: text(),
+    stage: text(),
+    occurredOn: text('occurred_on'),
+    outcome: text(),
+    difficulty: text(),
+    tagsJson: jsonText('tags_json').notNull().default('[]'),
+    notes: text(),
+    sourceUrl: text('source_url'),
+    sourceTitle: text('source_title'),
+    sourcePublishedAt: text('source_published_at'),
+    sourceRetrievedAt: text('source_retrieved_at'),
+    verificationStatus: text('verification_status').notNull().default('not_applicable'),
+  },
+  (table) => [
+    unique('interview_experiences_document_sequence_unique').on(table.documentId, table.sequenceNo),
+    index('interview_experiences_company_role_idx').on(table.company, table.role, table.occurredOn),
+    index('interview_experiences_research_review_idx').on(
+      table.researchRequestId,
+      table.reviewStatus,
+      table.sequenceNo,
+    ),
+    check('interview_experiences_sequence_check', sql`${table.sequenceNo} >= 1`),
+    check(
+      'interview_experiences_source_type_check',
+      sql`${table.sourceType} in ('personal', 'community')`,
+    ),
+    check(
+      'interview_experiences_review_status_check',
+      sql`${table.reviewStatus} in ('draft', 'needs_review', 'accepted', 'rejected')`,
+    ),
+    check(
+      'interview_experiences_verification_check',
+      sql`${table.verificationStatus} in ('not_applicable', 'unverified', 'verified')`,
+    ),
+    check(
+      'interview_experiences_source_check',
+      sql`(${table.sourceType} = 'personal' and ${table.researchRequestId} is null and ${table.verificationStatus} = 'not_applicable') or (${table.sourceType} = 'community' and ${table.researchRequestId} is not null and ${table.sourceUrl} is not null and ${table.sourceTitle} is not null and ${table.sourceRetrievedAt} is not null and ${table.verificationStatus} <> 'not_applicable')`,
+    ),
+  ],
+);
+
+export const interviewQuestionEntries = sqliteTable(
+  'interview_question_entries',
+  {
+    id: text().primaryKey(),
+    experienceId: text('experience_id')
+      .notNull()
+      .references(() => interviewExperiences.id, { onDelete: 'cascade' }),
+    sequenceNo: integer('sequence_no').notNull(),
+    question: text().notNull(),
+    answer: text(),
+    reflection: text(),
+    answerExcerpt: text('answer_excerpt'),
+    topicsJson: jsonText('topics_json').notNull().default('[]'),
+    evidenceExcerpt: text('evidence_excerpt'),
+    questionFingerprint: text('question_fingerprint'),
+    questionSourceStart: integer('question_source_start'),
+    questionSourceEnd: integer('question_source_end'),
+    answerSourceStart: integer('answer_source_start'),
+    answerSourceEnd: integer('answer_source_end'),
+  },
+  (table) => [
+    unique('interview_question_entries_experience_sequence_unique').on(
+      table.experienceId,
+      table.sequenceNo,
+    ),
+    index('interview_question_entries_experience_idx').on(table.experienceId, table.sequenceNo),
+    index('interview_question_entries_fingerprint_idx').on(
+      table.questionFingerprint,
+      table.experienceId,
+    ),
+    check('interview_question_entries_sequence_check', sql`${table.sequenceNo} >= 1`),
+    check('interview_question_entries_question_check', sql`length(trim(${table.question})) > 0`),
+    check(
+      'interview_question_entries_question_range_check',
+      sql`(${table.questionSourceStart} is null and ${table.questionSourceEnd} is null) or (${table.questionSourceStart} >= 0 and ${table.questionSourceEnd} > ${table.questionSourceStart})`,
+    ),
+    check(
+      'interview_question_entries_answer_range_check',
+      sql`(${table.answerSourceStart} is null and ${table.answerSourceEnd} is null) or (${table.answerSourceStart} >= 0 and ${table.answerSourceEnd} > ${table.answerSourceStart})`,
+    ),
+    check(
+      'interview_question_entries_fingerprint_check',
+      sql`${table.questionFingerprint} is null or length(${table.questionFingerprint}) = 64`,
     ),
   ],
 );

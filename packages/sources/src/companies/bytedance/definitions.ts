@@ -9,7 +9,13 @@ import type { ScriptedConfig } from '../../shared/scripted/schemas.js';
 import { byteDanceJobSchema } from './schemas.js';
 
 function requestFor(key: 'bytedance.social' | 'bytedance.campus', portalType: number) {
-  return ({ config, page, requestId, signal, timeoutMs }: Parameters<ScriptedAdapterDefinition['request']>[0]) => {
+  return ({
+    config,
+    page,
+    requestId,
+    signal,
+    timeoutMs,
+  }: Parameters<ScriptedAdapterDefinition['request']>[0]) => {
     const offset = (page - 1) * config.pageSize;
     const campus = key === 'bytedance.campus';
     return jsonRequest({
@@ -75,4 +81,3 @@ export const createByteDanceAdapter = (): JobSourceAdapter<ScriptedConfig, never
   createScriptedAdapter(bytedanceDefinition);
 export const createByteDanceCampusAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(bytedanceCampusDefinition);
-

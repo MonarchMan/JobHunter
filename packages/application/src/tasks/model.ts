@@ -36,6 +36,7 @@ export interface TaskLogger {
 }
 
 export interface TaskHandlerContext {
+  readonly taskId?: TaskId;
   readonly signal: AbortSignal;
   readonly clock: Clock;
   readonly logger: TaskLogger;
@@ -48,6 +49,14 @@ export interface TaskHandler<TPayload, TOutput> {
   readonly outputSchema: RuntimeSchema<TOutput>;
   readonly defaultMaxAttempts: number;
   readonly leaseDurationMs: number;
+  /**
+   * Use `complete` only when the handler's durable commit rejects cancellation requested before
+   * that commit. A cancellation arriving after the handler returns is then too late to hide the
+   * already-published business result. A resolver runs after output validation so handlers with
+   * no-op results can keep the default cancellation-wins behavior.
+   */
+  readonly lateCancellationPolicy?:
+    'cancel' | 'complete' | ((output: TOutput) => 'cancel' | 'complete');
   readonly concurrencyKey?: (payload: TPayload) => string | null;
   execute(context: TaskHandlerContext, payload: TPayload): Promise<TOutput>;
 }
@@ -73,6 +82,7 @@ export interface TaskRecord {
   readonly cancelRequestedAt: UtcInstant | null;
   readonly errorCategory: TaskErrorCategory | null;
   readonly errorSummary: string | null;
+  readonly result?: unknown;
   readonly createdAt: UtcInstant;
   readonly startedAt: UtcInstant | null;
   readonly finishedAt: UtcInstant | null;
@@ -96,6 +106,13 @@ export type EnqueueTaskResult =
   | { readonly kind: 'enqueued'; readonly task: TaskRecord }
   | { readonly kind: 'idempotent'; readonly task: TaskRecord }
   | { readonly kind: 'concurrency_conflict'; readonly task: TaskRecord };
+
+export interface TaskRetryCoordinator {
+  enqueueRetry(input: {
+    readonly source: TaskRecord;
+    readonly retry: PersistedTaskInput;
+  }): EnqueueTaskResult;
+}
 
 export interface TaskListFilter {
   readonly statuses?: readonly TaskStatus[];
@@ -175,7 +192,13 @@ export interface TaskQueue {
     readonly now: UtcInstant;
     readonly leaseDurationMs: number;
   }): HeartbeatResult;
-  complete(taskId: TaskId, workerId: string, finishedAt: UtcInstant): boolean;
+  complete(
+    taskId: TaskId,
+    workerId: string,
+    finishedAt: UtcInstant,
+    result?: unknown,
+    options?: { readonly allowRequestedCancellation?: boolean },
+  ): boolean;
   reschedule(input: {
     readonly taskId: TaskId;
     readonly workerId: string;

@@ -86,22 +86,30 @@ async function setup(): Promise<{
   resources.push({ root, handle });
   handle.client
     .prepare(
-      `INSERT INTO file_artifacts
-       (id, kind, relative_path, media_type, sha256, byte_size, created_at, deleted_at)
-       VALUES ('018f0000-0000-7000-8000-000000009001', 'resume', 'artifacts/test',
+      `INSERT INTO entities
+       (id, relative_path, media_type, sha256, byte_size, created_at, deleted_at)
+       VALUES ('018f0000-0000-7000-8000-000000009001', 'artifacts/test',
                'text/plain', ?, 100, 1, NULL)`,
     )
     .run('a'.repeat(64));
   handle.client
     .prepare(
-      `INSERT INTO resume_documents
-       (id, artifact_id, content_hash, media_type, extracted_text, parse_status,
-        parser_version, error_summary, created_at)
-       VALUES ('018f0000-0000-7000-8000-000000009002',
-               '018f0000-0000-7000-8000-000000009001', ?, 'text/plain',
-               'TypeScript Agent RAG', 'parsed', 'utf8@1', NULL, 1)`,
+      `INSERT INTO files
+       (id, kind, name, state, revision, properties_json, created_at, updated_at)
+       VALUES ('018f0000-0000-7000-8000-000000009002', 'resume', 'fixture-resume',
+               'parsed', 0, '{}', 1, 1)`,
     )
-    .run('a'.repeat(64));
+    .run();
+  handle.client
+    .prepare(
+      `INSERT INTO file_entity_mappings
+       (file_id, entity_id, version_no, parser_version, parse_status, extracted_text,
+        metadata_json, created_at)
+       VALUES ('018f0000-0000-7000-8000-000000009002',
+               '018f0000-0000-7000-8000-000000009001', 1, 'utf8@1', 'parsed',
+               'TypeScript Agent RAG', '{}', 1)`,
+    )
+    .run();
   handle.client
     .prepare(
       `INSERT INTO agent_runs

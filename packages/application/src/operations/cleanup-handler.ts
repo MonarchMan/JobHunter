@@ -5,7 +5,7 @@ import type { CleanupService } from './cleanup-service.js';
 
 export const cleanupTaskPayloadSchema = z
   .object({
-    rawRecordsDays: z.number().int().min(1).max(3_650),
+    sourceDetailsDays: z.number().int().min(1).max(3_650),
     observationsDays: z.number().int().min(1).max(3_650),
     failedAgentRunsDays: z.number().int().min(1).max(3_650),
   })

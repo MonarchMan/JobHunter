@@ -27,8 +27,7 @@ export class SourceScheduleReconciliationService {
     let enabled = 0;
     const sources = this.#sources.list();
     for (const source of sources) {
-      const scheduleEnabled =
-        ready && source.channel === activeChannel && source.effectiveEnabled;
+      const scheduleEnabled = ready && source.channel === activeChannel && source.effectiveEnabled;
       this.#schedules.upsert({
         id: source.id,
         scheduleKey: `source.sync:${source.id}`,

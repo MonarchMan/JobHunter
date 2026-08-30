@@ -6,6 +6,18 @@ export * from './jobs/web-job-query-service.js';
 export * from './jobs/web-job-detail-service.js';
 export * from './interview/index.js';
 export type { ProjectDossierDetail, ProjectDossierSummary } from './ports/interview-projects.js';
+export type {
+  ExperienceDocumentDetail,
+  ExperienceDocumentSummary,
+} from './ports/interview-experiences.js';
+export type {
+  CommunityExperienceFilter,
+  CommunityExperienceSummary,
+  ExperienceResearchDetail,
+  ExperienceResearchRequestRecord,
+  ExperienceResearchRequestSummary,
+  ExperienceResearchTaskSnapshot,
+} from './ports/interview-research.js';
 export * from './matching/job-advice-handler.js';
 export * from './matching/job-understanding-handler.js';
 export * from './matching/match-workflow-service.js';

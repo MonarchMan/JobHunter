@@ -139,9 +139,10 @@ export class WorkerEngine implements TaskCancellationNotifier {
       if (!handler) {
         throw new TaskExecutionError('invalid_config', 'No handler is registered for task type.');
       }
-      await this.#registry.execute(
+      const output = await this.#registry.execute(
         task.taskType,
         {
+          taskId: task.id,
           signal: controller.signal,
           clock: this.#clock,
           logger: this.#logger,
@@ -149,17 +150,35 @@ export class WorkerEngine implements TaskCancellationNotifier {
         },
         task.payload,
       );
-      if (controller.signal.reason === 'cancelled') {
+      const lateCancellationPolicy =
+        typeof handler.lateCancellationPolicy === 'function'
+          ? handler.lateCancellationPolicy(output)
+          : handler.lateCancellationPolicy;
+      const completionWinsLateCancellation = lateCancellationPolicy === 'complete';
+      if (controller.signal.reason === 'cancelled' && !completionWinsLateCancellation) {
         this.#queue.markCancelled(task.id, this.#options.workerId, this.#clock.now());
-      } else if (!controller.signal.aborted) {
-        this.#queue.complete(task.id, this.#options.workerId, this.#clock.now());
-        this.#logger.info('task.finished', {
-          taskId: task.id,
-          taskType: task.taskType,
-          attempt: task.attemptCount,
-          durationMs: this.#clock.now() - startedAt,
-          result: 'succeeded',
-        });
+      } else if (
+        !controller.signal.aborted ||
+        (controller.signal.reason === 'cancelled' && completionWinsLateCancellation)
+      ) {
+        const completed = this.#queue.complete(
+          task.id,
+          this.#options.workerId,
+          this.#clock.now(),
+          output,
+          { allowRequestedCancellation: completionWinsLateCancellation },
+        );
+        if (completed) {
+          this.#logger.info('task.finished', {
+            taskId: task.id,
+            taskType: task.taskType,
+            attempt: task.attemptCount,
+            durationMs: this.#clock.now() - startedAt,
+            result: 'succeeded',
+          });
+        } else {
+          this.#finalizeRequestedCancellation(task);
+        }
       }
     } catch (error) {
       this.#handleFailure(task, controller, error);
@@ -209,6 +228,8 @@ export class WorkerEngine implements TaskCancellationNotifier {
       return;
     }
 
+    if (this.#finalizeRequestedCancellation(task)) return;
+
     const classified = classifyTaskError(error);
     const decision = this.#retryPolicy.decide({
       category: classified.category,
@@ -251,6 +272,21 @@ export class WorkerEngine implements TaskCancellationNotifier {
       errorCategory: category,
       error: classified,
     });
+  }
+
+  #finalizeRequestedCancellation(task: TaskRecord): boolean {
+    const current = this.#queue.get(task.id);
+    if (current?.status !== 'running' || current.cancelRequestedAt === null) return false;
+    const cancelled = this.#queue.markCancelled(task.id, this.#options.workerId, this.#clock.now());
+    if (cancelled) {
+      this.#logger.info('task.finished', {
+        taskId: task.id,
+        taskType: task.taskType,
+        attempt: task.attemptCount,
+        result: 'cancelled',
+      });
+    }
+    return true;
   }
 
   public async run(signal?: AbortSignal): Promise<void> {

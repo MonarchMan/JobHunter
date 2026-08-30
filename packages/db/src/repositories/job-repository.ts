@@ -19,6 +19,7 @@ import type Database from 'better-sqlite3';
 
 interface CurrentJobRow {
   readonly id: string;
+  readonly revision_id: string;
   readonly source_id: string;
   readonly external_job_id: string;
   readonly revision_no: number;
@@ -43,7 +44,7 @@ export class SqliteJobRepository implements JobRepository {
   }): CurrentJobRecord | null {
     const row = this.#client
       .prepare(
-        `SELECT j.id, j.source_id, j.external_job_id, j.status, j.missing_count,
+        `SELECT j.id, r.id AS revision_id, j.source_id, j.external_job_id, j.status, j.missing_count,
                 j.last_seen_at, j.closed_at, r.revision_no, r.content_hash, r.snapshot_json
          FROM jobs j
          JOIN job_revisions r ON r.job_id = j.id
@@ -56,6 +57,7 @@ export class SqliteJobRepository implements JobRepository {
 
     return {
       jobId: parseId(row.id, 'Job'),
+      revisionId: parseId(row.revision_id, 'JobRevision'),
       identity: {
         sourceId: parseId(row.source_id, 'JobSource'),
         externalJobId: row.external_job_id,
@@ -110,15 +112,23 @@ export class SqliteJobRepository implements JobRepository {
         );
       this.#client
         .prepare(
-          `INSERT INTO job_status_events
-           (id, job_id, sync_run_id, from_status, to_status, reason_code, evidence_json, created_at)
-           VALUES (?, ?, ?, NULL, 'active', 'first_observed', ?, ?)`,
+          `INSERT INTO events
+           (id, stream_type, stream_id, sequence_no, event_type, payload_json, occurred_at)
+           VALUES (?, 'job', ?, 1, 'job.status.changed', ?, ?)`,
         )
         .run(
           input.statusEventId,
           input.jobId,
-          input.syncRunId,
-          canonicalJson({ rawRecordId: input.rawRecordId }),
+          canonicalJson({
+            syncRunId: input.syncRunId,
+            fromStatus: null,
+            toStatus: 'active',
+            reasonCode: 'first_observed',
+            evidence: {
+              sourcePayloadHash: input.sourcePayloadHash,
+              sourceUrl: input.sourceUrl,
+            },
+          }),
           input.observedAt,
         );
     } else {
@@ -156,9 +166,9 @@ export class SqliteJobRepository implements JobRepository {
     this.#client
       .prepare(
         `INSERT INTO job_revisions
-         (id, job_id, revision_no, content_hash, normalizer_version, snapshot_json,
-          change_set_json, raw_record_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
+          source_url, snapshot_json, change_set_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.revisionId,
@@ -166,12 +176,18 @@ export class SqliteJobRepository implements JobRepository {
         input.decision.revisionNumber,
         input.decision.contentHash,
         input.normalizerVersion,
+        input.sourcePayloadHash,
+        input.sourceUrl,
         canonicalJson(normalized),
         canonicalJson(input.decision.type === 'create' ? [] : input.decision.changes),
-        input.rawRecordId,
         input.observedAt,
       );
-    this.recordObservation(input);
+    this.recordObservation({
+      jobId: input.jobId,
+      syncRunId: input.syncRunId,
+      jobRevisionId: parseId(input.revisionId, 'JobRevision'),
+      observedAt: input.observedAt,
+    });
   }
 
   public persistDetailRevision(input: Parameters<JobRepository['persistDetailRevision']>[0]): void {
@@ -206,9 +222,9 @@ export class SqliteJobRepository implements JobRepository {
     this.#client
       .prepare(
         `INSERT INTO job_revisions
-         (id, job_id, revision_no, content_hash, normalizer_version, snapshot_json,
-          change_set_json, raw_record_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
+          source_url, snapshot_json, change_set_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.revisionId,
@@ -216,9 +232,10 @@ export class SqliteJobRepository implements JobRepository {
         input.decision.revisionNumber,
         input.decision.contentHash,
         input.normalizerVersion,
+        input.sourcePayloadHash,
+        input.sourceUrl,
         canonicalJson(normalized),
         canonicalJson(input.decision.changes),
-        input.rawRecordId,
         input.occurredAt,
       );
   }
@@ -226,16 +243,16 @@ export class SqliteJobRepository implements JobRepository {
   public recordObservation(input: {
     readonly jobId: JobId;
     readonly syncRunId: SyncRunId;
-    readonly rawRecordId: string;
+    readonly jobRevisionId: Parameters<JobRepository['recordObservation']>[0]['jobRevisionId'];
     readonly observedAt: UtcInstant;
   }): void {
     this.#client
       .prepare(
-        `INSERT INTO job_observations (job_id, sync_run_id, raw_record_id, observed_at)
+        `INSERT INTO job_observations (job_id, sync_run_id, job_revision_id, observed_at)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(job_id, sync_run_id) DO NOTHING`,
       )
-      .run(input.jobId, input.syncRunId, input.rawRecordId, input.observedAt);
+      .run(input.jobId, input.syncRunId, input.jobRevisionId, input.observedAt);
     this.#client
       .prepare(
         'INSERT INTO sync_seen_jobs (sync_run_id, job_id) VALUES (?, ?) ON CONFLICT DO NOTHING',
@@ -263,19 +280,24 @@ export class SqliteJobRepository implements JobRepository {
     if (input.eventId && input.reason) {
       this.#client
         .prepare(
-          `INSERT INTO job_status_events
-           (id, job_id, sync_run_id, from_status, to_status, reason_code, evidence_json, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO events
+           (id, stream_type, stream_id, sequence_no, event_type, payload_json, occurred_at)
+           SELECT ?, 'job', ?, COALESCE(MAX(sequence_no), 0) + 1,
+                  'job.status.changed', ?, ?
+           FROM events WHERE stream_type = 'job' AND stream_id = ?`,
         )
         .run(
           input.eventId,
           input.jobId,
-          input.syncRunId,
-          input.fromStatus,
-          input.lifecycle.status,
-          input.reason,
-          canonicalJson(input.evidence ?? {}),
+          canonicalJson({
+            syncRunId: input.syncRunId,
+            fromStatus: input.fromStatus,
+            toStatus: input.lifecycle.status,
+            reasonCode: input.reason,
+            evidence: input.evidence ?? {},
+          }),
           input.occurredAt,
+          input.jobId,
         );
     }
   }

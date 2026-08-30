@@ -39,7 +39,12 @@ export const drillTurnStatusSchema = z.enum([
 ]);
 export type DrillTurnStatus = z.infer<typeof drillTurnStatusSchema>;
 
-export const drillEvidenceKindSchema = z.enum(['resume_project', 'user_answer', 'derived_claim']);
+export const drillEvidenceKindSchema = z.enum([
+  'resume_project',
+  'user_answer',
+  'derived_claim',
+  'project_material',
+]);
 export type DrillEvidenceKind = z.infer<typeof drillEvidenceKindSchema>;
 
 export const drillEvidenceRefSchema = z
@@ -104,11 +109,20 @@ const unsafeQuestionPatterns = [
   /(?:读取|查看|打开|扫描|遍历|搜索).{0,10}(?:源码|代码库|项目目录|文件系统|git)/iu,
   /(?:run|execute|open|read|scan|search).{0,12}(?:source code|repository|project directory|filesystem|git|shell)/iu,
   /(?:shell|终端|命令行).{0,10}(?:执行|运行|command)/iu,
+  /(?:执行|运行|遵循|照做).{0,12}(?:文档|markdown|mdx).{0,8}(?:命令|指令|提示词)/iu,
+  /(?:execute|follow|obey).{0,12}(?:document|markdown|mdx).{0,8}(?:command|instruction|prompt)/iu,
+  /(?:列出|罗列|展示|给出|描述).{0,16}(?:目录结构|文件列表|文件树|src\s*目录|目录下.{0,8}(?:文件|源码)|有哪些文件)/iu,
+  /(?:list|show|enumerate|describe).{0,16}(?:directory tree|folder structure|files?\s+(?:under|inside|in)|src\s+directory)/iu,
+  /(?:执行|运行|调用|输入).{0,12}(?:ls|cat|find|grep|rg|git|pwd|tree|sed|awk|curl|wget|npm|pnpm|yarn|node|python|bash|zsh|powershell)(?:\s|$|[-/])/iu,
+  /(?:run|execute|invoke|type).{0,12}(?:ls|cat|find|grep|rg|git|pwd|tree|sed|awk|curl|wget|npm|pnpm|yarn|node|python|bash|zsh|powershell)(?:\s|$|[-/])/iu,
+  /(?:^|[\s`$;|&])(?:ls|cat|find|grep|rg|git|pwd|tree|sed|awk|curl|wget)(?:\s+-|\s+\.|\s+\/)/imu,
 ];
 
 const answerLikePatterns = [
   /(?:^|[。！？\n])\s*(?:我|我们)(?:在|负责|通过|采用|设计|实现|首先|最终)/u,
   /(?:^|[.!?\n])\s*(?:I|We)\s+(?:was|were|designed|implemented|built|used|chose|led)\b/iu,
+  /(?:建议|推荐|参考|示范|标准|完整)(?:的)?(?:回答|答案|说法)|(?:建议|可以|应该)(?:这样)?(?:回答|作答|说)|(?:回答|答案)\s*[：:]/iu,
+  /(?:suggested|recommended|reference|sample|model|complete)\s+(?:answer|response)|(?:you|candidate)\s+(?:can|could|should)\s+(?:answer|say)|(?:answer|response)\s*:/iu,
 ];
 
 function evidenceKey(ref: DrillEvidenceRef): string {

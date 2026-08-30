@@ -17,7 +17,7 @@ interface SourceRow {
   readonly slug: string;
   readonly adapter_key: string;
   readonly coverage_role: WebSource['coverageRole'];
-  readonly recruitment_type: WebSource['recruitmentType'];
+  readonly channel: WebSourceChannel['channel'];
   readonly enabled: number;
   readonly company_enabled: number;
   readonly channel_enabled: number;
@@ -42,8 +42,8 @@ interface SourceRow {
 
 const selection = `
   SELECT source.id, source.company_id, source.channel_id, company.name AS company_name, source.base_url,
-         source.slug, source.adapter_key, source.coverage_role,
-         source.recruitment_type, source.enabled, company.enabled AS company_enabled,
+         source.slug, source.adapter_key, source.coverage_role, channel.channel,
+         source.enabled, company.enabled AS company_enabled,
          channel.enabled AS channel_enabled, source.support_status, source.health_status,
          source.consecutive_failures, source.last_success_at, source.last_failure_at,
          run.id AS run_id, run.status AS run_status, run.coverage, run.stats_json,
@@ -63,21 +63,12 @@ function instant(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
 }
 
-function recruitmentChannels(
-  adapterKey: string,
-  recruitmentType: WebSource['recruitmentType'],
-): WebSource['recruitmentChannels'] {
-  if (adapterKey.endsWith('.social')) return ['social'];
-  if (adapterKey.endsWith('.intern')) return ['internship'];
-  if (adapterKey.endsWith('.campus')) return ['campus'];
-  return recruitmentType === 'social'
-    ? ['social']
-    : recruitmentType === 'campus'
-      ? ['campus']
-      : ['campus', 'social'];
+function recruitmentChannels(channel: SourceRow['channel']): WebSource['recruitmentChannels'] {
+  return channel === 'intern' ? ['internship'] : [channel];
 }
 
 function source(row: SourceRow): WebSource {
+  const recruitmentType = row.channel === 'social' ? 'social' : 'campus';
   return webSourceSchema.parse({
     id: row.id,
     companyId: row.company_id,
@@ -87,8 +78,8 @@ function source(row: SourceRow): WebSource {
     slug: row.slug,
     adapterKey: row.adapter_key,
     coverageRole: row.coverage_role,
-    recruitmentType: row.recruitment_type,
-    recruitmentChannels: recruitmentChannels(row.adapter_key, row.recruitment_type),
+    recruitmentType,
+    recruitmentChannels: recruitmentChannels(row.channel),
     enabled: row.enabled === 1,
     effectiveEnabled: row.enabled === 1 && row.company_enabled === 1 && row.channel_enabled === 1,
     supportStatus: row.support_status,

@@ -29,45 +29,13 @@ export class SqliteCleanupRepository implements CleanupRepository {
          FROM job_observations WHERE observed_at < ?`,
       )
       .all(cutoffs.observationsBefore) as CandidateRow[];
-    const rawRecords = this.#client
+    const sourceDetails = this.#client
       .prepare(
-        `SELECT raw.id,
-                CASE WHEN artifact.id IS NOT NULL
-                       AND NOT EXISTS (
-                         SELECT 1 FROM raw_job_records other
-                         WHERE other.artifact_id = artifact.id AND other.id <> raw.id
-                       )
-                       AND NOT EXISTS (
-                         SELECT 1 FROM resume_documents resume WHERE resume.artifact_id = artifact.id
-                       )
-                       AND NOT EXISTS (
-                         SELECT 1 FROM project_dossiers dossier
-                         WHERE dossier.latest_notebook_artifact_id = artifact.id
-                       )
-                     THEN artifact.relative_path ELSE NULL END AS relative_path,
-                CASE WHEN artifact.id IS NOT NULL
-                       AND NOT EXISTS (
-                         SELECT 1 FROM raw_job_records other
-                         WHERE other.artifact_id = artifact.id AND other.id <> raw.id
-                       )
-                       AND NOT EXISTS (
-                         SELECT 1 FROM resume_documents resume WHERE resume.artifact_id = artifact.id
-                       )
-                       AND NOT EXISTS (
-                         SELECT 1 FROM project_dossiers dossier
-                         WHERE dossier.latest_notebook_artifact_id = artifact.id
-                       )
-                     THEN artifact.byte_size ELSE NULL END AS byte_size,
-                raw.captured_at AS created_at
-         FROM raw_job_records raw
-         LEFT JOIN file_artifacts artifact ON artifact.id = raw.artifact_id
-         WHERE raw.captured_at < ?
-           AND NOT EXISTS (SELECT 1 FROM job_revisions revision WHERE revision.raw_record_id = raw.id)
-           AND NOT EXISTS (
-             SELECT 1 FROM job_observations observation WHERE observation.raw_record_id = raw.id
-           )`,
+        `SELECT json_array(source_id, external_job_id) AS id, NULL AS relative_path,
+                NULL AS byte_size, updated_at AS created_at
+         FROM source_job_details WHERE updated_at < ?`,
       )
-      .all(cutoffs.rawRecordsBefore) as CandidateRow[];
+      .all(cutoffs.sourceDetailsBefore) as CandidateRow[];
     const agentRuns = this.#client
       .prepare(
         `SELECT run.id, NULL AS relative_path, NULL AS byte_size, run.started_at AS created_at
@@ -84,16 +52,16 @@ export class SqliteCleanupRepository implements CleanupRepository {
       .all(cutoffs.agentRunsBefore) as CandidateRow[];
     return [
       ...observations.map((row) => this.#candidate('observation', row)),
-      ...rawRecords.map((row) => this.#candidate('raw_record', row)),
+      ...sourceDetails.map((row) => this.#candidate('source_detail', row)),
       ...agentRuns.map((row) => this.#candidate('agent_run', row)),
     ];
   }
 
   public listRegisteredArtifactPaths(): readonly string[] {
     return (
-      this.#client
-        .prepare('SELECT relative_path FROM file_artifacts WHERE deleted_at IS NULL')
-        .all() as { readonly relative_path: string }[]
+      this.#client.prepare('SELECT relative_path FROM entities WHERE deleted_at IS NULL').all() as {
+        readonly relative_path: string;
+      }[]
     ).map((row) => row.relative_path);
   }
 
@@ -107,31 +75,18 @@ export class SqliteCleanupRepository implements CleanupRepository {
           this.#client
             .prepare('DELETE FROM job_observations WHERE job_id = ? AND sync_run_id = ?')
             .run(jobId, syncRunId);
-        } else if (candidate.kind === 'raw_record') {
-          const artifact = this.#client
-            .prepare('SELECT artifact_id FROM raw_job_records WHERE id = ?')
-            .get(candidate.id) as { readonly artifact_id: string | null } | undefined;
-          this.#client.prepare('DELETE FROM raw_job_records WHERE id = ?').run(candidate.id);
-          if (artifact?.artifact_id) {
-            this.#client
-              .prepare(
-                `DELETE FROM file_artifacts WHERE id = ?
-                   AND NOT EXISTS (
-                     SELECT 1 FROM raw_job_records value WHERE value.artifact_id = file_artifacts.id
-                   )
-                   AND NOT EXISTS (
-                     SELECT 1 FROM resume_documents value
-                     WHERE value.artifact_id = file_artifacts.id
-                   )
-                   AND NOT EXISTS (
-                     SELECT 1 FROM project_dossiers value
-                     WHERE value.latest_notebook_artifact_id = file_artifacts.id
-                   )`,
-              )
-              .run(artifact.artifact_id);
-          }
+        } else if (candidate.kind === 'source_detail') {
+          const [sourceId, externalJobId] = z
+            .tuple([z.string(), z.string()])
+            .parse(JSON.parse(candidate.id));
+          this.#client
+            .prepare('DELETE FROM source_job_details WHERE source_id = ? AND external_job_id = ?')
+            .run(sourceId, externalJobId);
         } else if (candidate.kind === 'agent_run') {
           this.#client.prepare('DELETE FROM agent_runs WHERE id = ?').run(candidate.id);
+          this.#client
+            .prepare("DELETE FROM events WHERE stream_type = 'agent_run' AND stream_id = ?")
+            .run(candidate.id);
         }
       }
     })();

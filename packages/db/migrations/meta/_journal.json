@@ -127,6 +127,48 @@
       "when": 1788026400000,
       "tag": "0017_interview_project_drill",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788112800000,
+      "tag": "0018_interview_experience_intake",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788116400000,
+      "tag": "0019_storage_event_convergence",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788202800000,
+      "tag": "0020_deep_project_materials",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788206400000,
+      "tag": "0021_community_experience_research",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788292800000,
+      "tag": "0022_project_material_logical_identity",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788296400000,
+      "tag": "0023_research_bundle_import_claims",
+      "breakpoints": true
     }
   ]
 }

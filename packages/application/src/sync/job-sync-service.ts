@@ -1,5 +1,4 @@
 import {
-  canonicalJson,
   contentHash,
   decideExplicitClosure,
   decideJobMerge,
@@ -25,7 +24,6 @@ import {
   type NormalizedSourceJob,
   type SourcePageClient,
 } from '@jobhunter/source-core';
-import type { ArtifactStore } from '../ports/artifact-store.js';
 import type { UnitOfWork } from '../ports/unit-of-work.js';
 import type { SyncCoverage, SyncRunStats, SyncSourceRecord, SyncTrigger } from './model.js';
 import type { JobIntakePolicy } from './job-intake-policy.js';
@@ -33,7 +31,6 @@ import { classifyJobRegion } from './region-policy.js';
 
 interface MutableSyncRunStats {
   discovered: number;
-  rawStored: number;
   created: number;
   unchanged: number;
   revised: number;
@@ -61,47 +58,12 @@ export type JobSyncResult =
 
 export interface JobSyncServiceOptions {
   readonly normalizerVersion: string;
-  readonly maximumInlineRawBytes?: number;
   readonly unseenBatchSize?: number;
-}
-
-interface PreparedRaw {
-  readonly contentHash: string;
-  readonly payload: unknown;
-  readonly artifactId: string | null;
-}
-
-const SENSITIVE_KEY = /authorization|cookie|token|password|api[-_]?key|secret/i;
-
-function sanitizeRaw(value: unknown, key = '', depth = 0): unknown {
-  if (SENSITIVE_KEY.test(key)) return '[redacted]';
-  if (depth > 20) return '[depth-limited]';
-  if (Array.isArray(value)) return value.map((item) => sanitizeRaw(item, '', depth + 1));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([childKey, childValue]) => [
-        childKey,
-        sanitizeRaw(childValue, childKey, depth + 1),
-      ]),
-    );
-  }
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    return value;
-  }
-  if (typeof value === 'bigint') return value.toString();
-  if (typeof value === 'undefined') return null;
-  return `[unsupported:${typeof value}]`;
 }
 
 function emptyStats(): MutableSyncRunStats {
   return {
     discovered: 0,
-    rawStored: 0,
     created: 0,
     unchanged: 0,
     revised: 0,
@@ -137,20 +99,17 @@ function assertStats(stats: MutableSyncRunStats): void {
 export class JobSyncService {
   readonly #uow: UnitOfWork;
   readonly #registry: AdapterRegistry;
-  readonly #artifacts: ArtifactStore;
   readonly #http: SourceHttpClient;
   readonly #page: SourcePageClient | undefined;
   readonly #clock: Clock;
   readonly #ids: IdGenerator;
   readonly #normalizerVersion: string;
-  readonly #maximumInlineRawBytes: number;
   readonly #unseenBatchSize: number;
   readonly #jobIntakePolicy: JobIntakePolicy | undefined;
 
   public constructor(input: {
     readonly uow: UnitOfWork;
     readonly registry: AdapterRegistry;
-    readonly artifacts: ArtifactStore;
     readonly http: SourceHttpClient;
     readonly page?: SourcePageClient;
     readonly clock: Clock;
@@ -160,64 +119,19 @@ export class JobSyncService {
   }) {
     this.#uow = input.uow;
     this.#registry = input.registry;
-    this.#artifacts = input.artifacts;
     this.#http = input.http;
     this.#page = input.page;
     this.#clock = input.clock;
     this.#ids = input.ids;
     this.#normalizerVersion = input.options.normalizerVersion;
-    this.#maximumInlineRawBytes = input.options.maximumInlineRawBytes ?? 128 * 1024;
     this.#unseenBatchSize = input.options.unseenBatchSize ?? 100;
     this.#jobIntakePolicy = input.jobIntakePolicy;
-  }
-
-  async #prepareRaw(value: unknown, capturedAt: UtcInstant): Promise<PreparedRaw> {
-    const payload = sanitizeRaw(value);
-    const serialized = canonicalJson(payload);
-    const bytes = new TextEncoder().encode(serialized);
-    const hash = contentHash(payload);
-    if (bytes.byteLength <= this.#maximumInlineRawBytes) {
-      return { contentHash: hash, payload, artifactId: null };
-    }
-    const artifact = await this.#artifacts.put({
-      id: this.#ids.generate(),
-      kind: 'raw_job',
-      mediaType: 'application/json',
-      content: bytes,
-      createdAt: capturedAt,
-    });
-    return { contentHash: hash, payload: null, artifactId: artifact.id };
-  }
-
-  #persistRaw(input: {
-    readonly sourceId: JobSourceId;
-    readonly runId: SyncRunId;
-    readonly job: DiscoveredJob;
-    readonly prepared: PreparedRaw;
-    readonly capturedAt: UtcInstant;
-  }): string {
-    return this.#uow.run(
-      ({ sync }) =>
-        sync.persistRawJob({
-          id: this.#ids.generate(),
-          sourceId: input.sourceId,
-          syncRunId: input.runId,
-          externalJobId: input.job.externalJobId,
-          identityKey: input.job.externalJobId,
-          sourceUrl: input.job.sourceUrl,
-          contentHash: input.prepared.contentHash,
-          payload: input.prepared.payload,
-          artifactId: input.prepared.artifactId,
-          capturedAt: input.capturedAt,
-        }).id,
-    );
   }
 
   #recordIsolated(input: {
     readonly sourceId: JobSourceId;
     readonly runId: SyncRunId;
     readonly job: DiscoveredJob;
-    readonly rawRecordId: string;
     readonly observedAt: UtcInstant;
     readonly explicitNotFound: boolean;
     readonly policyVersion: string;
@@ -232,7 +146,7 @@ export class JobSyncService {
       jobs.recordObservation({
         jobId: current.jobId,
         syncRunId: input.runId,
-        rawRecordId: input.rawRecordId,
+        jobRevisionId: current.revisionId,
         observedAt: input.observedAt,
       });
       const transition = input.explicitNotFound
@@ -246,7 +160,7 @@ export class JobSyncService {
         fromStatus: current.lifecycle.status,
         reason: transition.event?.reason ?? null,
         occurredAt: input.observedAt,
-        evidence: { policyVersion: input.policyVersion, rawRecordId: input.rawRecordId },
+        evidence: { policyVersion: input.policyVersion, sourceUrl: input.job.sourceUrl },
       });
       if (transition.event?.reason === 'reobserved') input.stats.restored += 1;
       if (transition.event?.reason === 'explicitly_closed') input.stats.closed += 1;
@@ -286,7 +200,7 @@ export class JobSyncService {
     const detailCacheIsCurrent = cachedDetail?.listContentHash === listContentHash;
     const detail = cachedDetail?.detail ?? null;
 
-    const prepared = await this.#prepareRaw({ discovered: job.raw, detail }, observedAt);
+    const sourcePayloadHash = contentHash({ discovered: job.raw, detail });
 
     let normalized: NormalizedSourceJob;
     try {
@@ -311,14 +225,6 @@ export class JobSyncService {
         throw new SourceError('parse_changed', 'Adapter normalization changed source identity.');
       }
     } catch (error) {
-      const rawRecordId = this.#persistRaw({
-        sourceId: input.source.id,
-        runId: input.runId,
-        job,
-        prepared,
-        capturedAt: observedAt,
-      });
-      input.stats.rawStored += 1;
       input.stats.isolated += 1;
       this.#uow.run(({ sync }) => {
         sync.recordItemFailure({
@@ -336,7 +242,7 @@ export class JobSyncService {
             : error instanceof Error
               ? error.message.slice(0, 240)
               : 'Adapter normalization failed.',
-          rawRecordId,
+          sourceUrl: job.sourceUrl,
           occurredAt: observedAt,
         });
       });
@@ -344,7 +250,6 @@ export class JobSyncService {
         sourceId: input.source.id,
         runId: input.runId,
         job,
-        rawRecordId,
         observedAt,
         explicitNotFound: false,
         policyVersion: input.source.syncPolicyVersion,
@@ -368,15 +273,6 @@ export class JobSyncService {
       return;
     }
 
-    const rawRecordId = this.#persistRaw({
-      sourceId: input.source.id,
-      runId: input.runId,
-      job,
-      prepared,
-      capturedAt: observedAt,
-    });
-    input.stats.rawStored += 1;
-
     this.#uow.run(({ jobs, tasks }) => {
       const current = jobs.findCurrent({
         sourceId: input.source.id,
@@ -385,10 +281,11 @@ export class JobSyncService {
       const decision = decideJobMerge(current, normalized.job);
       let revisionId: string | null = null;
       if (decision.type === 'unchanged') {
+        if (!current) throw new Error('An unchanged merge requires a current job revision.');
         jobs.recordObservation({
           jobId: decision.jobId,
           syncRunId: input.runId,
-          rawRecordId,
+          jobRevisionId: current.revisionId,
           observedAt,
         });
         input.stats.unchanged += 1;
@@ -399,7 +296,8 @@ export class JobSyncService {
           jobId: decision.type === 'create' ? parseId(this.#ids.generate(), 'Job') : decision.jobId,
           revisionId,
           statusEventId: this.#ids.generate(),
-          rawRecordId,
+          sourcePayloadHash,
+          sourceUrl: job.sourceUrl,
           normalizerVersion: this.#normalizerVersion,
           syncRunId: input.runId,
           observedAt,
@@ -418,7 +316,11 @@ export class JobSyncService {
           fromStatus: current.lifecycle.status,
           reason: transition.event?.reason ?? null,
           occurredAt: observedAt,
-          evidence: { policyVersion: input.source.syncPolicyVersion, rawRecordId },
+          evidence: {
+            policyVersion: input.source.syncPolicyVersion,
+            sourcePayloadHash,
+            sourceUrl: job.sourceUrl,
+          },
         });
         if (transition.event) input.stats.restored += 1;
       }

@@ -44,14 +44,14 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
 
   public preview(resumeDocumentId: string): ResumeDeletionSnapshot | null {
     const document = this.#client
-      .prepare('SELECT id FROM resume_documents WHERE id = ?')
+      .prepare("SELECT id FROM files WHERE id = ? AND kind = 'resume'")
       .get(resumeDocumentId);
     if (!document) return null;
 
     const profiles = new Set<string>(
       selectStrings(
         this.#client,
-        'SELECT DISTINCT profile_id AS id FROM profile_versions WHERE resume_document_id = ?',
+        'SELECT DISTINCT profile_id AS id FROM profile_versions WHERE resume_file_id = ?',
         [resumeDocumentId],
       ),
     );
@@ -96,9 +96,9 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
     if (profileIds.length > 0) {
       for (const id of selectStrings(
         this.#client,
-        `SELECT DISTINCT resume_document_id AS id FROM profile_versions
+        `SELECT DISTINCT resume_file_id AS id FROM profile_versions
          WHERE profile_id IN (${placeholders(profileIds.length)})
-           AND resume_document_id IS NOT NULL`,
+           AND resume_file_id IS NOT NULL`,
         profileIds,
       )) {
         resumeDocumentIds.add(id);
@@ -137,13 +137,21 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
     }
     const artifactRows = this.#client
       .prepare(
-        `SELECT fa.id, fa.relative_path
-         FROM file_artifacts fa
-         JOIN resume_documents rd ON rd.artifact_id = fa.id
-         WHERE rd.id IN (${placeholders(sortedDocumentIds.length)})
-         ORDER BY fa.id`,
+        `SELECT DISTINCT entity.id, entity.relative_path
+         FROM file_entity_mappings version
+         JOIN entities entity ON entity.id = version.entity_id
+         WHERE version.file_id IN (${placeholders(sortedDocumentIds.length)})
+           AND NOT EXISTS (
+             SELECT 1 FROM file_entity_mappings other
+             WHERE other.entity_id = entity.id
+               AND other.file_id NOT IN (${placeholders(sortedDocumentIds.length)})
+           )
+         ORDER BY entity.id`,
       )
-      .all(...sortedDocumentIds) as { readonly id: string; readonly relative_path: string }[];
+      .all(...sortedDocumentIds, ...sortedDocumentIds) as {
+      readonly id: string;
+      readonly relative_path: string;
+    }[];
 
     return {
       requestedResumeDocumentId: resumeDocumentId,
@@ -177,7 +185,7 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
         }
         this.#client
           .prepare(
-            `UPDATE file_artifacts SET relative_path = ?, deleted_at = ?
+            `UPDATE entities SET relative_path = ?, deleted_at = ?
              WHERE id = ? AND relative_path = ? AND deleted_at IS NULL`,
           )
           .run(
@@ -203,7 +211,7 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
       }
       this.#client
         .prepare(
-          `DELETE FROM resume_documents WHERE id IN (${placeholders(current.resumeDocumentIds.length)})`,
+          `DELETE FROM files WHERE id IN (${placeholders(current.resumeDocumentIds.length)})`,
         )
         .run(...current.resumeDocumentIds);
       for (const agentRunId of current.agentRunIds) {
@@ -216,19 +224,27 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
                AND NOT EXISTS (SELECT 1 FROM match_advices WHERE agent_run_id = ?)`,
           )
           .run(agentRunId, agentRunId, agentRunId, agentRunId);
+        this.#client
+          .prepare(
+            `DELETE FROM events WHERE stream_type = 'agent_run' AND stream_id = ?
+             AND NOT EXISTS (SELECT 1 FROM agent_runs WHERE id = ?)`,
+          )
+          .run(agentRunId, agentRunId);
       }
       this.#client
         .prepare(
-          `INSERT INTO operation_audit_events
-           (event_key, event_type, subject_hash, details_json, created_at)
-           VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO events
+           (id, stream_type, stream_id, sequence_no, event_type, payload_json, occurred_at)
+           SELECT ?, 'operation', ?, COALESCE(MAX(sequence_no), 0) + 1, ?, ?, ?
+           FROM events WHERE stream_type = 'operation' AND stream_id = ?`,
         )
         .run(
           input.audit.eventKey,
-          input.audit.eventType,
           input.audit.subjectHash,
+          input.audit.eventType,
           canonicalJson({ counts: input.audit.counts }),
           input.deletedAt,
+          input.audit.subjectHash,
         );
     })();
   }
@@ -236,9 +252,9 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
   public removePurgedArtifact(artifactId: string): void {
     this.#client
       .prepare(
-        `DELETE FROM file_artifacts
+        `DELETE FROM entities
          WHERE id = ? AND deleted_at IS NOT NULL
-           AND NOT EXISTS (SELECT 1 FROM resume_documents WHERE artifact_id = ?)`,
+           AND NOT EXISTS (SELECT 1 FROM file_entity_mappings WHERE entity_id = ?)`,
       )
       .run(artifactId, artifactId);
   }
@@ -248,7 +264,7 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
   ): ResumeDeletionSnapshot['artifacts'][number] | null {
     const row = this.#client
       .prepare(
-        `SELECT id, relative_path FROM file_artifacts
+        `SELECT id, relative_path FROM entities
          WHERE id = ? AND deleted_at IS NOT NULL`,
       )
       .get(artifactId) as { readonly id: string; readonly relative_path: string } | undefined;

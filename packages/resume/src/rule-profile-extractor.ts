@@ -94,9 +94,7 @@ function headingKey(line: SourceLine): SectionKey | null {
   return headingAliases[normalized] ?? null;
 }
 
-function sectionsFrom(
-  lines: readonly SourceLine[],
-):
+function sectionsFrom(lines: readonly SourceLine[]):
   | {
       readonly kind: 'sections';
       readonly preface: readonly SourceLine[];

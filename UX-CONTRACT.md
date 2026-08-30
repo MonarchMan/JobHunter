@@ -12,15 +12,15 @@
 
 ## Business-context sources
 
-| Domain / scope     | Authoritative source                        | Source type | Reviewed date |
-| ------------------ | ------------------------------------------- | ----------- | ------------- |
-| Web 行为与安全     | `specs/011-web-console/spec.md`             | 产品规格    | 2026-08-24    |
-| Web 技术与异步任务 | `specs/011-web-console/design.md`           | 技术设计    | 2026-08-24    |
-| 删除与敏感数据     | `specs/013-resume-driven-intake/spec.md`    | 产品规格    | 2026-08-24    |
-| 进程与任务职责     | `docs/arch/worker-and-concurrency.md`       | 架构文档    | 2026-08-24    |
-| UI 重设计          | `specs/014-ui-redesign/spec.md`             | 产品规格    | 2026-08-24    |
-| 项目拷打与面试准备 | `specs/020-interview-project-drill/spec.md` | 产品规格    | 2026-08-29    |
-| 个人面经导入       | `specs/021-interview-experience-intake/spec.md` | 产品规格 | 2026-08-30    |
+| Domain / scope     | Authoritative source                            | Source type | Reviewed date |
+| ------------------ | ----------------------------------------------- | ----------- | ------------- |
+| Web 行为与安全     | `specs/011-web-console/spec.md`                 | 产品规格    | 2026-08-24    |
+| Web 技术与异步任务 | `specs/011-web-console/design.md`               | 技术设计    | 2026-08-24    |
+| 删除与敏感数据     | `specs/013-resume-driven-intake/spec.md`        | 产品规格    | 2026-08-24    |
+| 进程与任务职责     | `docs/arch/worker-and-concurrency.md`           | 架构文档    | 2026-08-24    |
+| UI 重设计          | `specs/014-ui-redesign/spec.md`                 | 产品规格    | 2026-08-24    |
+| 项目拷打与面试准备 | `specs/020-interview-project-drill/spec.md`     | 产品规格    | 2026-08-29    |
+| 个人面经导入       | `specs/021-interview-experience-intake/spec.md` | 产品规格    | 2026-08-30    |
 
 ## Visual contract
 
@@ -69,21 +69,21 @@
 
 ## Flow ledger
 
-| Operation              | Trigger                | Pending                        | Success destination  | Success feedback | Failure recovery   | Focus outcome                | Source ref |
-| ---------------------- | ---------------------- | ------------------------------ | -------------------- | ---------------- | ------------------ | ---------------------------- | ---------- |
-| Edit profile/settings  | 保存按钮或设置控件     | 控件尺寸稳定并禁用重复提交     | 留在当前页           | 内联“已保存”     | 保留输入并显示错误 | 回到触发控件/首错字段        | 011        |
-| Select sync channel    | 设置页招聘渠道单选组   | 保存按钮尺寸稳定并禁用重复提交 | 留在设置页           | 内联“已保存”     | 保留选择并显示错误 | 回到保存按钮                 | 018        |
-| Search/filter          | 应用筛选               | 保持列表框架                   | 同列表 URL           | 结果总数         | 清除或修改筛选     | 返回筛选控件                 | 011        |
-| Upload/background job  | 文件选择/同步/匹配     | 立即显示已入队状态             | 留在当前上下文       | task ID 与状态   | 重试或前往任务详情 | 回到触发控件                 | 011/013    |
-| Polish resume sections | 生成 AI 润色建议       | 按钮尺寸稳定、阻止重复提交     | 留在在线简历         | 持久内联建议状态 | 保留草稿并允许重试 | 返回生成按钮或“应用到草稿”   | 007        |
-| Confirm sync scope     | 来源页同步入口         | 目标岗位未确认时保持禁用       | 前往个人资料         | 已确认的目标大类 | 返回来源页后重试   | 聚焦个人资料中的目标岗位字段 | 013        |
-| Cancel task            | 取消按钮               | 禁止重复触发                   | 留在任务列表         | 内联状态更新     | 可重试失败操作     | 回到操作按钮                 | 011        |
-| Hard-delete resume     | 影响预览 + 输入 DELETE | 最终按钮 busy                  | 留在资料页并跟踪任务 | 删除任务已创建   | 影响变化时重新预览 | 初始聚焦取消，失败回确认字段 | 011/013    |
-| Start project drill    | 建立会话 / 生成下一题  | 显示真实任务并自动刷新         | 留在项目档案         | 持久内联任务状态 | 任务页诊断与重试   | 回到当前问题推进点           | 020        |
-| Submit drill answer    | 保存并分析 / 保存修订  | 原文先持久化，覆盖分析后台执行 | 留在当前项目档案     | 原文已保存       | 保留输入并允许重试 | 回到回答字段或下一步         | 020        |
-| Hard-delete dossier    | 影响预览 + 输入 DELETE | 最终按钮 busy                  | 返回准备档案列表     | 删除结果内联     | 影响变化时重新预览 | 取消恢复触发，成功到列表     | 020        |
-| Import personal experience | 上传文件 / 在线填写 | 保留所选文件或表单输入并阻止重复提交 | 前往草稿校对页 | 已生成草稿 | 内联说明并允许重试 | 草稿标题或首个警告 | 021 |
-| Review experience draft | 保存草稿 / 接受为历史 | 按钮尺寸稳定；CAS 冲突不清空输入 | 留在详情页 | 内联保存或接受状态 | 刷新后重新核对 | 首错字段或接受状态 | 021 |
+| Operation                  | Trigger                | Pending                              | Success destination  | Success feedback   | Failure recovery   | Focus outcome                | Source ref |
+| -------------------------- | ---------------------- | ------------------------------------ | -------------------- | ------------------ | ------------------ | ---------------------------- | ---------- |
+| Edit profile/settings      | 保存按钮或设置控件     | 控件尺寸稳定并禁用重复提交           | 留在当前页           | 内联“已保存”       | 保留输入并显示错误 | 回到触发控件/首错字段        | 011        |
+| Select sync channel        | 设置页招聘渠道单选组   | 保存按钮尺寸稳定并禁用重复提交       | 留在设置页           | 内联“已保存”       | 保留选择并显示错误 | 回到保存按钮                 | 018        |
+| Search/filter              | 应用筛选               | 保持列表框架                         | 同列表 URL           | 结果总数           | 清除或修改筛选     | 返回筛选控件                 | 011        |
+| Upload/background job      | 文件选择/同步/匹配     | 立即显示已入队状态                   | 留在当前上下文       | task ID 与状态     | 重试或前往任务详情 | 回到触发控件                 | 011/013    |
+| Polish resume sections     | 生成 AI 润色建议       | 按钮尺寸稳定、阻止重复提交           | 留在在线简历         | 持久内联建议状态   | 保留草稿并允许重试 | 返回生成按钮或“应用到草稿”   | 007        |
+| Confirm sync scope         | 来源页同步入口         | 目标岗位未确认时保持禁用             | 前往个人资料         | 已确认的目标大类   | 返回来源页后重试   | 聚焦个人资料中的目标岗位字段 | 013        |
+| Cancel task                | 取消按钮               | 禁止重复触发                         | 留在任务列表         | 内联状态更新       | 可重试失败操作     | 回到操作按钮                 | 011        |
+| Hard-delete resume         | 影响预览 + 输入 DELETE | 最终按钮 busy                        | 留在资料页并跟踪任务 | 删除任务已创建     | 影响变化时重新预览 | 初始聚焦取消，失败回确认字段 | 011/013    |
+| Start project drill        | 建立会话 / 生成下一题  | 显示真实任务并自动刷新               | 留在项目档案         | 持久内联任务状态   | 任务页诊断与重试   | 回到当前问题推进点           | 020        |
+| Submit drill answer        | 保存并分析 / 保存修订  | 原文先持久化，覆盖分析后台执行       | 留在当前项目档案     | 原文已保存         | 保留输入并允许重试 | 回到回答字段或下一步         | 020        |
+| Hard-delete dossier        | 影响预览 + 输入 DELETE | 最终按钮 busy                        | 返回准备档案列表     | 删除结果内联       | 影响变化时重新预览 | 取消恢复触发，成功到列表     | 020        |
+| Import personal experience | 上传文件 / 在线填写    | 保留所选文件或表单输入并阻止重复提交 | 前往草稿校对页       | 已生成草稿         | 内联说明并允许重试 | 草稿标题或首个警告           | 021        |
+| Review experience draft    | 保存草稿 / 接受为历史  | 按钮尺寸稳定；CAS 冲突不清空输入     | 留在详情页           | 内联保存或接受状态 | 刷新后重新核对     | 首错字段或接受状态           | 021        |
 
 ## Navigation and responsive behavior
 

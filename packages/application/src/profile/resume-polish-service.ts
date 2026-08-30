@@ -1,7 +1,11 @@
+import type { AgentRunReader } from '@jobhunter/agent-core';
 import { parseId, type IdGenerator } from '@jobhunter/domain';
-import { resumePolishSectionSchema, type ResumePolishSection } from '@jobhunter/resume';
+import {
+  resumePolishAgentOutputSchema,
+  resumePolishSectionSchema,
+  type ResumePolishSection,
+} from '@jobhunter/resume';
 import type { CandidateProfileRepository } from '../ports/profiles.js';
-import type { ResumePolishSuggestionRepository } from '../ports/resume-polish-suggestions.js';
 import {
   webResumePolishAcceptedSchema,
   webResumePolishStatusSchema,
@@ -37,18 +41,18 @@ function presentTaskError(category: string | null): string {
 
 export class ResumePolishService {
   readonly #profiles: CandidateProfileRepository;
-  readonly #suggestions: ResumePolishSuggestionRepository;
+  readonly #agentRuns: AgentRunReader;
   readonly #tasks: TaskService;
   readonly #ids: IdGenerator;
 
   public constructor(input: {
     readonly profiles: CandidateProfileRepository;
-    readonly suggestions: ResumePolishSuggestionRepository;
+    readonly agentRuns: AgentRunReader;
     readonly tasks: TaskService;
     readonly ids: IdGenerator;
   }) {
     this.#profiles = input.profiles;
-    this.#suggestions = input.suggestions;
+    this.#agentRuns = input.agentRuns;
     this.#tasks = input.tasks;
     this.#ids = input.ids;
   }
@@ -108,9 +112,22 @@ export class ResumePolishService {
   public status(taskIdValue: string, suggestionId: string): WebResumePolishStatus | null {
     const task = this.#tasks.get(parseId(taskIdValue, 'Task'));
     if (task?.taskType !== 'resume.polish') return null;
-    const payload = task.payload as { readonly suggestionId?: string };
+    const payload = task.payload as {
+      readonly suggestionId?: string;
+      readonly sourceVersionId?: string;
+      readonly sections?: readonly ResumePolishSection[];
+    };
     if (payload.suggestionId !== suggestionId) return null;
-    const suggestion = task.status === 'succeeded' ? this.#suggestions.get(suggestionId) : null;
+    const taskResult = task.status === 'succeeded' ? resumePolishTaskResult(task.result) : null;
+    const run = taskResult ? this.#agentRuns.get(taskResult.agentRunId) : null;
+    const suggestion =
+      run?.status === 'succeeded' && payload.sourceVersionId && payload.sections
+        ? {
+            sourceVersionId: payload.sourceVersionId,
+            sections: payload.sections,
+            result: resumePolishAgentOutputSchema.parse(run.output),
+          }
+        : null;
     const resultUnavailable = task.status === 'succeeded' && suggestion === null;
     return webResumePolishStatusSchema.parse({
       suggestionId,
@@ -122,11 +139,15 @@ export class ResumePolishService {
           : null,
       suggestion: suggestion
         ? {
-            sourceVersionId: suggestion.sourceVersionId,
-            sections: suggestion.sections,
-            result: suggestion.result,
+            ...suggestion,
           }
         : null,
     });
   }
+}
+
+function resumePolishTaskResult(value: unknown): { readonly agentRunId: string } | null {
+  if (!value || typeof value !== 'object' || !('agentRunId' in value)) return null;
+  const agentRunId = value.agentRunId;
+  return typeof agentRunId === 'string' ? { agentRunId } : null;
 }

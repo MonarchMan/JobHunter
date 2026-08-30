@@ -60,7 +60,9 @@ export async function checkDocs(rootDirectory) {
     if (!spec || !tasks) continue;
 
     if (spec.match(/^> 状态：(.+)$/m)?.[1]?.trim() === 'Ready') {
-      const unresolved = spec.match(/^## 未解决问题\s*$([\s\S]*?)(?=^## |(?![\s\S]))/m)?.[1]?.trim();
+      const unresolved = spec
+        .match(/^## 未解决问题\s*$([\s\S]*?)(?=^## |(?![\s\S]))/m)?.[1]
+        ?.trim();
       if (!(unresolved === '无' || unresolved?.startsWith('无。'))) {
         errors.push(`Ready specification has unresolved questions: specs/${directory}/spec.md`);
       }

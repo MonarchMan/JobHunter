@@ -2,12 +2,15 @@ import {
   CandidateProfileService,
   BackupService,
   createCleanupTaskHandler,
+  createExperienceResearchTaskHandler,
   createResumeProfileTaskHandler,
   createResumePolishTaskHandler,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createJobUnderstandingTaskHandler,
   createJobAdviceTaskHandler,
+  createProjectAnswerDigestTaskHandler,
+  createProjectQuestionTaskHandler,
   dataRootCheck,
   InitializationService,
   modelConfigurationCheck,
@@ -48,6 +51,7 @@ import {
   SqliteSourceManagementRepository,
   SqliteCompanyLookupRepository,
   SqliteJobQueryRepository,
+  SqliteInterviewTaskRetryCoordinator,
   SqliteMatchingRepository,
   SqliteResumeDocumentRepository,
   SqliteSystemInitializer,
@@ -183,6 +187,9 @@ export function createLocalCliContainer(
     registry.register(createCleanupTaskHandler({ unavailable: true }));
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
     registry.register(createResumePolishTaskHandler({ unavailable: true }));
+    registry.register(createExperienceResearchTaskHandler({ unavailable: true }));
+    registry.register(createProjectQuestionTaskHandler({ unavailable: true }));
+    registry.register(createProjectAnswerDigestTaskHandler({ unavailable: true }));
     const matchingHandler = createMatchRevisionTaskHandler(null);
     const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
     const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
@@ -199,6 +206,8 @@ export function createLocalCliContainer(
     const tasks = new TaskService(
       { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
       registry,
+      null,
+      new SqliteInterviewTaskRetryCoordinator(database.client, queue),
     );
     const schedules = new ScheduleService(
       { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
@@ -351,7 +360,7 @@ export function createLocalCliContainer(
           id: '018f0000-0000-7000-8000-000000000401',
           scheduleKey: 'maintenance.cleanup:weekly',
           taskType: 'maintenance.cleanup',
-          payload: { rawRecordsDays: 30, observationsDays: 90, failedAgentRunsDays: 30 },
+          payload: { sourceDetailsDays: 30, observationsDays: 90, failedAgentRunsDays: 30 },
           cronExpression: '0 4 * * 0',
           timezone: 'Asia/Shanghai',
           enabled: true,

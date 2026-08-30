@@ -40,6 +40,7 @@ interface TaskRow {
   readonly cancel_requested_at: number | null;
   readonly error_category: TaskErrorCategory | null;
   readonly error_summary: string | null;
+  readonly result_json: string | null;
   readonly created_at: number;
   readonly started_at: number | null;
   readonly finished_at: number | null;
@@ -109,6 +110,7 @@ function taskFromRow(row: TaskRow): TaskRecord {
     cancelRequestedAt: nullableInstant(row.cancel_requested_at),
     errorCategory: row.error_category,
     errorSummary: row.error_summary,
+    result: row.result_json === null ? null : (JSON.parse(row.result_json) as unknown),
     createdAt: utcInstant(row.created_at),
     startedAt: nullableInstant(row.started_at),
     finishedAt: nullableInstant(row.finished_at),
@@ -135,7 +137,7 @@ const TASK_COLUMNS = `
   id, task_type, payload_json, status, priority, idempotency_key, concurrency_key,
   schedule_id, retry_of_task_id, attempt_count, max_attempts, available_at,
   lease_owner, lease_expires_at, last_heartbeat_at, cancel_requested_at,
-  error_category, error_summary, created_at, started_at, finished_at`;
+  error_category, error_summary, result_json, created_at, started_at, finished_at`;
 
 const SCHEDULE_COLUMNS = `
   id, schedule_key, task_type, payload_json, cron_expression, timezone, enabled,
@@ -191,9 +193,9 @@ export class SqliteTaskRepository implements TaskQueue {
          (id, task_type, payload_json, status, priority, idempotency_key, concurrency_key,
           schedule_id, retry_of_task_id, attempt_count, max_attempts, available_at,
           lease_owner, lease_expires_at, last_heartbeat_at, cancel_requested_at,
-          error_category, error_summary, created_at, started_at, finished_at)
+          error_category, error_summary, result_json, created_at, started_at, finished_at)
          VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL,
-                 NULL, NULL, ?, NULL, NULL)
+                 NULL, NULL, NULL, ?, NULL, NULL)
          RETURNING ${TASK_COLUMNS}`,
       )
       .get(
@@ -444,16 +446,29 @@ export class SqliteTaskRepository implements TaskQueue {
     };
   }
 
-  public complete(taskId: TaskId, workerId: string, finishedAt: UtcInstant): boolean {
+  public complete(
+    taskId: TaskId,
+    workerId: string,
+    finishedAt: UtcInstant,
+    result: unknown = null,
+    options: { readonly allowRequestedCancellation?: boolean } = {},
+  ): boolean {
     return (
       this.#client
         .prepare(
-          `UPDATE tasks SET status = 'succeeded', finished_at = ?, lease_owner = NULL,
+          `UPDATE tasks SET status = 'succeeded', finished_at = ?, result_json = ?, lease_owner = NULL,
              lease_expires_at = NULL, last_heartbeat_at = NULL
            WHERE id = ? AND status = 'running' AND lease_owner = ?
-             AND cancel_requested_at IS NULL AND lease_expires_at > ?`,
+             AND (? = 1 OR cancel_requested_at IS NULL) AND lease_expires_at > ?`,
         )
-        .run(finishedAt, taskId, workerId, finishedAt).changes === 1
+        .run(
+          finishedAt,
+          canonicalJson(result),
+          taskId,
+          workerId,
+          options.allowRequestedCancellation === true ? 1 : 0,
+          finishedAt,
+        ).changes === 1
     );
   }
 

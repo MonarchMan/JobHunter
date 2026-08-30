@@ -35,7 +35,7 @@ class FixtureFiles implements CleanupFileStore {
   }
 }
 
-const policy = { rawRecordsDays: 30, observationsDays: 90, failedAgentRunsDays: 30 };
+const policy = { sourceDetailsDays: 30, observationsDays: 90, failedAgentRunsDays: 30 };
 const dayMs = 24 * 60 * 60 * 1_000;
 
 describe('cleanup planning and confirmation', () => {

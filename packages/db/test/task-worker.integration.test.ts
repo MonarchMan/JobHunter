@@ -572,6 +572,88 @@ describe('worker execution', () => {
     expect(input.queue.get(task.task.id)?.status).toBe('cancelled');
   });
 
+  it('finalizes cancellation requested after the handler finishes but before task completion', async () => {
+    const input = await setup();
+    const registry = new HandlerRegistry();
+    registry.register({
+      taskType: 'source.sync',
+      payloadSchema: z.object({ sourceId: z.string().min(1) }).strict(),
+      outputSchema: voidTaskOutputSchema,
+      defaultMaxAttempts: 1,
+      leaseDurationMs: 1_000,
+      execute(context): Promise<void> {
+        if (!context.taskId) throw new Error('Worker task identity is unavailable.');
+        input.queue.cancel(context.taskId, input.clock.now());
+        return Promise.resolve();
+      },
+    });
+    const tasks = services(input, registry).tasks;
+    const task = enqueueSync(tasks, 'cancel-completion-gap');
+
+    await engine(input, registry).runOnce();
+
+    const cancelled = input.queue.get(task.task.id);
+    expect(cancelled?.status).toBe('cancelled');
+    expect(cancelled?.cancelRequestedAt).not.toBeNull();
+  });
+
+  it('keeps a committed handler result visible when cancellation arrives after its commit', async () => {
+    const input = await setup();
+    const registry = new HandlerRegistry();
+    registry.register({
+      taskType: 'source.sync',
+      payloadSchema: z.object({ sourceId: z.string().min(1) }).strict(),
+      outputSchema: voidTaskOutputSchema,
+      defaultMaxAttempts: 1,
+      leaseDurationMs: 1_000,
+      lateCancellationPolicy: 'complete',
+      execute(context): Promise<void> {
+        if (!context.taskId) throw new Error('Worker task identity is unavailable.');
+        input.queue.cancel(context.taskId, input.clock.now());
+        return Promise.resolve();
+      },
+    });
+    const tasks = services(input, registry).tasks;
+    const task = enqueueSync(tasks, 'late-cancel-after-commit');
+
+    await engine(input, registry).runOnce();
+
+    const completed = input.queue.get(task.task.id);
+    expect(completed?.status).toBe('succeeded');
+    expect(completed?.cancelRequestedAt).not.toBeNull();
+  });
+
+  it('resolves late cancellation from the validated handler output', async () => {
+    const input = await setup();
+    const registry = new HandlerRegistry();
+    registry.register({
+      taskType: 'source.sync',
+      payloadSchema: z.object({ sourceId: z.enum(['no-op', 'committed']) }).strict(),
+      outputSchema: z.object({ committed: z.boolean() }).strict(),
+      defaultMaxAttempts: 1,
+      leaseDurationMs: 1_000,
+      lateCancellationPolicy: (output) => (output.committed ? 'complete' : 'cancel'),
+      execute(context, payload): Promise<{ readonly committed: boolean }> {
+        if (!context.taskId) throw new Error('Worker task identity is unavailable.');
+        input.queue.cancel(context.taskId, input.clock.now());
+        return Promise.resolve({ committed: payload.sourceId === 'committed' });
+      },
+    });
+    const tasks = services(input, registry).tasks;
+    const noOp = enqueueSync(tasks, 'output-aware-no-op', 'no-op');
+
+    await engine(input, registry).runOnce();
+
+    expect(input.queue.get(noOp.task.id)?.status).toBe('cancelled');
+
+    const committed = enqueueSync(tasks, 'output-aware-commit', 'committed');
+    await engine(input, registry).runOnce();
+
+    const completed = input.queue.get(committed.task.id);
+    expect(completed?.status).toBe('succeeded');
+    expect(completed?.cancelRequestedAt).not.toBeNull();
+  });
+
   it('stops claiming and leaves shutdown-interrupted work for lease recovery', async () => {
     const input = await setup();
     let started!: () => void;

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export type CleanupCandidateKind = 'orphan_file' | 'raw_record' | 'observation' | 'agent_run';
+export type CleanupCandidateKind = 'orphan_file' | 'source_detail' | 'observation' | 'agent_run';
 
 export interface CleanupCandidate {
   readonly kind: CleanupCandidateKind;
@@ -12,7 +12,7 @@ export interface CleanupCandidate {
 
 export interface CleanupRepository {
   listCandidates(cutoffs: {
-    readonly rawRecordsBefore: number;
+    readonly sourceDetailsBefore: number;
     readonly observationsBefore: number;
     readonly agentRunsBefore: number;
   }): readonly CleanupCandidate[];
@@ -32,7 +32,7 @@ export interface CleanupFileStore {
 }
 
 export interface CleanupPolicy {
-  readonly rawRecordsDays: number;
+  readonly sourceDetailsDays: number;
   readonly observationsDays: number;
   readonly failedAgentRunsDays: number;
   readonly orphanSafetyWindowMs?: number;
@@ -53,7 +53,7 @@ const dayMs = 24 * 60 * 60 * 1_000;
 
 function validatePolicy(policy: CleanupPolicy): Required<CleanupPolicy> {
   for (const [key, value] of Object.entries({
-    rawRecordsDays: policy.rawRecordsDays,
+    sourceDetailsDays: policy.sourceDetailsDays,
     observationsDays: policy.observationsDays,
     failedAgentRunsDays: policy.failedAgentRunsDays,
   })) {
@@ -132,7 +132,7 @@ export class CleanupService {
     const candidates = await this.#candidates(policy, plannedAt);
     const expiresAt = plannedAt + lifetime;
     const confirmationToken = tokenFor({ plannedAt, expiresAt, policy, candidates });
-    const counts = { orphan_file: 0, raw_record: 0, observation: 0, agent_run: 0 };
+    const counts = { orphan_file: 0, source_detail: 0, observation: 0, agent_run: 0 };
     for (const candidate of candidates) counts[candidate.kind] += 1;
     return {
       kind: 'cleanup',
@@ -193,7 +193,7 @@ export class CleanupService {
     plannedAt: number,
   ): Promise<readonly CleanupCandidate[]> {
     const database = this.#repository.listCandidates({
-      rawRecordsBefore: plannedAt - policy.rawRecordsDays * dayMs,
+      sourceDetailsBefore: plannedAt - policy.sourceDetailsDays * dayMs,
       observationsBefore: plannedAt - policy.observationsDays * dayMs,
       agentRunsBefore: plannedAt - policy.failedAgentRunsDays * dayMs,
     });

@@ -238,15 +238,10 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                     </dd>
                   </div>
                   <div>
-                    <dt>入库记录 / 后续详情任务</dt>
+                    <dt>后续详情任务</dt>
                     <dd>
                       {task.sourceSync.run
-                        ? [
-                            task.sourceSync.run.stats.rawStored,
-                            task.sourceSync.run.stats.followupEnqueued,
-                          ]
-                            .map(String)
-                            .join(' / ')
+                        ? String(task.sourceSync.run.stats.followupEnqueued)
                         : '—'}
                     </dd>
                   </div>

@@ -7,6 +7,7 @@ import {
   type ResumeDeletionRepository,
   type ResumeDeletionSnapshot,
   type StoredArtifact,
+  type StoredArtifactContent,
 } from '@jobhunter/application';
 import { utcInstant, type Clock, type UtcInstant } from '@jobhunter/domain';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
@@ -34,6 +35,10 @@ class FailOncePurgeStore implements ArtifactStore {
 
   public put(input: Parameters<ArtifactStore['put']>[0]): Promise<StoredArtifact> {
     return this.#delegate.put(input);
+  }
+
+  public read(input: Parameters<ArtifactStore['read']>[0]): Promise<StoredArtifactContent> {
+    return this.#delegate.read(input);
   }
 
   public resolve(relativePath: string): string {
@@ -82,7 +87,7 @@ class ImpactChangingRepository implements ResumeDeletionRepository {
     this.#client
       .prepare(
         `INSERT INTO profile_versions
-         (id, profile_id, version_no, resume_document_id, agent_run_id, extracted_json,
+         (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
           effective_json, locked_paths_json, content_hash, is_current, created_at)
          VALUES ('version-three', 'profile-three', 1, 'document-one', 'shared-agent-run',
                  '{}', '{}', '[]', 'profile-three-hash', 1, 1)`,
@@ -119,41 +124,43 @@ async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promi
   readonly artifacts: ArtifactStore;
   readonly service: ResumeDeletionService;
   readonly originalPaths: readonly string[];
+  readonly entityIds: readonly string[];
 }> {
   const root = await createTemporaryDataRoot('jobhunter-resume-delete-');
   const handle = openSqliteDatabase({ dataRoot: root.path });
   resources.push({ root, handle });
   const sqliteArtifacts = new SqliteArtifactStore(handle.client, root.path);
   const first = await sqliteArtifacts.put({
-    id: 'artifact-one',
+    id: 'document-one',
     kind: 'resume',
     mediaType: 'text/plain',
     content: new TextEncoder().encode('first redacted resume body'),
     createdAt: utcInstant(1),
   });
   const second = await sqliteArtifacts.put({
-    id: 'artifact-two',
+    id: 'document-two',
     kind: 'resume',
     mediaType: 'text/plain',
     content: new TextEncoder().encode('second redacted resume body'),
     createdAt: utcInstant(2),
   });
   handle.client
-    .prepare(
-      `INSERT INTO resume_documents
-       (id, artifact_id, content_hash, media_type, extracted_text, parse_status,
-        parser_version, error_summary, created_at)
-       VALUES (?, ?, ?, 'text/plain', 'redacted extracted text', 'parsed', 'utf8@1', NULL, ?)`,
-    )
-    .run('document-one', first.id, first.sha256, 1);
+    .prepare("UPDATE files SET state = 'parsed' WHERE id IN ('document-one', 'document-two')")
+    .run();
   handle.client
     .prepare(
-      `INSERT INTO resume_documents
-       (id, artifact_id, content_hash, media_type, extracted_text, parse_status,
-        parser_version, error_summary, created_at)
-       VALUES (?, ?, ?, 'text/plain', 'new redacted extracted text', 'parsed', 'utf8@1', NULL, ?)`,
+      `UPDATE file_entity_mappings
+       SET parser_version = 'utf8@1', parse_status = 'parsed', extracted_text = ?
+       WHERE file_id = ?`,
     )
-    .run('document-two', second.id, second.sha256, 2);
+    .run('redacted extracted text', 'document-one');
+  handle.client
+    .prepare(
+      `UPDATE file_entity_mappings
+       SET parser_version = 'utf8@1', parse_status = 'parsed', extracted_text = ?
+       WHERE file_id = ?`,
+    )
+    .run('new redacted extracted text', 'document-two');
   handle.client
     .prepare(
       `INSERT INTO agent_runs
@@ -175,7 +182,7 @@ async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promi
     handle.client
       .prepare(
         `INSERT INTO profile_versions
-         (id, profile_id, version_no, resume_document_id, agent_run_id, extracted_json,
+         (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
           effective_json, locked_paths_json, content_hash, is_current, created_at)
          VALUES (?, ?, ?, ?, 'shared-agent-run', '{}', '{}', '[]', ?, 1, 1)`,
       )
@@ -196,6 +203,7 @@ async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promi
       sqliteArtifacts.resolve(first.relativePath),
       sqliteArtifacts.resolve(second.relativePath),
     ],
+    entityIds: [first.entityId, second.entityId],
   };
 }
 
@@ -234,9 +242,9 @@ describe('resume sensitive-data deletion', () => {
     for (const table of [
       'candidate_profiles',
       'profile_versions',
-      'resume_documents',
       'agent_runs',
-      'file_artifacts',
+      'files',
+      'entities',
     ]) {
       expect(handle.client.prepare(`SELECT count(*) FROM ${table}`).pluck().get()).toBe(0);
     }
@@ -245,8 +253,9 @@ describe('resume sensitive-data deletion', () => {
     }
     const audit = handle.client
       .prepare(
-        `SELECT event_type, subject_hash, details_json, created_at
-         FROM operation_audit_events`,
+        `SELECT event_type, stream_id AS subject_hash, payload_json AS details_json,
+                occurred_at AS created_at
+         FROM events WHERE stream_type = 'operation'`,
       )
       .get() as {
       readonly event_type: string;
@@ -272,22 +281,24 @@ describe('resume sensitive-data deletion', () => {
   });
 
   it('keeps a tombstone after purge failure and supports an idempotent purge retry', async () => {
-    const { handle, service } = await setup({ failFirstPurge: true });
+    const { handle, service, entityIds } = await setup({ failFirstPurge: true });
     const preview = service.preview('document-one');
     const result = await service.deleteConfirmed({
       resumeDocumentId: 'document-one',
       expectedImpactHash: preview.impactHash,
     });
-    expect(result.pendingArtifactPurgeIds).toEqual(['artifact-one']);
+    expect(result.pendingArtifactPurgeIds).toHaveLength(1);
+    const pendingEntityId = result.pendingArtifactPurgeIds[0] ?? '';
+    expect(entityIds).toContain(pendingEntityId);
     expect(
       handle.client
-        .prepare('SELECT deleted_at, relative_path FROM file_artifacts WHERE id = ?')
-        .get('artifact-one'),
+        .prepare('SELECT deleted_at, relative_path FROM entities WHERE id = ?')
+        .get(pendingEntityId),
     ).toMatchObject({ deleted_at: 1_800_000_000_000 });
 
-    await expect(service.retryArtifactPurge('artifact-one')).resolves.toBe('purged');
-    await expect(service.retryArtifactPurge('artifact-one')).resolves.toBe('already_purged');
-    expect(handle.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(0);
+    await expect(service.retryArtifactPurge(pendingEntityId)).resolves.toBe('purged');
+    await expect(service.retryArtifactPurge(pendingEntityId)).resolves.toBe('already_purged');
+    expect(handle.client.prepare('SELECT count(*) FROM entities').pluck().get()).toBe(0);
   });
 
   it('restores quarantined files when the database impact changes before commit', async () => {
@@ -313,14 +324,16 @@ describe('resume sensitive-data deletion', () => {
       await expect(access(originalPath)).resolves.toBeUndefined();
     }
     expect(
+      handle.client.prepare('SELECT count(*) FROM entities WHERE deleted_at IS NULL').pluck().get(),
+    ).toBe(2);
+    expect(
+      handle.client.prepare("SELECT count(*) FROM files WHERE kind = 'resume'").pluck().get(),
+    ).toBe(2);
+    expect(
       handle.client
-        .prepare('SELECT count(*) FROM file_artifacts WHERE deleted_at IS NULL')
+        .prepare("SELECT count(*) FROM events WHERE stream_type = 'operation'")
         .pluck()
         .get(),
-    ).toBe(2);
-    expect(handle.client.prepare('SELECT count(*) FROM resume_documents').pluck().get()).toBe(2);
-    expect(handle.client.prepare('SELECT count(*) FROM operation_audit_events').pluck().get()).toBe(
-      0,
-    );
+    ).toBe(0);
   });
 });

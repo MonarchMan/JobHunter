@@ -18,7 +18,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   openSqliteDatabase,
   seedSourceCatalog,
-  SqliteArtifactStore,
   SqliteUnitOfWork,
   SqliteWebSourceRepository,
   type SqliteDatabaseHandle,
@@ -204,13 +203,20 @@ describe('first-party source seed and sync', () => {
   });
 
   it('runs the supported Tencent adapter through the real sync pipeline', async () => {
-    const { root, handle } = await database();
+    const { handle } = await database();
     seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 1 });
     const tencent = firstPartyPhysicalSourceCatalog.find(
       (record) => record.company.slug === 'tencent',
     );
     expect(tencent).toBeDefined();
     if (!tencent) return;
+    handle.client
+      .prepare(
+        `UPDATE source_channels SET enabled = 1
+         WHERE id = (SELECT channel_id FROM job_sources WHERE id = ?)`,
+      )
+      .run(tencent.source.id);
+    handle.client.prepare('UPDATE job_sources SET enabled = 1 WHERE id = ?').run(tencent.source.id);
 
     const registry = new AdapterRegistry();
     registry.register(createTencentAdapter());
@@ -218,7 +224,6 @@ describe('first-party source seed and sync', () => {
     const service = new JobSyncService({
       uow: new SqliteUnitOfWork(handle.client),
       registry,
-      artifacts: new SqliteArtifactStore(handle.client, root.path),
       http: fixtureHttp,
       clock: new FixedClock(),
       ids,
@@ -277,13 +282,20 @@ describe('first-party source seed and sync', () => {
   });
 
   it('runs the supported Meituan adapter and preserves jobs after a partial page', async () => {
-    const { root, handle } = await database();
+    const { handle } = await database();
     seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 1 });
     const meituan = firstPartyPhysicalSourceCatalog.find(
       (record) => record.company.slug === 'meituan',
     );
     expect(meituan).toBeDefined();
     if (!meituan) return;
+    handle.client
+      .prepare(
+        `UPDATE source_channels SET enabled = 1
+         WHERE id = (SELECT channel_id FROM job_sources WHERE id = ?)`,
+      )
+      .run(meituan.source.id);
+    handle.client.prepare('UPDATE job_sources SET enabled = 1 WHERE id = ?').run(meituan.source.id);
 
     const [listPage, detail] = await Promise.all([
       meituanFixture('list-page-1.json'),
@@ -300,7 +312,6 @@ describe('first-party source seed and sync', () => {
       return new JobSyncService({
         uow: new SqliteUnitOfWork(handle.client),
         registry,
-        artifacts: new SqliteArtifactStore(handle.client, root.path),
         http: meituanSyncHttp({ listJob, detail, partial }),
         clock: new FixedClock(),
         ids,

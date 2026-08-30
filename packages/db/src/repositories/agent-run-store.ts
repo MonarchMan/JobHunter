@@ -205,21 +205,24 @@ export class SqliteAgentRunStore implements AgentRunStore {
   public saveToolCall(record: ToolCallRecord): void {
     this.#client
       .prepare(
-        `INSERT INTO agent_tool_calls
-           (id, agent_run_id, sequence_no, tool_key, input_summary_json, output_summary_json,
-            status, duration_ms, error_summary)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO events
+           (id, stream_type, stream_id, sequence_no, event_type, payload_json, occurred_at)
+         SELECT ?, 'agent_run', ?, ?, 'agent.tool.finished', ?, started_at
+         FROM agent_runs WHERE id = ?`,
       )
       .run(
         record.id,
         record.agentRunId,
-        record.sequenceNo,
-        record.toolKey,
-        JSON.stringify(record.inputSummary),
-        record.outputSummary === null ? null : JSON.stringify(record.outputSummary),
-        record.status,
-        record.durationMs,
-        record.errorSummary,
+        record.sequenceNo + 1,
+        JSON.stringify({
+          toolKey: record.toolKey,
+          inputSummary: record.inputSummary,
+          outputSummary: record.outputSummary,
+          status: record.status,
+          durationMs: record.durationMs,
+          errorSummary: record.errorSummary,
+        }),
+        record.agentRunId,
       );
   }
 

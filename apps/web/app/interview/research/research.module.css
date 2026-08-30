@@ -1,0 +1,560 @@
+.root {
+  display: grid;
+  gap: 2.5rem;
+}
+
+.planner {
+  display: grid;
+  grid-template-columns: minmax(17rem, 0.72fr) minmax(0, 1.28fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.plannerIntro {
+  display: flex;
+  gap: 1rem;
+  padding-top: 0.4rem;
+}
+
+.decisionCursor {
+  flex: 0 0 3px;
+  width: 3px;
+  min-height: 3rem;
+  border-radius: 2px;
+  background: var(--action);
+}
+
+.plannerIntro h2,
+.sectionHeading h2,
+.briefSnapshot h2,
+.handoff h2,
+.bundleImport h2 {
+  margin: 0.3rem 0 0;
+  font-size: 1.55rem;
+  letter-spacing: -0.025em;
+}
+
+.plannerIntro p:last-child,
+.handoff > p,
+.bundleImport > p {
+  color: var(--muted-ink);
+  line-height: 1.65;
+}
+
+.briefForm,
+.handoff,
+.bundleImport {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.briefForm {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+}
+
+.fieldGrid label,
+.bundleImport > label {
+  display: grid;
+  gap: 0.42rem;
+  color: var(--muted-ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.fieldGrid small,
+.bundleImport small,
+.assetRows small {
+  color: var(--muted-ink);
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+.fullField {
+  grid-column: 1 / -1;
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.formActions p {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.archive,
+.acceptedArchive,
+.reviewQueue {
+  display: grid;
+  gap: 1rem;
+}
+
+.archiveFilters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto auto;
+  gap: 0.75rem;
+  align-items: end;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.archiveFilters label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sectionHeading p {
+  margin-bottom: 0;
+}
+
+.sectionHeading > span {
+  color: var(--muted-ink);
+  font-size: 0.84rem;
+}
+
+.requestList,
+.questionList,
+.tags {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.requestList li + li {
+  border-top: 1px solid var(--line);
+}
+
+.requestList a {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  min-height: 5.25rem;
+  padding: 0.8rem 0.5rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.requestList a:hover {
+  background: var(--surface);
+}
+
+.archiveIndex {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-weight: 750;
+}
+
+.requestCopy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.requestCopy strong,
+.requestCopy small {
+  overflow-wrap: anywhere;
+}
+
+.requestCopy small,
+.requestStatus {
+  color: var(--muted-ink);
+  font-size: 0.82rem;
+}
+
+.requestStatus {
+  text-align: right;
+}
+
+.emptyCopy {
+  margin: 0;
+  padding: 1.4rem 0;
+  color: var(--muted-ink);
+  line-height: 1.6;
+}
+
+.warnings {
+  padding: 1rem 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--line));
+  border-radius: var(--radius-panel);
+  background: var(--warning-soft);
+}
+
+.warnings h2 {
+  margin: 0;
+  color: var(--warning);
+  font-size: 1rem;
+}
+
+.warnings ul {
+  margin: 0.7rem 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.55;
+}
+
+.experienceStack {
+  display: grid;
+  gap: 1rem;
+}
+
+.experienceRecord {
+  padding: 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.experienceHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.experienceHeader h3 {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+  font-size: 1.12rem;
+}
+
+.recordMeta {
+  margin: 0;
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.recordActions,
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.sourceLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-top: 0.8rem;
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+}
+
+.sourceLine a,
+.taskLine a {
+  color: var(--primary-hover);
+  font-weight: 700;
+  text-underline-offset: 0.18rem;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+}
+
+.tags li {
+  padding: 0.25rem 0.52rem;
+  border-radius: 0.35rem;
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.questionList {
+  margin-top: 1rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.questionList li {
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.questionList li:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.questionList p {
+  margin: 0;
+  color: var(--muted-ink);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.questionList p b {
+  color: var(--ink);
+}
+
+.questionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.questionHeading > span {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.questionHeading small {
+  color: var(--muted-ink);
+  font-size: 0.76rem;
+}
+
+.briefSnapshot {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  gap: 1rem 2rem;
+  align-items: start;
+  padding: 1.25rem 0;
+  border-block: 1px solid var(--line);
+}
+
+.briefSnapshot dl {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1.5rem;
+  margin: 0;
+}
+
+.briefSnapshot dl > div {
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.briefSnapshot dt {
+  color: var(--muted-ink);
+  font-size: 0.78rem;
+}
+
+.briefSnapshot dd {
+  margin: 0.3rem 0 0;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+}
+
+.summaryStates {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.handoffGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(17rem, 0.65fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.handoff,
+.bundleImport {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem;
+}
+
+.handoff > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.handoff > header > span {
+  color: var(--muted-ink);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.handoff > p,
+.bundleImport > p {
+  margin: 0;
+}
+
+.assetRows {
+  display: grid;
+  border-top: 1px solid var(--line-soft);
+}
+
+.assetRows > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.assetRows > div > div:first-child {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.executionBar {
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: center;
+  padding: 0.9rem;
+  background: var(--canvas-tint);
+}
+
+.executionBar .decisionCursor {
+  align-self: stretch;
+}
+
+.executionBar p {
+  margin: 0.25rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.82rem;
+}
+
+.taskLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.8rem;
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+}
+
+.taskLine code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.bundleImport > header p {
+  margin-bottom: 0;
+}
+
+.bundleImport input[type='file'] {
+  height: auto;
+  padding: 0.4rem;
+  color: var(--muted-ink);
+  font-size: 0.78rem;
+}
+
+.bundleImport input[type='file']::file-selector-button {
+  min-height: 2.2rem;
+  margin-right: 0.65rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 750;
+}
+
+.selectedFile {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.7rem;
+  min-height: 2rem;
+  color: var(--muted-ink);
+  font-size: 0.8rem;
+}
+
+.selectedFile strong {
+  max-width: 100%;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 980px) {
+  .planner,
+  .handoffGrid,
+  .archiveFilters {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .fieldGrid,
+  .briefSnapshot dl {
+    grid-template-columns: 1fr;
+  }
+
+  .fullField {
+    grid-column: auto;
+  }
+
+  .formActions,
+  .sectionHeading,
+  .experienceHeader,
+  .handoff > header,
+  .assetRows > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .requestList a {
+    grid-template-columns: 2.2rem minmax(0, 1fr);
+  }
+
+  .requestStatus {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .recordActions button,
+  .inlineActions > *,
+  .formActions button,
+  .archiveFilters > * {
+    flex: 1 1 auto;
+  }
+
+  .executionBar {
+    grid-template-columns: 3px minmax(0, 1fr);
+  }
+
+  .executionBar button {
+    grid-column: 2;
+  }
+}

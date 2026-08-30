@@ -35,7 +35,6 @@ export interface SyncSourceRecord {
 
 export interface SyncRunStats {
   readonly discovered: number;
-  readonly rawStored: number;
   readonly created: number;
   readonly unchanged: number;
   readonly revised: number;
@@ -66,24 +65,6 @@ export type StartSyncRunResult =
   | { readonly kind: 'started'; readonly runId: SyncRunId }
   | { readonly kind: 'conflict'; readonly runId: SyncRunId };
 
-export interface PersistRawJobInput {
-  readonly id: string;
-  readonly sourceId: JobSourceId;
-  readonly syncRunId: SyncRunId;
-  readonly externalJobId: string;
-  readonly identityKey: string;
-  readonly sourceUrl: string;
-  readonly contentHash: string;
-  readonly payload: unknown;
-  readonly artifactId: string | null;
-  readonly capturedAt: UtcInstant;
-}
-
-export interface PersistedRawJob {
-  readonly id: string;
-  readonly deduplicated: boolean;
-}
-
 export interface FinishSyncRunInput {
   readonly runId: SyncRunId;
   readonly sourceId: JobSourceId;
@@ -108,7 +89,6 @@ export interface CachedSourceJobDetail {
 export interface SyncRepository {
   getSource(sourceId: JobSourceId): SyncSourceRecord | null;
   startRun(input: StartSyncRunInput): StartSyncRunResult;
-  persistRawJob(input: PersistRawJobInput): PersistedRawJob;
   getCachedJobDetail(
     sourceId: JobSourceId,
     externalJobId: string,
@@ -140,7 +120,7 @@ export interface SyncRepository {
     readonly stage: 'normalize' | 'identity';
     readonly errorCategory: string;
     readonly errorSummary: string;
-    readonly rawRecordId: string;
+    readonly sourceUrl: string;
     readonly occurredAt: UtcInstant;
   }): void;
   findUnseenJobs(

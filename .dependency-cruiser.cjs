@@ -64,7 +64,7 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
-    exclude: { path: '(^|/)dist/|(^|/)test/fixtures/' },
+    exclude: { path: '(^|/)\\.next[^/]*/|(^|/)dist/|(^|/)test/fixtures/' },
     includeOnly: '^(apps|packages)/',
     tsConfig: { fileName: 'tsconfig.json' },
     enhancedResolveOptions: { exportsFields: ['exports'] },

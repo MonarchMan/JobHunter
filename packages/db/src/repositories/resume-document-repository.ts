@@ -17,7 +17,20 @@ interface ResumeDocumentRow {
 
 const selection = `SELECT id, artifact_id, content_hash, media_type, extracted_text,
                           parse_status, parser_version, error_summary, created_at
-                   FROM resume_documents`;
+                   FROM (
+                     SELECT file.id, version.entity_id AS artifact_id,
+                            entity.sha256 AS content_hash, entity.media_type,
+                            version.extracted_text, version.parse_status,
+                            version.parser_version, version.error_summary, file.created_at
+                     FROM files file
+                     JOIN file_entity_mappings version ON version.file_id = file.id
+                     JOIN entities entity ON entity.id = version.entity_id
+                     WHERE file.kind = 'resume' AND version.parse_status IS NOT NULL
+                       AND version.version_no = (
+                         SELECT MAX(candidate.version_no) FROM file_entity_mappings candidate
+                         WHERE candidate.file_id = file.id
+                       )
+                   )`;
 
 function toRecord(row: ResumeDocumentRow): ResumeDocumentRecord {
   return {
@@ -55,25 +68,34 @@ export class SqliteResumeDocumentRepository implements ResumeDocumentRepository 
   }
 
   public createOrGet(input: ResumeDocumentRecord): ResumeDocumentRecord {
-    this.#client
-      .prepare(
-        `INSERT INTO resume_documents
-           (id, artifact_id, content_hash, media_type, extracted_text, parse_status,
-            parser_version, error_summary, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(content_hash) DO NOTHING`,
-      )
-      .run(
-        input.id,
-        input.artifactId,
-        input.contentHash,
-        input.mediaType,
-        input.extractedText,
-        input.parseStatus,
-        input.parserVersion,
-        input.errorSummary,
-        input.createdAt,
-      );
+    const existing = this.findByContentHash(input.contentHash);
+    if (existing) return existing;
+    this.#client.transaction(() => {
+      const changed = this.#client
+        .prepare(
+          `UPDATE files SET kind = 'resume', state = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(input.parseStatus, input.createdAt, input.id).changes;
+      if (changed !== 1) throw new TypeError('Resume file was not registered.');
+      this.#client
+        .prepare(
+          `UPDATE file_entity_mappings
+           SET parser_version = ?, parse_status = ?, extracted_text = ?, error_summary = ?
+           WHERE file_id = ? AND version_no = (
+             SELECT MAX(candidate.version_no) FROM file_entity_mappings candidate
+             WHERE candidate.file_id = ?
+           )`,
+        )
+        .run(
+          input.parserVersion,
+          input.parseStatus,
+          input.extractedText,
+          input.errorSummary,
+          input.id,
+          input.id,
+        );
+    })();
     const stored = this.findByContentHash(input.contentHash);
     if (!stored) throw new Error('Resume document persistence did not produce a row.');
     return stored;
@@ -89,11 +111,16 @@ export class SqliteResumeDocumentRepository implements ResumeDocumentRepository 
     if (!text || !parserVersion) throw new TypeError('OCR result is incomplete.');
     this.#client
       .prepare(
-        `UPDATE resume_documents
+        `UPDATE file_entity_mappings
          SET extracted_text = ?, parse_status = 'parsed', parser_version = ?, error_summary = NULL
-         WHERE id = ? AND parse_status = 'needs_ocr'`,
+         WHERE file_id = ? AND parse_status = 'needs_ocr'
+           AND version_no = (
+             SELECT MAX(candidate.version_no) FROM file_entity_mappings candidate
+             WHERE candidate.file_id = ?
+           )`,
       )
-      .run(text, parserVersion, input.id);
+      .run(text, parserVersion, input.id, input.id);
+    this.#client.prepare("UPDATE files SET state = 'parsed' WHERE id = ?").run(input.id);
     const stored = this.getById(input.id);
     if (!stored) throw new TypeError('Resume document was not found.');
     if (stored.parseStatus !== 'parsed' || stored.extractedText === null) {

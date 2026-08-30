@@ -105,7 +105,7 @@ Markdown 投影复用 ArtifactStore 的 `export` 类型，并由 `project_dossie
 - `ProjectAnswerDigestHandler`：调用 Agent、校验偏移、提交推导和覆盖；
 - `ProjectNotebookHandler`：读取权威状态、确定性渲染、写 Artifact、更新最新引用。
 
-问题和摘要成功后入队投影任务；投影任务使用 `dossierId + sourceRevision` 幂等键和 `interview-dossier:<id>` 并发键。模型调用和文件写入发生在事务外，最终提交使用比较并交换。
+问题和摘要成功后入队投影任务；投影任务使用 `dossierId + sourceRevision` 幂等键和 `interview-dossier:<id>:revision:<revision>` 并发键，不同 revision 都会形成可恢复任务，生产 Worker 对该类型固定单消费者串行执行。旧 revision 通过比较并交换失效，不能吞掉最新投影。最终事务同时核验 Task ID、类型、payload、`running`、有效租约与未取消条件；文件写入期间取消时先注销新 Artifact 再退出，提交已成功后才到达的取消则视为过晚。若 Artifact 已写入但最终 CAS 或 Task 门控失败，Repository 在同一短事务注销未被任何 dossier 引用的逻辑文件、mapping 与非共享 entity，使物理文件进入通用 orphan cleanup。模型调用和文件写入发生在事务外，最终提交使用比较并交换。
 
 ## 6. Web 契约与页面
 

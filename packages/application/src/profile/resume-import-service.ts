@@ -59,8 +59,8 @@ export class ResumeImportService {
       signal,
     });
     const candidate: ResumeDocumentRecord = {
-      id: this.#ids.generate(),
-      artifactId: artifact.id,
+      id: artifact.id,
+      artifactId: artifact.entityId,
       contentHash: artifact.sha256,
       mediaType: detected.mediaType,
       extractedText: parsed.text,

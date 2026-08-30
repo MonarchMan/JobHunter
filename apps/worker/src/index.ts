@@ -6,6 +6,7 @@ import {
   createJobAdviceTaskHandler,
   createJobUnderstandingTaskHandler,
   createCleanupTaskHandler,
+  createExperienceResearchTaskHandler,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createProjectAnswerDigestTaskHandler,
@@ -19,6 +20,7 @@ import {
   createSourceSyncTaskHandler,
   createSourceHealthTaskHandler,
   DeterministicMatchingService,
+  ExperienceResearchService,
   HandlerRegistry,
   JobDetailService,
   JobSyncService,
@@ -49,8 +51,8 @@ import {
   SqliteCleanupRepository,
   SqliteMatchingRepository,
   SqliteInterviewProjectRepository,
+  SqliteInterviewResearchRepository,
   SqliteResumeDocumentRepository,
-  SqliteResumePolishSuggestionRepository,
   SqliteResumeArtifactReader,
   SqliteResumeDeletionRepository,
   SqliteSourceHealthWriter,
@@ -60,7 +62,13 @@ import {
   SqliteTaskRepository,
   SqliteUnitOfWork,
 } from '@jobhunter/db';
-import { parseId, SystemIdGenerator, utcInstant, type Clock, type IdGenerator } from '@jobhunter/domain';
+import {
+  parseId,
+  SystemIdGenerator,
+  utcInstant,
+  type Clock,
+  type IdGenerator,
+} from '@jobhunter/domain';
 import { createConfiguredModelClient } from '@jobhunter/llm';
 import { TesseractResumeOcrEngine } from '@jobhunter/resume';
 import {
@@ -74,6 +82,7 @@ import {
 } from '@jobhunter/source-core';
 import { firstPartySourceCatalog, registerFirstPartyAdapters } from '@jobhunter/sources';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
+import { CodexLocalResearchExecutor } from './codex-research-executor.js';
 
 export { createPlaywrightSourcePageClient } from './browser-source.js';
 
@@ -286,7 +295,6 @@ export function createProductionWorkerApplication(input: {
   const sync = new JobSyncService({
     uow,
     registry: adapters,
-    artifacts: new SqliteArtifactStore(database.client, input.dataRoot),
     http: sourceHttp,
     ...(sourcePage ? { page: sourcePage } : {}),
     clock,
@@ -296,7 +304,20 @@ export function createProductionWorkerApplication(input: {
   });
   const registry = new HandlerRegistry();
   const interviewRepository = new SqliteInterviewProjectRepository(database.client);
+  const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
   const interviewArtifacts = new SqliteArtifactStore(database.client, input.dataRoot);
+  registry.register(
+    createExperienceResearchTaskHandler({
+      repository: interviewResearchRepository,
+      service: new ExperienceResearchService({
+        repository: interviewResearchRepository,
+        artifacts: interviewArtifacts,
+        clock,
+        ids,
+      }),
+      executor: new CodexLocalResearchExecutor(),
+    }),
+  );
   let interviewTasks: TaskService | null = null;
   const enqueueInterviewNotebook = (dossierId: string): void => {
     const detail = interviewRepository.getDossier(parseId(dossierId, 'ProjectDossier'));
@@ -404,7 +425,6 @@ export function createProductionWorkerApplication(input: {
       createResumePolishTaskHandler({
         runner,
         profiles: profileRepository,
-        suggestions: new SqliteResumePolishSuggestionRepository(database.client),
       }),
     );
     understandingHandler = createJobUnderstandingTaskHandler({
@@ -488,7 +508,10 @@ export function createProductionWorkerApplication(input: {
       emptyPollMinimumMs: input.pollIntervalMs ?? 1_000,
       emptyPollMaximumMs: Math.max(input.pollIntervalMs ?? 1_000, 10_000),
       schedulerPollMs: input.pollIntervalMs ?? 1_000,
-      taskTypeConcurrency: input.taskTypeConcurrency ?? {},
+      taskTypeConcurrency: {
+        ...(input.taskTypeConcurrency ?? {}),
+        'interview.project-notebook.render': 1,
+      },
     },
     ...(input.logger ? { logger: input.logger } : {}),
   });

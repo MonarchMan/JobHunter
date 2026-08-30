@@ -69,10 +69,13 @@ export function DrillWorkbench({
 }>): ReactElement {
   const router = useRouter();
   const deleteDialog = useRef<HTMLDialogElement>(null);
+  const materialInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [answer, setAnswer] = useState('');
   const [answerToken, setAnswerToken] = useState(() => crypto.randomUUID());
+  const [profileKey, setProfileKey] = useState<'resume-only' | 'docs-grounded'>('resume-only');
+  const [selectedMaterialIds, setSelectedMaterialIds] = useState<readonly string[]>([]);
   const [deleteImpact, setDeleteImpact] = useState<{
     readonly impactHash: string;
     readonly counts: Readonly<Record<string, number>>;
@@ -86,6 +89,16 @@ export function DrillWorkbench({
       null,
     [detail.sessionRecords],
   );
+  const currentMaterials = useMemo(() => {
+    const latest = new Map<string, (typeof detail.materials)[number]>();
+    for (const material of detail.materials) {
+      const current = latest.get(material.fileId);
+      if (!current || current.versionNo < material.versionNo) latest.set(material.fileId, material);
+    }
+    return [...latest.values()].toSorted((left, right) =>
+      left.fileName.localeCompare(right.fileName),
+    );
+  }, [detail.materials]);
   const sessionTurns = session ? detail.turns.filter((turn) => turn.sessionId === session.id) : [];
   const latestTurn = sessionTurns.toSorted((left, right) => right.turnNo - left.turnNo)[0] ?? null;
   const currentTurn = session?.status === 'completed' ? null : latestTurn;
@@ -141,13 +154,74 @@ export function DrillWorkbench({
 
   const startSession = async (): Promise<void> => {
     try {
-      await mutate('session', `/api/interview/projects/${detail.dossier.id}/sessions`);
+      await mutate('session', `/api/interview/projects/${detail.dossier.id}/sessions`, {
+        profileKey,
+        materialFileIds: profileKey === 'docs-grounded' ? selectedMaterialIds : [],
+      });
       setFeedback('新一轮拷打已建立，可以生成第一题。');
       router.refresh();
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : '无法开始拷打。');
     }
   };
+
+  const uploadMaterials = async (): Promise<void> => {
+    const files = [...(materialInput.current?.files ?? [])];
+    if (files.length < 1) return;
+    if (files.some((file) => file.size < 1 || file.size > 512 * 1024)) {
+      setFeedback('每份项目资料必须非空且不超过 512 KiB。');
+      return;
+    }
+    setBusy('materials');
+    setFeedback(null);
+    try {
+      const failures: string[] = [];
+      let succeeded = 0;
+      for (const file of files) {
+        const form = new FormData();
+        form.append('files', file);
+        const response = await fetch(`/api/interview/projects/${detail.dossier.id}/materials`, {
+          method: 'POST',
+          headers: await mutationHeaders(false),
+          body: form,
+        });
+        const result = (await response.json()) as ApiEnvelope<readonly unknown[]>;
+        if (!response.ok || !result.data) {
+          failures.push(`${file.name}：${result.error?.message ?? '登记失败'}`);
+        } else {
+          succeeded += result.data.length;
+        }
+      }
+      if (succeeded > 0) {
+        if (materialInput.current) materialInput.current.value = '';
+        router.refresh();
+      }
+      setFeedback(
+        failures.length === 0
+          ? `已登记 ${String(succeeded)} 份项目资料。`
+          : `已登记 ${String(succeeded)} 份；${failures.join('；')}`,
+      );
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : '项目资料上传失败。');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const materialEvidence = (
+    turn: (typeof detail.turns)[number],
+  ): {
+    readonly material: (typeof detail.materials)[number];
+    readonly chunk: (typeof detail.materials)[number]['chunks'][number];
+  }[] =>
+    turn.evidenceRefs.flatMap((reference) => {
+      if (reference.kind !== 'project_material') return [];
+      for (const material of detail.materials) {
+        const chunk = material.chunks.find((candidate) => candidate.id === reference.id);
+        if (chunk) return [{ material, chunk }];
+      }
+      return [];
+    });
 
   const requestQuestion = async (): Promise<void> => {
     if (!session) return;
@@ -268,7 +342,10 @@ export function DrillWorkbench({
         </div>
         <div className={styles.snapshotFacts}>
           <span>{detail.sourceAvailable ? '来源简历可用' : '来源已分离 · 当前展示冻结快照'}</span>
-          <span>浅档 · resume-only@v1</span>
+          <span>
+            {session?.profileKey === 'docs-grounded' ? '深档' : '浅档'} ·{' '}
+            {session ? `${session.profileKey}@${session.profileVersion}` : '尚未开始'}
+          </span>
           {detail.dossier.latestNotebookArtifactId ? (
             <a href={`/api/interview/projects/${detail.dossier.id}/notebook`}>下载 Markdown</a>
           ) : (
@@ -283,6 +360,55 @@ export function DrillWorkbench({
           </ul>
         ) : (
           <p className={styles.muted}>简历没有项目描述，首轮问题会先帮助补齐背景和职责。</p>
+        )}
+      </section>
+
+      <section className={styles.materials} aria-labelledby="project-materials-title">
+        <header>
+          <div>
+            <p className="eyebrow">SELECTED MARKDOWN ONLY</p>
+            <h2 id="project-materials-title">项目资料</h2>
+          </div>
+          <span>{currentMaterials.length} 个逻辑文件</span>
+        </header>
+        <p className={styles.muted}>
+          只读取你在这里显式上传并在会话前勾选的 Markdown；不会扫描项目目录或源码。
+        </p>
+        <form
+          className={styles.materialUpload}
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            void uploadMaterials();
+          }}
+        >
+          <label htmlFor="project-material-files">上传 Markdown / MDX（单份不超过 512 KiB）</label>
+          <input
+            ref={materialInput}
+            id="project-material-files"
+            name="files"
+            type="file"
+            accept=".md,.mdx,text/markdown"
+            multiple
+            disabled={busy !== null}
+          />
+          <button type="submit" className="button-secondary" disabled={busy !== null}>
+            {busy === 'materials' ? '正在登记…' : '登记资料版本'}
+          </button>
+        </form>
+        {currentMaterials.length > 0 ? (
+          <ul className={styles.materialList}>
+            {currentMaterials.map((material) => (
+              <li key={material.fileId}>
+                <strong>{material.fileName}</strong>
+                <span>v{material.versionNo}</span>
+                <span>{material.chunks.length} 个标题分块</span>
+                <code>{material.contentHash.slice(0, 12)}</code>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={styles.muted}>尚未登记资料；浅档仍可正常使用。</p>
         )}
       </section>
 
@@ -304,8 +430,53 @@ export function DrillWorkbench({
               <div>
                 <h3>{session ? '开始新一轮准备' : '建立第一轮会话'}</h3>
                 <p>每次只推进一个问题；可以随时暂停，历史记录不会被覆盖。</p>
+                <div className={styles.profileChooser}>
+                  <label htmlFor="drill-profile">拷打档位</label>
+                  <select
+                    id="drill-profile"
+                    value={profileKey}
+                    disabled={busy !== null}
+                    onChange={(event) => {
+                      setProfileKey(event.currentTarget.value as typeof profileKey);
+                    }}
+                  >
+                    <option value="resume-only">浅档 · 只用简历项目</option>
+                    <option value="docs-grounded" disabled={currentMaterials.length === 0}>
+                      深档 · 简历 + 选中 Markdown
+                    </option>
+                  </select>
+                  {profileKey === 'docs-grounded' ? (
+                    <fieldset>
+                      <legend>本轮冻结资料</legend>
+                      {currentMaterials.map((material) => (
+                        <label key={material.fileId}>
+                          <input
+                            type="checkbox"
+                            checked={selectedMaterialIds.includes(material.fileId)}
+                            onChange={(event) => {
+                              const checked = event.currentTarget.checked;
+                              setSelectedMaterialIds((current) =>
+                                checked
+                                  ? [...current, material.fileId]
+                                  : current.filter((id) => id !== material.fileId),
+                              );
+                            }}
+                          />
+                          {material.fileName} · v{material.versionNo}
+                        </label>
+                      ))}
+                    </fieldset>
+                  ) : null}
+                </div>
               </div>
-              <button type="button" disabled={busy !== null} onClick={() => void startSession()}>
+              <button
+                type="button"
+                disabled={
+                  busy !== null ||
+                  (profileKey === 'docs-grounded' && selectedMaterialIds.length === 0)
+                }
+                onClick={() => void startSession()}
+              >
                 {busy === 'session' ? '正在建立…' : '开始拷打'}
               </button>
             </div>
@@ -460,6 +631,19 @@ export function DrillWorkbench({
                 </p>
                 <h3>{currentTurn.question}</h3>
                 {currentTurn.intent ? <p className={styles.intent}>{currentTurn.intent}</p> : null}
+                {materialEvidence(currentTurn).length > 0 ? (
+                  <div className={styles.evidence}>
+                    <strong>提问依据</strong>
+                    <ul>
+                      {materialEvidence(currentTurn).map(({ material, chunk }) => (
+                        <li key={chunk.id}>
+                          {material.fileName}
+                          {chunk.heading ? ` · ${chunk.heading}` : ''}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <div className={styles.guidance}>
                   <strong>回答时建议覆盖</strong>
                   <ul>
@@ -627,6 +811,16 @@ export function DrillWorkbench({
                         </time>
                       </header>
                       <h3>{turn.question ?? '本题在生成完成前被取消'}</h3>
+                      {materialEvidence(turn).length > 0 ? (
+                        <ul className={styles.historyEvidence} aria-label="提问资料依据">
+                          {materialEvidence(turn).map(({ material, chunk }) => (
+                            <li key={chunk.id}>
+                              {material.fileName}
+                              {chunk.heading ? ` · ${chunk.heading}` : ''}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                       {answers.map((item) => {
                         const knowledge = detail.knowledgeItems.filter(
                           (candidate) => candidate.sourceAnswerRevisionId === item.id,
@@ -662,7 +856,9 @@ export function DrillWorkbench({
       <section className={styles.dangerZone} aria-labelledby="delete-dossier-title">
         <div>
           <h2 id="delete-dossier-title">删除准备档案</h2>
-          <p>删除会清除该项目的会话、回答、推导和未共享投影，不会删除个人资料或简历文件。</p>
+          <p>
+            删除会清除该项目的会话、回答、推导、资料逻辑文件和未共享物理内容，不会删除个人资料或简历文件。
+          </p>
         </div>
         <button
           type="button"
@@ -690,6 +886,8 @@ export function DrillWorkbench({
               <li>{deleteImpact.counts.turns ?? 0} 个问题</li>
               <li>{deleteImpact.counts.answerRevisions ?? 0} 版回答</li>
               <li>{deleteImpact.counts.knowledgeItems ?? 0} 条推导记录</li>
+              <li>{deleteImpact.counts.materialFiles ?? 0} 个项目资料逻辑文件</li>
+              <li>{deleteImpact.counts.materialArtifacts ?? 0} 个独占物理文件</li>
             </ul>
           ) : null}
           <label htmlFor="delete-confirmation">输入 DELETE 进行二次确认</label>

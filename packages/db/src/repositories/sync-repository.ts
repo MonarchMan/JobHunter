@@ -2,8 +2,6 @@ import type {
   CurrentJobRecord,
   CachedSourceJobDetail,
   FinishSyncRunInput,
-  PersistedRawJob,
-  PersistRawJobInput,
   SourceSyncPolicy,
   StartSyncRunInput,
   StartSyncRunResult,
@@ -53,6 +51,7 @@ interface SourceRow {
 
 interface CurrentJobRow {
   readonly id: string;
+  readonly revision_id: string;
   readonly source_id: string;
   readonly external_job_id: string;
   readonly revision_no: number;
@@ -67,6 +66,7 @@ interface CurrentJobRow {
 function currentJob(row: CurrentJobRow): CurrentJobRecord {
   return {
     jobId: parseId(row.id, 'Job'),
+    revisionId: parseId(row.revision_id, 'JobRevision'),
     identity: {
       sourceId: parseId(row.source_id, 'JobSource'),
       externalJobId: row.external_job_id,
@@ -162,39 +162,6 @@ export class SqliteSyncRepository implements SyncRepository {
       if (running) return { kind: 'conflict', runId: parseId(running.id, 'SyncRun') };
       throw error;
     }
-  }
-
-  public persistRawJob(input: PersistRawJobInput): PersistedRawJob {
-    const result = this.#client
-      .prepare(
-        `INSERT INTO raw_job_records
-         (id, source_id, first_sync_run_id, external_job_id, identity_key, source_url,
-          content_hash, payload_json, artifact_id, captured_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(source_id, identity_key, content_hash) DO NOTHING`,
-      )
-      .run(
-        input.id,
-        input.sourceId,
-        input.syncRunId,
-        input.externalJobId,
-        input.identityKey,
-        input.sourceUrl,
-        input.contentHash,
-        input.payload === null ? null : canonicalJson(input.payload),
-        input.artifactId,
-        input.capturedAt,
-      );
-    if (result.changes === 1) return { id: input.id, deduplicated: false };
-    const existing = this.#client
-      .prepare(
-        `SELECT id FROM raw_job_records
-         WHERE source_id = ? AND identity_key = ? AND content_hash = ?`,
-      )
-      .get(input.sourceId, input.identityKey, input.contentHash) as
-      { readonly id: string } | undefined;
-    if (!existing) throw new Error('Raw job deduplication conflict could not be resolved.');
-    return { id: existing.id, deduplicated: true };
   }
 
   public getCachedJobDetail(
@@ -299,26 +266,30 @@ export class SqliteSyncRepository implements SyncRepository {
     readonly stage: 'normalize' | 'identity';
     readonly errorCategory: string;
     readonly errorSummary: string;
-    readonly rawRecordId: string;
+    readonly sourceUrl: string;
     readonly occurredAt: UtcInstant;
   }): void {
     this.#client
       .prepare(
-        `INSERT INTO sync_item_failures
-         (id, sync_run_id, source_id, external_job_id, stage, error_category,
-          error_summary, raw_record_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO events
+         (id, stream_type, stream_id, sequence_no, event_type, payload_json, occurred_at)
+         SELECT ?, 'sync_run', ?, COALESCE(MAX(sequence_no), 0) + 1,
+                'sync.item.failed', ?, ?
+         FROM events WHERE stream_type = 'sync_run' AND stream_id = ?`,
       )
       .run(
         input.id,
         input.runId,
-        input.sourceId,
-        input.externalJobId,
-        input.stage,
-        input.errorCategory,
-        input.errorSummary,
-        input.rawRecordId,
+        JSON.stringify({
+          sourceId: input.sourceId,
+          externalJobId: input.externalJobId,
+          stage: input.stage,
+          errorCategory: input.errorCategory,
+          errorSummary: input.errorSummary,
+          sourceUrl: input.sourceUrl,
+        }),
         input.occurredAt,
+        input.runId,
       );
   }
 
@@ -329,7 +300,7 @@ export class SqliteSyncRepository implements SyncRepository {
   ): readonly CurrentJobRecord[] {
     const rows = this.#client
       .prepare(
-        `SELECT j.id, j.source_id, j.external_job_id, j.status, j.missing_count,
+        `SELECT j.id, r.id AS revision_id, j.source_id, j.external_job_id, j.status, j.missing_count,
                 j.last_seen_at, j.closed_at, r.revision_no, r.content_hash, r.snapshot_json
          FROM jobs j
          JOIN job_revisions r ON r.job_id = j.id

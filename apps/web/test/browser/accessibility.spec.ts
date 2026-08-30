@@ -2,7 +2,15 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 for (const width of [1280, 768]) {
-  for (const route of ['/', '/jobs', '/interview', '/profile', '/sources', '/tasks']) {
+  for (const route of [
+    '/',
+    '/jobs',
+    '/interview',
+    '/interview/experiences',
+    '/profile',
+    '/sources',
+    '/tasks',
+  ]) {
     test(`${route} has no accessibility violations at ${String(width)}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(route);

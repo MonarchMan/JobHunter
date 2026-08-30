@@ -8,7 +8,6 @@ import {
 import { z } from 'zod';
 import { mapAgentRuntimeError } from '../agents/error-mapping.js';
 import type { CandidateProfileRepository } from '../ports/profiles.js';
-import type { ResumePolishSuggestionRepository } from '../ports/resume-polish-suggestions.js';
 import type { TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
 
@@ -30,7 +29,6 @@ export function createResumePolishTaskHandler(
     | {
         readonly runner: AgentRunner;
         readonly profiles: CandidateProfileRepository;
-        readonly suggestions: ResumePolishSuggestionRepository;
       }
     | { readonly unavailable: true },
 ): TaskHandler<
@@ -82,15 +80,7 @@ export function createResumePolishTaskHandler(
           signal: context.signal,
         });
         const polished = parseResumePolishAgentOutput(result.output, agentInput);
-        input.suggestions.save({
-          id: payload.suggestionId,
-          profileId: payload.profileId,
-          sourceVersionId: payload.sourceVersionId,
-          sections: selectedSections,
-          result: polished,
-          agentRunId: result.run.id,
-          createdAt: context.clock.now(),
-        });
+        void polished;
         return {
           suggestionId: payload.suggestionId,
           agentRunId: result.run.id,

@@ -16,6 +16,13 @@ export const webSubmitDrillAnswerSchema = z
   })
   .strict();
 
+export const webStartDrillSessionSchema = z
+  .object({
+    profileKey: z.enum(['resume-only', 'docs-grounded']).default('resume-only'),
+    materialFileIds: z.array(z.uuid()).max(8).default([]),
+  })
+  .strict();
+
 export const webDrillSessionStateSchema = z
   .object({ action: z.enum(['pause', 'resume', 'complete']) })
   .strict();

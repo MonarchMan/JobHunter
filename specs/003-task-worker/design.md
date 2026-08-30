@@ -28,7 +28,7 @@ Cron 解析使用 `cron-parser` 和 IANA timezone；计算结果统一转换为 
 
 ## 取消
 
-pending 直接转 cancelled。running 写入取消请求并通过当前进程内 AbortController 立即通知；跨进程 Worker 在心跳时检查取消。Handler 必须在分页、模型调用和批处理边界检查信号。
+pending 直接转 cancelled。running 写入取消请求并通过当前进程内 AbortController 立即通知；跨进程 Worker 在心跳时检查取消。Handler 必须在分页、模型调用和批处理边界检查信号。默认由取消获胜；只有在最终业务事务同时核验当前 Task、`running` 状态与未取消条件的 Handler 才能声明 `lateCancellationPolicy = complete`。同一 Handler 同时有提交和 no-op 输出时，可在 output Schema 校验后按输出动态选择策略，仅真正提交的结果允许完成获胜。这类 Handler 一旦返回已提交结果，随后抵达的取消不能再把 Task 标成 cancelled；租约丢失或关闭信号仍不允许越权完成。
 
 ## 可观测性
 

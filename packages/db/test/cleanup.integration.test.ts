@@ -53,7 +53,7 @@ describe('cleanup infrastructure', () => {
         files,
       });
       const plan = await service.plan(
-        { rawRecordsDays: 30, observationsDays: 90, failedAgentRunsDays: 30 },
+        { sourceDetailsDays: 30, observationsDays: 90, failedAgentRunsDays: 30 },
         { now },
       );
       expect(plan.candidates).toMatchObject([
@@ -74,7 +74,7 @@ describe('cleanup infrastructure', () => {
     }
   });
 
-  it('removes expired observations before their now-unreferenced raw records', async () => {
+  it('removes expired observations and source detail cache entries independently', async () => {
     const root = await createTemporaryDataRoot('jobhunter-cleanup-records-');
     const handle = openSqliteDatabase({ dataRoot: root.path });
     try {
@@ -86,10 +86,10 @@ describe('cleanup infrastructure', () => {
           (id, company_id, channel, slug, enabled, created_at, updated_at)
         VALUES ('channel', 'company', 'social', 'cleanup-social', 1, 1, 1);
         INSERT INTO job_sources
-          (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
+          (id, company_id, channel_id, slug, adapter_key, base_url, config_json,
            sync_policy_version, sync_policy_json, enabled, support_status, health_status,
            consecutive_failures, created_at, updated_at)
-        VALUES ('source', 'company', 'channel', 'cleanup-social', 'cleanup.fixture', 'social',
+        VALUES ('source', 'company', 'channel', 'cleanup-social', 'cleanup.fixture',
                 'https://careers.example.com', '{}', 'v1', '{}', 1, 'supported',
                 'healthy', 0, 1, 1);
         INSERT INTO sync_runs
@@ -97,11 +97,6 @@ describe('cleanup infrastructure', () => {
            sync_policy_version, source_config_hash, stats_json, started_at, finished_at)
         VALUES ('sync', 'source', 'manual', 'succeeded', 'complete', '1', '1', 'v1',
                 '${'a'.repeat(64)}', '{}', 1, 2);
-        INSERT INTO raw_job_records
-          (id, source_id, first_sync_run_id, external_job_id, identity_key, source_url,
-           content_hash, payload_json, artifact_id, captured_at)
-        VALUES ('raw', 'source', 'sync', 'job', 'job', 'https://careers.example.com/job',
-                '${'b'.repeat(64)}', '{}', NULL, 1);
         INSERT INTO jobs
           (id, company_id, source_id, external_job_id, title, department, job_family,
            locations_json, employment_type, experience_text, education_text, description,
@@ -111,33 +106,31 @@ describe('cleanup infrastructure', () => {
                 NULL, NULL, 'Fixture', 'https://careers.example.com/job',
                 'https://careers.example.com/job', NULL, 'active', 0, '${'c'.repeat(64)}',
                 1, 1, NULL, 1, 1);
-        INSERT INTO job_observations (job_id, sync_run_id, raw_record_id, observed_at)
-        VALUES ('job', 'sync', 'raw', 1);
-        INSERT INTO file_artifacts
-          (id, kind, relative_path, media_type, sha256, byte_size, created_at)
-        VALUES ('shared-artifact', 'raw_job', 'artifacts/shared', 'application/json',
-                '${'d'.repeat(64)}', 12, 1);
-        UPDATE raw_job_records SET artifact_id = 'shared-artifact' WHERE id = 'raw';
-        INSERT INTO resume_project_snapshots
-          (id, source_profile_id, source_profile_version_id, project_index, project_json,
-           content_hash, created_at)
-        VALUES ('snapshot', 'profile', 'version', 0, '{}', '${'e'.repeat(64)}', 1);
-        INSERT INTO project_dossiers
-          (id, snapshot_id, latest_notebook_artifact_id, revision, created_at, updated_at)
-        VALUES ('dossier', 'snapshot', 'shared-artifact', 0, 1, 1);
+        INSERT INTO job_revisions
+          (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
+           source_url, snapshot_json, change_set_json, created_at)
+        VALUES ('revision', 'job', 1, '${'c'.repeat(64)}', '1', '${'b'.repeat(64)}',
+                'https://careers.example.com/job', '{}', '[]', 1);
+        INSERT INTO job_observations (job_id, sync_run_id, job_revision_id, observed_at)
+        VALUES ('job', 'sync', 'revision', 1);
+        INSERT INTO source_job_details
+          (source_id, external_job_id, list_content_hash, adapter_version, detail_json,
+           status, fetched_at, updated_at)
+        VALUES ('source', 'job', '${'c'.repeat(64)}', '1', '{}', 'succeeded', 1, 1);
       `);
       const repository = new SqliteCleanupRepository(handle.client);
-      const cutoffs = { rawRecordsBefore: 10, observationsBefore: 10, agentRunsBefore: 10 };
+      const cutoffs = { sourceDetailsBefore: 10, observationsBefore: 10, agentRunsBefore: 10 };
       const first = repository.listCandidates(cutoffs);
-      expect(first).toMatchObject([{ kind: 'observation' }]);
-      repository.deleteCandidates(first);
-      const second = repository.listCandidates(cutoffs);
-      expect(second).toMatchObject([
-        { kind: 'raw_record', id: 'raw', relativePath: null, bytes: 0 },
+      expect(first).toEqual([
+        expect.objectContaining({ kind: 'observation' }),
+        expect.objectContaining({ kind: 'source_detail', relativePath: null, bytes: 0 }),
       ]);
-      repository.deleteCandidates(second);
-      expect(handle.client.prepare('SELECT count(*) FROM raw_job_records').pluck().get()).toBe(0);
-      expect(handle.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(1);
+      repository.deleteCandidates(first);
+      expect(handle.client.prepare('SELECT count(*) FROM job_observations').pluck().get()).toBe(0);
+      expect(handle.client.prepare('SELECT count(*) FROM source_job_details').pluck().get()).toBe(
+        0,
+      );
+      expect(handle.client.prepare('SELECT count(*) FROM job_revisions').pluck().get()).toBe(1);
     } finally {
       handle.close();
       await root.cleanup();

@@ -1,6 +1,7 @@
 import type {
   ContentHash,
   JobId,
+  JobRevisionId,
   JobLifecycleSnapshot,
   JobMergeDecision,
   JobStatus,
@@ -16,7 +17,8 @@ export interface PersistJobMutation {
   readonly jobId: JobId;
   readonly revisionId: string;
   readonly statusEventId: string;
-  readonly rawRecordId: string;
+  readonly sourcePayloadHash: ContentHash;
+  readonly sourceUrl: string;
   readonly normalizerVersion: string;
   readonly syncRunId: SyncRunId;
   readonly observedAt: UtcInstant;
@@ -35,6 +37,7 @@ export interface PersistJobStatus {
 
 export interface CurrentJobRecord {
   readonly jobId: JobId;
+  readonly revisionId: JobRevisionId;
   readonly identity: SourceJobIdentity;
   readonly revisionNumber: RevisionNumber;
   readonly contentHash: ContentHash;
@@ -48,14 +51,15 @@ export interface JobRepository {
   persistDetailRevision(input: {
     readonly decision: Extract<JobMergeDecision, { readonly type: 'revise' }>;
     readonly revisionId: string;
-    readonly rawRecordId: string;
+    readonly sourcePayloadHash: ContentHash;
+    readonly sourceUrl: string;
     readonly normalizerVersion: string;
     readonly occurredAt: UtcInstant;
   }): void;
   recordObservation(input: {
     readonly jobId: JobId;
     readonly syncRunId: SyncRunId;
-    readonly rawRecordId: string;
+    readonly jobRevisionId: JobRevisionId;
     readonly observedAt: UtcInstant;
   }): void;
   persistStatus(input: PersistJobStatus): void;

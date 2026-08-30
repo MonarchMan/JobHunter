@@ -71,8 +71,10 @@ describe('resume import persistence', () => {
     expect(first.document.mediaType).toBe('image/jpeg');
     expect(first.document.extractedText).toBeNull();
     expect(replay).toMatchObject({ deduplicated: true, document: { id: first.document.id } });
-    expect(handle.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(1);
-    expect(handle.client.prepare('SELECT count(*) FROM resume_documents').pluck().get()).toBe(1);
+    expect(handle.client.prepare('SELECT count(*) FROM entities').pluck().get()).toBe(1);
+    expect(
+      handle.client.prepare("SELECT count(*) FROM files WHERE kind = 'resume'").pluck().get(),
+    ).toBe(1);
   });
 
   it('records low-quality parsing without creating an active profile version', async () => {
@@ -117,6 +119,6 @@ describe('resume import persistence', () => {
     await expect(
       service.import(new TextEncoder().encode('resume'.repeat(50)), abort.signal),
     ).rejects.toMatchObject({ name: 'AbortError' });
-    expect(handle.client.prepare('SELECT count(*) FROM file_artifacts').pluck().get()).toBe(0);
+    expect(handle.client.prepare('SELECT count(*) FROM entities').pluck().get()).toBe(0);
   });
 });

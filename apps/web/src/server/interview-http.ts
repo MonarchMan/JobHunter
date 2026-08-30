@@ -1,6 +1,13 @@
 import {
   DrillSessionNotFoundError,
+  ExperienceDocumentConflictError,
+  ExperienceDocumentNotFoundError,
+  ExperienceDocumentParseError,
+  ExperienceResearchBundleError,
+  ExperienceResearchConflictError,
+  ExperienceResearchNotFoundError,
   InterviewProjectConflictError,
+  ProjectMaterialError,
   ProjectDossierNotFoundError,
   type InterviewTaskAccepted,
 } from '@jobhunter/application/web';
@@ -29,14 +36,38 @@ export function interviewErrorResponse(error: unknown): Response {
   if (error instanceof DrillSessionNotFoundError) {
     return notFoundResponse('项目拷打会话不存在。');
   }
+  if (error instanceof ExperienceDocumentNotFoundError) {
+    return notFoundResponse('个人面经文档不存在。');
+  }
+  if (error instanceof ExperienceDocumentConflictError) {
+    return conflictResponse('EXPERIENCE_CHANGED', '面经草稿已变化，请刷新后重新核对。', {});
+  }
+  if (error instanceof ExperienceDocumentParseError) {
+    return badRequestResponse(error.message);
+  }
+  if (error instanceof ExperienceResearchNotFoundError) {
+    return notFoundResponse('网友面经研究请求不存在。');
+  }
+  if (error instanceof ExperienceResearchConflictError) {
+    return conflictResponse('RESEARCH_CHANGED', error.message, {});
+  }
+  if (error instanceof ExperienceResearchBundleError || error instanceof ProjectMaterialError) {
+    return badRequestResponse(error.message);
+  }
   if (error instanceof InterviewProjectConflictError) {
     return conflictResponse('INTERVIEW_STATE_CHANGED', '拷打状态已变化，请刷新后重试。', {});
   }
   if (error instanceof DomainError) {
+    if (error.code === 'INVALID_EXPERIENCE_TEXT') {
+      return badRequestResponse('面经文档没有可整理的文本，请检查内容。');
+    }
+    if (error.code === 'EXPERIENCE_HAS_NO_QUESTIONS') {
+      return badRequestResponse('至少需要保留一个非空问题，才能接受为历史面经。');
+    }
     return conflictResponse('INTERVIEW_STATE_CHANGED', '当前状态不允许该操作，请刷新后重试。', {});
   }
   if (error instanceof ZodError || error instanceof TypeError) {
-    return badRequestResponse('项目拷打请求无效。');
+    return badRequestResponse('面试准备请求无效，请检查填写内容。');
   }
   return errorResponse(error);
 }

@@ -94,7 +94,6 @@ describe('source.sync handler', () => {
         coverage: 'complete' as const,
         stats: {
           discovered: 0,
-          rawStored: 0,
           created: 0,
           unchanged: 0,
           revised: 0,
@@ -138,7 +137,6 @@ describe('source.sync handler', () => {
           coverage: 'unknown',
           stats: {
             discovered: 0,
-            rawStored: 0,
             created: 0,
             unchanged: 0,
             revised: 0,
@@ -175,7 +173,6 @@ describe('source.sync handler', () => {
           coverage: 'partial',
           stats: {
             discovered: 1,
-            rawStored: 1,
             created: 1,
             unchanged: 0,
             revised: 0,

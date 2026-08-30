@@ -98,13 +98,6 @@ function seedMatchingInputs(dataRoot: string): void {
       VALUES
         ('${ids.syncRun}', '018f0000-0000-7000-8000-000000000201', 'manual', 'running',
          'unknown', 'fixture', 'fixture', 'v1', 'fixture', '{}', 1);
-      INSERT INTO raw_job_records
-        (id, source_id, first_sync_run_id, external_job_id, identity_key, source_url,
-         content_hash, payload_json, captured_at)
-      VALUES
-        ('${ids.raw}', '018f0000-0000-7000-8000-000000000201', '${ids.syncRun}',
-         'match-cli-job', 'match-cli-job', 'https://careers.tencent.com/job/agent',
-         '${'a'.repeat(64)}', '{}', 1);
       INSERT INTO jobs
         (id, company_id, source_id, external_job_id, title, department, job_family,
          locations_json, employment_type, experience_text, education_text, description,
@@ -118,15 +111,16 @@ function seedMatchingInputs(dataRoot: string): void {
          'https://careers.tencent.com/apply/agent', 1700000000000, 'active', 0,
          '${'b'.repeat(64)}', 1, 2, 1, 2);
       INSERT INTO job_revisions
-        (id, job_id, revision_no, content_hash, normalizer_version, snapshot_json,
-         change_set_json, raw_record_id, created_at)
+        (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
+         source_url, snapshot_json, change_set_json, created_at)
       VALUES
         ('${ids.revision}', '${ids.job}', 1, '${'b'.repeat(64)}', 'fixture',
-         '${canonicalJson(normalized).replaceAll("'", "''")}', '[]', '${ids.raw}', 1);
+         '${'a'.repeat(64)}', 'https://careers.tencent.com/job/agent',
+         '${canonicalJson(normalized).replaceAll("'", "''")}', '[]', 1);
       INSERT INTO candidate_profiles (id, name, created_at, updated_at)
       VALUES ('${ids.profile}', '脱敏候选人', 1, 1);
       INSERT INTO profile_versions
-        (id, profile_id, version_no, resume_document_id, agent_run_id, extracted_json,
+        (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
          effective_json, locked_paths_json, content_hash, is_current, created_at)
       VALUES
         ('${ids.profileVersion}', '${ids.profile}', 1, NULL, NULL,

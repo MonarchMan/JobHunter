@@ -107,7 +107,7 @@ export async function createBackup(
       artifacts = snapshot
         .prepare(
           `SELECT id, relative_path, sha256, byte_size
-           FROM file_artifacts WHERE deleted_at IS NULL ORDER BY id`,
+           FROM entities WHERE deleted_at IS NULL ORDER BY id`,
         )
         .all() as ArtifactReferenceRow[];
     } finally {

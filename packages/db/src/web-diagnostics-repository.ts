@@ -256,8 +256,15 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     if (!row) return null;
     const calls = this.#client
       .prepare(
-        `SELECT sequence_no, tool_key, status, duration_ms, error_summary
-         FROM agent_tool_calls WHERE agent_run_id = ? ORDER BY sequence_no`,
+        `SELECT sequence_no,
+                json_extract(payload_json, '$.toolKey') AS tool_key,
+                json_extract(payload_json, '$.status') AS status,
+                json_extract(payload_json, '$.durationMs') AS duration_ms,
+                json_extract(payload_json, '$.errorSummary') AS error_summary
+         FROM events
+         WHERE stream_type = 'agent_run' AND stream_id = ?
+           AND event_type = 'agent.tool.finished'
+         ORDER BY sequence_no`,
       )
       .all(id) as ToolCallRow[];
     return webAgentRunDetailSchema.parse({

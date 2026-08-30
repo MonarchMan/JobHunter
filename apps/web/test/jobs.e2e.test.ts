@@ -1,12 +1,13 @@
 import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application';
 import { openSqliteDatabase } from '@jobhunter/db';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { createTemporaryDataRoot, makeCandidateProfile } from '@jobhunter/testkit';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 import { nextPageHref, parseWebJobQuery } from '../src/server/job-query.js';
 
 function seedJobs(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
+  const profile = JSON.stringify(makeCandidateProfile({ targetRoles: ['研发'] }));
   try {
     database.client
       .prepare(
@@ -27,13 +28,13 @@ function seedJobs(dataRoot: string): void {
     database.client
       .prepare(
         `INSERT INTO job_sources
-         (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
+         (id, company_id, channel_id, slug, adapter_key, base_url, config_json,
           sync_policy_version, sync_policy_json, enabled, support_status, health_status,
           consecutive_failures, created_at, updated_at)
          VALUES ('018f0000-0000-7000-8000-000000000201',
           '018f0000-0000-7000-8000-000000000101',
           '018f0000-0000-7000-8200-000000010103', 'tencent-social', 'tencent.social',
-          'social', 'https://careers.tencent.com', '{}', 'v1', '{}', 1, 'supported',
+          'https://careers.tencent.com', '{}', 'v1', '{}', 1, 'supported',
           'healthy', 0, 1, 1)`,
       )
       .run();
@@ -94,26 +95,14 @@ function seedJobs(dataRoot: string): void {
       .run();
     database.client
       .prepare(
-        `INSERT INTO raw_job_records
-         (id, source_id, first_sync_run_id, external_job_id, identity_key, source_url,
-          content_hash, payload_json, captured_at)
-         VALUES ('018f0000-0000-7000-8000-000000000502',
-          '018f0000-0000-7000-8000-000000000201',
-          '018f0000-0000-7000-8000-000000000501', 'web-job-1', 'web-job-1',
-          'https://careers.tencent.com/job/1', 'raw-hash', '{}', 1)`,
-      )
-      .run();
-    database.client
-      .prepare(
         `INSERT INTO job_revisions
-         (id, job_id, revision_no, content_hash, normalizer_version, snapshot_json,
-          change_set_json, raw_record_id, created_at)
+         (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
+          source_url, snapshot_json, change_set_json, created_at)
          VALUES ('018f0000-0000-7000-8000-000000000503',
-          '018f0000-0000-7000-8000-000000000401', 1, 'revision-hash', 'v1', '{}',
-          '[]',
-          '018f0000-0000-7000-8000-000000000502', 2)`,
+          '018f0000-0000-7000-8000-000000000401', 1, 'revision-hash', 'v1', ?,
+          'https://careers.tencent.com/job/1', '{}', '[]', 2)`,
       )
-      .run();
+      .run('d'.repeat(64));
     database.client
       .prepare(
         `INSERT INTO candidate_profiles (id, name, created_at, updated_at)
@@ -126,10 +115,9 @@ function seedJobs(dataRoot: string): void {
          (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
           content_hash, is_current, created_at)
          VALUES ('018f0000-0000-7000-8000-000000000602',
-          '018f0000-0000-7000-8000-000000000601', 1, '{}', '{}', '[]',
-          'profile-hash', 1, 1)`,
+          '018f0000-0000-7000-8000-000000000601', 1, ?, ?, '[]', ?, 1, 1)`,
       )
-      .run();
+      .run(profile, profile, 'e'.repeat(64));
     database.client
       .prepare(
         `INSERT INTO match_rulesets
@@ -172,7 +160,7 @@ describe('Web job listing', () => {
         resolveAppConfig({ bootstrap, environment: {}, file: {} }),
       );
       try {
-        const query = parseWebJobQuery({ company: '鹅厂', limit: '1' });
+        const query = parseWebJobQuery({ company: '腾讯', limit: '1' });
         const first = container.services.webJobs.list(query);
         expect(first.items).toHaveLength(1);
         expect(first.items[0]).toMatchObject({
@@ -182,8 +170,8 @@ describe('Web job listing', () => {
         });
         expect(first.nextCursor).toBeTruthy();
 
-        const href = nextPageHref({ company: '鹅厂', limit: '1' }, first.nextCursor ?? '');
-        expect(href).toContain('company=%E9%B9%85%E5%8E%82');
+        const href = nextPageHref({ company: '腾讯', limit: '1' }, first.nextCursor ?? '');
+        expect(href).toContain('company=%E8%85%BE%E8%AE%AF');
         const secondQuery = parseWebJobQuery(
           Object.fromEntries(new URL(`http://localhost${href}`).searchParams.entries()),
         );

@@ -183,10 +183,10 @@ async function setup(): Promise<{
   handle.client
     .prepare(
       `INSERT INTO job_sources
-       (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
+       (id, company_id, channel_id, slug, adapter_key, base_url, config_json,
         sync_policy_version, sync_policy_json, enabled, support_status, health_status,
         consecutive_failures, created_at, updated_at)
-       VALUES (?, ?, ?, 'fixture-match-social', 'fixture.match', 'social',
+       VALUES (?, ?, ?, 'fixture-match-social', 'fixture.match',
                'https://careers.example.com', '{}', 'v1', '{}', 1, 'supported', 'healthy', 0, 1, 1)`,
     )
     .run(sourceId, companyId, channelId);
@@ -198,15 +198,6 @@ async function setup(): Promise<{
        VALUES ('sync-match', ?, 'manual', 'succeeded', 'complete', '1', '1', 'v1', ?, '{}', 1, 2)`,
     )
     .run(sourceId, 'a'.repeat(64));
-  handle.client
-    .prepare(
-      `INSERT INTO raw_job_records
-       (id, source_id, first_sync_run_id, external_job_id, identity_key, source_url,
-        content_hash, payload_json, artifact_id, captured_at)
-       VALUES ('raw-match', ?, 'sync-match', 'agent-job', 'agent-job',
-               'https://careers.example.com/jobs/agent-job', ?, '{}', NULL, 1)`,
-    )
-    .run(sourceId, 'b'.repeat(64));
   handle.client
     .prepare(
       `INSERT INTO jobs
@@ -238,11 +229,17 @@ async function setup(): Promise<{
   handle.client
     .prepare(
       `INSERT INTO job_revisions
-       (id, job_id, revision_no, content_hash, normalizer_version, snapshot_json,
-        change_set_json, raw_record_id, created_at)
-       VALUES (?, ?, 1, ?, '1', ?, '[]', 'raw-match', 1)`,
+       (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
+        source_url, snapshot_json, change_set_json, created_at)
+       VALUES (?, ?, 1, ?, '1', ?, 'https://careers.example.com/jobs/agent-job', ?, '[]', 1)`,
     )
-    .run(revisionId, jobId, normalizedJobContentHash(normalizedJob), canonicalJson(normalizedJob));
+    .run(
+      revisionId,
+      jobId,
+      normalizedJobContentHash(normalizedJob),
+      'b'.repeat(64),
+      canonicalJson(normalizedJob),
+    );
   handle.client
     .prepare(
       `INSERT INTO candidate_profiles (id, name, created_at, updated_at)
@@ -252,7 +249,7 @@ async function setup(): Promise<{
   handle.client
     .prepare(
       `INSERT INTO profile_versions
-       (id, profile_id, version_no, resume_document_id, agent_run_id, extracted_json,
+       (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
         effective_json, locked_paths_json, content_hash, is_current, created_at)
        VALUES (?, ?, 1, NULL, NULL, ?, ?, '[]', ?, 1, 1)`,
     )

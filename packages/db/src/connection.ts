@@ -79,15 +79,16 @@ export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabase
 
   try {
     client = new Database(databasePath);
-    client.pragma('foreign_keys = ON');
     client.pragma('journal_mode = WAL');
     client.pragma(`busy_timeout = ${String(resolved.busyTimeoutMs)}`);
     assertSqliteCapabilities(client);
 
     const db = drizzle(client);
     if (resolved.runMigrations) {
+      client.pragma('foreign_keys = OFF');
       migrate(db, { migrationsFolder: resolved.migrationsFolder });
     }
+    client.pragma('foreign_keys = ON');
     assertDatabaseIntegrity(client);
     registerConnection(databasePath);
     let closed = false;

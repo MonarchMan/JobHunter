@@ -11,10 +11,11 @@ test.describe('校招实习管理台核心流程', () => {
     const project = page.getByRole('article').filter({ hasText: '校招职位 Agent' });
     await project.getByRole('button', { name: '建立准备档案' }).click();
     await expect(page).toHaveURL(/\/interview\/projects\//);
-    await expect(page.getByText('浅档 · resume-only@v1')).toBeVisible();
+    await expect(page.getByText('浅档 · 尚未开始')).toBeVisible();
 
     await page.getByRole('button', { name: '开始拷打' }).click();
     await expect(page.getByRole('status')).toContainText('新一轮拷打已建立');
+    await expect(page.getByText('浅档 · resume-only@v1')).toBeVisible();
     await page.getByRole('button', { name: '生成第一题' }).click();
     await expect(page.getByRole('heading', { name: '正在生成问题' })).toBeVisible();
     await expect(page.getByRole('link', { name: '查看任务状态' })).toBeVisible();

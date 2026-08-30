@@ -53,13 +53,22 @@ function seedDiagnostics(dataRoot: string): void {
       .run(agentRunId);
     database.client
       .prepare(
-        `INSERT INTO agent_tool_calls
-         (id, agent_run_id, sequence_no, tool_key, input_summary_json, output_summary_json,
-          status, duration_ms, error_summary)
-         VALUES ('018f0000-0000-7000-8000-000000000704', ?, 0, 'resume.read',
-          '{"private":"input"}', '{"private":"output"}', 'succeeded', 25, NULL)`,
+        `INSERT INTO events
+         (id, stream_type, stream_id, sequence_no, event_type, payload_json, occurred_at)
+         VALUES ('018f0000-0000-7000-8000-000000000704', 'agent_run', ?, 1,
+          'agent.tool.finished', ?, 1)`,
       )
-      .run(agentRunId);
+      .run(
+        agentRunId,
+        JSON.stringify({
+          toolKey: 'resume.read',
+          inputSummary: { private: 'input' },
+          outputSummary: { private: 'output' },
+          status: 'succeeded',
+          durationMs: 25,
+          errorSummary: null,
+        }),
+      );
   } finally {
     database.close();
   }
@@ -144,7 +153,6 @@ describe('Web diagnostics', () => {
       const stats = (discovered: number): string =>
         JSON.stringify({
           discovered,
-          rawStored: discovered - 1,
           created: 1,
           revised: 2,
           unchanged: discovered - 4,

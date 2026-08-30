@@ -12,7 +12,6 @@ import {
   openSqliteDatabase,
   SqliteAgentRunStore,
   SqliteCandidateProfileRepository,
-  SqliteResumePolishSuggestionRepository,
 } from '../src/index.js';
 
 const logger: TaskLogger = {
@@ -99,11 +98,10 @@ describe('resume polish Agent task', () => {
         createId: () => runId,
         now: () => 10,
       });
-      const suggestions = new SqliteResumePolishSuggestionRepository(database.client);
+      const runStore = new SqliteAgentRunStore(database.client);
       const handler = createResumePolishTaskHandler({
         runner,
         profiles: new SqliteCandidateProfileRepository(database.client),
-        suggestions,
       });
       const context: TaskHandlerContext = {
         signal: new AbortController().signal,
@@ -127,15 +125,19 @@ describe('resume polish Agent task', () => {
         workExperience: null,
         projects: [{ name: '任务调度系统', highlights: ['开发失败重试功能'] }],
       });
-      expect(suggestions.get(suggestionId)).toMatchObject({
-        profileId,
-        sourceVersionId: versionId,
-        sections: ['projects'],
-        result: {
+      expect(runStore.get(runId)).toMatchObject({
+        status: 'succeeded',
+        output: {
           workExperience: null,
           projects: [['实现失败任务重试机制，减少人工处理。']],
         },
       });
+      expect(
+        database.client
+          .prepare("SELECT count(*) FROM sqlite_master WHERE name = 'resume_polish_suggestions'")
+          .pluck()
+          .get(),
+      ).toBe(0);
     } finally {
       database.close();
       await root.cleanup();

@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import {
   JobDetailService,
   JobSyncService,
@@ -24,12 +23,7 @@ import {
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { z } from 'zod';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  openSqliteDatabase,
-  SqliteArtifactStore,
-  SqliteUnitOfWork,
-  type SqliteDatabaseHandle,
-} from '../src/index.js';
+import { openSqliteDatabase, SqliteUnitOfWork, type SqliteDatabaseHandle } from '../src/index.js';
 
 const companyId = parseId('018f0000-0000-7000-8000-000000000001', 'Company');
 const sourceId = parseId('018f0000-0000-7000-8000-000000000002', 'JobSource');
@@ -196,7 +190,6 @@ interface SyncFixture {
 
 async function setup(
   options: {
-    readonly maximumInlineRawBytes?: number;
     readonly rejectAllJobs?: boolean;
     readonly deferredDetails?: boolean;
   } = {},
@@ -230,10 +223,10 @@ async function setup(
   handle.client
     .prepare(
       `INSERT INTO job_sources
-       (id, company_id, channel_id, slug, adapter_key, recruitment_type, base_url, config_json,
+       (id, company_id, channel_id, slug, adapter_key, base_url, config_json,
         sync_policy_version, sync_policy_json, enabled, support_status, support_note,
         health_status, consecutive_failures, last_success_at, last_failure_at, created_at, updated_at)
-       VALUES (?, ?, ?, 'fixture-social', 'fixture.sync', 'social', 'https://careers.example.com/jobs',
+       VALUES (?, ?, ?, 'fixture-social', 'fixture.sync', 'https://careers.example.com/jobs',
                '{}', 'v1', ?, 1, 'supported', NULL, 'unknown', 0, NULL, NULL, 1, 1)`,
     )
     .run(sourceId, companyId, channelId, JSON.stringify(policy));
@@ -258,7 +251,6 @@ async function setup(
   const service = new JobSyncService({
     uow,
     registry,
-    artifacts: new SqliteArtifactStore(handle.client, handle.dataRoot),
     http: unusedHttp,
     clock,
     ids,
@@ -271,12 +263,7 @@ async function setup(
           },
         }
       : {}),
-    options: {
-      normalizerVersion: 'normalize-v1',
-      ...(options.maximumInlineRawBytes === undefined
-        ? {}
-        : { maximumInlineRawBytes: options.maximumInlineRawBytes }),
-    },
+    options: { normalizerVersion: 'normalize-v1' },
   });
   return { root, handle, clock, ids, scenario, service, uow };
 }
@@ -296,11 +283,10 @@ function count(handle: SqliteDatabaseHandle, table: string): number {
     'jobs',
     'job_revisions',
     'job_observations',
-    'raw_job_records',
     'tasks',
-    'file_artifacts',
+    'entities',
     'source_job_details',
-    'sync_item_failures',
+    'events',
   ]);
   if (!allowed.has(table)) throw new TypeError('Unexpected fixture table.');
   return handle.client.prepare(`SELECT count(*) FROM ${table}`).pluck().get() as number;
@@ -403,7 +389,7 @@ describe('JobSyncService', () => {
       kind: 'completed',
       status: 'succeeded',
       coverage: 'complete',
-      stats: { discovered: 3, created: 3, rawStored: 3, followupEnqueued: 0 },
+      stats: { discovered: 3, created: 3, followupEnqueued: 0 },
     });
     expect(count(fixture.handle, 'jobs')).toBe(3);
     expect(count(fixture.handle, 'job_revisions')).toBe(3);
@@ -515,11 +501,16 @@ describe('JobSyncService', () => {
         .get(),
     ).toMatchObject({ missing_count: 0, status: 'active' });
     expect(count(fixture.handle, 'job_observations')).toBe(6);
-    expect(count(fixture.handle, 'sync_item_failures')).toBe(1);
+    expect(
+      fixture.handle.client
+        .prepare("SELECT count(*) FROM events WHERE event_type = 'sync.item.failed'")
+        .pluck()
+        .get(),
+    ).toBe(1);
   });
 
-  it('stores oversized redacted raw evidence as an artifact', async () => {
-    const fixture = await setup({ maximumInlineRawBytes: 64 });
+  it('stores only source provenance for a large source payload', async () => {
+    const fixture = await setup();
     fixture.scenario.jobs = [
       {
         id: 'job-large',
@@ -529,22 +520,17 @@ describe('JobSyncService', () => {
       },
     ];
     await run(fixture);
-    expect(count(fixture.handle, 'file_artifacts')).toBe(1);
     const row = fixture.handle.client
       .prepare(
-        `SELECT r.payload_json, f.relative_path FROM raw_job_records r
-         JOIN file_artifacts f ON f.id = r.artifact_id WHERE r.external_job_id = 'job-large'`,
+        `SELECT revision.source_payload_hash, revision.source_url
+         FROM job_revisions revision
+         JOIN jobs job ON job.id = revision.job_id
+         WHERE job.external_job_id = 'job-large'`,
       )
-      .get() as { readonly payload_json: string | null; readonly relative_path: string };
-    expect(row.payload_json).toBeNull();
-    const text = await readFile(
-      new SqliteArtifactStore(fixture.handle.client, fixture.handle.dataRoot).resolve(
-        row.relative_path,
-      ),
-      'utf8',
-    );
-    expect(text).not.toContain('must-never-be-stored');
-    expect(text).toContain('[redacted]');
+      .get() as { readonly source_payload_hash: string; readonly source_url: string };
+    expect(row.source_payload_hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(row.source_url).toContain('/job-large');
+    expect(count(fixture.handle, 'entities')).toBe(0);
   });
 
   it('returns the existing run when the source mutex is already held', async () => {

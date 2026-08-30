@@ -1,0 +1,42 @@
+.nav {
+  display: flex;
+  gap: 0.4rem;
+  margin: -0.25rem 0 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.nav a {
+  position: relative;
+  min-height: 2.6rem;
+  padding: 0.62rem 0.9rem;
+  border-radius: var(--radius-control);
+  color: var(--muted-ink);
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.nav a:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.nav a:focus-visible {
+  outline: 3px solid var(--action);
+  outline-offset: 2px;
+}
+
+.nav .current {
+  padding-left: 1.05rem;
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+}
+
+.nav .current::before {
+  position: absolute;
+  inset: 0.5rem auto 0.5rem 0;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--action);
+  content: '';
+}
