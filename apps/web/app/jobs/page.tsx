@@ -48,7 +48,6 @@ export default async function JobsPage({
   return (
     <main id="main-content" tabIndex={-1}>
       <PageHeader
-        eyebrow="OPPORTUNITIES"
         title="职位列表"
         description="默认隐藏已关闭职位。筛选条件会保存在当前 URL 中。"
       />

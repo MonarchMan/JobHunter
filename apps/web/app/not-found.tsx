@@ -3,7 +3,6 @@ import type { ReactElement } from 'react';
 export default function NotFound(): ReactElement {
   return (
     <main id="main-content" className="error-state" tabIndex={-1}>
-      <p className="eyebrow">NOT FOUND</p>
       <h1>页面不存在</h1>
       <p>这个页面可能已被移除，或链接地址不再有效。</p>
       <div className="inline-actions">

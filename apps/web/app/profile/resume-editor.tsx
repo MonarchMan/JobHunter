@@ -418,10 +418,7 @@ function ResumePreview({ draft: source }: Readonly<{ draft: Draft }>): ReactElem
     <article className={styles['resume-preview-paper']}>
       {filled(draft.basicInfo.name) || basic.length ? (
         <header className={styles['resume-preview-person']}>
-          <div>
-            <p className="eyebrow">CANDIDATE PROFILE</p>
-            {filled(draft.basicInfo.name) ? <h2>{draft.basicInfo.name}</h2> : null}
-          </div>
+          <div>{filled(draft.basicInfo.name) ? <h2>{draft.basicInfo.name}</h2> : null}</div>
           {basic.length ? <p>{basic.join(' · ')}</p> : null}
         </header>
       ) : null}
@@ -576,7 +573,6 @@ function PreviewDialog({
       >
         <header>
           <div>
-            <p className="eyebrow">RESUME PREVIEW</p>
             <h2 id="resume-preview-title">简历预览</h2>
           </div>
           <button type="button" className="button-muted" onClick={onClose}>
@@ -710,7 +706,6 @@ export function ResumeEditor({
     >
       <header className={styles['structured-resume-heading']} data-resume-editor-heading>
         <div>
-          <p className="eyebrow">ONLINE RESUME</p>
           <h2>在线简历</h2>
           <p className="muted">逐项核对解析结果，保存后生成新的画像版本。</p>
         </div>

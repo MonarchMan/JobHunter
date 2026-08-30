@@ -169,6 +169,34 @@
       "when": 1788296400000,
       "tag": "0023_research_bundle_import_claims",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788382800000,
+      "tag": "0024_reset_cleanup_schedule_payload",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788386400000,
+      "tag": "0025_reset_empty_sync_run_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788390000000,
+      "tag": "0026_project_sync_run_stats",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788469200000,
+      "tag": "0027_retain_latest_profile_versions",
+      "breakpoints": true
     }
   ]
 }

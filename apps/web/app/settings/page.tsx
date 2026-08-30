@@ -13,7 +13,6 @@ export default async function SettingsPage(): Promise<ReactElement> {
   return (
     <main id="main-content" tabIndex={-1}>
       <PageHeader
-        eyebrow="SYSTEM SETTINGS"
         title="设置"
         description="管理影响整个系统的非敏感运行开关。修改会立即保存，下一次同步开始时生效。"
       />
@@ -22,7 +21,6 @@ export default async function SettingsPage(): Promise<ReactElement> {
         aria-labelledby="settings-title"
       >
         <div className={[styles.sectionHeading, 'section-heading'].join(' ')}>
-          <p className="eyebrow">SYNC & MATCHING</p>
           <h2 id="settings-title">同步范围与职位理解</h2>
           <p className="muted">
             招聘渠道决定系统采集实习、校招或社招中的哪一类岗位。职位理解会调用模型提取岗位语义信息，关闭后不会自动创建新任务。

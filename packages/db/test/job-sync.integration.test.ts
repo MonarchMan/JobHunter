@@ -24,6 +24,7 @@ import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { z } from 'zod';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openSqliteDatabase, SqliteUnitOfWork, type SqliteDatabaseHandle } from '../src/index.js';
+import { SqliteWebDiagnosticsRepository } from '../src/web.js';
 
 const companyId = parseId('018f0000-0000-7000-8000-000000000001', 'Company');
 const sourceId = parseId('018f0000-0000-7000-8000-000000000002', 'JobSource');
@@ -531,6 +532,48 @@ describe('JobSyncService', () => {
     expect(row.source_payload_hash).toMatch(/^[a-f0-9]{64}$/);
     expect(row.source_url).toContain('/job-large');
     expect(count(fixture.handle, 'entities')).toBe(0);
+  });
+
+  it('exposes complete zero statistics while a sync run is still running', async () => {
+    const fixture = await setup();
+    const runId = parseId(fixture.ids.generate(), 'SyncRun');
+    const startedAt = fixture.clock.now();
+    fixture.uow.run(({ sync }) =>
+      sync.startRun({
+        id: runId,
+        sourceId,
+        trigger: 'manual',
+        coverage: 'unknown',
+        adapterVersion: '1.0.0',
+        normalizerVersion: 'normalize-v1',
+        syncPolicyVersion: 'v1',
+        sourceConfigHash: '0'.repeat(64),
+        cursorIn: null,
+        startedAt,
+      }),
+    );
+
+    expect(
+      new SqliteWebDiagnosticsRepository(fixture.handle.client).getSourceSyncTaskDetail({
+        sourceId,
+        trigger: 'manual',
+        windowStartedAt: startedAt,
+        windowFinishedAt: null,
+      })?.run?.stats,
+    ).toEqual({
+      discovered: 0,
+      created: 0,
+      revised: 0,
+      unchanged: 0,
+      skippedNonDomestic: 0,
+      skippedOutOfScope: 0,
+      skippedUnknownRegion: 0,
+      isolated: 0,
+      restored: 0,
+      staled: 0,
+      closed: 0,
+      followupEnqueued: 0,
+    });
   });
 
   it('returns the existing run when the source mutex is already held', async () => {

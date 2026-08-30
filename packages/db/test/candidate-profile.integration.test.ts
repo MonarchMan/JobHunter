@@ -224,4 +224,29 @@ describe('candidate profile versioning', () => {
     ).toThrow(ProfileVersionConflictError);
     expect(service.getCurrent(candidate.id)?.id).toBe(second.id);
   });
+
+  it('retains only the latest five profile versions without reusing version numbers', async () => {
+    const { handle, service } = await setup();
+    const candidate = service.createProfile('候选人');
+    let current = service.applyExtraction({
+      profileId: candidate.id,
+      expectedCurrentVersionId: null,
+      resumeDocumentId: '018f0000-0000-7000-8000-000000009002',
+      agentRunId: '018f0000-0000-7000-8000-000000009003',
+      extracted: profile(),
+    });
+    for (const location of ['上海', '杭州', '深圳', '广州', '成都', '南京']) {
+      current = service.updatePreferences({
+        profileId: candidate.id,
+        expectedCurrentVersionId: current.id,
+        preferences: { ...current.effective.preferences, locations: [location] },
+      });
+    }
+
+    expect(current.versionNo).toBe(7);
+    expect(service.history(candidate.id).map((version) => version.versionNo)).toEqual([
+      7, 6, 5, 4, 3,
+    ]);
+    expect(handle.client.prepare('SELECT count(*) FROM profile_versions').pluck().get()).toBe(5);
+  });
 });

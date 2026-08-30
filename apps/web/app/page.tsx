@@ -22,7 +22,6 @@ export default async function DashboardPage(): Promise<ReactElement> {
       <section className={styles.overview} aria-labelledby="snapshot-title">
         <div className="section-heading">
           <div>
-            <span className="eyebrow">AT A GLANCE</span>
             <h2 id="snapshot-title">工作台概览</h2>
           </div>
           <p className={styles.description}>所有关键进展，都从这里开始。</p>
@@ -67,7 +66,6 @@ export default async function DashboardPage(): Promise<ReactElement> {
         >
           <div className={['section-heading', styles.tightHeading].filter(Boolean).join(' ')}>
             <div>
-              <span className="eyebrow">ACTIVITY</span>
               <h2 id="latest-sync-title">最近同步</h2>
             </div>
             <a className={styles.textLink} href="/sources">

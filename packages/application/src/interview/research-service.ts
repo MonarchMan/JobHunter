@@ -13,6 +13,7 @@ import {
   type TaskId,
 } from '@jobhunter/domain';
 import type { ArtifactStore } from '../ports/artifact-store.js';
+import type { ExternalResearchExecutorKey } from '../ports/external-research.js';
 import {
   InterviewTaskPublicationConflictError,
   type InterviewTaskPublisher,
@@ -276,7 +277,7 @@ export class ExperienceResearchService {
 
   public enqueueExecution(input: {
     readonly requestId: string;
-    readonly executorKey: 'codex-local';
+    readonly executorKey: ExternalResearchExecutorKey;
     readonly idempotencyToken: string;
   }): { readonly task: TaskRecord; readonly deduplicated: boolean } {
     if (!this.#tasks || !this.#taskPublisher) {

@@ -1,6 +1,6 @@
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { openSqliteDatabase, SqliteTaskRepository } from '@jobhunter/db';
-import { parseId, utcInstant } from '@jobhunter/domain';
+import { communityResearchPromptVersion, parseId, utcInstant } from '@jobhunter/domain';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
@@ -182,13 +182,14 @@ describe('source and task commands', () => {
               prompt_file_id, prompt_file_version_no, schema_file_id, schema_file_version_no,
               bundle_file_id, bundle_file_version_no, current_task_id, state, revision,
               created_at, updated_at)
-             VALUES (?, '{}', ?, 'community-research-prompt@v1',
+             VALUES (?, '{}', ?, ?,
                      'community-research-bundle@v1', ?, 1, ?, 1,
                      NULL, NULL, ?, 'ready', 0, 1, 1)`,
           )
           .run(
             requestId,
             'b'.repeat(64),
+            communityResearchPromptVersion,
             '018f0000-0000-7000-8000-00000000c203',
             '018f0000-0000-7000-8000-00000000c204',
             taskId,

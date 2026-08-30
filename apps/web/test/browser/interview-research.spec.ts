@@ -32,7 +32,7 @@ test.describe('外部 Agent 网友面经研究', () => {
     await brief.getByLabel('目标岗位').fill(role);
     await brief.getByLabel('目标公司').fill(`${firstCompany}、${secondCompany}`);
     await brief.getByLabel('面试阶段').fill('技术一面、系统设计');
-    await brief.getByLabel('只允许这些域名（可选）').fill('example.com');
+    await brief.getByLabel('只允许这些域名（可选）').fill('nowcoder.com');
 
     const creation = page.waitForResponse(
       (response) =>
@@ -57,6 +57,9 @@ test.describe('外部 Agent 网友面经研究', () => {
       'href',
       `/api/interview/research/${request.id}/schema`,
     );
+    await expect(page.getByRole('combobox', { name: '研究执行方式' })).toHaveText(
+      '受限浏览器增强（推荐）',
+    );
 
     const origin = new URL(page.url()).origin;
     const [promptResponse, schemaResponse] = await Promise.all([
@@ -68,7 +71,7 @@ test.describe('外部 Agent 网友面经研究', () => {
     const prompt = await promptResponse.text();
     expect(prompt).toContain(role);
     expect(prompt).toContain(request.requestFingerprint);
-    expect(prompt).toContain('community-research-prompt@v1');
+    expect(prompt).toContain('community-research-prompt@v3');
 
     expect(schemaResponse.ok()).toBe(true);
     expect(schemaResponse.headers()['content-type']).toContain('application/schema+json');
@@ -85,13 +88,13 @@ test.describe('外部 Agent 网友面经研究', () => {
       generatedAt: '2026-08-30T08:00:00.000Z',
       sources: [
         {
-          url: 'https://example.com/interviews/browser-backend',
+          url: 'https://nowcoder.com/interviews/browser-backend',
           title: firstSourceTitle,
           publishedAt: '2026-08-20T08:00:00.000Z',
           retrievedAt: '2026-08-30T07:00:00.000Z',
         },
         {
-          url: 'https://example.com/interviews/browser-system-design',
+          url: 'https://nowcoder.com/interviews/browser-system-design',
           title: secondSourceTitle,
           publishedAt: '2026-08-21T08:00:00.000Z',
           retrievedAt: '2026-08-30T07:10:00.000Z',
@@ -103,7 +106,7 @@ test.describe('外部 Agent 网友面经研究', () => {
           role,
           stage: '技术一面',
           occurredAt: '2026-08-18',
-          sourceUrl: 'https://example.com/interviews/browser-backend',
+          sourceUrl: 'https://nowcoder.com/interviews/browser-backend',
           questions: [
             {
               text: '如何保证后台任务重复执行时的数据一致性？',
@@ -118,7 +121,7 @@ test.describe('外部 Agent 网友面经研究', () => {
           role,
           stage: '系统设计',
           occurredAt: '2026-08-19',
-          sourceUrl: 'https://example.com/interviews/browser-system-design',
+          sourceUrl: 'https://nowcoder.com/interviews/browser-system-design',
           questions: [
             {
               text: '如何设计可追溯的异步任务系统？',

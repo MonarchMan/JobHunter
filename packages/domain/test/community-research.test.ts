@@ -17,8 +17,8 @@ const brief = {
   language: 'zh-CN' as const,
   maxSources: 10,
   maxQuestionsPerSource: 20,
-  allowedDomains: ['example.com', 'interview.example.org'],
-  blockedDomains: ['ads.example.com'],
+  allowedDomains: ['nowcoder.com', 'interview.nowcoder.com'],
+  blockedDomains: ['ads.nowcoder.com'],
 };
 
 describe('community interview research', () => {
@@ -27,7 +27,7 @@ describe('community interview research', () => {
     const reordered = researchRequestFingerprint({
       ...brief,
       targetRoles: [' 平台工程师 ', '后端工程师', '后端工程师'],
-      allowedDomains: ['INTERVIEW.EXAMPLE.ORG.', 'Example.com'],
+      allowedDomains: ['INTERVIEW.NOWCODER.COM.', 'Nowcoder.com'],
     });
 
     expect(reordered).toBe(first);
@@ -45,7 +45,7 @@ describe('community interview research', () => {
     expect(() =>
       experienceResearchBriefSchema.parse({
         ...brief,
-        blockedDomains: ['EXAMPLE.COM'],
+        blockedDomains: ['NOWCODER.COM'],
       }),
     ).toThrow();
     expect(() =>
@@ -57,8 +57,8 @@ describe('community interview research', () => {
   });
 
   it('canonicalizes public URLs and rejects local or credential-bearing sources', () => {
-    expect(normalizePublicResearchUrl('https://Example.com/posts/1?q=java#answer')).toBe(
-      'https://example.com/posts/1?q=java',
+    expect(normalizePublicResearchUrl('https://Nowcoder.com/posts/1?q=java#answer')).toBe(
+      'https://nowcoder.com/posts/1?q=java',
     );
     expect(() => normalizePublicResearchUrl('http://127.0.0.1/private')).toThrow(
       /publicly addressable/u,
@@ -73,6 +73,16 @@ describe('community interview research', () => {
       /public HTTP URL/u,
     );
     expect(() => normalizePublicResearchUrl('file:///etc/passwd')).toThrow(/public HTTP URL/u);
+  });
+
+  it.each([
+    'https://placeholder.invalid/result',
+    'https://research.example/result',
+    'https://research.test/result',
+    'https://example.com/result',
+    'https://subdomain.example.org/result',
+  ])('rejects special-use or documentation source URL %s', (url) => {
+    expect(() => normalizePublicResearchUrl(url)).toThrow(/publicly addressable/u);
   });
 
   it('deduplicates semantically identical question whitespace', () => {

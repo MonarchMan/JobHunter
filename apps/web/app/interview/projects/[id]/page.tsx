@@ -48,7 +48,7 @@ export default async function ProjectDrillPage({
     );
     return (
       <main id="main-content" tabIndex={-1}>
-        <PageHeader eyebrow="PROJECT DOSSIER" title={detail.snapshot.project.name}>
+        <PageHeader title={detail.snapshot.project.name}>
           <div>
             <a className="button-secondary" href="/interview">
               返回准备档案

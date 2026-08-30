@@ -19,23 +19,9 @@
   max-width: 42rem;
 }
 
-.eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  color: #d9deff;
-  font-size: 0.68rem;
-}
-
-.eyebrowRule {
-  width: 2rem;
-  height: 1px;
-  background: rgb(169 223 189 / 65%);
-}
-
 .hero h1 {
   max-width: 13ch;
-  margin: 1.15rem 0 1rem;
+  margin: 0 0 1rem;
   color: #fff;
   font-size: clamp(3rem, 5vw, 4.5rem);
   letter-spacing: -0.07em;
@@ -136,16 +122,8 @@
   content: '';
 }
 
-.noteLabel {
-  color: #c8cefa;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-}
-
 .note strong {
   display: block;
-  margin-top: 0.65rem;
   color: #fff;
   font-size: 1.05rem;
 }

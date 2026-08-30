@@ -13,7 +13,6 @@ export default async function ExperiencePage(): Promise<ReactElement> {
   return (
     <main id="main-content" tabIndex={-1}>
       <PageHeader
-        eyebrow="PERSONAL INTERVIEW ARCHIVE"
         title="历史面经"
         description="导入或在线记录自己的面试问题与回答。系统先整理成草稿，只有你确认后才进入历史记录。"
       />

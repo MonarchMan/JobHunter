@@ -30,7 +30,6 @@ export default async function ResearchDetailPage({
     return (
       <main id="main-content" tabIndex={-1}>
         <PageHeader
-          eyebrow="RESEARCH WORKBENCH"
           title={detail.request.brief.targetRoles.join(' / ')}
           description="交接材料不包含你的简历或项目目录；外部 Agent 只需返回符合 Schema 的公开来源研究包。"
         >

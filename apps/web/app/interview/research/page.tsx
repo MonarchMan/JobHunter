@@ -37,7 +37,6 @@ export default async function ResearchPage({
   return (
     <main id="main-content" tabIndex={-1}>
       <PageHeader
-        eyebrow="COMMUNITY INTERVIEW RESEARCH"
         title="网友面经"
         description="定义目标岗位，把公开网络调研交给本地 Codex，再逐条核对来源与内容。只有你接受的候选才会进入网友面经。"
       />

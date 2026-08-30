@@ -6,6 +6,7 @@ export * from './material.js';
 export * from './notebook.js';
 export * from './profile.js';
 export * from './research-normalization.js';
+export * from './research-collection-plan.js';
 export * from './research-prompt.js';
 export * from './research-service.js';
 export * from './research-task-handler.js';

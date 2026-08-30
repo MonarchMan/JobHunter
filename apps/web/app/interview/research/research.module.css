@@ -447,6 +447,24 @@
   align-self: stretch;
 }
 
+.executionChoice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.72fr);
+  gap: 1rem;
+  align-items: end;
+}
+
+.executorSelector {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.executorSelector > span {
+  color: var(--muted-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .executionBar p {
   margin: 0.25rem 0 0;
   color: var(--muted-ink);
@@ -552,6 +570,10 @@
 
   .executionBar {
     grid-template-columns: 3px minmax(0, 1fr);
+  }
+
+  .executionChoice {
+    grid-template-columns: 1fr;
   }
 
   .executionBar button {

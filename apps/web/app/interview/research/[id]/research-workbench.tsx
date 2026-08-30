@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../../src/client/csrf.js';
+import { SelectField } from '../../../components/select-field.js';
 import { CommunityExperienceRecord } from '../community-experience-record.js';
 import styles from '../research.module.css';
 
@@ -46,6 +47,12 @@ const taskStateLabels = {
 } as const;
 
 const maximumBundleBytes = 2 * 1024 * 1024;
+const browserPromptVersion = 'community-research-prompt@v3';
+type ResearchExecutorKey = 'codex-local' | 'browser-assisted-codex';
+
+function defaultExecutor(promptVersion: string): ResearchExecutorKey {
+  return promptVersion === browserPromptVersion ? 'browser-assisted-codex' : 'codex-local';
+}
 
 function taskFailure(task: ResearchTaskView | null): string | null {
   if (task?.status === 'cancelled') return '研究任务已取消。可以重新发布，或手动导入结果。';
@@ -75,6 +82,9 @@ export function ResearchWorkbench({
   const fileInput = useRef<HTMLInputElement>(null);
   const [current, setCurrent] = useState(detail);
   const [currentTask, setCurrentTask] = useState(task);
+  const [executorKey, setExecutorKey] = useState<ResearchExecutorKey>(() =>
+    defaultExecutor(detail.request.promptVersion),
+  );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -83,6 +93,7 @@ export function ResearchWorkbench({
   useEffect(() => {
     setCurrent(detail);
     setCurrentTask(task);
+    setExecutorKey(defaultExecutor(detail.request.promptVersion));
   }, [detail, task]);
 
   const taskPending = currentTask?.status === 'pending' || currentTask?.status === 'running';
@@ -128,7 +139,7 @@ export function ResearchWorkbench({
         method: 'POST',
         headers: await mutationHeaders(),
         body: JSON.stringify({
-          executorKey: 'codex-local',
+          executorKey,
           idempotencyToken: crypto.randomUUID(),
         }),
       });
@@ -144,7 +155,9 @@ export function ResearchWorkbench({
       report(
         result.data.deduplicated
           ? '相同研究任务已在队列中，将继续等待结果。'
-          : '研究任务已发布给本机 Codex。可以离开此页，任务会在后台继续。',
+          : executorKey === 'browser-assisted-codex'
+            ? '研究任务已发布。Worker 将匿名采集公开网页，再交给无网络 Codex 筛选；离开此页不会中断。'
+            : '研究任务已发布给本机 Codex，仅使用原生网页搜索；离开此页不会中断。',
       );
       router.refresh();
     } catch (caught) {
@@ -280,12 +293,18 @@ export function ResearchWorkbench({
     current.request.state === 'ready' ||
     (current.request.state === 'completed' && allCandidatesRejected && !replacementBlocked);
   const failure = taskFailure(currentTask);
+  const browserCompatible = current.request.promptVersion === browserPromptVersion;
+  const executorOptions = browserCompatible
+    ? [
+        { value: 'browser-assisted-codex', label: '受限浏览器增强（推荐）' },
+        { value: 'codex-local', label: '仅原生网页搜索（兼容）' },
+      ]
+    : [{ value: 'codex-local', label: '仅原生网页搜索' }];
 
   return (
     <div className={styles.root} aria-busy={busy !== null || taskPending}>
       <section className={styles.briefSnapshot} aria-labelledby="brief-snapshot-title">
         <div>
-          <p className="eyebrow">FROZEN RESEARCH BRIEF</p>
           <h2 id="brief-snapshot-title">研究约束</h2>
         </div>
         <div className={styles.summaryStates}>
@@ -333,7 +352,6 @@ export function ResearchWorkbench({
         <section className={styles.handoff} aria-labelledby="handoff-title">
           <header>
             <div>
-              <p className="eyebrow">AGENT HANDOFF</p>
               <h2 id="handoff-title">把调研交给外部 Agent</h2>
             </div>
             <span>公开网页 · 无简历上下文</span>
@@ -390,9 +408,32 @@ export function ResearchWorkbench({
           </div>
           <div className={styles.executionBar}>
             <span className={styles.decisionCursor} aria-hidden="true" />
-            <div>
-              <strong>本机 Codex</strong>
-              <p>任务在 Worker 中执行；离开此页不会中断。</p>
+            <div className={styles.executionChoice}>
+              <div>
+                <strong>本机 Codex</strong>
+                <p>
+                  {executorKey === 'browser-assisted-codex'
+                    ? 'Worker 使用匿名隔离浏览器采集公开正文，Codex 仅离线筛选问题。'
+                    : browserCompatible
+                      ? '只使用 Codex 原生网页搜索，适合作为兼容路径。'
+                      : '该请求使用旧版 Prompt，只能使用原生网页搜索或手工导包。'}
+                </p>
+              </div>
+              <div className={styles.executorSelector}>
+                <span>执行方式</span>
+                <SelectField
+                  name="researchExecutor"
+                  label="研究执行方式"
+                  options={executorOptions}
+                  value={executorKey}
+                  disabled={busy !== null || taskPending || !canExecute}
+                  onValueChange={(value) => {
+                    if (value === 'codex-local' || value === 'browser-assisted-codex') {
+                      setExecutorKey(value);
+                    }
+                  }}
+                />
+              </div>
             </div>
             <button
               type="button"
@@ -426,7 +467,6 @@ export function ResearchWorkbench({
 
         <section className={styles.bundleImport} aria-labelledby="bundle-import-title">
           <header>
-            <p className="eyebrow">RESULT IMPORT</p>
             <h2 id="bundle-import-title">导入 JSON 研究包</h2>
           </header>
           <p>只接受当前 Schema、当前 Brief 指纹和公开 HTTP(S) 来源；单文件最大 2 MiB。</p>
@@ -501,7 +541,6 @@ export function ResearchWorkbench({
       <section className={styles.reviewQueue} aria-labelledby="candidate-review-title">
         <header className={styles.sectionHeading}>
           <div>
-            <p className="eyebrow">SOURCE REVIEW QUEUE</p>
             <h2 id="candidate-review-title">候选审核</h2>
           </div>
           <span>
@@ -554,7 +593,6 @@ export function ResearchWorkbench({
       <section className={styles.acceptedArchive} aria-labelledby="accepted-request-title">
         <header className={styles.sectionHeading}>
           <div>
-            <p className="eyebrow">ACCEPTED FROM THIS REQUEST</p>
             <h2 id="accepted-request-title">本次已接受</h2>
           </div>
           <span>{acceptedCandidates.length} 份</span>

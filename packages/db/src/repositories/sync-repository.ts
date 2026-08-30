@@ -6,6 +6,7 @@ import type {
   StartSyncRunInput,
   StartSyncRunResult,
   SyncRepository,
+  SyncRunStats,
   SyncSourceRecord,
 } from '@jobhunter/application';
 import {
@@ -24,6 +25,20 @@ import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
 const ORPHANED_RUN_RECOVERY_MS = 15 * 60_000;
+const INITIAL_SYNC_RUN_STATS_JSON = canonicalJson({
+  discovered: 0,
+  created: 0,
+  unchanged: 0,
+  revised: 0,
+  restored: 0,
+  staled: 0,
+  closed: 0,
+  isolated: 0,
+  skippedNonDomestic: 0,
+  skippedUnknownRegion: 0,
+  skippedOutOfScope: 0,
+  followupEnqueued: 0,
+} satisfies SyncRunStats);
 
 const syncPolicySchema: z.ZodType<SourceSyncPolicy> = z
   .object({
@@ -140,7 +155,7 @@ export class SqliteSyncRepository implements SyncRepository {
            (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
             sync_policy_version, source_config_hash, cursor_in_json, cursor_out_json, stats_json,
             error_category, error_summary, started_at, finished_at)
-           VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, NULL, '{}', NULL, NULL, ?, NULL)`,
+           VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, ?, NULL)`,
         )
         .run(
           input.id,
@@ -152,6 +167,7 @@ export class SqliteSyncRepository implements SyncRepository {
           input.syncPolicyVersion,
           input.sourceConfigHash,
           input.cursorIn === null ? null : canonicalJson(input.cursorIn),
+          INITIAL_SYNC_RUN_STATS_JSON,
           input.startedAt,
         );
       return { kind: 'started', runId: input.id };

@@ -22,6 +22,7 @@ export function SelectField({
   defaultValue = '',
   value,
   onValueChange,
+  disabled = false,
 }: Readonly<{
   name: string;
   label: string;
@@ -29,6 +30,7 @@ export function SelectField({
   defaultValue?: string;
   value?: string;
   onValueChange?: (value: string) => void;
+  disabled?: boolean;
 }>): ReactElement {
   const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
   const selectedValue = value ?? uncontrolledValue;
@@ -41,6 +43,7 @@ export function SelectField({
     <>
       <input type="hidden" name={name} value={selectedValue} />
       <SelectPrimitive.Root
+        disabled={disabled}
         value={encode(selectedValue)}
         onValueChange={(nextValue) => {
           const decodedValue = decode(nextValue);

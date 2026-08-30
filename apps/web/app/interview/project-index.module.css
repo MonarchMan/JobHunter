@@ -1,100 +1,148 @@
 .root {
   display: grid;
-  gap: 2.5rem;
+  grid-template-columns: minmax(0, 1.55fr) minmax(18rem, 0.75fr);
+  align-items: start;
+  gap: 1.5rem;
 }
 
 .source,
 .archive {
   display: grid;
-  gap: 1rem;
-}
-
-.sectionHeading {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 1.5rem;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 0.85rem;
-}
-
-.sectionHeading h2,
-.sectionHeading p {
-  margin: 0;
-}
-
-.sectionHeading > p {
-  max-width: 34rem;
-  color: var(--muted-ink);
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
-
-.projectList {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
   overflow: hidden;
 }
 
-.project {
+.archive {
+  position: sticky;
+  top: 1.5rem;
+}
+
+.sectionHeading {
   display: flex;
-  min-width: 0;
-  align-items: end;
+  align-items: start;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1.25rem;
+  gap: 1.5rem;
+  min-height: 6.5rem;
+  padding: 1.25rem 1.35rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: -0.02em;
+}
+
+.sectionHeading p {
+  max-width: 32rem;
+  margin: 0.4rem 0 0;
+  color: var(--muted-ink);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.sectionHeading > span {
+  flex: 0 0 auto;
+  color: var(--primary-hover);
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.5;
+}
+
+.projectList {
+  display: grid;
+  grid-template-columns: 1fr;
+}
+
+.project {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.25rem 1.35rem;
   border-bottom: 1px solid var(--line-soft);
 }
 
-.project:nth-child(odd) {
-  border-right: 1px solid var(--line-soft);
+.project:last-child {
+  border-bottom: 0;
+}
+
+.project:hover,
+.project:focus-within {
+  background: var(--canvas);
 }
 
 .projectCopy {
   min-width: 0;
 }
 
-.projectCopy > span,
-.projectCopy > p,
-.projectCopy blockquote {
+.projectMeta,
+.projectTitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+}
+
+.projectMeta {
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
   color: var(--muted-ink);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
 }
 
-.projectCopy h3 {
-  margin: 0.25rem 0;
+.projectMeta span:last-child {
+  color: var(--primary-hover);
+  font-weight: 700;
 }
 
-.projectCopy p {
+.projectTitle h3 {
   margin: 0;
+  font-size: 1.12rem;
+  letter-spacing: -0.02em;
+}
+
+.projectTitle p {
+  margin: 0;
+  color: var(--muted-ink);
+  font-size: 0.82rem;
 }
 
 .projectCopy blockquote {
-  max-width: 34rem;
-  margin: 0.75rem 0 0;
-  padding-left: 0.75rem;
+  display: -webkit-box;
+  max-width: 42rem;
+  margin: 0.7rem 0 0;
+  padding-left: 0.7rem;
+  overflow: hidden;
   border-left: 2px solid var(--primary-soft);
-  line-height: 1.5;
+  color: var(--muted-ink);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.project > button,
-.project > a {
+.projectAction {
   flex: 0 0 auto;
 }
 
 .emptyArchive {
   margin: 0;
-  padding: 1.5rem 0;
+  padding: 1.5rem 1.35rem;
   color: var(--muted-ink);
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
 
 .dossierList {
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--line);
   list-style: none;
 }
 
@@ -102,51 +150,102 @@
   display: grid;
   grid-template-columns: 3px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 1rem;
-  min-height: 4.5rem;
-  border-bottom: 1px solid var(--line);
+  gap: 0.9rem;
+  min-height: 6.35rem;
+  padding: 1rem 1.1rem 1rem 0;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink);
   text-decoration: none;
 }
 
-.dossierList a:hover {
-  background: var(--surface-muted);
+.dossierList li:last-child a {
+  border-bottom: 0;
 }
 
-.dossierList strong,
-.dossierList small {
+.dossierList a:hover {
+  background: var(--canvas);
+}
+
+.dossierCopy,
+.dossierCopy strong,
+.dossierCopy small {
   display: block;
 }
 
-.dossierList small {
-  margin-top: 0.25rem;
+.dossierCopy strong {
+  margin-top: 0.15rem;
+  font-size: 0.95rem;
+}
+
+.dossierCopy small {
+  margin-top: 0.3rem;
   color: var(--muted-ink);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.dossierStatus {
+  color: var(--muted-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 .cursor {
   width: 3px;
-  height: 2rem;
+  height: 2.5rem;
+  background: transparent;
+}
+
+.activeDossier .cursor {
   background: var(--action);
 }
 
+.activeDossier .dossierStatus {
+  color: var(--primary-hover);
+}
+
+.dossierAction {
+  color: var(--primary-hover);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
 @media (max-width: 900px) {
-  .projectList {
+  .root {
     grid-template-columns: 1fr;
   }
 
-  .project:nth-child(odd) {
-    border-right: 0;
+  .archive {
+    position: static;
   }
 }
 
 @media (max-width: 600px) {
-  .sectionHeading,
-  .project {
-    align-items: stretch;
-    flex-direction: column;
+  .root {
+    gap: 1rem;
   }
 
-  .project > button,
-  .project > a {
+  .sectionHeading {
+    min-height: 0;
+    padding: 1rem;
+  }
+
+  .project {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1.1rem 1rem;
+  }
+
+  .projectAction > button,
+  .projectAction > a {
     width: 100%;
+  }
+
+  .projectCopy blockquote {
+    -webkit-line-clamp: 3;
+  }
+
+  .dossierList a {
+    min-height: 5.8rem;
   }
 }

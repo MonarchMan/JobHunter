@@ -61,7 +61,7 @@ export default async function TasksPage({
   });
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader eyebrow="OPERATIONS" title="任务与 Agent 运行">
+      <PageHeader title="任务与 Agent 运行">
         <div>
           <p>诊断视图不会显示任务载荷或模型原始内容。</p>
           <TaskAutoRefresh />

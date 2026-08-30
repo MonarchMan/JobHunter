@@ -96,7 +96,7 @@ const brief: ExperienceResearchBrief = {
   language: 'zh-CN',
   maxSources: 3,
   maxQuestionsPerSource: 3,
-  allowedDomains: ['example.com'],
+  allowedDomains: ['nowcoder.com'],
   blockedDomains: [],
 };
 
@@ -161,13 +161,13 @@ function researchBundle(generatedAt = '2026-08-30T08:00:00.000Z'): CommunityRese
     generatedAt,
     sources: [
       {
-        url: 'https://example.com/interviews/one',
+        url: 'https://nowcoder.com/interviews/one',
         title: '面试经历一',
         publishedAt: null,
         retrievedAt: '2026-08-30T07:00:00.000Z',
       },
       {
-        url: 'https://example.com/interviews/two',
+        url: 'https://nowcoder.com/interviews/two',
         title: '面试经历二',
         publishedAt: '2026-08-01T00:00:00.000Z',
         retrievedAt: '2026-08-30T07:10:00.000Z',
@@ -179,7 +179,7 @@ function researchBundle(generatedAt = '2026-08-30T08:00:00.000Z'): CommunityRese
         role: '后端工程师',
         stage: '一面',
         occurredAt: null,
-        sourceUrl: 'https://example.com/interviews/one',
+        sourceUrl: 'https://nowcoder.com/interviews/one',
         questions: [
           {
             text: question,
@@ -194,7 +194,7 @@ function researchBundle(generatedAt = '2026-08-30T08:00:00.000Z'): CommunityRese
         role: '后端工程师',
         stage: '二面',
         occurredAt: '2026-08-01',
-        sourceUrl: 'https://example.com/interviews/two',
+        sourceUrl: 'https://nowcoder.com/interviews/two',
         questions: [
           {
             text: question,
@@ -484,6 +484,33 @@ describe('community interview research persistence', () => {
     ).toBe(0);
   });
 
+  it('persists the actual reviewed source URL instead of its tracking-free collection identity', async () => {
+    const { handle, service } = await setup();
+    const created = await service.create(brief);
+    const value = researchBundle();
+    const actualFinalUrl =
+      'https://www.nowcoder.com/feed/main/detail/84f8d10f0b994be6aeeea786b63070d9?sourceSSR=search&utm_source=jobhunter';
+    const trackedBundle: CommunityResearchBundle = {
+      ...value,
+      sources: [{ ...value.sources[0], url: actualFinalUrl }],
+      experiences: [{ ...value.experiences[0], sourceUrl: actualFinalUrl }],
+    };
+
+    const imported = await service.importBundle({
+      requestId: created.detail.request.id,
+      expectedRevision: 0,
+      bytes: new TextEncoder().encode(JSON.stringify(trackedBundle)),
+    });
+
+    expect(imported.experiences).toMatchObject([{ sourceUrl: actualFinalUrl }]);
+    expect(
+      handle.client
+        .prepare('SELECT source_url FROM interview_experiences WHERE research_request_id = ?')
+        .pluck()
+        .get(created.detail.request.id),
+    ).toBe(actualFinalUrl);
+  });
+
   it('closes create, validate, version, review and accepted-history flow', async () => {
     const { handle, service } = await setup();
     const created = await service.create(brief);
@@ -510,6 +537,41 @@ describe('community interview research persistence', () => {
         requestId: created.detail.request.id,
         expectedRevision: 0,
         bytes: new TextEncoder().encode(JSON.stringify(invalid)),
+      }),
+    ).rejects.toBeInstanceOf(ExperienceResearchBundleError);
+    expect(service.get(created.detail.request.id).experiences).toHaveLength(0);
+    expect(
+      handle.client
+        .prepare("SELECT count(*) FROM files WHERE kind = 'interview_research'")
+        .pluck()
+        .get(),
+    ).toBe(2);
+
+    const placeholder = researchBundle();
+    await expect(
+      service.importBundle({
+        requestId: created.detail.request.id,
+        expectedRevision: 0,
+        bytes: new TextEncoder().encode(
+          JSON.stringify({
+            ...placeholder,
+            sources: [{ ...placeholder.sources[0], title: '实时网页搜索不可用' }],
+            experiences: [
+              {
+                ...placeholder.experiences[0],
+                questions: [
+                  {
+                    text: '未能检索到可核验的公开面经',
+                    answerExcerpt: null,
+                    topics: [],
+                    evidenceExcerpt: '没有找到有效来源或研究结果',
+                  },
+                ],
+              },
+            ],
+            warnings: ['当前环境无法进行联网检索。'],
+          }),
+        ),
       }),
     ).rejects.toBeInstanceOf(ExperienceResearchBundleError);
     expect(service.get(created.detail.request.id).experiences).toHaveLength(0);
@@ -880,71 +942,129 @@ describe('community interview research persistence', () => {
     });
   });
 
-  it('routes an external executor result through the same validated bundle importer', async () => {
-    const { repository, service, queue, clock } = await setup();
-    const created = await service.create(brief);
-    const execution = service.enqueueExecution({
-      requestId: created.detail.request.id,
-      executorKey: 'codex-local',
-      idempotencyToken: 'handler-research-execution',
-    });
-    const running = queue.claim({
-      taskType: 'interview.experience-research.execute',
-      workerId: 'research-handler-test',
-      now: clock.now(),
-      leaseDurationMsFor: () => 20 * 60_000,
-    });
-    expect(running?.id).toBe(execution.task.id);
-    let receivedPrompt = '';
-    const executor: ExternalResearchExecutor = {
-      key: 'codex-local',
-      version: 'fixture-v1',
-      capabilitySummary: { liveWebSearch: true, sandbox: 'web-search-only-local-process' },
-      execute(input) {
-        receivedPrompt = input.prompt;
-        expect(input.requestId).toBe(created.detail.request.id);
-        expect(input.maximumOutputBytes).toBe(2 * 1024 * 1024);
-        expect(input.outputSchema).toMatchObject({ type: 'object' });
-        return Promise.resolve({
-          bundleText: JSON.stringify(researchBundle()),
-          externalSessionId: 'fixture-session',
-          diagnosticSummary: null,
-        });
-      },
-    };
-    const registry = new HandlerRegistry();
-    registry.register(createExperienceResearchTaskHandler({ repository, service, executor }));
-    const output = await registry.execute(
-      'interview.experience-research.execute',
-      {
-        taskId: execution.task.id,
-        signal: new AbortController().signal,
-        clock: new TestClock(),
-        logger: {
-          info: () => undefined,
-          warn: () => undefined,
-          error: () => undefined,
-        },
-        services: {},
-      },
-      {
+  it.each(['codex-local', 'browser-assisted-codex'] as const)(
+    'routes the %s executor result through the same validated bundle importer',
+    async (executorKey) => {
+      const { repository, service, queue, clock } = await setup();
+      const created = await service.create(brief);
+      const execution = service.enqueueExecution({
         requestId: created.detail.request.id,
-        requestFingerprint: created.detail.request.requestFingerprint,
-        expectedRevision: 0,
-        executorKey: 'codex-local',
-      },
-    );
+        executorKey,
+        idempotencyToken: `handler-research-execution-${executorKey}`,
+      });
+      const running = queue.claim({
+        taskType: 'interview.experience-research.execute',
+        workerId: 'research-handler-test',
+        now: clock.now(),
+        leaseDurationMsFor: () => 20 * 60_000,
+      });
+      expect(running?.id).toBe(execution.task.id);
+      let receivedPrompt = '';
+      const executor: ExternalResearchExecutor = {
+        key: executorKey,
+        version: 'fixture-v1',
+        supportedPromptVersions: [created.detail.request.promptVersion],
+        capabilitySummary: {
+          liveWebSearch: executorKey === 'codex-local',
+          browserTools: [],
+          sandbox:
+            executorKey === 'browser-assisted-codex'
+              ? 'isolated-evidence-local-process'
+              : 'web-search-only-local-process',
+        },
+        execute(input) {
+          receivedPrompt = input.prompt;
+          expect(input.requestId).toBe(created.detail.request.id);
+          expect(input.promptVersion).toBe(created.detail.request.promptVersion);
+          expect(input.maximumOutputBytes).toBe(2 * 1024 * 1024);
+          expect(input.outputSchema).toMatchObject({ type: 'object' });
+          expect(input.collectionPlan).toEqual({
+            version: 'community-browser-collection@v2',
+            queries: [
+              'site:nowcoder.com 后端工程师 面经 面试 技术问题',
+              '示例科技 后端工程师 面经 面试 技术问题',
+              '后端工程师 面经 面试 技术问题',
+            ],
+            priorityQueryCount: 1,
+            relevanceTerms: ['后端工程师', '后端'],
+            maximumSources: 3,
+          });
+          expect(input.browserPolicy).toEqual({
+            allowedDomains: ['nowcoder.com'],
+            blockedDomains: [],
+            maximumSearches: 3,
+            maximumPages: 6,
+            maximumReadCalls: 6,
+            maximumPageCharacters: 40_000,
+            maximumTotalCharacters: 120_000,
+            navigationTimeoutMs: 20_000,
+          });
+          return Promise.resolve({
+            bundleText: JSON.stringify(researchBundle()),
+            externalSessionId: 'fixture-session',
+            diagnosticSummary: null,
+          });
+        },
+      };
+      const unusedExecutor: ExternalResearchExecutor = {
+        ...executor,
+        key: executorKey === 'codex-local' ? 'browser-assisted-codex' : 'codex-local',
+        capabilitySummary:
+          executorKey === 'codex-local'
+            ? {
+                liveWebSearch: false,
+                browserTools: [],
+                sandbox: 'isolated-evidence-local-process',
+              }
+            : {
+                liveWebSearch: true,
+                browserTools: [],
+                sandbox: 'web-search-only-local-process',
+              },
+        execute() {
+          throw new Error('Handler selected the wrong research executor fixture.');
+        },
+      };
+      const registry = new HandlerRegistry();
+      registry.register(
+        createExperienceResearchTaskHandler({
+          repository,
+          service,
+          executors: [unusedExecutor, executor],
+        }),
+      );
+      const output = await registry.execute(
+        'interview.experience-research.execute',
+        {
+          taskId: execution.task.id,
+          signal: new AbortController().signal,
+          clock: new TestClock(),
+          logger: {
+            info: () => undefined,
+            warn: () => undefined,
+            error: () => undefined,
+          },
+          services: {},
+        },
+        {
+          requestId: created.detail.request.id,
+          requestFingerprint: created.detail.request.requestFingerprint,
+          expectedRevision: 0,
+          executorKey,
+        },
+      );
 
-    expect(receivedPrompt).toContain(created.detail.request.requestFingerprint);
-    expect(output).toMatchObject({
-      requestId: created.detail.request.id,
-      bundleFileVersionNo: 1,
-      candidateCount: 2,
-      externalSessionId: 'fixture-session',
-    });
-    expect(service.get(created.detail.request.id)).toMatchObject({
-      request: { state: 'needs_review', revision: 1 },
-      experiences: [{ reviewStatus: 'needs_review' }, { reviewStatus: 'needs_review' }],
-    });
-  });
+      expect(receivedPrompt).toContain(created.detail.request.requestFingerprint);
+      expect(output).toMatchObject({
+        requestId: created.detail.request.id,
+        bundleFileVersionNo: 1,
+        candidateCount: 2,
+        externalSessionId: 'fixture-session',
+      });
+      expect(service.get(created.detail.request.id)).toMatchObject({
+        request: { state: 'needs_review', revision: 1 },
+        experiences: [{ reviewStatus: 'needs_review' }, { reviewStatus: 'needs_review' }],
+      });
+    },
+  );
 });

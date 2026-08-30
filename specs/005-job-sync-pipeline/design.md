@@ -45,6 +45,8 @@ Adapter 结束时提供 coverage，但应用层只在以下证据同时成立时
 
 按 runId 聚合 discovered、rawStored、created、unchanged、revised、restored、staled、closed、isolated、skippedOutOfScope、followupEnqueued。职位理解和匹配不属于同步后续任务，`followupEnqueued` 必须保持为 0；最终必须满足可推导计数等式，否则运行标记 failed/internal_invariant。
 
+SyncRun 创建时即写入与最终统计同构的完整零值对象，不能以 `{}` 表示“尚未完成”。任务诊断因此可以在运行中、取消或孤儿恢复阶段继续使用严格 Schema。已有统计通过破坏性数据迁移统一投影为当前 12 个字段：缺失值填 0，并移除 `rawStored` 等废弃或未知字段；读取层不保留旧形状兼容分支。
+
 ## 测试
 
 使用 FakeAdapter 与真实临时 SQLite 测试所有验收场景。失败注入点覆盖分页、详情、文件、每个事务阶段、任务入队和取消。

@@ -34,7 +34,7 @@ export default async function ProfilePage({
   if (!selectedId) {
     return (
       <main id="main-content" tabIndex={-1}>
-        <PageHeader eyebrow="PERSONAL PROFILE" title="个人资料" />
+        <PageHeader title="个人资料" />
         <ResumeImport />
         <section className="empty-state page-empty-state" aria-labelledby="profile-empty-title">
           <span className="empty-state-icon" aria-hidden="true">
@@ -58,7 +58,7 @@ export default async function ProfilePage({
   if (!selectedProfile?.currentVersionId) {
     return (
       <main id="main-content" tabIndex={-1}>
-        <PageHeader eyebrow="PERSONAL PROFILE" title="个人资料" />
+        <PageHeader title="个人资料" />
         {selectedProfile ? <ResumeImport profileId={selectedProfile.id} /> : <ResumeImport />}
         <section className="empty-state page-empty-state" aria-labelledby="profile-pending-title">
           <span className="empty-state-icon" aria-hidden="true">
@@ -78,7 +78,7 @@ export default async function ProfilePage({
   );
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader eyebrow="PERSONAL PROFILE" title="个人资料">
+      <PageHeader title="个人资料">
         <form action="/profile" method="get" noValidate>
           <label>
             选择画像
@@ -103,7 +103,6 @@ export default async function ProfilePage({
       />
       <section className={styles.overview} data-profile-overview>
         <article className="panel-block">
-          <p className="eyebrow">CURRENT VERSION</p>
           <h2>版本 {detail.current.versionNumber}</h2>
           <dl className="facts">
             <div>
@@ -135,7 +134,6 @@ export default async function ProfilePage({
           </dl>
         </article>
         <article className="panel-block">
-          <p className="eyebrow">VERSION HISTORY</p>
           <h2>历史版本</h2>
           <ol className={styles.versionList}>
             {visibleVersions.map((version) => (

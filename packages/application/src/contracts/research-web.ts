@@ -5,7 +5,7 @@ export const webCreateExperienceResearchSchema = experienceResearchBriefSchema;
 
 export const webExecuteExperienceResearchSchema = z
   .object({
-    executorKey: z.literal('codex-local'),
+    executorKey: z.enum(['codex-local', 'browser-assisted-codex']),
     idempotencyToken: z.string().trim().min(8).max(200),
   })
   .strict();

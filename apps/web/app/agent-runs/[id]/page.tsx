@@ -24,7 +24,7 @@ export default async function AgentRunPage({
   if (!run) notFound();
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader eyebrow="AGENT TRACE" title={run.agentKey}>
+      <PageHeader title={run.agentKey}>
         <a href="/tasks">返回任务</a>
       </PageHeader>
       <section className="panel">

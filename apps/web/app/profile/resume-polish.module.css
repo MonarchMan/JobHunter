@@ -22,15 +22,6 @@
   gap: 0.25rem 0.75rem;
 }
 
-.kicker {
-  margin: 0;
-  color: var(--primary);
-  font-size: 0.68rem;
-  font-weight: 750;
-  letter-spacing: 0.16em;
-  line-height: 1.2;
-}
-
 .heading h3 {
   margin: 0;
   font-size: 1.05rem;

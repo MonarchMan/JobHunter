@@ -18,10 +18,7 @@ export default async function ExperienceDetailPage({
     const first = detail.experiences[0];
     return (
       <main id="main-content" tabIndex={-1}>
-        <PageHeader
-          eyebrow={detail.document.status === 'accepted' ? 'PERSONAL HISTORY' : 'REVIEW DRAFT'}
-          title={`${first?.company ?? '公司待补充'} · ${first?.role ?? '岗位待补充'}`}
-        >
+        <PageHeader title={`${first?.company ?? '公司待补充'} · ${first?.role ?? '岗位待补充'}`}>
           <div>
             <a className="button-secondary" href="/interview/experiences">
               返回历史面经

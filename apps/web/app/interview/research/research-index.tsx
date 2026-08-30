@@ -137,7 +137,6 @@ export function ResearchIndex({
         <div className={styles.plannerIntro}>
           <span className={styles.decisionCursor} aria-hidden="true" />
           <div>
-            <p className="eyebrow">STEP 01 · DEFINE THE BRIEF</p>
             <h2 id="research-plan-title">先限定问题，再让 Agent 搜集</h2>
             <p>
               研究只访问公开网页，不读取简历、项目目录或本地文件。公司、时间和域名范围越明确，结果越容易核对。
@@ -235,7 +234,6 @@ export function ResearchIndex({
       <section className={styles.archive} aria-labelledby="research-requests-title">
         <header className={styles.sectionHeading}>
           <div>
-            <p className="eyebrow">RESEARCH REQUESTS</p>
             <h2 id="research-requests-title">研究请求</h2>
           </div>
           <span>{requests.length} 项</span>
@@ -271,7 +269,6 @@ export function ResearchIndex({
       <section className={styles.acceptedArchive} aria-labelledby="accepted-community-title">
         <header className={styles.sectionHeading}>
           <div>
-            <p className="eyebrow">ACCEPTED COMMUNITY RECORDS</p>
             <h2 id="accepted-community-title">已接受的网友面经</h2>
           </div>
           <span>
@@ -281,7 +278,12 @@ export function ResearchIndex({
           </span>
         </header>
         {acceptedTotal > 0 ? (
-          <form className={styles.archiveFilters} action="/interview/research" method="get">
+          <form
+            className={styles.archiveFilters}
+            action="/interview/research"
+            method="get"
+            noValidate
+          >
             <label>
               公司
               <select name="company" defaultValue={acceptedFilter.company ?? ''}>

@@ -82,7 +82,10 @@ import {
 } from '@jobhunter/source-core';
 import { firstPartySourceCatalog, registerFirstPartyAdapters } from '@jobhunter/sources';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
-import { CodexLocalResearchExecutor } from './codex-research-executor.js';
+import {
+  BrowserAssistedCodexResearchExecutor,
+  CodexLocalResearchExecutor,
+} from './codex-research-executor.js';
 
 export { createPlaywrightSourcePageClient } from './browser-source.js';
 
@@ -315,7 +318,7 @@ export function createProductionWorkerApplication(input: {
         clock,
         ids,
       }),
-      executor: new CodexLocalResearchExecutor(),
+      executors: [new CodexLocalResearchExecutor(), new BrowserAssistedCodexResearchExecutor()],
     }),
   );
   let interviewTasks: TaskService | null = null;

@@ -47,7 +47,6 @@ export default async function SourcesPage({
   return (
     <main id="main-content" tabIndex={-1}>
       <PageHeader
-        eyebrow="RECRUITMENT SOURCES"
         title="招聘来源"
         description="按来源类型管理职位同步。操作仅创建后台任务，页面请求不会执行采集或健康检查。"
       />

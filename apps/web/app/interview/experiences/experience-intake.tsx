@@ -168,7 +168,6 @@ export function ExperienceIntake({
           <div className={styles.decisionHeading}>
             <span aria-hidden="true" />
             <div>
-              <p className="eyebrow">STEP 01 · CAPTURE</p>
               <h2 id="intake-title">先记录，再校对</h2>
               <p>标准模板和在线填写会汇入同一条清洗管线，不会自动补写答案。</p>
             </div>
@@ -177,7 +176,6 @@ export function ExperienceIntake({
           <article className={styles.templateSheet}>
             <header>
               <div>
-                <p>STANDARD FORMAT</p>
                 <h3>个人面经 Markdown 模板</h3>
               </div>
               <span>{template.version}</span>
@@ -204,7 +202,6 @@ export function ExperienceIntake({
           >
             <div className={styles.formHeading}>
               <div>
-                <p className="eyebrow">FILE IMPORT</p>
                 <h3 id="upload-experience-title">导入已有文档</h3>
               </div>
               <small>单文件 · 最大 10 MiB</small>
@@ -252,7 +249,6 @@ export function ExperienceIntake({
         >
           <div className={styles.formHeading}>
             <div>
-              <p className="eyebrow">ONLINE ENTRY</p>
               <h2 id="online-entry-title">在线填写</h2>
             </div>
             <span>保存后先进入校对草稿</span>
@@ -397,7 +393,6 @@ export function ExperienceIntake({
       <section className={styles.archive} aria-labelledby="experience-archive-title">
         <div className={styles.archiveHeading}>
           <div>
-            <p className="eyebrow">PERSONAL ARCHIVE</p>
             <h2 id="experience-archive-title">草稿与历史记录</h2>
           </div>
           <p>{documents.length} 份本地文档</p>

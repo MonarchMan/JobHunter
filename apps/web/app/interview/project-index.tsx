@@ -51,14 +51,18 @@ export function InterviewProjectIndex({
   };
 
   return (
-    <div className={styles.root}>
-      <section className={styles.source} aria-labelledby="resume-projects-title">
+    <div className={styles.root} data-interview-workbench>
+      <section
+        className={styles.source}
+        aria-labelledby="resume-projects-title"
+        data-project-source
+      >
         <div className={styles.sectionHeading}>
           <div>
-            <p className="eyebrow">RESUME PROJECTS</p>
-            <h2 id="resume-projects-title">从简历选择项目</h2>
+            <h2 id="resume-projects-title">选择简历项目</h2>
+            <p>每个项目建立一份独立档案，沿着面试问题逐步补齐理解。</p>
           </div>
-          <p>创建时会冻结当前描述，之后修改简历不会改写已有准备记录。</p>
+          <span>{availableProjects.length} 个可选项目</span>
         </div>
         {availableProjects.length === 0 ? (
           <div className="empty-state">
@@ -81,29 +85,37 @@ export function InterviewProjectIndex({
               return (
                 <article className={styles.project} key={key}>
                   <div className={styles.projectCopy}>
-                    <span>{project.profileName}</span>
-                    <h3>{project.name}</h3>
-                    <p>{project.role ?? '简历未填写项目角色'}</p>
+                    <div className={styles.projectMeta}>
+                      <span>{project.profileName}</span>
+                      <span>{existing ? '已有准备档案' : '尚未开始'}</span>
+                    </div>
+                    <div className={styles.projectTitle}>
+                      <h3>{project.name}</h3>
+                      <p>{project.role ?? '简历未填写项目角色'}</p>
+                    </div>
                     {project.highlights[0] ? (
                       <blockquote>{project.highlights[0]}</blockquote>
                     ) : null}
                   </div>
-                  {existing ? (
-                    <a
-                      className="button-secondary"
-                      href={`/interview/projects/${existing.dossier.id}`}
-                    >
-                      继续准备
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={busyProject !== null}
-                      onClick={() => void create(project)}
-                    >
-                      {busyProject === key ? '正在创建…' : '建立准备档案'}
-                    </button>
-                  )}
+                  <div className={styles.projectAction}>
+                    {existing ? (
+                      <a
+                        className="button-secondary"
+                        href={`/interview/projects/${existing.dossier.id}`}
+                      >
+                        继续准备
+                      </a>
+                    ) : (
+                      <button
+                        className="button-secondary"
+                        type="button"
+                        disabled={busyProject !== null}
+                        onClick={() => void create(project)}
+                      >
+                        {busyProject === key ? '正在创建…' : '建立准备档案'}
+                      </button>
+                    )}
+                  </div>
                 </article>
               );
             })}
@@ -116,36 +128,45 @@ export function InterviewProjectIndex({
         ) : null}
       </section>
 
-      <section className={styles.archive} aria-labelledby="dossiers-title">
+      <section className={styles.archive} aria-labelledby="dossiers-title" data-dossier-archive>
         <div className={styles.sectionHeading}>
           <div>
-            <p className="eyebrow">PREPARATION ARCHIVE</p>
             <h2 id="dossiers-title">准备档案</h2>
+            <p>从已保存的进度继续，不必重新梳理项目背景。</p>
           </div>
-          <p>{dossiers.length} 个项目</p>
+          <span>{dossiers.length} 份</span>
         </div>
         {dossiers.length === 0 ? (
           <p className={styles.emptyArchive}>
             选择上方项目后，这里会保存问题、回答修订与覆盖记录。
           </p>
         ) : (
-          <ol className={styles.dossierList}>
+          <ul className={styles.dossierList}>
             {dossiers.map((item) => (
               <li key={item.dossier.id}>
-                <a href={`/interview/projects/${item.dossier.id}`}>
+                <a
+                  className={item.activeSessionId ? styles.activeDossier : undefined}
+                  data-active-session={item.activeSessionId ? 'true' : undefined}
+                  href={`/interview/projects/${item.dossier.id}`}
+                >
                   <span className={styles.cursor} aria-hidden="true" />
-                  <span>
+                  <span className={styles.dossierCopy}>
+                    <span className={styles.dossierStatus}>
+                      {item.activeSessionId ? '进行中' : '待开始'}
+                    </span>
                     <strong>{item.snapshot.project.name}</strong>
                     <small>
                       {item.sourceAvailable ? '来源简历可用' : '来源已分离'} · {item.sessions}{' '}
                       轮会话
                     </small>
                   </span>
-                  <span>{item.activeSessionId ? '继续' : '查看'}</span>
+                  <span className={styles.dossierAction}>
+                    {item.activeSessionId ? '继续' : '查看'}
+                  </span>
                 </a>
               </li>
             ))}
-          </ol>
+          </ul>
         )}
       </section>
     </div>

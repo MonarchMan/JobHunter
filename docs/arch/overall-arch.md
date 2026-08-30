@@ -63,7 +63,7 @@ JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有�
 - 按目标岗位生成公开面经研究 Brief，导入人工或外部 Agent 返回的带来源研究包，形成网友面经。
 - 将问答、事实缺口、矛盾和准备建议保存为结构化数据，并生成本地 Markdown 准备文档。
 
-当前深档只接受用户在项目档案页显式上传的 Markdown/MDX，并由应用层选择有限片段；不接收或扫描项目目录，内部 Agent 工具集为空。当前自动研究执行器只有本机 `codex-local@v1`，人工 Prompt/Schema 导出和 JSON Bundle 导入始终可用。该能力只负责提问、指出缺口和给出准备建议，不代替用户回答，不修改或接管简历中的实际项目，也不提供真实面试中的实时提词或代答。详细设计见 [面试准备、简历项目拷打与面经知识库设计](./interview-preparation.md)。
+当前深档只接受用户在项目档案页显式上传的 Markdown/MDX，并由应用层选择有限片段；不接收或扫描项目目录，内部 Agent 工具集为空。网友面经已有本机 `codex-local@v1` 原生搜索执行器和 `browser-assisted-codex@v2`：JobHunter Worker 在匿名隔离浏览器中按固定来源与确定性 QueryPlan 完成 `search → open → readPage`，经岗位词与面试词相关性硬门槛后关闭浏览器，再把有界 EvidencePack 从 stdin 交给无网络、无 MCP、无浏览器与无 Shell 的 Codex。下一覆盖增强分两阶段先耗尽允许域名生成的 `site:<domain>` 合格候选、再按需搜索通用查询；每个查询只在提供方结果完成公网/域名过滤后仍非空时停止回退，并以版本化 source identity 与页面质量规则挡住跟踪变体、评论、空壳和低问题密度页面。透明网络环境只有在可信公网 IP 已验证且系统 DNS 答案全部属于 `198.18/15` 时才可把该保留地址用于连接，不改变安全 pin。这些增量完成牛客双岗位多来源联网验收前不宣称已交付。人工 Prompt/Schema 导出和 JSON Bundle 导入始终可用。该能力只负责提问、指出缺口和给出准备建议，不代替用户回答，不修改或接管简历中的实际项目，也不提供真实面试中的实时提词或代答。详细设计见 [面试准备、简历项目拷打与面经知识库设计](./interview-preparation.md)。
 
 ## 2. 架构目标与原则
 
@@ -549,7 +549,7 @@ sequenceDiagram
 - 年限、职级和管理经验。
 - 人工修正字段及锁定状态。
 
-重新解析简历时不得静默覆盖已锁定字段。原始简历属于敏感数据，日志和 Agent 运行记录不得保存无必要的完整正文。
+重新解析简历时不得静默覆盖已锁定字段。每个候选人画像只保留最新 5 个不可变版本，版本号持续递增；超额旧版本及其可重算匹配推导在新版本提交事务中清理。原始简历属于敏感数据，日志和 Agent 运行记录不得保存无必要的完整正文。
 
 ### 7.2 匹配架构
 
@@ -634,8 +634,8 @@ Agent 用于提取隐含要求、识别加分项、解释匹配依据以及生�
 5. 每轮问题、原始回答、回答修订、知识项、冲突和证据分开保存；模型推导不能覆盖用户回答或候选人画像。
 6. 个人面经的标准 Markdown 模板、文件导入和在线填写汇入同一版本化清洗管线；原文件与提取文本不可变，规则解析只生成可编辑草稿，用户确认后才进入历史面经。
 7. 个人面经和网友面经共享查询投影，但保留不同来源和审核策略。网友内容必须带 URL、时间和短摘录，并始终视为外部陈述。
-8. 网友面经以 `ExperienceResearchRequest` 保存研究意图，Prompt、JSON Schema 和 Bundle 都是通用文件版本；预览和执行读取请求冻结的精确 Prompt/Schema 版本，人工导包和 Worker 调用 `codex-local@v1` 汇入同一 Bundle Importer，只有人工接受后才出现在网友面经。
-9. 外部研究通过持久化 `Task` 执行，只能返回待审核文件；Codex 适配器只保留原生实时网页搜索并禁用本地读取、浏览器自动化和可扩展工具，不能直接访问 Repository 或写业务表。Bundle 以短租约 claim、事务外 staging 写入和短事务原子提升完成并发闭环。`experience-informed` Profile 尚未实现，不能把已接受面经自动加入项目拷打上下文。
+8. 网友面经以 `ExperienceResearchRequest` 保存研究意图，Prompt、JSON Schema 和 Bundle 都是通用文件版本；预览和执行读取请求冻结的精确 Prompt/Schema 版本，人工导包、`codex-local@v1` 与只兼容 `community-research-prompt@v3` 的 `browser-assisted-codex@v2` 汇入同一 Bundle Importer，只有人工接受后才出现在网友面经。冻结的 `@v1`/`@v2` Prompt 不得静默升级为 v2 浏览器执行。
+9. 外部研究通过持久化 `Task` 执行，只能返回待审核文件。`browser-assisted-codex@v2` 由 Worker 使用固定搜索提供方和确定性 QueryPlan 完成 `search → open → readPage`：允许域名形成优先查询组，耗尽合格候选后才按需进入通用组；搜索提供方的原始链接须先通过跳转解包、公网 URL 和域名策略过滤，过滤后为空才继续回退。请求 URL 与最终 URL 以 canonical source identity 折叠跟踪变体，同时保留实际最终 URL，候选还须通过岗位/面试相关性和有界页面问题质量门槛。公网 URL、DNS/IP、重定向、域名、连接、页面、字节与时间均受限；`198.18/15` 透明转译地址只有在受信任公网 pin 已建立且系统答案全部属于该网段时才可用于连接，不能成为 SSRF 例外。Worker 在启动 Codex 前关闭浏览器，把有界、分区标记为不可信的 EvidencePack 仅通过 stdin 传入；Codex 禁用网络、MCP、浏览器、Shell 和其他可扩展工具。结果必须通过本次 trace、来源最终 URL 和证据逐字回溯校验，再由短租约 claim、事务外 staging 写入和短事务原子提升进入 `needs_review`。`experience-informed` Profile 尚未实现，不能把已接受面经自动加入项目拷打上下文。
 10. 面试问题、摘要和研究 Task 的首次入队与业务引用由 SQLite 协调器在同一短事务完成；手工重试原子重绑当前 Task。Worker 最终业务提交重验 Task 身份、running/未取消状态，回答已保存但摘要任务尚未发布时可按幂等 token 恢复。
 
 SQLite 是结构化状态的权威数据源；每个项目的 Markdown 准备文档是可重建投影，不形成双写权威。完整功能、数据对象、任务类型、安全约束与分阶段路线见 [面试准备、简历项目拷打与面经知识库设计](./interview-preparation.md)。
@@ -747,7 +747,7 @@ CLI 临时参数 > 环境变量 > 本地配置文件 > 内置默认值
 - 原始页面中与职位无关的个人信息不进入领域数据。
 - 简历默认仅保存在本地，发送给 LLM 的内容应限于当前任务所需字段。
 - 项目拷打默认只发送单个项目的最小快照；深档只增加当前问题命中的显式 Markdown 资料片段，不读取源码。
-- 外部研究 Agent 默认不接收完整简历、个人面经答案、项目目录或 SQLite 路径；当前 Codex 适配器以 strict config 禁用 Shell、统一执行、本地/外部浏览器、Computer Use、多 Agent/Goal、授权请求、插件、App、Skill、本地图片和工作区依赖工具，输出必须经 Schema 校验和人工审核。
+- 外部研究 Agent 默认不接收完整简历、个人面经答案、项目目录或 SQLite 路径；所有 Codex 适配器以 strict config 禁用 Shell、统一执行、Codex 内建浏览器、Computer Use、多 Agent/Goal、授权请求、插件、App、Skill、本地图片和工作区依赖工具。`browser-assisted-codex@v2` 的联网采集完全由 Worker 在 Codex 启动前完成，Codex 不获得 MCP、浏览器、网络凭据或句柄；输出仍须经过本次访问 trace、Schema、来源与证据逐字校验和人工审核。
 - 公开面经搜集遵守站点条款、robots、访问控制和频率限制，不绕过登录、付费墙或验证码，不默认镜像第三方全文。
 - 提供删除或清理简历、Agent 运行输入和导出文件的显式维护能力。
 - 官网投递链接必须保留原始来源，系统不伪装为招聘方。
@@ -853,13 +853,13 @@ CLI 临时参数 > 环境变量 > 本地配置文件 > 内置默认值
 
 - 浅档项目拷打、问答文档和个人面经导入由规格 020、021 落地。
 - [规格 023](../../specs/023-deep-project-drill/spec.md) 已落地显式 Markdown/MDX、通用文件实体版本、`docs-grounded@v1`、应用内有界排序和深档 Web 闭环；当前代码位于 `packages/domain/src/interview/project-drill.ts`、`packages/application/src/interview`、`packages/db/src/repositories/interview-project-repository.ts` 与项目档案 Web 路由/工作台。
-- [规格 024](../../specs/024-community-experience-research/spec.md) 已落地 `ExperienceResearchRequest`、通用 Prompt/Schema/Bundle 文件、人工导包、Codex Task、候选审核和网友面经读取；当前代码位于 `packages/domain/src/interview/community-research.ts`、`packages/application/src/interview/` 的研究服务与 Handler、`packages/db/src/repositories/interview-research-repository.ts`、`apps/worker/src/codex-research-executor.ts` 与研究 Web 路由/页面。
+- [规格 024](../../specs/024-community-experience-research/spec.md) 已落地 `ExperienceResearchRequest`、通用 Prompt/Schema/Bundle 文件、人工导包、原生搜索 Codex Task、候选审核、网友面经读取和 `browser-assisted-codex@v2` 安全闭环；无登录真实网页 smoke test 与实际产品任务进入 `needs_review` 的验收均已完成。允许域名定向查询、跟踪 URL identity 去重、页面质量门槛和牛客“大模型算法 / 大模型应用开发”双岗位多来源联网验收处于增量实施阶段。当前代码位于 `packages/domain/src/interview/community-research.ts`、`packages/application/src/interview/` 的研究服务、QueryPlan 与 Handler、`packages/db/src/repositories/interview-research-repository.ts`、`apps/worker/src/codex-research-executor.ts`、`apps/worker/src/research-browser-gateway.ts` 与研究 Web 路由/页面。
 
 #### 10.1.8 后续扩展
 
 - BOSS 直聘等统一招聘渠道。
 - 已接受面经辅助的 `experience-informed` Profile；该档位当前未实现。
-- Claude Code 等其他本地研究适配器、可靠续跑和授权协议；当前自动执行器只有 `codex-local@v1`。
+- Claude Code 等其他本地研究适配器、可靠续跑和授权协议；当前保留 `codex-local@v1` 与按 ADR-0015 落地的 `browser-assisted-codex@v2`。
 - 更细化的岗位建议、拷打档位与简历定制 Agent。
 - 浏览器辅助投递，但仍要求用户确认关键操作。
 - PostgreSQL 存储适配器和多用户能力。

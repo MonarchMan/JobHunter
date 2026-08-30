@@ -1,7 +1,7 @@
 # 面试准备、简历项目拷打与面经知识库设计
 
 > 状态：Accepted
-> 版本：0.2.0
+> 版本：0.3.0
 > 日期：2026-08-30
 > 适用范围：面试准备能力的架构与功能基线；当前实现以规格 020、021、023、024 为准
 
@@ -22,7 +22,7 @@
 - 系统只提问、指出信息缺口和给出准备建议，不代替用户回答，不生成可背诵的“标准答案”，也不补造项目事实。
 - 用户原始回答属于用户事实；模型从回答中抽取的项目知识项属于可修正推导。两者分开保存，推导不得反向覆盖原回答或候选人画像。
 - 用户面经与网友面经共享规范化的问答读取模型，但保留不同来源、审核和保留策略；网友内容始终被视为“带来源的外部陈述”，不是已验证事实。
-- 网友面经研究同时支持“Prompt/Schema 导出 + JSON 研究包人工导入”和 Worker 调用本机 `codex-local@v1`；本机 Codex 不可用时，人工路径仍能独立完成闭环。
+- 网友面经研究同时支持“Prompt/Schema 导出 + JSON 研究包人工导入”、本机 `codex-local@v1` 和 `browser-assisted-codex@v2`。浏览器增强路径由 JobHunter Worker 持有匿名隔离浏览器并确定性完成 `search → open → readPage`，关闭浏览器后才把有界证据从 stdin 交给无网络、无 MCP、无浏览器与无 Shell 的 Codex。任一自动路径不可用时，人工路径仍能独立完成闭环。
 - 外部 Agent 只生成受 Schema 约束、带来源的 `ResearchBundle`，不能直接写数据库。JobHunter 负责验证、去重、审核和入库。
 - 项目资料、研究 Prompt、Schema 和 Bundle 都复用 `files → file_entity_mappings → entities`；业务表只保存稳定文件及精确版本引用，不为不同文档类型建立专用版本表。
 
@@ -51,11 +51,12 @@
 - [Claude Code programmatic mode](https://code.claude.com/docs/en/headless) 支持非交互运行、结构化输出、流式事件和工具权限配置，也可以实现同一执行端口。
 - Multica 已验证“任务进入队列、本地 Runtime 领取、调用已安装并登录的 Agent CLI、回传结果供审核”的产品路线，但 JobHunter 不需要复制完整的团队协作、Issue Board 或多用户权限系统。
 
-当前路线分为已实现的两个入口和一个未来演进项：
+当前路线分为三个已实现入口和一个未来演进项：
 
 1. **Prompt/Schema 导出与人工导包**：JobHunter 生成冻结研究 Brief，用户手动交给任意 AI 工具，再导回 JSON `ResearchBundle`。
 2. **Codex 本机适配器**：Worker 调用本机已安装并登录的 `codex`，在隔离临时目录中获得结构化结果，再走与人工导包相同的校验和审核路径。
-3. **其他 SDK/协议适配器（未来）**：只有在需要可靠续跑、实时事件、授权回调或多 Runtime 时，才评估 Claude Code、供应商 SDK、App Server 或成熟通用协议。
+3. **受限浏览器增强适配器**：Worker 在无登录态临时 BrowserContext 中按固定搜索提供方和确定性 QueryPlan 采集公开页面，通过相关性与安全门槛后关闭浏览器；Codex 只处理 stdin 中的有界 EvidencePack，不获得用户浏览器、MCP、网络或通用自动化能力。
+4. **其他 SDK/协议适配器（未来）**：只有在需要可靠续跑、实时事件、授权回调或多 Runtime 时，才评估 Claude Code、供应商 SDK、App Server 或成熟通用协议。
 
 首期不抽象通用多 Agent 图，不让外部 Agent 成为项目拷打主链路的依赖。
 
@@ -92,6 +93,7 @@
 - 不承诺公开面经完整、最新或真实，只提供来源、时间和交叉出现证据。
 - 不把 Codex、Claude Code 或任一供应商 CLI 暴露为领域概念。
 - 不让外部 Agent 直接访问 SQLite、简历原文件、模型密钥或不相关的本地目录。
+- 不让外部 Agent 连接用户日常浏览器、登录态或通用浏览器自动化，也不提供登录、表单提交、下载或任意脚本执行。
 
 ### 3.3 “指导但不代答”的边界
 
@@ -346,7 +348,7 @@ Markdown 通过临时文件和原子替换生成。用户可以导出或复制�
 - 目标岗位快照，来自用户选择或当前 CandidateProfile，而不是运行时动态读取整份简历。
 - 可选公司、地区、级别、招聘类型和面试阶段。
 - 时间范围与语言。
-- 最大来源数、每来源最大条目数和允许/禁止域名。
+- 最大来源数、每来源最大条目数和允许/禁止域名；允许域名既是导航硬边界，也在受限浏览器路径中驱动优先的 `site:<domain>` 定向查询。
 - 必须返回的字段、引用规则、去重规则和合规约束。
 - Prompt 模板版本和输出 Schema 版本。
 
@@ -400,12 +402,12 @@ interface ResearchBundle {
 
 ### 7.3 当前自动闭环：本地 Codex 执行器
 
-Worker 已通过 `interview.experience-research.execute` 任务执行首个本地适配器：
+Worker 已通过 `interview.experience-research.execute` 任务执行 `codex-local@v1` 和 `browser-assisted-codex@v2` 两种本地适配器；两者共享以下业务闭环：
 
 1. 应用层冻结 Brief、请求指纹以及 Prompt/Schema 文件版本，并创建持久化 `Task`；预览、下载和 Worker 执行都从 Artifact Store 读取请求绑定的精确版本，不按当前代码重新渲染。
-2. Worker 通过应用端口 `ExternalResearchExecutor` 调用 `codex-local@v1`；同一 ResearchRequest 使用并发键串行化，同一 Worker 进程全局最多运行一个 Codex 研究子进程。
+2. Worker 通过应用端口 `ExternalResearchExecutor` 调用与冻结 Prompt 版本兼容的执行器；同一 ResearchRequest 使用并发键串行化，同一 Worker 进程全局最多运行一个 Codex 研究子进程。
 3. 适配器用参数数组启动非交互 Codex，在 `mkdtemp` 隔离目录中只放 Schema 和结果文件，Prompt 从 stdin 传入。
-4. 子进程使用最小环境、非交互只读沙箱和固定输出 Schema，只保留原生实时网页搜索，并禁用 Shell、统一执行、本地/外部浏览器自动化、Computer Use、多 Agent/Goal、授权请求、插件、App、Skill、本地图片和工作区依赖工具；不把项目目录、简历原文、个人回答、SQLite 路径或模型密钥放入 Prompt、参数或日志。
+4. 子进程使用最小环境、非交互只读沙箱和固定输出 Schema；`codex-local@v1` 只保留原生实时网页搜索，`browser-assisted-codex@v2` 关闭全部联网能力，两者都禁用 Shell、统一执行、本地/外部浏览器自动化、Computer Use、多 Agent/Goal、授权请求、插件、App、Skill、本地图片和工作区依赖工具；不把项目目录、简历原文、个人回答、SQLite 路径或模型密钥放入 Prompt、参数或日志。
 5. stdout、stderr 和结果都有大小上限；取消或 15 分钟超时会对进程组执行 TERM→KILL，结束后清理临时目录。
 6. 自动结果调用与人工上传完全相同的 Bundle Importer：先用短事务取得带 5 分钟租约的 import claim，再在事务外写独占 staging 文件，最后用短事务把 entity mapping 原子提升为正式 Bundle 版本并以请求 revision CAS 替换待审核候选；失败或过期 claim 会回收 staging 数据。
 7. 有效结果进入 `needs_review`，不会自动发布到网友面经。
@@ -429,25 +431,43 @@ interface ExternalResearchExecutor {
   readonly version: string;
   readonly capabilitySummary: Readonly<{
     liveWebSearch: boolean;
-    sandbox: 'web-search-only-local-process';
+    browserTools: readonly ('search' | 'open' | 'readPage')[];
+    sandbox: 'web-search-only-local-process' | 'isolated-evidence-local-process';
   }>;
   execute(input: ExternalResearchInput, signal: AbortSignal): Promise<ExternalResearchOutput>;
 }
 ```
 
-当前只实现 `codex-local@v1`。适配器通过重复的 `--disable` 关闭 `shell_tool`、`unified_exec`、`browser_use*`、`in_app_browser`、`computer_use`、`multi_agent`、Goal、授权请求、`plugins`、`apps`、`skill_*`、`view_image`、`workspace_dependencies` 等本地或扩展能力；`--strict-config` 确保运行中的 Codex 版本不认识任何必要限制时直接失败，而不是降级为更宽权限。本机未安装、未登录、不支持限制、非零退出或无有效结果会映射为安全的 Task 诊断，不能绕过人工导包路径；Claude Code 或其他供应商适配器仍是未来演进项。这仍是可信本机上的受限进程，不宣称提供容器或 OS 级根目录隔离。
+`codex-local@v1` 通过重复的 `--disable` 关闭 `shell_tool`、`unified_exec`、`browser_use*`、`in_app_browser`、`computer_use`、`multi_agent`、Goal、授权请求、`plugins`、`apps`、`skill_*`、`view_image`、`workspace_dependencies` 等本地或扩展能力，只保留原生搜索。`browser-assisted-codex@v2` 进一步关闭原生搜索与全部网络、MCP 和浏览器工具。`--strict-config` 确保运行中的 Codex 版本不认识任何必要限制时直接失败，而不是降级为更宽权限。本机未安装、未登录、不支持限制、非零退出或无有效结果会映射为安全的 Task 诊断，不能绕过人工导包路径。这仍是可信本机上的受限进程，不宣称提供容器或 OS 级根目录隔离。
 
-### 7.4 规范化、去重与质量
+### 7.4 受限浏览器增强闭环
+
+`browser-assisted-codex@v2` 只接受冻结的 `community-research-prompt@v3`，并由 Worker 持有 `ResearchBrowserGateway` 和匿名浏览器进程。旧 `@v1`/`@v2` 请求不能静默切换到该语义：
+
+1. 每次任务创建无登录态、无扩展、无持久化存储的临时 BrowserContext，不连接用户日常浏览器。
+2. 应用层从冻结 Brief 生成有限 QueryPlan；`allowedDomains` 非空时，先按稳定的域名 × 岗位顺序生成 `site:<domain>` 定向查询，并冻结优先查询数量。Worker 先搜索、轮询并耗尽优先组候选；仅在来源目标未满足且页面预算未耗尽时才搜索通用组。
+3. 每个查询按固定搜索提供方顺序尝试。搜索跳转解包、公网 URL 和允许/禁止域名过滤之后仍有非空结果，当前提供方才算成功；原始页面有链接但全部越界或无效时继续回退下一提供方。
+4. 请求 URL 与最终 URL 分别生成版本化 canonical source identity：保留 HTTP/HTTPS 协议语义，只折叠 fragment、默认端口、主机大小写和版本化已知跟踪参数，保留内容主键、分页等业务参数。identity 只用于采集去重，实际成功读取的最终 URL 原样进入 EvidencePack、trace 和 Bundle。
+5. 候选页面必须同时命中从目标岗位提取的相关词和“面试/面经/interview”等面试词，并通过 `interview-page-quality@v1`：正文至少 200 字符，至少有 3 个问题候选和 2 个技术问题候选；少于 5 个问题候选时须占有效正文行至少 4%，纯登录/验证码/脚本空壳和评论/列表页提前拒绝。不相关或低质量页面不会进入 EvidencePack，全部候选未通过时不启动 Codex。
+6. `open` 在导航及每次重定向后重做协议、凭据、主机、DNS/IP 和 Brief 域名策略校验；固定公网 IP 的 loopback 代理只允许 GET/HEAD，并限制网络目标、连接、搜索、页面、单响应、总字节与时间。若系统 DNS 非空且全部返回 `198.18.0.0/15` 透明转译地址，网关必须先通过有界受信任 DNS 查询并验证真实公网地址；只有显式启用转译且系统答案仍全属于该网段时，连接层才能使用转译地址，安全 pin 和审计仍以公网地址为准。混合答案、字面 IP、查询失败或非公网答案不能启用转译。
+7. `readPage` 只返回标题、最终 URL、抓取时间和清洗限长正文；网关不提供登录、输入、点击、表单提交、上传、下载、任意脚本、本地文件或剪贴板能力，页面中的指令不能扩大权限。
+8. Worker 完成采集后关闭 BrowserContext、网关与临时 Profile，再从 stdin 传入有硬上限、明确标记为不可信的 EvidencePack；Codex 不获得 MCP URL/token、Browser/Page 句柄、网络凭据、浏览器、Shell 或其他本机工具。
+9. 本地 finalizer 以有界 trace 校验每个来源确实完成 `open + readPage`，并强制来源 URL 等于本次最终 URL、问题及非空答案摘录逐字来自同页正文；无证据内容被裁剪，裁剪后无问题则整包失败。
+10. 有效结果经统一 Bundle Importer 进入 `needs_review`，仍标记为 `unverified`，只有人工接受后才进入网友面经。
+
+浏览器、网络、Codex 和文件写入全部在数据库事务外执行。普通 CI 使用伪网关和固定页面样本；无登录真实公开网页的显式 smoke test 已证明至少一个页面被读取，实际产品任务也已产生非空、可逐字回溯的问题并进入 `needs_review`。定向来源覆盖增强正在实现：完成前必须以 `allowedDomains = ["nowcoder.com"]`、目标岗位“大模型算法 / 大模型应用开发”显式联网验证至少 4 个 canonical identity 不同的公开页面，且两个方向各至少 2 个，不能把跟踪参数变体或固定夹具计入真实覆盖。
+
+### 7.5 规范化、去重与质量
 
 规范化分为三层：
 
-1. **来源记录**：保留规范 URL、标题、发布时间和抓取时间。
+1. **来源记录**：保留实际成功读取的最终 URL、标题、发布时间和抓取时间；另在单次采集内用版本化 canonical source identity 折叠已知跟踪参数变体，但不改写审计 URL。
 2. **面试经历**：公司、岗位、阶段、发生时间和来源之间保持一对一审计关系。
 3. **问题读取投影**：对规范化问题文本计算稳定指纹；同一经历内的完全重复只保留首项，不同来源始终保留独立记录，并按指纹计算独立出处出现次数。
 
 当前审核页保留 Bundle 中的经历/问题顺序；已接受列表按面试日期降序和稳定 ID 排序。问题指纹只用于去重和计算独立出处出现次数，不隐式改变顺序。相关度或可信度排序仍是未来能力。
 
-不得把“多个网页复制同一原文”误算为独立印证。当前实现只使用规范 URL 和问题指纹做确定性处理，不建立聚类表、不执行语义聚类或可信度评分。
+不得把“多个网页复制同一原文”或“同一页面的多个跟踪参数变体”误算为独立印证。canonical source identity 只解决 URL 级重复，问题指纹只处理完全相同问题；系统仍不建立聚类表、不执行本地语义聚类或可信度评分。
 
 ## 8. 逻辑架构
 
@@ -460,7 +480,10 @@ flowchart LR
     INTERVIEW --> DB[("SQLite")]
     INTERVIEW --> FILES["files / mappings / entities"]
     WORKER --> EXEC["外部研究执行器"]
-    EXEC --> PUBLIC["公开网页"]
+    EXEC --> GATEWAY["受限研究浏览器网关"]
+    EXEC --> PUBLIC["原生网页搜索"]
+    GATEWAY --> BROWSER["匿名隔离 BrowserContext"]
+    BROWSER --> PUBLIC_PAGE["公开网页"]
 ```
 
 关键边界：
@@ -470,6 +493,7 @@ flowchart LR
 - 内部轻量 Agent 生成结构化问题或解析结果，不直接写业务表。
 - Worker 执行模型、OCR、外部进程和网络等耗时任务。
 - 外部研究执行器是基础设施适配器，不进入 `agent-core` 的内部模型—工具循环。
+- 浏览器网关只是 Worker 持有的受信任基础设施，Codex 不能绕过网关获得浏览器或网络句柄。
 - SQLite 保存结构化状态；Artifact Store 通过 `files → file_entity_mappings → entities` 保存原文件、项目资料版本、研究 Prompt/Schema/Bundle 和 Markdown 投影。
 
 ### 8.1 当前代码归属
@@ -588,24 +612,24 @@ Prompt、Schema 和 Bundle 通过 `files.kind = interview_research` 及 `propert
 网友面经：
 
 - 创建 ResearchRequest、生成 Prompt/Schema、导入 ResearchBundle。
-- 发布 `codex-local` 研究任务，并通过通用 Task 能力取消或重试。
+- 发布已装配的 `codex-local` 或 `browser-assisted-codex` 研究任务，并通过通用 Task 能力取消或重试。
 - 查看来源、问题出现次数、警告和审核草稿。
 - 接受、拒绝或按来源清理网友面经。
 
 ### 10.2 当前任务类型
 
-| Task type                               | 作用                          | 默认重试倾向               |
-| --------------------------------------- | ----------------------------- | -------------------------- |
-| `interview.project-question`            | 构建受限上下文并生成一个问题  | 临时模型错误可重试         |
-| `interview.project-answer-digest`       | 抽取知识项、冲突和覆盖变化    | 临时模型错误可重试         |
-| `interview.project-notebook.render`     | 原子生成 Markdown 投影        | IO 临时错误可重试          |
-| `interview.experience-research.execute` | 调用 `codex-local` 并统一导包 | 仅基础设施临时错误自动重试 |
+| Task type                               | 作用                         | 默认重试倾向               |
+| --------------------------------------- | ---------------------------- | -------------------------- |
+| `interview.project-question`            | 构建受限上下文并生成一个问题 | 临时模型错误可重试         |
+| `interview.project-answer-digest`       | 抽取知识项、冲突和覆盖变化   | 临时模型错误可重试         |
+| `interview.project-notebook.render`     | 原子生成 Markdown 投影       | IO 临时错误可重试          |
+| `interview.experience-research.execute` | 调用已选研究执行器并统一导包 | 仅基础设施临时错误自动重试 |
 
 项目资料清洗/分块在上传应用用例内完成；研究包校验、规范化和确定性去重在统一 Bundle Importer 内完成。二者都不建立专用后台任务。
 
 同一 DrillSession 同时只能有一个生成或摘要任务，使用 `interview-session:{sessionId}` 并发键；文档投影使用 `interview-dossier:{dossierId}:revision:{sourceRevision}` 并发键，使每个 revision 都有持久化任务，生产 Worker 对该任务类型固定单消费者串行执行，旧 revision 以 CAS 失效；同一 ResearchRequest 同时只能有一次外部执行，使用 `experience-research:{requestId}` 并发键。
 
-外部 Agent 子进程内的网络请求对 JobHunter 的进程内网络信号量不可见，因此研究任务还必须设置独立的全局进程并发上限，首期默认 1。站点级访问节奏写入 Brief 并由执行器约束；无法证明执行器遵守时只保留 Prompt 导出/人工导入路径。
+外部 Agent 子进程内的原生网络请求对 JobHunter 的进程内网络信号量不可见；浏览器增强执行器虽由网关限流，仍与其他研究执行共用独立的全局进程并发上限，默认 1。站点级访问节奏写入 Brief 并由执行器/网关约束；无法证明执行器遵守时只保留 Prompt 导出/人工导入路径。
 
 ## 11. Agent、工具与 Skill 设计
 
@@ -628,7 +652,7 @@ Prompt、Schema 和 Bundle 通过 `files.kind = interview_research` 及 `propert
 
 ### 11.3 外部执行器 Prompt 边界
 
-当前 `codex-local@v1` 使用 JobHunter 生成的 Prompt 和 JSON Schema，不加载项目规则、用户配置或供应商 Skill。外部研究的一致性来自冻结 Brief、版本化 Prompt/Schema、严格 Bundle 校验和人工审核。
+当前 `codex-local@v1` 使用 JobHunter 生成的 Prompt 和 JSON Schema，不加载项目规则、用户配置或供应商 Skill。`browser-assisted-codex@v2` 使用 `community-research-prompt@v3`，页面采集发生在 Codex 启动前；Codex 只接收 stdin 中有界、分区标记为不可信的 EvidencePack，不加载原生搜索、MCP、Browser、Computer Use 或其他工具。外部研究的一致性来自冻结 Brief、版本化 Prompt/Schema、确定性采集、相关性硬门槛、严格证据校验和人工审核。
 
 未来若某个适配器需要供应商 Skill，必须新增显式能力声明和版本哈希；Skill 目录不能成为业务权威，也不能扩大本地文件权限。
 
@@ -646,13 +670,14 @@ Prompt、Schema 和 Bundle 通过 `files.kind = interview_research` 及 `propert
 - 可执行命令由适配器默认值或受信任的进程装配显式提供，启动参数使用数组构造，不能拼接未经验证的用户 Shell 文本。
 - 工作目录使用受控临时目录，只包含输出 Schema 和结果文件；Prompt 通过 stdin 传入，Prompt/Schema 均读取 ResearchRequest 冻结的精确文件版本。
 - 默认不挂载 JobHunter 仓库和用户项目目录。
-- 网络权限仅在研究任务中启用；执行器只保留原生实时网页搜索，禁用所有本地读取、浏览器自动化和可扩展工具，并记录 `web-search-only-local-process` 权限摘要。
-- 取消或超时通过 AbortSignal 对完整进程组执行 TERM→KILL；退出后清理临时目录，只有通过统一导入的 Bundle 才登记为文件版本。
+- 网络权限按执行器收敛：`codex-local@v1` 的 Codex 进程只保留原生实时网页搜索并记录 `web-search-only-local-process` 权限摘要；`browser-assisted-codex@v2` 仅在 Worker 预采集阶段联网，其 Codex 进程禁用全部网络、MCP 与浏览器能力并记录 `isolated-evidence-local-process` 权限摘要。
+- 浏览器增强路径只能由 JobHunter Worker 使用无登录态、无扩展、无持久化存储的临时 BrowserContext；不得连接用户日常浏览器，也不提供登录、输入、点击、表单、上传、下载、任意脚本或本地文件能力。Worker 必须在启动 Codex 前关闭浏览器及网关，不把 MCP token、网络凭据或浏览器句柄传入 Codex。
+- 取消或超时通过 AbortSignal 对 Codex、工具服务和浏览器的完整进程树执行 TERM→KILL；退出后关闭 BrowserContext 并清理临时目录/Profile，只有通过统一导入的 Bundle 才登记为文件版本。
 - 外部 Agent 的工具调用、网页内容和最终文本都是不可信输入，必须通过 Schema 和应用层规则后才能入库。
 
 ### 12.3 Prompt injection 与来源污染
 
-研究 Prompt 必须明确网页中的指令、代码块、下载链接和工具调用建议都只是待分析内容。执行器不得因网页文本扩大权限、读取本地文件、安装软件或改变输出位置。
+研究 Prompt 必须明确网页中的指令、代码块、下载链接和工具调用建议都只是待分析内容。工具响应必须把受信任的来源元数据和不可信页面正文分区；执行器不得因网页文本扩大权限、访问新域名、读取本地文件、安装软件或改变输出位置。
 
 ResearchBundle 校验至少拒绝：
 
@@ -671,6 +696,7 @@ ResearchBundle 校验至少拒绝：
 - 面经文档规则直出率、Agent 回退率、草稿修正率和接受率。
 - 研究任务的来源数、有效引用率、同经历重复折叠数、人工接受率和来源域分布。
 - 外部执行器启动失败、认证失败、超时、取消、无效输出和 Schema 失败。
+- 浏览器网关的搜索/打开/读取计数、域名拒绝、重定向拒绝、文本裁剪、资源回收失败和来源证据完整率。
 
 ### 13.2 黄金集与硬门槛
 
@@ -704,6 +730,8 @@ ResearchBundle 校验至少拒绝：
 8. 用户创建目标岗位研究请求，导出 Prompt 和 Schema；从其他 AI 工具导回的研究包经审核后进入网友面经。
 9. 同一网友问题来自多个 URL 时保留各来源，并按问题指纹展示独立出处出现次数，不覆盖为一个无来源的统一条目。
 10. 外部执行器失败、取消或返回无效 JSON 时不产生网友面经，其他项目会话和历史面经仍可使用。
+11. 浏览器执行器只允许 Worker 确定性调用 `search/open/readPage`，对登录、表单、下载、任意脚本、内网和越界重定向的请求全部失败；页面伪指令不改变采集范围，Codex 本身没有网络、MCP、浏览器或 Shell 工具。
+12. 浏览器执行器的成功、失败、取消和超时路径都回收 BrowserContext、子进程与临时 Profile，每个问题均可回溯到实际打开的最终 URL 和有限证据摘录。
 
 ## 15. 当前实现与后续演进
 
@@ -725,6 +753,9 @@ ResearchBundle 校验至少拒绝：
 - `ResearchRequest`、通用 Prompt/Schema/Bundle 文件、人工 JSON 导包和逐条审核。
 - `ExternalResearchExecutor` 端口、`codex-local@v1`、Task Handler、隔离目录、限长、取消与超时。
 - 已接受网友面经的独立读取页、来源未核验提示和问题出现次数。
+- `community-research-prompt@v3`、`browser-assisted-codex@v2`、固定提供方 QueryPlan、岗位与面试相关性硬门槛、匿名隔离 BrowserContext、`search/open/readPage` 受限采集、无网络 Codex、来源证据和全路径清理。
+- 无登录真实公开网页 smoke test 和实际产品任务 `needs_review` 验收均已完成，候选包含非空且可逐字回溯的问题。
+- 定向来源覆盖增强进行中：允许域名优先查询、跟踪 URL identity 去重、页面质量门槛和牛客双岗位多来源验收尚未标记完成。
 
 ### I4：更多档位与质量闭环（未来）
 
@@ -740,14 +771,14 @@ ResearchBundle 校验至少拒绝：
 1. `020-interview-project-drill`：ProjectDossier、浅档 Profile、Session、Turn、知识项和文档投影。
 2. `021-interview-experience-intake`：个人文档、解析、审核、历史面经和查询。
 3. [`023-deep-project-drill`](../../specs/023-deep-project-drill/spec.md)：已落地显式 Markdown、文件实体版本、深档上下文和 Web 闭环。
-4. [`024-community-experience-research`](../../specs/024-community-experience-research/spec.md)：已落地 ResearchRequest、Prompt/Schema/Bundle、Codex 任务、人工导包和审核读取闭环。
+4. [`024-community-experience-research`](../../specs/024-community-experience-research/spec.md)：已落地 ResearchRequest、Prompt/Schema/Bundle、原生搜索 Codex 任务、人工导包、审核读取和 `browser-assisted-codex@v2` 安全闭环。
 
 当前实现路径如下：
 
 - 深档领域与应用：`packages/domain/src/interview/project-drill.ts`，以及 `packages/application/src/interview/` 下的 `material.ts`、`profile.ts`、`context.ts`、`agents.ts`、`service.ts` 和 `task-handlers.ts`。
 - 深档持久化与 Web：`packages/db/src/repositories/interview-project-repository.ts`、`apps/web/app/api/interview/projects/[id]/materials/route.ts`、`apps/web/app/api/interview/projects/[id]/sessions/route.ts` 和 `apps/web/app/interview/projects/[id]/workbench.tsx`。
-- 网友面经领域与应用：`packages/domain/src/interview/community-research.ts`，以及 `packages/application/src/interview/` 下的 `research-prompt.ts`、`research-normalization.ts`、`research-service.ts`、`research-task-handler.ts`。
-- 网友面经端口与基础设施：`packages/application/src/ports/interview-research.ts`、`packages/application/src/ports/external-research.ts`、`packages/db/src/repositories/interview-research-repository.ts`、`apps/worker/src/codex-research-executor.ts` 和 Worker 装配 `apps/worker/src/index.ts`。
+- 网友面经领域与应用：`packages/domain/src/interview/community-research.ts`，以及 `packages/application/src/interview/` 下的 `research-prompt.ts`、`research-collection-plan.ts`、`research-normalization.ts`、`research-service.ts`、`research-task-handler.ts`。
+- 网友面经端口与基础设施：`packages/application/src/ports/interview-research.ts`、`packages/application/src/ports/external-research.ts`、`packages/db/src/repositories/interview-research-repository.ts`、`apps/worker/src/codex-research-executor.ts`、`apps/worker/src/research-browser-gateway.ts` 和 Worker 装配 `apps/worker/src/index.ts`。
 - 网友面经 Web：`apps/web/app/api/interview/research/` 与 `apps/web/app/interview/research/`。
 
 [ADR-0010](../adr/0010-interview-preparation-and-external-agent-boundaries.md) 已接受以下跨模块决策：
@@ -755,6 +786,8 @@ ResearchBundle 校验至少拒绝：
 - 面试准备数据与 CandidateProfile 的所有权分离。
 - SQLite 为结构化权威、Markdown 为可重建投影。
 - 外部 Agent 作为受限基础设施适配器，不能直接写业务存储。
+
+[ADR-0014](../adr/0014-isolated-browser-research-boundary.md) 确定浏览器增强研究的匿名临时 Profile、`search/open/readPage` 工具白名单、URL/SSRF 防护和全路径清理边界；[ADR-0015](../adr/0015-worker-collected-research-evidence.md) 部分取代其模型主动浏览语义，确定生产路径由 Worker 预采集证据并在关闭浏览器后启动无网络 Codex。
 
 ## 17. 已确认的首期产品选择
 

@@ -43,12 +43,12 @@
 
 数据按语义分为四类：
 
-| 类型       | 例子                                                | 更新规则                     |
-| ---------- | --------------------------------------------------- | ---------------------------- |
-| 当前态     | `jobs`、`candidate_profiles`                        | 原地更新，服务主要查询入口   |
-| 不可变版本 | `job_revisions`、`profile_versions`                 | 只追加，不静默覆盖           |
-| 观察与事件 | `job_observations`、`events`                        | 只追加或按明确保留策略清理   |
-| 推导结果   | `job_enrichments`、`match_results`、`match_advices` | 引用不可变输入，绝不反写事实 |
+| 类型       | 例子                                                | 更新规则                       |
+| ---------- | --------------------------------------------------- | ------------------------------ |
+| 当前态     | `jobs`、`candidate_profiles`                        | 原地更新，服务主要查询入口     |
+| 不可变版本 | `job_revisions`、`profile_versions`                 | 不静默覆盖；按领域保留策略淘汰 |
+| 观察与事件 | `job_observations`、`events`                        | 只追加或按明确保留策略清理     |
+| 推导结果   | `job_enrichments`、`match_results`、`match_advices` | 引用不可变输入，绝不反写事实   |
 
 相同有效输入必须用稳定哈希或唯一约束实现幂等。只有内容实际变化时才产生新版本；重复观察不制造新版本。
 
@@ -326,7 +326,7 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 简历来源由通用 `files` 表示，本领域只保存候选人聚合和不可变画像版本。
 
-**事务边界：**简历物理文件写入和文本解析在事务外完成；文件元数据登记和画像任务入队分别使用短事务。应用画像提取或人工修订时，旧当前版本失效和新当前版本创建必须原子提交。
+**事务边界：**简历物理文件写入和文本解析在事务外完成；文件元数据登记和画像任务入队分别使用短事务。应用画像提取或人工修订时，旧当前版本失效、新当前版本创建、超额旧版本及其匹配推导清理必须原子提交。
 
 #### 3.3.1 `candidate_profiles`
 
@@ -340,7 +340,7 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 #### 3.3.2 `profile_versions`
 
-候选人事实的不可变版本，保存模型提取结果与人工覆盖后的有效结果。
+候选人事实的不可变版本，保存模型提取结果与人工覆盖后的有效结果；每个画像最多保留最新 5 个版本。
 
 | 列                  | 类型    | 约束                            | 说明                           |
 | ------------------- | ------- | ------------------------------- | ------------------------------ |
@@ -356,7 +356,7 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 | `is_current`        | INTEGER | NOT NULL CHECK                  | 当前版本标志                   |
 | `created_at`        | INTEGER | NOT NULL                        | 创建时间                       |
 
-唯一约束：`(profile_id, version_no)`；部分唯一索引 `profile_id WHERE is_current = 1` 保证一个画像最多一个当前版本。
+唯一约束：`(profile_id, version_no)`；部分唯一索引 `profile_id WHERE is_current = 1` 保证一个画像最多一个当前版本。版本号单调递增且不复用；写入新版本的同一事务按 `version_no DESC` 保留最新 5 个，先删除超额版本关联的 `match_results`（以及级联的 `match_advices`），再删除超额 `profile_versions`。
 
 ### 3.4 Agent、匹配与推导结果
 

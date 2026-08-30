@@ -54,6 +54,8 @@ CLI `init` 在幂等 seed 后：
 
 新增 `maintenance.cleanup` Handler，payload 为既有 `CleanupPolicy` 的运行时 Schema。Handler 在 Worker 中先生成计划，再立即以短期 token 执行；复用 `CleanupService` 的候选变化校验、孤立文件安全窗口和路径边界。计划/执行不放在数据库事务中，清理失败由任务策略处理。
 
+清理 payload 从 `rawRecordsDays` 收敛为 `sourceDetailsDays` 后，不在运行时兼容旧字段。数据库迁移直接把所有存量 `maintenance.cleanup` payload 重置为当前默认值 `30/90/30`，覆盖旧自定义保留期，保证 Scheduler 继续使用严格 Schema。
+
 ## 事务、安全与可观测性
 
 - Artifact 写入和文档登记复用现有去重边界；模型/网络调用不进入 SQLite 事务。
@@ -68,3 +70,4 @@ CLI `init` 在幂等 seed 后：
 - CLI 集成测试：初始化 seed、默认简历幂等、未确认时跳过来源任务/计划，以及已确认时允许手动同步。
 - Matching 集成测试：目标岗位 OR 命中、排除词、空目标岗位兼容和分页。
 - Worker/应用测试：画像完成后匹配回调、cleanup Handler 和任务重试。
+- 数据库迁移测试：旧清理 Schedule payload 被破坏性重置，并可通过当前严格 Schema。

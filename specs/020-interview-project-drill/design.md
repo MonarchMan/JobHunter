@@ -120,7 +120,7 @@ Web API 使用严格 Schema 和既有 CSRF/错误信封：
 - `POST /api/interview/sessions/:sessionId/state`
 - `GET /api/interview/projects/:dossierId/notebook`
 
-`/interview` 显示画像项目选择器和档案列表；`/interview/projects/:id` 显示项目快照、会话、覆盖图、当前问题、回答修订、推导及投影下载。交互组件只提交命令并轮询既有 Task API，不在浏览器保留整份回答历史。
+`/interview` 将画像项目队列和档案恢复栏组织为同一准备工作台：宽屏主次双栏、窄屏自然单栏，项目和档案均使用连续档案行；`/interview/projects/:id` 显示项目快照、会话、覆盖图、当前问题、回答修订、推导及投影下载。交互组件只提交命令并轮询既有 Task API，不在浏览器保留整份回答历史。
 
 ## 7. 删除与隐私
 

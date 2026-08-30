@@ -33,6 +33,8 @@ interface VersionRow {
   readonly created_at: number;
 }
 
+const maximumRetainedProfileVersions = 5;
+
 const versionSelection = `SELECT id, profile_id, version_no,
                                  resume_file_id AS resume_document_id, agent_run_id,
                                  extracted_json, effective_json, locked_paths_json, content_hash,
@@ -158,6 +160,24 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
       this.#client
         .prepare('UPDATE candidate_profiles SET updated_at = ? WHERE id = ?')
         .run(version.createdAt, version.profileId);
+      const obsoleteVersionIds = this.#client
+        .prepare(
+          `SELECT id FROM profile_versions
+           WHERE profile_id = ?
+           ORDER BY version_no DESC, id DESC
+           LIMIT -1 OFFSET ?`,
+        )
+        .pluck()
+        .all(version.profileId, maximumRetainedProfileVersions) as string[];
+      if (obsoleteVersionIds.length > 0) {
+        const placeholders = obsoleteVersionIds.map(() => '?').join(', ');
+        this.#client
+          .prepare(`DELETE FROM match_results WHERE profile_version_id IN (${placeholders})`)
+          .run(...obsoleteVersionIds);
+        this.#client
+          .prepare(`DELETE FROM profile_versions WHERE id IN (${placeholders})`)
+          .run(...obsoleteVersionIds);
+      }
       return { kind: 'created', version } as const;
     })();
   }

@@ -337,7 +337,6 @@ export function DrillWorkbench({
     <div className={styles.root} aria-busy={busy !== null || pending}>
       <section className={styles.snapshot} aria-labelledby="snapshot-title">
         <div>
-          <p className="eyebrow">FROZEN RESUME SNAPSHOT</p>
           <h2 id="snapshot-title">{detail.snapshot.project.role ?? '项目经历'}</h2>
         </div>
         <div className={styles.snapshotFacts}>
@@ -366,7 +365,6 @@ export function DrillWorkbench({
       <section className={styles.materials} aria-labelledby="project-materials-title">
         <header>
           <div>
-            <p className="eyebrow">SELECTED MARKDOWN ONLY</p>
             <h2 id="project-materials-title">项目资料</h2>
           </div>
           <span>{currentMaterials.length} 个逻辑文件</span>
@@ -416,7 +414,6 @@ export function DrillWorkbench({
         <section className={styles.drill} aria-labelledby="current-question-title">
           <header className={styles.drillHeader}>
             <div>
-              <p className="eyebrow">CURRENT QUESTION</p>
               <h2 id="current-question-title">当前拷打</h2>
             </div>
             {session ? (
@@ -753,7 +750,6 @@ export function DrillWorkbench({
 
         <aside className={styles.coverage} aria-labelledby="coverage-title">
           <header>
-            <p className="eyebrow">COVERAGE LEDGER</p>
             <h2 id="coverage-title">准备覆盖</h2>
             <p>只记录证据状态，不计算总分。</p>
           </header>
@@ -777,7 +773,6 @@ export function DrillWorkbench({
       <section className={styles.history} aria-labelledby="history-title">
         <header>
           <div>
-            <p className="eyebrow">AUDITABLE HISTORY</p>
             <h2 id="history-title">问答记录</h2>
           </div>
           <span>{historyTurns.length} 题已归档</span>
@@ -877,7 +872,6 @@ export function DrillWorkbench({
       >
         <form method="dialog" noValidate>
           <header>
-            <p className="eyebrow">DESTRUCTIVE ACTION</p>
             <h2 id="delete-dialog-title">确认删除准备档案</h2>
           </header>
           {deleteImpact ? (

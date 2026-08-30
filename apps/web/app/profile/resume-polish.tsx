@@ -160,7 +160,6 @@ export function ResumePolish({
     >
       <header className={styles.heading}>
         <div className={styles.titleBlock}>
-          <p className={styles.kicker}>AI POLISH</p>
           <h3 id="resume-polish-title">按求职意向润色经历</h3>
           <p className={styles.targetRole}>
             目标岗位 <strong>{draft.targetRoles[0] ?? '尚未确认'}</strong>

@@ -37,6 +37,11 @@
   transform: none;
 }
 
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .icon {
   display: inline-grid;
   flex: 0 0 auto;

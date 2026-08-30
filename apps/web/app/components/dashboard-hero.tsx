@@ -5,10 +5,6 @@ export function DashboardHero(): ReactElement {
   return (
     <section className={styles.hero} aria-labelledby="dashboard-title">
       <div className={styles.copy}>
-        <div className={['eyebrow', styles.eyebrow].filter(Boolean).join(' ')}>
-          PERSONAL JOB SEARCH OS <span className={styles.eyebrowRule} aria-hidden="true" />{' '}
-          LOCAL-FIRST
-        </div>
         <h1 id="dashboard-title">
           把下一份工作，
           <em>找得更快。</em>
@@ -33,7 +29,6 @@ export function DashboardHero(): ReactElement {
           <strong>已就绪</strong>
         </div>
         <div className={styles.note}>
-          <span className={styles.noteLabel}>NEXT BEST ACTION</span>
           <strong>先建立画像，再开始匹配</strong>
           <p>让岗位列表从“有职位”变成“适合你的职位”。</p>
         </div>

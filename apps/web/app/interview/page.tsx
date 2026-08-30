@@ -13,7 +13,6 @@ export default async function InterviewPage(): Promise<ReactElement> {
   return (
     <main id="main-content" tabIndex={-1}>
       <PageHeader
-        eyebrow="INTERVIEW PREPARATION"
         title="简历项目拷打"
         description="从简历事实出发，一次回答一个问题，逐步补齐项目理解。系统只提问和给结构指导，不替你作答。"
       />

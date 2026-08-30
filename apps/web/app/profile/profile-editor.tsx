@@ -101,7 +101,6 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
   return (
     <section className={styles.root} aria-labelledby="profile-editor-title">
       <div className="section-heading">
-        <p className="eyebrow">MANUAL OVERRIDES</p>
         <h2 id="profile-editor-title">人工维护</h2>
       </div>
       {feedback ? (

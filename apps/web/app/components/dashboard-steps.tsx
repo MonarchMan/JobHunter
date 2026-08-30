@@ -41,7 +41,6 @@ export function DashboardSteps({
     <section className={panelStyles.panel} aria-labelledby="setup-title">
       <div className={['section-heading', styles.heading].filter(Boolean).join(' ')}>
         <div>
-          <span className="eyebrow">GET STARTED</span>
           <h2 id="setup-title">三步开始使用</h2>
         </div>
         <span className={styles.count}>个人工作流</span>

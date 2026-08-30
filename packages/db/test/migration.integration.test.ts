@@ -21,8 +21,12 @@ async function openTestDatabase(): Promise<SqliteDatabaseHandle> {
   return handle;
 }
 
-async function migrationsBeforeStorageConvergence(root: string): Promise<string> {
-  const folder = path.join(root, 'migrations-before-storage-convergence');
+async function migrationsBefore(
+  root: string,
+  directoryName: string,
+  firstExcludedIndex: number,
+): Promise<string> {
+  const folder = path.join(root, directoryName);
   const metadataFolder = path.join(folder, 'meta');
   await mkdir(metadataFolder, { recursive: true });
   const journal = JSON.parse(
@@ -32,7 +36,7 @@ async function migrationsBeforeStorageConvergence(root: string): Promise<string>
     readonly dialect: string;
     readonly entries: readonly { readonly idx: number; readonly tag: string }[];
   };
-  const entries = journal.entries.filter((entry) => entry.idx < 19);
+  const entries = journal.entries.filter((entry) => entry.idx < firstExcludedIndex);
   await Promise.all(
     entries.map((entry) =>
       copyFile(
@@ -145,8 +149,212 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
+      28,
+    );
+  });
+
+  it('destructively resets legacy cleanup schedule payloads to current defaults', async () => {
+    const dataRoot = await createTemporaryDataRoot('jobhunter-db-cleanup-schedule-upgrade-');
+    dataRoots.push(dataRoot);
+    const legacyMigrations = await migrationsBefore(
+      dataRoot.path,
+      'migrations-before-cleanup-schedule-reset',
       24,
     );
+    const legacy = openSqliteDatabase({
+      dataRoot: dataRoot.path,
+      migrationsFolder: legacyMigrations,
+    });
+    handles.push(legacy);
+    legacy.client
+      .prepare(
+        `INSERT INTO schedules
+         (id, schedule_key, task_type, payload_json, cron_expression, timezone, enabled,
+          next_run_at, last_enqueued_at, created_at, updated_at)
+         VALUES (?, 'maintenance.cleanup:weekly', 'maintenance.cleanup', ?, '0 4 * * 0',
+                 'Asia/Shanghai', 1, 1, NULL, 1, 1)`,
+      )
+      .run(
+        '018f0000-0000-7000-8000-000000000401',
+        JSON.stringify({ rawRecordsDays: 7, observationsDays: 8, failedAgentRunsDays: 9 }),
+      );
+    legacy.close();
+    handles.splice(handles.indexOf(legacy), 1);
+
+    const upgraded = openSqliteDatabase({ dataRoot: dataRoot.path });
+    handles.push(upgraded);
+    const payload = upgraded.client
+      .prepare(
+        "SELECT payload_json FROM schedules WHERE schedule_key = 'maintenance.cleanup:weekly'",
+      )
+      .pluck()
+      .get() as string;
+    expect(JSON.parse(payload)).toEqual({
+      sourceDetailsDays: 30,
+      observationsDays: 90,
+      failedAgentRunsDays: 30,
+    });
+  });
+
+  it('destructively projects legacy sync run statistics to the current shape', async () => {
+    const dataRoot = await createTemporaryDataRoot('jobhunter-db-sync-stats-upgrade-');
+    dataRoots.push(dataRoot);
+    const legacyMigrations = await migrationsBefore(
+      dataRoot.path,
+      'migrations-before-sync-stats-reset',
+      25,
+    );
+    const legacy = openSqliteDatabase({
+      dataRoot: dataRoot.path,
+      migrationsFolder: legacyMigrations,
+    });
+    handles.push(legacy);
+    legacy.client.exec(`
+      INSERT INTO companies
+        (id, slug, name, aliases_json, enabled, created_at, updated_at)
+      VALUES ('stats-company', 'stats-company', 'Stats Company', '[]', 1, 1, 1);
+      INSERT INTO source_channels
+        (id, company_id, channel, slug, enabled, created_at, updated_at)
+      VALUES ('stats-channel', 'stats-company', 'social', 'stats-company-social', 1, 1, 1);
+      INSERT INTO job_sources
+        (id, company_id, channel_id, slug, adapter_key, base_url, config_json,
+         sync_policy_version, sync_policy_json, enabled, support_status, health_status,
+         consecutive_failures, created_at, updated_at)
+      VALUES ('stats-source', 'stats-company', 'stats-channel', 'stats-source', 'stats.source',
+              'https://example.com', '{}', 'v1', '{}', 1, 'supported', 'healthy', 0, 1, 1);
+      INSERT INTO sync_runs
+        (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
+         sync_policy_version, source_config_hash, stats_json, started_at)
+      VALUES ('stats-run', 'stats-source', 'manual', 'running', 'unknown', 'v1', 'v1',
+              'v1', '${'0'.repeat(64)}', '{}', 1),
+             ('stats-run-legacy', 'stats-source', 'manual', 'succeeded', 'complete', 'v1', 'v1',
+              'v1', '${'1'.repeat(64)}',
+              '{"discovered":3,"created":1,"unchanged":2,"rawStored":3}', 2);
+    `);
+    legacy.close();
+    handles.splice(handles.indexOf(legacy), 1);
+
+    const upgraded = openSqliteDatabase({ dataRoot: dataRoot.path });
+    handles.push(upgraded);
+    const payload = upgraded.client
+      .prepare("SELECT stats_json FROM sync_runs WHERE id = 'stats-run'")
+      .pluck()
+      .get() as string;
+    expect(JSON.parse(payload)).toEqual({
+      discovered: 0,
+      created: 0,
+      revised: 0,
+      unchanged: 0,
+      skippedNonDomestic: 0,
+      skippedOutOfScope: 0,
+      skippedUnknownRegion: 0,
+      isolated: 0,
+      restored: 0,
+      staled: 0,
+      closed: 0,
+      followupEnqueued: 0,
+    });
+    const legacyPayload = upgraded.client
+      .prepare("SELECT stats_json FROM sync_runs WHERE id = 'stats-run-legacy'")
+      .pluck()
+      .get() as string;
+    expect(JSON.parse(legacyPayload)).toEqual({
+      discovered: 3,
+      created: 1,
+      revised: 0,
+      unchanged: 2,
+      skippedNonDomestic: 0,
+      skippedOutOfScope: 0,
+      skippedUnknownRegion: 0,
+      isolated: 0,
+      restored: 0,
+      staled: 0,
+      closed: 0,
+      followupEnqueued: 0,
+    });
+  });
+
+  it('retains the latest five profile versions and removes obsolete match derivations', async () => {
+    const dataRoot = await createTemporaryDataRoot('jobhunter-db-profile-retention-upgrade-');
+    dataRoots.push(dataRoot);
+    const legacyMigrations = await migrationsBefore(
+      dataRoot.path,
+      'migrations-before-profile-retention',
+      27,
+    );
+    const legacy = openSqliteDatabase({
+      dataRoot: dataRoot.path,
+      migrationsFolder: legacyMigrations,
+    });
+    handles.push(legacy);
+    legacy.client.exec(`
+      INSERT INTO candidate_profiles (id, name, created_at, updated_at)
+      VALUES ('retention-profile', 'Candidate', 1, 7);
+      INSERT INTO profile_versions
+        (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+         content_hash, is_current, created_at)
+      VALUES
+        ('retention-version-1', 'retention-profile', 1, '{}', '{}', '[]', 'hash-1', 0, 1),
+        ('retention-version-2', 'retention-profile', 2, '{}', '{}', '[]', 'hash-2', 0, 2),
+        ('retention-version-3', 'retention-profile', 3, '{}', '{}', '[]', 'hash-3', 0, 3),
+        ('retention-version-4', 'retention-profile', 4, '{}', '{}', '[]', 'hash-4', 0, 4),
+        ('retention-version-5', 'retention-profile', 5, '{}', '{}', '[]', 'hash-5', 0, 5),
+        ('retention-version-6', 'retention-profile', 6, '{}', '{}', '[]', 'hash-6', 0, 6),
+        ('retention-version-7', 'retention-profile', 7, '{}', '{}', '[]', 'hash-7', 1, 7);
+      INSERT INTO companies
+        (id, slug, name, aliases_json, enabled, created_at, updated_at)
+      VALUES ('retention-company', 'retention-company', 'Company', '[]', 1, 1, 1);
+      INSERT INTO source_channels
+        (id, company_id, channel, slug, enabled, created_at, updated_at)
+      VALUES ('retention-channel', 'retention-company', 'social', 'retention-channel', 1, 1, 1);
+      INSERT INTO job_sources
+        (id, company_id, channel_id, slug, adapter_key, coverage_role, base_url, config_json,
+         sync_policy_version, sync_policy_json, enabled, support_status, health_status,
+         consecutive_failures, created_at, updated_at)
+      VALUES ('retention-source', 'retention-company', 'retention-channel', 'retention-source',
+              'retention.source', 'required', 'https://example.com', '{}', 'v1', '{}', 1,
+              'supported', 'healthy', 0, 1, 1);
+      INSERT INTO jobs
+        (id, company_id, source_id, external_job_id, title, locations_json, description,
+         detail_url, apply_url, status, missing_count, content_hash, first_seen_at, last_seen_at,
+         created_at, updated_at)
+      VALUES ('retention-job', 'retention-company', 'retention-source', 'job', 'Engineer', '[]',
+              'Build systems', 'https://example.com/job', 'https://example.com/job', 'active', 0,
+              'job-hash', 1, 1, 1, 1);
+      INSERT INTO job_revisions
+        (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
+         source_url, snapshot_json, change_set_json, created_at)
+      VALUES ('retention-revision', 'retention-job', 1, 'revision-hash', 'v1',
+              '${'a'.repeat(64)}', 'https://example.com/job', '{}', '[]', 1);
+      INSERT INTO match_rulesets
+        (id, version, definition_json, definition_hash, active, created_at)
+      VALUES ('retention-ruleset', 'retention-v1', '{}', 'retention-rules-hash', 1, 1);
+      INSERT INTO match_results
+        (id, profile_version_id, job_revision_id, ruleset_id, filter_status, total_score,
+         components_json, risks_json, input_hash, created_at)
+      VALUES ('retention-match', 'retention-version-1', 'retention-revision',
+              'retention-ruleset', 'eligible', 80, '[]', '[]', 'retention-input-hash', 1);
+    `);
+    legacy.close();
+    handles.splice(handles.indexOf(legacy), 1);
+
+    const upgraded = openSqliteDatabase({ dataRoot: dataRoot.path });
+    handles.push(upgraded);
+    expect(
+      upgraded.client
+        .prepare(
+          `SELECT version_no FROM profile_versions
+           WHERE profile_id = 'retention-profile' ORDER BY version_no DESC`,
+        )
+        .pluck()
+        .all(),
+    ).toEqual([7, 6, 5, 4, 3]);
+    expect(
+      upgraded.client
+        .prepare("SELECT count(*) FROM match_results WHERE id = 'retention-match'")
+        .pluck()
+        .get(),
+    ).toBe(0);
   });
 
   it('migrates existing sync work to one active recruitment channel', async () => {
@@ -293,7 +501,11 @@ describe('SQLite migrations and capabilities', () => {
   it('converges an existing 0018 database without losing business files or job provenance', async () => {
     const dataRoot = await createTemporaryDataRoot('jobhunter-db-storage-upgrade-');
     dataRoots.push(dataRoot);
-    const legacyMigrations = await migrationsBeforeStorageConvergence(dataRoot.path);
+    const legacyMigrations = await migrationsBefore(
+      dataRoot.path,
+      'migrations-before-storage-convergence',
+      19,
+    );
     const legacy = openSqliteDatabase({
       dataRoot: dataRoot.path,
       migrationsFolder: legacyMigrations,

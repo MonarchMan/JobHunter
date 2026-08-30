@@ -13,7 +13,6 @@ export default function ErrorBoundary({
   }, [error]);
   return (
     <main id="main-content" className="error-state" tabIndex={-1}>
-      <p className="eyebrow">ERROR</p>
       <h1>页面暂时无法加载</h1>
       <p>请确认已运行初始化命令，或稍后重试。</p>
       <button type="button" onClick={reset}>

@@ -83,7 +83,6 @@ export default async function JobDetailPage({
       </header>
       <section className={styles.grid}>
         <article className="panel-block">
-          <p className="eyebrow">JOB DESCRIPTION</p>
           <h2>职位描述</h2>
           <div className={styles.description}>{job.description}</div>
           <dl className="facts">
@@ -110,7 +109,6 @@ export default async function JobDetailPage({
           </dl>
         </article>
         <aside className="panel-block">
-          <p className="eyebrow">REVISION HISTORY</p>
           <h2>修订时间线</h2>
           {job.revisions.length === 0 ? (
             <p className="muted">暂无修订记录。</p>
@@ -135,7 +133,6 @@ export default async function JobDetailPage({
       </section>
       <section aria-labelledby="matching-title">
         <div className="section-heading">
-          <p className="eyebrow">MATCHING EVIDENCE</p>
           <h2 id="matching-title">匹配与建议</h2>
         </div>
         {job.matches.length === 0 ? (

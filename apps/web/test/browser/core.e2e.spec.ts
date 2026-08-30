@@ -8,6 +8,16 @@ test.describe('校招实习管理台核心流程', () => {
     await page.goto('/interview');
 
     await expect(page.getByRole('heading', { name: '简历项目拷打' })).toBeVisible();
+    const projectSource = page.locator('[data-project-source]');
+    const dossierArchive = page.locator('[data-dossier-archive]');
+    const sourceBox = await projectSource.boundingBox();
+    const archiveBox = await dossierArchive.boundingBox();
+    expect(sourceBox).not.toBeNull();
+    expect(archiveBox).not.toBeNull();
+    if (sourceBox && archiveBox) {
+      expect(archiveBox.x).toBeGreaterThan(sourceBox.x + sourceBox.width);
+      expect(sourceBox.width).toBeGreaterThan(archiveBox.width);
+    }
     const project = page.getByRole('article').filter({ hasText: '校招职位 Agent' });
     await project.getByRole('button', { name: '建立准备档案' }).click();
     await expect(page).toHaveURL(/\/interview\/projects\//);
@@ -26,6 +36,24 @@ test.describe('校招实习管理台核心流程', () => {
       'aria-current',
       'page',
     );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+        ),
+      )
+      .toBe(true);
+
+    await page.goto('/interview');
+    await expect(page.locator('[data-active-session="true"]')).toHaveCount(1);
+    const narrowSourceBox = await page.locator('[data-project-source]').boundingBox();
+    const narrowArchiveBox = await page.locator('[data-dossier-archive]').boundingBox();
+    expect(narrowSourceBox).not.toBeNull();
+    expect(narrowArchiveBox).not.toBeNull();
+    if (narrowSourceBox && narrowArchiveBox) {
+      expect(Math.abs(narrowSourceBox.x - narrowArchiveBox.x)).toBeLessThanOrEqual(1);
+      expect(narrowArchiveBox.y).toBeGreaterThan(narrowSourceBox.y + narrowSourceBox.height);
+    }
     await expect
       .poll(() =>
         page.evaluate(

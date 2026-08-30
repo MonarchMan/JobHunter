@@ -123,7 +123,6 @@ export function ResumeImport({ profileId }: Readonly<{ profileId?: string }>): R
   return (
     <section className="panel-block" data-resume-import aria-labelledby="resume-import-title">
       <div className="section-heading">
-        <p className="eyebrow">RESUME INTAKE</p>
         <h2 id="resume-import-title">导入简历</h2>
       </div>
       <p className="muted">

@@ -63,15 +63,6 @@
   gap: 1rem;
 }
 
-.templateSheet header p {
-  margin: 0 0 0.25rem;
-  color: var(--primary);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
 .templateSheet h3,
 .formHeading h3,
 .questionHeading h3 {

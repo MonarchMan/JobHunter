@@ -2,11 +2,26 @@ import { z } from 'zod';
 import { contentHash, type ContentHash } from '../shared/canonical.js';
 import { DomainError } from '../shared/domain-error.js';
 
-export const communityResearchPromptVersion = 'community-research-prompt@v1' as const;
+export const communityResearchPromptVersion = 'community-research-prompt@v3' as const;
 export const communityResearchSchemaVersion = 'community-research-bundle@v1' as const;
 
 const nullableText = (maximum: number): z.ZodNullable<z.ZodString> =>
   z.string().trim().min(1).max(maximum).nullable();
+
+function matchesHostnameSuffix(hostname: string, suffix: string): boolean {
+  return hostname === suffix || hostname.endsWith(`.${suffix}`);
+}
+
+function isSpecialUseResearchHostname(hostname: string): boolean {
+  return (
+    ['localhost', 'local', 'invalid', 'example', 'test'].some((suffix) =>
+      matchesHostnameSuffix(hostname, suffix),
+    ) ||
+    ['example.com', 'example.net', 'example.org'].some((domain) =>
+      matchesHostnameSuffix(hostname, domain),
+    )
+  );
+}
 
 const researchDomainSchema = z
   .string()
@@ -197,9 +212,7 @@ export function normalizePublicResearchUrl(value: string): string {
   const address =
     hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
   if (
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost') ||
-    hostname.endsWith('.local') ||
+    isSpecialUseResearchHostname(hostname) ||
     address === '::' ||
     address === '::1' ||
     /^fe[89ab]/u.test(address) ||

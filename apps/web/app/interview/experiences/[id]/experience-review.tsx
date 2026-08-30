@@ -187,7 +187,6 @@ export function ExperienceReview({
         <section className={styles.acceptedBanner} aria-labelledby="accepted-title">
           <span aria-hidden="true" />
           <div>
-            <p className="eyebrow">ACCEPTED HISTORY</p>
             <h2 id="accepted-title">已进入历史面经</h2>
             <p>这里保留你确认过的问题与回答，不会被后续解析规则静默改写。</p>
           </div>
@@ -221,7 +220,6 @@ export function ExperienceReview({
       <section className={styles.reviewLead} aria-labelledby="review-title">
         <span aria-hidden="true" />
         <div>
-          <p className="eyebrow">STEP 02 · VERIFY</p>
           <h2 id="review-title">校对后再入库</h2>
           <p>解析结果只是草稿。请确认拆分、问题和回答，不清楚的内容可以继续留空。</p>
         </div>
@@ -263,7 +261,6 @@ export function ExperienceReview({
             <div className={styles.experienceHeading}>
               <span>{String(experienceIndex + 1).padStart(2, '0')}</span>
               <div>
-                <p>INTERVIEW EXPERIENCE</p>
                 <h3>经历 {experienceIndex + 1}</h3>
               </div>
             </div>
@@ -638,7 +635,6 @@ function DeletionArea({
             event.preventDefault();
           }}
         >
-          <p className="eyebrow">PERMANENT DELETE</p>
           <h2 id="delete-experience-dialog-title">删除“{fileName}”</h2>
           <p>
             将删除 {impact?.counts.experiences ?? 0} 段经历、{impact?.counts.questions ?? 0}{' '}
