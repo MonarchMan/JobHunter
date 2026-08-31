@@ -71,6 +71,12 @@ describe('SQLite dashboard read model', () => {
           status: 'succeeded',
           finishedAt: new Date(2000).toISOString(),
         },
+        nextAction: {
+          type: 'create_profile',
+          message: '建立简历画像是第一步',
+          href: '/profile',
+        },
+        highlightJobs: [],
       });
     } finally {
       handle.close();

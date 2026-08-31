@@ -1,0 +1,143 @@
+.container {
+  margin-top: 2rem;
+}
+
+.actionState,
+.goodState {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1.25rem 1.35rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.actionState {
+  border-left: 3px solid var(--action);
+  padding-left: 1.1rem;
+}
+
+.goodState {
+  background: var(--canvas-tint);
+}
+
+.cursorIcon {
+  flex: 0 0 auto;
+  color: var(--action);
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 2.4rem;
+  place-items: center;
+  border-radius: 0.6rem;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 750;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.message {
+  margin: 0.25rem 0 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.topJobPreview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+  color: var(--muted-ink);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.topJobPreview strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.separator {
+  color: var(--line);
+}
+
+.score {
+  color: var(--primary);
+  font-weight: 650;
+}
+
+.action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.4rem;
+  padding: 0 1rem;
+  border-radius: 0.5rem;
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition: background 120ms ease-out;
+}
+
+.action:hover {
+  background: var(--primary-hover);
+}
+
+.action:active {
+  transform: scale(0.98);
+}
+
+.goodState .message {
+  color: var(--muted-ink);
+}
+
+@media (max-width: 600px) {
+  .actionState,
+  .goodState {
+    flex-direction: column;
+    align-items: start;
+    gap: 0.75rem;
+  }
+
+  .action {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .topJobPreview {
+    flex-direction: column;
+    align-items: start;
+    gap: 0.25rem;
+  }
+
+  .separator {
+    display: none;
+  }
+}

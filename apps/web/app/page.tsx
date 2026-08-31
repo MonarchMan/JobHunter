@@ -1,5 +1,7 @@
 import type { ReactElement } from 'react';
 import { DashboardHero } from './components/dashboard-hero.js';
+import { DashboardNextAction } from './components/dashboard-next-action.js';
+import { DashboardHighlightJobs } from './components/dashboard-highlight-jobs.js';
 import { DashboardSteps } from './components/dashboard-steps.js';
 import { MetricCard } from './components/metric-card.js';
 import { labelStatus, syncRunStatusLabels } from './components/status-labels.js';
@@ -18,6 +20,8 @@ export default async function DashboardPage(): Promise<ReactElement> {
   return (
     <main id="main-content" className={styles.page} tabIndex={-1}>
       <DashboardHero />
+
+      {dashboard.nextAction ? <DashboardNextAction action={dashboard.nextAction} /> : null}
 
       <section className={styles.overview} aria-labelledby="snapshot-title">
         <div className="section-heading">
@@ -57,6 +61,8 @@ export default async function DashboardPage(): Promise<ReactElement> {
           />
         </div>
       </section>
+
+      <DashboardHighlightJobs jobs={dashboard.highlightJobs} />
 
       <div className={styles.columns}>
         <DashboardSteps hasSources={hasSources} hasJobs={hasJobs} />
