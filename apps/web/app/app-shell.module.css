@@ -80,6 +80,15 @@
   }
 }
 
+.body:has([data-resume-studio]) {
+  padding-left: 0;
+  background: var(--canvas-tint);
+}
+
+.body:has([data-resume-studio]) > .header {
+  display: none;
+}
+
 @media (max-width: 1024px) {
   .body {
     padding-left: 0;

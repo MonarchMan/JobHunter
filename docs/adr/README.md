@@ -15,5 +15,6 @@
 - [ADR-0013：深档文档取证与本机 Codex 面经研究执行（已被 ADR-0014 部分取代）](./0013-deep-drill-and-codex-research-execution.md)
 - [ADR-0014：匿名隔离浏览器与受限 Codex 研究工具边界（已被 ADR-0015 部分取代）](./0014-isolated-browser-research-boundary.md)
 - [ADR-0015：Worker 预采集证据与无网络 Agent 研究](./0015-worker-collected-research-evidence.md)
+- [ADR-0016：版本化简历模板与 Worker PDF 导出](./0016-resume-template-rendering-and-export.md)
 
 ADR 一经 Accepted 不直接改写历史结论；需要改变决策时新增 ADR，并把旧记录标为 Superseded。

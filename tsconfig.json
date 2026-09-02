@@ -5,6 +5,7 @@
     { "path": "./packages/source-core" },
     { "path": "./packages/agent-core" },
     { "path": "./packages/resume" },
+    { "path": "./packages/resume-template" },
     { "path": "./packages/matching" },
     { "path": "./packages/application" },
     { "path": "./packages/sources" },

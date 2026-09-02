@@ -17,6 +17,8 @@ Worker 内部包含：
 - `RetryPolicy`：按错误类别决定重试时间。
 - `GracefulShutdown`：停止领取、取消在途工作并释放或等待租约。
 
+`resume.export.pdf@v1` 是 Worker 独占的本地浏览器任务。Web 先把已转义、无外部依赖的 HTML 快照写入临时文件，Worker 再用 Playwright 以 A4 和 `printBackground` 生成 PDF；任务按导出请求 ID 幂等，Web 进程不得直接启动 Chromium。
+
 ## 2. 任务状态机
 
 ```mermaid

@@ -86,6 +86,7 @@
 | Import personal experience | 上传文件 / 在线填写    | 保留所选文件或表单输入并阻止重复提交 | 前往草稿校对页       | 已生成草稿         | 内联说明并允许重试 | 草稿标题或首个警告           | 021        |
 | Review experience draft    | 保存草稿 / 接受为历史  | 按钮尺寸稳定；CAS 冲突不清空输入     | 留在详情页           | 内联保存或接受状态 | 刷新后重新核对     | 首错字段或接受状态           | 021        |
 | Run community research     | 发布研究任务           | 锁定执行方式；显示真实 Task 并轮询   | 留在研究详情页       | 持久内联任务状态   | 任务诊断或手工导包 | 返回执行方式或任务状态       | 024        |
+| Build/export resume draft  | 模板选择/章节失焦/导出 | 保存状态或真实 PDF Task              | 留在制作页           | 持久内联状态       | 保留草稿并重试     | 返回触发字段或导出按钮       | 025        |
 
 ## Navigation and responsive behavior
 
@@ -115,6 +116,7 @@
 - Profile date ranges: 教育、工作和项目的开始/结束日期由同一字段组拥有；桌面端该组占一列（半行，外宽与普通字段一致），内部两个日期等宽同排，移动端扩为整行；应用表面固定显示 `YYYY-MM-DD`，旧的月份值载入时补齐为当月首日，保存值统一为完整 ISO 日期字符串。标题沿用普通字段的正常字重、行高和标签间距，日期控件顶边与同行普通输入框对齐。
 - Job title navigation: 职位列表的职位名称直接使用 `detailUrl` 在安全新标签页打开官网详情；站内 `/jobs/[id]` 是诊断详情而非列表默认落点，其历史修订读取必须兼容数组式和对象式 change set。
 - Professional skills: 在线简历用单一多行文本编辑和预览“专业技能”；解析得到的结构化 `skills`/`domains` 继续供匹配使用，不在表单拆成大量重复项。
+- Resume template studio: 在线简历使用共享 `SelectField` 选择内置模板并创建或恢复唯一草稿；`/resume-studio/[draftId]` 使用沉浸式壳层、左侧章节 tablist 和完整 A4 画布。字段失焦保存，结构动作立即保存；revision 冲突保留输入、显示持久错误并阻止导出。画像版本变化只提示，不自动覆盖；确认重建保留头像。PDF 轮询真实 Worker Task，界面统一使用“生成/导出”而非“下载”。
 - Target role family: 在线简历的“目标岗位”使用共享 authored `SelectField` 展示规范大类，空值表示尚未确认；保存时写入零或一个 `targetRoles` 值，不接受自由文本作为同步范围。
 - Filter and profile selectors: 职位筛选的招聘类别、职位类别、状态、排序、个人资料版本，以及个人资料页的全部单选统一使用共享 authored `SelectField`，因为这些工作流的弹层宽度、边框、间距和定位属于应用契约；共享组件同时支持 URL 表单默认值和在线简历受控草稿值，弹层默认在触发框下方左对齐展开、与触发框等宽。来源设置中明确接受平台弹层的单选继续使用 native 变体。
 
@@ -123,6 +125,7 @@
 - Mutation default: 悲观提交；耗时操作仅入队。
 - Idempotency and duplicate-submit policy: mutation 使用现有 CSRF/idempotency，提交期间禁用重复触发。
 - Auto-save/draft recovery: 当前设置即时保存，在线简历显式整份保存；失败与版本冲突均保留客户端输入，不自动覆盖新版本。
+- Resume studio auto-save: 模板草稿在字段失焦或结构操作后保存，状态明确区分未保存、正在保存、已保存、失败和 revision 冲突；导出必须等待当前保存结束，离线或冲突时不得伪造成功。
 - Offline/read-stale/write behavior: 离线写入失败并保留上下文，不伪造成功。
 - Retry/backoff/timeout behavior: 使用现有任务策略；UI 只展示真实状态和可用重试。
 - Version conflict and multi-tab behavior: 画像更新沿用版本条件，冲突时重新加载并保留可复制输入。

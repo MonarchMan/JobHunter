@@ -197,6 +197,13 @@
       "when": 1788469200000,
       "tag": "0027_retain_latest_profile_versions",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1788472800000,
+      "tag": "0028_resume_template_export",
+      "breakpoints": true
     }
   ]
 }

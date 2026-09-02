@@ -827,7 +827,7 @@ test.describe('校招实习管理台核心流程', () => {
   test('uses shared authored selects throughout the profile page', async ({ page }) => {
     await page.goto('/profile');
     await expect(page.locator('select:not([aria-hidden="true"])')).toHaveCount(0);
-    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(5);
+    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(6);
 
     const targetRole = page.getByRole('combobox', { name: '目标岗位' });
     await expect(targetRole).not.toHaveText('');

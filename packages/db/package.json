@@ -22,6 +22,7 @@
     "@jobhunter/agent-core": "workspace:*",
     "@jobhunter/application": "workspace:*",
     "@jobhunter/domain": "workspace:*",
+    "@jobhunter/resume-template": "workspace:*",
     "@jobhunter/matching": "workspace:*",
     "@jobhunter/resume": "workspace:*",
     "better-sqlite3": "^12.4.1",

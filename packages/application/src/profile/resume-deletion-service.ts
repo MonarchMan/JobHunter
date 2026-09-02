@@ -13,6 +13,8 @@ export interface ResumeDeletionImpact {
     readonly matchResults: number;
     readonly agentRuns: number;
     readonly artifacts: number;
+    readonly resumeDrafts: number;
+    readonly resumeExports: number;
   };
 }
 
@@ -50,6 +52,8 @@ function impact(snapshot: ResumeDeletionSnapshot): ResumeDeletionImpact {
       matchResults: snapshot.matchResultIds.length,
       agentRuns: snapshot.agentRunIds.length,
       artifacts: snapshot.artifacts.length,
+      resumeDrafts: snapshot.resumeDraftIds.length,
+      resumeExports: snapshot.resumeExportRequestIds.length,
     },
   };
 }

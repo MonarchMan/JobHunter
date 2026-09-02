@@ -1,0 +1,357 @@
+.root {
+  width: 100%;
+  min-height: 100vh;
+  padding: 0;
+  background: var(--canvas-tint);
+}
+.topbar {
+  position: sticky;
+  z-index: 8;
+  top: 0;
+  display: grid;
+  grid-template-columns: auto minmax(9rem, 1fr) minmax(12rem, auto) auto;
+  min-height: 4.5rem;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.65rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+  background: rgb(255 255 255 / 96%);
+}
+.back {
+  padding: 0.45rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+.topbar > div:nth-child(2) {
+  display: grid;
+  gap: 0.1rem;
+}
+.topbar > div:nth-child(2) span {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+.saveState {
+  display: flex;
+  min-width: 12rem;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  text-align: right;
+}
+.saveState button {
+  padding: 0.25rem 0.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+}
+.saveState[data-state='failed'],
+.saveState[data-state='conflict'] {
+  color: var(--danger);
+}
+.saveState[data-state='saving'] {
+  color: var(--primary);
+}
+.exportActions {
+  display: flex;
+  gap: 0.55rem;
+}
+.exportActions button {
+  min-width: 7rem;
+}
+.stale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 1.2rem;
+  border-bottom: 1px solid #ead09f;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.stale p {
+  display: flex;
+  gap: 0.7rem;
+  margin: 0;
+}
+.stale button {
+  flex: none;
+}
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(19rem, 24rem) minmax(0, 1fr);
+  align-items: start;
+}
+.sidebar {
+  position: sticky;
+  top: 4.5rem;
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  height: calc(100vh - 4.5rem);
+  border-right: 1px solid var(--line);
+  background: var(--surface);
+}
+.sidebar > div {
+  min-width: 0;
+  min-height: 0;
+}
+.stale + .workspace .sidebar {
+  top: 8rem;
+  height: calc(100vh - 8rem);
+}
+.tabs {
+  overflow: auto;
+  padding: 0.85rem 0.55rem;
+  border-right: 1px solid var(--line);
+  background: var(--canvas);
+  scrollbar-gutter: stable;
+}
+.tabs button {
+  position: relative;
+  width: 100%;
+  min-height: 2.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-muted);
+  text-align: left;
+}
+.tabs button:hover {
+  background: var(--primary-soft);
+  color: var(--ink);
+  transform: none;
+}
+.tabs .activeTab {
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+  font-weight: 700;
+}
+.tabs .activeTab:before {
+  position: absolute;
+  inset: 0.45rem auto 0.45rem 0;
+  width: 3px;
+  background: var(--action);
+  content: '';
+}
+.form {
+  height: 100%;
+  overflow: auto;
+  padding: 1rem;
+  scrollbar-gutter: stable;
+}
+.form > header {
+  margin-bottom: 1rem;
+}
+.form h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.form header p {
+  margin: 0.3rem 0 0;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+}
+.form label {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+.form input,
+.form textarea {
+  width: 100%;
+  font: inherit;
+}
+.form textarea {
+  min-height: 8rem;
+}
+.fieldGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.15rem;
+}
+.avatarField span {
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+}
+.repeater {
+  display: grid;
+  gap: 0.8rem;
+}
+.repeaterHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+.entry {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+}
+.entry > button {
+  justify-self: end;
+}
+.canvas {
+  min-height: calc(100vh - 4.5rem);
+  padding: 1.5rem;
+  overflow: auto;
+}
+.paperFrame {
+  width: min(210mm, 100%);
+  margin: 0 auto;
+  box-shadow: 0 1.4rem 3rem rgb(28 33 48 / 12%);
+}
+.paperFrame iframe {
+  display: block;
+  width: 210mm;
+  max-width: 100%;
+  height: calc(100vh - 7.5rem);
+  min-height: 700px;
+  border: 0;
+  background: #fff;
+}
+.backdrop {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(28 33 48 / 55%);
+}
+.dialog {
+  width: min(30rem, 100%);
+  padding: 1.3rem;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+}
+.dialog h2 {
+  margin-top: 0;
+}
+.dialog > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+@media (max-width: 900px) {
+  .topbar {
+    grid-template-columns: 1fr auto;
+    min-height: auto;
+  }
+  .topbar > div:nth-child(2) {
+    display: none;
+  }
+  .saveState {
+    grid-column: 1/-1;
+    min-width: 0;
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .workspace {
+    display: block;
+  }
+  .sidebar,
+  .stale + .workspace .sidebar {
+    position: static;
+    display: block;
+    width: 100%;
+    height: auto;
+    border-right: 0;
+  }
+  .tabs {
+    position: sticky;
+    z-index: 4;
+    top: 6.3rem;
+    display: flex;
+    overflow-x: auto;
+    padding: 0.5rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .tabs button {
+    width: auto;
+    min-width: max-content;
+  }
+  .form {
+    height: auto;
+    overflow: visible;
+    padding: 1rem;
+  }
+  .canvas {
+    min-height: 0;
+    padding: 0.75rem;
+    overflow: hidden;
+  }
+  .paperFrame {
+    overflow: hidden;
+  }
+  .paperFrame iframe {
+    width: 793.7px;
+    max-width: none;
+    height: 75vh;
+    zoom: min(1, calc((100vw - 1.5rem) / 793.7px));
+  }
+  .stale {
+    align-items: flex-start;
+  }
+  .stale p {
+    display: grid;
+    gap: 0.1rem;
+  }
+}
+@media (max-width: 560px) {
+  .topbar {
+    gap: 0.5rem;
+    padding: 0.6rem;
+  }
+  .back {
+    font-size: 0.82rem;
+  }
+  .exportActions {
+    gap: 0.35rem;
+  }
+  .exportActions button {
+    min-width: 0;
+    padding: 0.65rem;
+    font-size: 0.78rem;
+  }
+  .stale {
+    display: grid;
+    padding: 0.7rem;
+  }
+  .stale button {
+    width: 100%;
+  }
+  .form {
+    padding: 0.85rem;
+  }
+  .paperFrame iframe {
+    height: 65vh;
+  }
+  .dialog > div {
+    display: grid;
+  }
+  .dialog button {
+    width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tabs button,
+  .exportActions button {
+    transition: none;
+  }
+}

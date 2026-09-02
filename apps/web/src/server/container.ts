@@ -12,6 +12,7 @@ import {
   createResumeProfileTaskHandler,
   createResumePolishTaskHandler,
   createResumeDeletionTaskHandler,
+  createResumePdfExportTaskHandler,
   createSourceSyncTaskHandler,
   createSourceHealthTaskHandler,
   createCleanupTaskHandler,
@@ -37,6 +38,7 @@ import {
   ResumeImportService,
   ResumeProfileWorkflow,
   ResumePolishService,
+  ResumeTemplateService,
   WebSourceService,
   WebDiagnosticsService,
   type AppConfig,
@@ -63,6 +65,7 @@ import {
   SqliteProjectNotebookReader,
   SqliteResumeDeletionRepository,
   SqliteResumeDocumentRepository,
+  SqliteResumeDraftRepository,
   SqliteSettingsStore,
   seedSourceCatalog,
   NodeResumeFileReader,
@@ -86,6 +89,7 @@ export interface WebApplicationServices {
   readonly resumeDeletion: WebResumeDeletionService;
   readonly resumes: ResumeProfileWorkflow;
   readonly resumePolish: ResumePolishService;
+  readonly resumeTemplates: ResumeTemplateService;
   readonly matches: MatchWorkflowService;
   readonly settings: SystemSettingsService;
   readonly interview: InterviewProjectService;
@@ -141,6 +145,7 @@ export function createLocalWebContainer(
     registry.register(createCleanupTaskHandler({ unavailable: true }));
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
     registry.register(createResumePolishTaskHandler({ unavailable: true }));
+    registry.register(createResumePdfExportTaskHandler());
     registry.register(createResumeDeletionTaskHandler(resumeDeletion));
     registry.register(createProjectQuestionTaskHandler({ unavailable: true }));
     registry.register(createProjectAnswerDigestTaskHandler({ unavailable: true }));
@@ -248,6 +253,14 @@ export function createLocalWebContainer(
         profiles: profileRepository,
         agentRuns,
         tasks,
+        ids,
+      }),
+      resumeTemplates: new ResumeTemplateService({
+        drafts: new SqliteResumeDraftRepository(database.client),
+        profiles: profileRepository,
+        artifacts,
+        tasks,
+        clock,
         ids,
       }),
       tasks,

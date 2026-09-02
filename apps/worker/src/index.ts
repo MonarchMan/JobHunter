@@ -15,6 +15,8 @@ import {
   createResumeProfileTaskHandler,
   createResumePolishTaskHandler,
   createResumeDeletionTaskHandler,
+  createResumePdfExportTaskHandler,
+  createResumeExportCleanupTaskHandler,
   createArtifactPurgeTaskHandler,
   createSourceJobDetailTaskHandler,
   createSourceSyncTaskHandler,
@@ -55,6 +57,7 @@ import {
   SqliteResumeDocumentRepository,
   SqliteResumeArtifactReader,
   SqliteResumeDeletionRepository,
+  SqliteResumeDraftRepository,
   SqliteSourceHealthWriter,
   SqliteSourceManagementRepository,
   SqliteSettingsStore,
@@ -86,6 +89,7 @@ import {
   BrowserAssistedCodexResearchExecutor,
   CodexLocalResearchExecutor,
 } from './codex-research-executor.js';
+import { PlaywrightResumePdfRenderer } from './resume-pdf-renderer.js';
 
 export { createPlaywrightSourcePageClient } from './browser-source.js';
 
@@ -367,6 +371,22 @@ export function createProductionWorkerApplication(input: {
   });
   registry.register(createResumeDeletionTaskHandler(resumeDeletion));
   registry.register(createArtifactPurgeTaskHandler(resumeDeletion));
+  const resumeDrafts = new SqliteResumeDraftRepository(database.client);
+  const resumeExportArtifacts = new SqliteArtifactStore(database.client, input.dataRoot);
+  registry.register(
+    createResumePdfExportTaskHandler({
+      repository: resumeDrafts,
+      artifacts: resumeExportArtifacts,
+      renderer: new PlaywrightResumePdfRenderer(),
+      ids,
+    }),
+  );
+  registry.register(
+    createResumeExportCleanupTaskHandler({
+      repository: resumeDrafts,
+      artifacts: resumeExportArtifacts,
+    }),
+  );
   const sourceHealth = new SourceHealthCheckService({
     sources: new SqliteSyncRepository(database.client),
     checker: new OnlineSourceHealthService({
@@ -489,6 +509,14 @@ export function createProductionWorkerApplication(input: {
   const queue = new SqliteTaskRepository(database.client);
   interviewTasks = new TaskService({ queue, clock, ids }, registry);
   const scheduleService = new ScheduleService({ queue, clock, ids }, registry);
+  scheduleService.upsert({
+    id: ids.generate(),
+    scheduleKey: 'resume-export-cleanup-hourly',
+    taskType: 'resume.export.cleanup@v1',
+    payload: {},
+    cronExpression: '15 * * * *',
+    timezone: 'Asia/Shanghai',
+  });
   const settings = new SystemSettingsService({
     repository: new SqliteSettingsStore(database.client),
     clock,
@@ -514,6 +542,7 @@ export function createProductionWorkerApplication(input: {
       taskTypeConcurrency: {
         ...(input.taskTypeConcurrency ?? {}),
         'interview.project-notebook.render': 1,
+        'resume.export.pdf@v1': 1,
       },
     },
     ...(input.logger ? { logger: input.logger } : {}),

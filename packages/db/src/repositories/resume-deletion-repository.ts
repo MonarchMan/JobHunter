@@ -135,20 +135,54 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
         agentRuns.add(id);
       }
     }
+    const resumeDraftIds =
+      profileIds.length === 0
+        ? []
+        : selectStrings(
+            this.#client,
+            `SELECT id FROM resume_template_drafts
+       WHERE profile_id IN (${placeholders(profileIds.length)})`,
+            profileIds,
+          );
+    const resumeExportRequestIds =
+      resumeDraftIds.length === 0
+        ? []
+        : selectStrings(
+            this.#client,
+            `SELECT id FROM resume_export_requests
+       WHERE draft_id IN (${placeholders(resumeDraftIds.length)})`,
+            resumeDraftIds,
+          );
+    const resumeDraftFileIds =
+      resumeDraftIds.length === 0
+        ? []
+        : selectStrings(
+            this.#client,
+            `SELECT id FROM (
+         SELECT avatar_file_id AS id FROM resume_template_drafts
+         WHERE id IN (${placeholders(resumeDraftIds.length)}) AND avatar_file_id IS NOT NULL
+         UNION SELECT input_file_id AS id FROM resume_export_requests
+         WHERE draft_id IN (${placeholders(resumeDraftIds.length)})
+         UNION SELECT output_file_id AS id FROM resume_export_requests
+         WHERE draft_id IN (${placeholders(resumeDraftIds.length)}) AND output_file_id IS NOT NULL
+       )`,
+            [...resumeDraftIds, ...resumeDraftIds, ...resumeDraftIds],
+          );
+    const allFileIds = sortedStrings([...sortedDocumentIds, ...resumeDraftFileIds]);
     const artifactRows = this.#client
       .prepare(
         `SELECT DISTINCT entity.id, entity.relative_path
          FROM file_entity_mappings version
          JOIN entities entity ON entity.id = version.entity_id
-         WHERE version.file_id IN (${placeholders(sortedDocumentIds.length)})
+         WHERE version.file_id IN (${placeholders(allFileIds.length)})
            AND NOT EXISTS (
              SELECT 1 FROM file_entity_mappings other
              WHERE other.entity_id = entity.id
-               AND other.file_id NOT IN (${placeholders(sortedDocumentIds.length)})
+               AND other.file_id NOT IN (${placeholders(allFileIds.length)})
            )
          ORDER BY entity.id`,
       )
-      .all(...sortedDocumentIds, ...sortedDocumentIds) as {
+      .all(...allFileIds, ...allFileIds) as {
       readonly id: string;
       readonly relative_path: string;
     }[];
@@ -160,6 +194,9 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
       resumeDocumentIds: sortedDocumentIds,
       matchResultIds,
       agentRunIds: sortedStrings(agentRuns),
+      resumeDraftIds,
+      resumeExportRequestIds,
+      resumeDraftFileIds,
       artifacts: artifactRows.map((row) => ({ id: row.id, relativePath: row.relative_path })),
     };
   }
@@ -208,6 +245,13 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
             `DELETE FROM candidate_profiles WHERE id IN (${placeholders(current.profileIds.length)})`,
           )
           .run(...current.profileIds);
+      }
+      if (current.resumeDraftFileIds.length > 0) {
+        this.#client
+          .prepare(
+            `DELETE FROM files WHERE id IN (${placeholders(current.resumeDraftFileIds.length)})`,
+          )
+          .run(...current.resumeDraftFileIds);
       }
       this.#client
         .prepare(

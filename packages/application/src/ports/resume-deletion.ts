@@ -13,6 +13,9 @@ export interface ResumeDeletionSnapshot {
   readonly resumeDocumentIds: readonly string[];
   readonly matchResultIds: readonly string[];
   readonly agentRunIds: readonly string[];
+  readonly resumeDraftIds: readonly string[];
+  readonly resumeExportRequestIds: readonly string[];
+  readonly resumeDraftFileIds: readonly string[];
   readonly artifacts: readonly ResumeDeletionArtifact[];
 }
 

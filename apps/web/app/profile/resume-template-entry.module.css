@@ -1,0 +1,30 @@
+.root {
+  display: flex;
+  min-width: 18rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.root > div {
+  min-width: 11rem;
+}
+.root button {
+  min-height: 2.75rem;
+  white-space: nowrap;
+}
+.error {
+  max-width: 18rem;
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 600px) {
+  .root {
+    width: 100%;
+    min-width: 0;
+  }
+  .root > div {
+    min-width: 0;
+    flex: 1;
+  }
+}

@@ -158,7 +158,7 @@ export class SqliteDashboardReadModel implements DashboardReadModel {
     if (failedTasks > 0) {
       return {
         type: 'handle_failures',
-        message: `${failedTasks} 个任务需要处理`,
+        message: `${String(failedTasks)} 个任务需要处理`,
         count: failedTasks,
         href: '/tasks?status=failed',
       };
@@ -208,7 +208,7 @@ export class SqliteDashboardReadModel implements DashboardReadModel {
 
       return {
         type: 'review_matches',
-        message: `${recentHighScoreCount} 个新匹配职位待查看`,
+        message: `${String(recentHighScoreCount)} 个新匹配职位待查看`,
         count: recentHighScoreCount,
         topJob: topJob
           ? {

@@ -24,7 +24,7 @@ describe('documentation checker', () => {
   it('accepts the repository documentation', async () => {
     const result = await checkDocs(workspaceRoot);
     expect(result.errors).toEqual([]);
-    expect(result.specCount).toBe(25);
+    expect(result.specCount).toBe(26);
   });
 
   it('finds missing triplet files', async () => {

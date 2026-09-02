@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { SelectField } from '../components/select-field.js';
 import { ResumePolish } from './resume-polish.js';
+import { ResumeTemplateEntry } from './resume-template-entry.js';
 import styles from './resume-editor.module.css';
 
 function classNames(...names: readonly (string | false | undefined)[]): string {
@@ -1172,6 +1173,7 @@ export function ResumeEditor({
       <footer className={styles['resume-editor-actions']} data-resume-editor-actions>
         <span>{dirty ? '有尚未保存的修改' : '保存会创建新的画像版本'}</span>
         <div>
+          <ResumeTemplateEntry profileId={profileId} />
           <button
             ref={previewButton}
             type="button"

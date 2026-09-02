@@ -711,6 +711,8 @@ export const webResumeDeletionImpactSchema = z
         matchResults: z.number().int().nonnegative(),
         agentRuns: z.number().int().nonnegative(),
         artifacts: z.number().int().nonnegative(),
+        resumeDrafts: z.number().int().nonnegative(),
+        resumeExports: z.number().int().nonnegative(),
       })
       .strict(),
     warnings: z.array(z.string()),

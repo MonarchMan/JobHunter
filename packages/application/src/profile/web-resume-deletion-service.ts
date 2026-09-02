@@ -28,7 +28,9 @@ export class WebResumeDeletionService {
       resumeDocumentId,
       impactHash: result.impactHash,
       counts: result.counts,
-      warnings: ['删除不可撤销；画像、匹配结果和独占 Agent 运行可能一并删除。'],
+      warnings: [
+        '删除不可撤销；画像、模板草稿、头像、未过期导出、匹配结果和独占 Agent 运行可能一并删除。',
+      ],
     });
   }
 

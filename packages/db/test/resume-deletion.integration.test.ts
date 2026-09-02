@@ -144,6 +144,30 @@ async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promi
     content: new TextEncoder().encode('second redacted resume body'),
     createdAt: utcInstant(2),
   });
+  const avatar = await sqliteArtifacts.put({
+    id: 'draft-avatar',
+    kind: 'resume_avatar',
+    mediaType: 'image/png',
+    content: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1]),
+    createdAt: utcInstant(3),
+    logicalFile: 'new',
+  });
+  const exportInput = await sqliteArtifacts.put({
+    id: 'draft-export-input',
+    kind: 'export',
+    mediaType: 'text/html',
+    content: new TextEncoder().encode('<html>resume export input</html>'),
+    createdAt: utcInstant(4),
+    logicalFile: 'new',
+  });
+  const exportOutput = await sqliteArtifacts.put({
+    id: 'draft-export-output',
+    kind: 'export',
+    mediaType: 'application/pdf',
+    content: new TextEncoder().encode('redacted pdf output'),
+    createdAt: utcInstant(5),
+    logicalFile: 'new',
+  });
   handle.client
     .prepare("UPDATE files SET state = 'parsed' WHERE id IN ('document-one', 'document-two')")
     .run();
@@ -188,6 +212,24 @@ async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promi
       )
       .run(versionId, profileId, versionNo, documentId, `${profileId}-hash`);
   }
+  handle.client
+    .prepare(
+      `INSERT INTO resume_template_drafts
+     (id, profile_id, template_key, template_version, source_profile_version_id,
+      content_json, avatar_file_id, avatar_file_version, revision, created_at, updated_at)
+     VALUES ('draft-one', 'profile-one', 'technical-blueprint', 1, 'version-one',
+      '{}', ?, ?, 0, 1, 1)`,
+    )
+    .run(avatar.id, avatar.versionNo);
+  handle.client
+    .prepare(
+      `INSERT INTO resume_export_requests
+     (id, draft_id, format, draft_revision, input_file_id, input_file_version,
+      output_file_id, output_file_version, status, file_name, expires_at, created_at, updated_at)
+     VALUES ('export-one', 'draft-one', 'pdf', 0, ?, ?, ?, ?, 'succeeded',
+      'resume.pdf', 9999999999999, 1, 1)`,
+    )
+    .run(exportInput.id, exportInput.versionNo, exportOutput.id, exportOutput.versionNo);
   const artifacts: ArtifactStore = options.failFirstPurge
     ? new FailOncePurgeStore(sqliteArtifacts)
     : sqliteArtifacts;
@@ -202,8 +244,17 @@ async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promi
     originalPaths: [
       sqliteArtifacts.resolve(first.relativePath),
       sqliteArtifacts.resolve(second.relativePath),
+      sqliteArtifacts.resolve(avatar.relativePath),
+      sqliteArtifacts.resolve(exportInput.relativePath),
+      sqliteArtifacts.resolve(exportOutput.relativePath),
     ],
-    entityIds: [first.entityId, second.entityId],
+    entityIds: [
+      first.entityId,
+      second.entityId,
+      avatar.entityId,
+      exportInput.entityId,
+      exportOutput.entityId,
+    ],
   };
 }
 
@@ -217,7 +268,9 @@ describe('resume sensitive-data deletion', () => {
       resumeDocuments: 2,
       matchResults: 0,
       agentRuns: 1,
-      artifacts: 2,
+      artifacts: 5,
+      resumeDrafts: 1,
+      resumeExports: 1,
     });
     expect(preview.snapshot.profileIds).toEqual(['profile-one', 'profile-two']);
     await expect(
@@ -243,6 +296,8 @@ describe('resume sensitive-data deletion', () => {
       'candidate_profiles',
       'profile_versions',
       'agent_runs',
+      'resume_template_drafts',
+      'resume_export_requests',
       'files',
       'entities',
     ]) {
@@ -325,7 +380,7 @@ describe('resume sensitive-data deletion', () => {
     }
     expect(
       handle.client.prepare('SELECT count(*) FROM entities WHERE deleted_at IS NULL').pluck().get(),
-    ).toBe(2);
+    ).toBe(5);
     expect(
       handle.client.prepare("SELECT count(*) FROM files WHERE kind = 'resume'").pluck().get(),
     ).toBe(2);

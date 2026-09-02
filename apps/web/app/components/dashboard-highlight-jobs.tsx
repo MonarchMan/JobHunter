@@ -10,7 +10,7 @@ function formatRelativeTime(dateString: string): string {
 
   if (days === 0) return '今天';
   if (days === 1) return '昨天';
-  if (days <= 7) return `${days} 天前`;
+  if (days <= 7) return `${String(days)} 天前`;
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date);
 }
 

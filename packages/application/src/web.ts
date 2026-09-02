@@ -34,6 +34,8 @@ export * from './profile/resume-polish-service.js';
 export * from './profile/resume-import-service.js';
 export * from './profile/web-profile-service.js';
 export * from './profile/web-resume-deletion-service.js';
+export * from './profile/resume-template-service.js';
+export * from './profile/resume-export-handler.js';
 export * from './operations/cleanup-handler.js';
 export * from './sync/source-management-service.js';
 export * from './sync/source-schedule-reconciliation-service.js';

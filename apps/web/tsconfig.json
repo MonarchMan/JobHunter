@@ -15,6 +15,7 @@
     { "path": "../../packages/application" },
     { "path": "../../packages/db" },
     { "path": "../../packages/domain" },
+    { "path": "../../packages/resume-template" },
     { "path": "../../packages/sources" }
   ]
 }

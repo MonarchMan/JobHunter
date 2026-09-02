@@ -27,6 +27,7 @@ export * from './repositories/matching-repository.js';
 export * from './repositories/job-query-repository.js';
 export * from './repositories/resume-document-repository.js';
 export * from './repositories/resume-deletion-repository.js';
+export * from './repositories/resume-draft-repository.js';
 export * from './repositories/sync-repository.js';
 export * from './repositories/source-management-repository.js';
 export * from './repositories/task-repository.js';

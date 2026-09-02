@@ -23,7 +23,7 @@ export function DashboardNextAction({
     );
   }
 
-  const renderContent = () => {
+  const renderContent = (): ReactElement | null => {
     switch (action.type) {
       case 'create_profile':
       case 'enable_sources':

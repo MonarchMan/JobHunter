@@ -273,6 +273,35 @@ export class SqliteArtifactStore implements ArtifactStore {
     }
   }
 
+  public async remove(input: { readonly id: string; readonly kind: ArtifactKind }): Promise<void> {
+    const rows = this.#client
+      .prepare(
+        `SELECT entity.id, entity.relative_path
+         FROM files file
+         JOIN file_entity_mappings mapping ON mapping.file_id = file.id
+         JOIN entities entity ON entity.id = mapping.entity_id
+         WHERE file.id = ? AND file.kind = ?`,
+      )
+      .all(input.id, input.kind) as { readonly id: string; readonly relative_path: string }[];
+    this.#client.transaction(() => {
+      this.#client.prepare('DELETE FROM files WHERE id = ? AND kind = ?').run(input.id, input.kind);
+      for (const row of rows) {
+        this.#client
+          .prepare(
+            `DELETE FROM entities WHERE id = ?
+             AND NOT EXISTS (SELECT 1 FROM file_entity_mappings WHERE entity_id = ?)`,
+          )
+          .run(row.id, row.id);
+      }
+    })();
+    for (const row of rows) {
+      const stillRegistered = this.#client
+        .prepare('SELECT 1 FROM entities WHERE id = ?')
+        .get(row.id);
+      if (!stillRegistered) await rm(this.resolve(row.relative_path), { force: true });
+    }
+  }
+
   public async quarantine(artifactId: string, relativePath: string): Promise<QuarantinedArtifact> {
     if (!artifactId.trim()) {
       throw new PersistenceError('ARTIFACT_PATH_INVALID', 'Artifact ID must not be empty.');

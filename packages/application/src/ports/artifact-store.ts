@@ -7,6 +7,7 @@ export type ArtifactKind =
   | 'project_notebook'
   | 'interview_research'
   | 'export'
+  | 'resume_avatar'
   | 'fixture_candidate';
 
 export interface StoredArtifact {
@@ -52,6 +53,7 @@ export interface ArtifactStore {
     readonly maximumBytes: number;
     readonly signal?: AbortSignal;
   }): Promise<StoredArtifactContent>;
+  remove(input: { readonly id: string; readonly kind: ArtifactKind }): Promise<void>;
   resolve(relativePath: string): string;
   quarantine(artifactId: string, relativePath: string): Promise<QuarantinedArtifact>;
   restoreQuarantined(artifact: QuarantinedArtifact): Promise<void>;

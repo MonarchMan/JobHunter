@@ -15,6 +15,7 @@
     "@jobhunter/application": "workspace:*",
     "@jobhunter/db": "workspace:*",
     "@jobhunter/domain": "workspace:*",
+    "@jobhunter/resume-template": "workspace:*",
     "@jobhunter/sources": "workspace:*",
     "@radix-ui/react-select": "^2.3.7",
     "next": "^16.3.1",
