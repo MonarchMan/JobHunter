@@ -67,6 +67,7 @@ export const resumeProfileAgentOutputSchema = z
         })
         .strict(),
     ),
+    professionalSkills: z.array(evidenceFactSchema(text)),
     skills: z.array(
       evidenceFactSchema(
         z
@@ -156,6 +157,11 @@ export function toCandidateProfile(
       highlights: item.highlights.map((fact) => fact.value),
       evidence: domainEvidence(item.evidenceRefs),
     })),
+    professionalSkills:
+      output.professionalSkills
+        .map((fact) => fact.value)
+        .join('\n')
+        .trim() || null,
     skills: output.skills.map((fact) => ({
       name: fact.value.name,
       level: fact.value.level,

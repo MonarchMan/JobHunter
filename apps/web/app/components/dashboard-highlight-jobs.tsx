@@ -22,7 +22,9 @@ function HighlightJobCard({ job }: Readonly<{ job: WebDashboardHighlightJob }>):
           <strong>{job.companyName}</strong>
           {job.isNew ? <span className={styles.newBadge}>新</span> : null}
         </div>
-        {job.score !== null ? <span className={styles.score}>{Math.round(job.score)} 分</span> : null}
+        {job.score !== null ? (
+          <span className={styles.score}>{Math.round(job.score)} 分</span>
+        ) : null}
       </div>
       <div className={styles.title}>{job.title}</div>
       {job.locations.length > 0 ? (

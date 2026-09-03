@@ -516,6 +516,15 @@
   white-space: pre-wrap;
 }
 
+.resume-preview-skills {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.resume-preview-skills li + li {
+  margin-top: 0.3rem;
+}
+
 @media (max-width: 1100px) {
   .resume-editor-layout,
   .resume-editor-layout.is-outline-collapsed {

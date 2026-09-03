@@ -112,6 +112,13 @@ function modelOutput(request: ModelRequest): unknown {
         evidenceRefs: [evidence(text, 'Coding Agent')],
       },
     ],
+    professionalSkills: [
+      {
+        value: '使用 ReAct 推理循环、MCP 工具延迟加载和上下文压缩。',
+        confidence: 0.95,
+        evidenceRefs: [evidence(text, 'ReAct 推理循环、MCP 工具延迟加载和上下文压缩')],
+      },
+    ],
     skills: [
       {
         value: { name: 'ReAct', level: 'proficient' },
@@ -241,6 +248,7 @@ describe('resume profile Agent pipeline', () => {
     expect(result.extractionMethod).toBe('llm');
     expect(profiles.getCurrent(profile.id)?.effective).toMatchObject({
       targetRoles: ['Agent 开发'],
+      professionalSkills: '使用 ReAct 推理循环、MCP 工具延迟加载和上下文压缩。',
       skills: [{ name: 'ReAct' }, { name: 'RAG' }],
     });
     expect(model.requests[0]?.input).toEqual({ extractedText: resumeText });
@@ -271,6 +279,7 @@ describe('resume profile Agent pipeline', () => {
       effective: {
         targetRoles: ['后端研发'],
         projects: [{ name: '任务调度系统', role: '后端负责人' }],
+        professionalSkills: '编程语言包括TypeScript、Python。',
         skills: [{ name: 'TypeScript' }, { name: 'Python' }],
       },
     });

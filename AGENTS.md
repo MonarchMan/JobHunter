@@ -9,3 +9,14 @@
 3. **按 SDD 推进变更。** 新能力先建立或更新 `spec.md`、`design.md` 和 `tasks.md`，再实现代码与测试；影响依赖方向、数据所有权、进程职责或核心技术选型的变更，必须先更新总体架构并新增 ADR。实现、测试和文档应引用同一术语与验收标准。
 
 4. **维持统一工程约束。** 使用 TypeScript 严格模式和 pnpm workspace；外部输入与模型输出在边界处进行运行时校验；持久化通过仓储端口访问；网络或模型调用不得发生在数据库事务内；耗时及可重试工作交给 Worker；每项变更至少运行与风险相匹配的格式检查、类型检查和自动化测试。
+
+5. **统一 Git 提交说明。** 提交信息首行使用一句简洁、完整的话概括本次提交的主要目的；空一行后，在正文中按 Conventional Commits 类型逐项展开实际变更，格式为 `<type>(<scope>): <description>`。优先使用 `feat`（新增功能）、`fix`、`docs`、`refactor`、`test`、`chore`、`build`、`ci`、`perf`、`style` 或 `revert`，不要使用含义不够标准的 `add` 代替 `feat`。只列出本次提交真实包含的类型，描述使用明确的动宾短语；存在不兼容变更时按 Conventional Commits 使用 `!` 并在正文中补充 `BREAKING CHANGE:`。示例：
+
+   ```text
+   完善简历制作页的直接编辑与导出体验
+
+   feat(resume-studio): 支持在简历画布中直接编辑字段
+   fix(resume-import): 将专业技能归一化为完整句子列表
+   test(resume-studio): 覆盖工具栏与画布中心对齐
+   docs(spec): 同步简历制作交互规范
+   ```

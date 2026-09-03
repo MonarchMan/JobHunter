@@ -13,6 +13,7 @@ JobHunter is a personal job hunting workbench that syncs job postings from compa
 ## Common Commands
 
 ### Setup & Initialization
+
 ```bash
 pnpm install
 cp .env.example .env  # Edit to configure model provider if needed
@@ -22,6 +23,7 @@ node apps/cli/dist/main.js doctor
 ```
 
 ### Development
+
 ```bash
 # Start web console (auto-launches worker)
 pnpm --filter @jobhunter/web dev  # http://127.0.0.1:3210
@@ -34,6 +36,7 @@ pnpm build
 ```
 
 ### Testing & Validation
+
 ```bash
 pnpm typecheck           # Type check all packages
 pnpm test                # Unit tests
@@ -45,6 +48,7 @@ pnpm check               # Run all checks (format, lint, typecheck, test, bounda
 ```
 
 ### CLI Operations
+
 ```bash
 # After building CLI
 node apps/cli/dist/main.js <command>
@@ -87,6 +91,7 @@ var/            - Local runtime data (not committed)
 ```
 
 **Dependency Rules (Enforced by `pnpm boundaries`):**
+
 1. `apps/` may import from `packages/` but not from other apps
 2. `domain/` has NO dependencies on application, db, browser, model SDKs, or any infrastructure
 3. `application/` declares ports (interfaces), never imports infrastructure implementations
@@ -110,6 +115,7 @@ var/            - Local runtime data (not committed)
 ### Specification-Driven Development (SDD)
 
 **Before implementing any feature:**
+
 1. Create or update `spec.md` in `specs/<feature-id>/` with requirements
 2. Create `design.md` with technical design
 3. Create `tasks.md` with implementation tasks
@@ -128,6 +134,7 @@ All specs must be in `Ready` state before implementation begins.
 ### Code Quality Gates
 
 Every change must pass:
+
 - `pnpm format:check` - Prettier formatting
 - `pnpm lint` - ESLint
 - `pnpm typecheck` - TypeScript strict mode
@@ -140,6 +147,7 @@ Run `pnpm check` to execute all gates.
 ## Design System (DESIGN.md)
 
 The web interface follows a restrained "档案工作台" (archive workbench) design:
+
 - **Colors:** Archive indigo (`primary`) for main actions, coral (`action`) for decision cursor (next-step highlights only)
 - **NO green brand colors** - Health status is the only exception with dedicated `health-*` tokens
 - **Typography:** 16px base for prose, 14px for dense tables. Chinese uses Inter + Noto Sans SC
@@ -151,6 +159,7 @@ Key components use specific variants detailed in DESIGN.md (e.g., "准备档案�
 ## Environment Configuration
 
 Copy `.env.example` to `.env` and configure:
+
 - `JOBHUNTER_DATA_ROOT=./var` - Local data directory
 - `JOBHUNTER_LOG_LEVEL=info` - Logging level
 - Model provider (optional, only for AI features):
@@ -159,6 +168,7 @@ Copy `.env.example` to `.env` and configure:
 - Browser path (optional): `JOBHUNTER_BROWSER_EXECUTABLE` - Auto-detects Chrome/Edge on macOS/Windows
 
 Install Playwright Chromium if system browser not available:
+
 ```bash
 pnpm exec playwright install chromium
 ```

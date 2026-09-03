@@ -6,6 +6,7 @@ export * from './rule-profile-extractor.js';
 export * from './resume-polish-agent.js';
 export * from './profile-schema/index.js';
 export * from './prompts/resume-profile/v1.js';
+export * from './prompts/resume-profile/v2.js';
 export * from './prompts/resume-polish/v1.js';
 
 /** Public package identifier used by composition smoke tests. */

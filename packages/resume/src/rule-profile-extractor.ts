@@ -220,6 +220,16 @@ function plainValues(lines: readonly SourceLine[]): readonly string[] {
   return lines.map((line) => stripBullet(line).text).filter(Boolean);
 }
 
+function professionalSkillSentences(lines: readonly SourceLine[]): readonly string[] {
+  return plainValues(lines).map((value) => {
+    if (/[。！？.!?]$/u.test(value)) return value;
+    if (/(?:精通|熟悉|掌握|了解|使用|具备|能够|擅长|负责)/u.test(value)) return `${value}。`;
+    const category = /^([^：:]{1,16})[：:](.+)$/u.exec(value);
+    if (category?.[1] && category[2]) return `${category[1]}包括${category[2].trim()}。`;
+    return `相关技能包括${value}。`;
+  });
+}
+
 function targetRoles(section: Section): readonly string[] {
   return plainValues(section.lines).flatMap((line) =>
     line
@@ -311,7 +321,7 @@ export function extractResumeProfileByRules(
       const value = parseSkills(section);
       if (!value) return { kind: 'fallback', reason: 'unstructured_skills' };
       profile.skills = value;
-      profile.professionalSkills = plainValues(section.lines).join('\n');
+      profile.professionalSkills = professionalSkillSentences(section.lines).join('\n');
     } else if (section.key === 'selfEvaluation') {
       profile.selfEvaluation = plainValues(section.lines).join('\n');
     } else if (section.key === 'works') {

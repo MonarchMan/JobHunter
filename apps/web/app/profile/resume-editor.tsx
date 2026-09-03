@@ -30,6 +30,18 @@ const list = (value: string): string[] =>
     .split(/[，,\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+const professionalSkillSentences = (value: string | null | undefined): string[] =>
+  (value ?? '')
+    .split(/\r?\n|(?<=[。；;])\s*/u)
+    .map((item) => item.replace(/^\s*[-•·]\s*/u, '').trim())
+    .filter(Boolean);
+const fallbackProfessionalSkills = (profile: Draft): string | null => {
+  const sentences: string[] = [];
+  if (profile.skills.length > 0)
+    sentences.push(`技术技能：${profile.skills.map((skill) => skill.name).join('、')}。`);
+  if (profile.domains.length > 0) sentences.push(`相关领域：${profile.domains.join('、')}。`);
+  return sentences.length > 0 ? sentences.join('\n') : null;
+};
 const filled = (value: string | null | undefined): value is string => Boolean(value?.trim());
 const meaningful = (value: string | null | undefined): value is string =>
   filled(value) && !value.startsWith('待填写');
@@ -143,9 +155,7 @@ function prepareDraft(profile: Draft): Draft {
       startDate: dateInputValue(item.startDate),
       endDate: dateInputValue(item.endDate),
     })),
-    professionalSkills:
-      profile.professionalSkills ??
-      ([...profile.skills.map((skill) => skill.name), ...profile.domains].join('、') || null),
+    professionalSkills: profile.professionalSkills ?? fallbackProfessionalSkills(profile),
   };
 }
 
@@ -512,7 +522,11 @@ function ResumePreview({ draft: source }: Readonly<{ draft: Draft }>): ReactElem
       ) : null}
       {filled(draft.professionalSkills) ? (
         <PreviewSection title="专业技能">
-          <p className={styles['resume-preview-copy']}>{draft.professionalSkills}</p>
+          <ul className={styles['resume-preview-skills']}>
+            {professionalSkillSentences(draft.professionalSkills).map((skill) => (
+              <li key={skill}>{skill}</li>
+            ))}
+          </ul>
         </PreviewSection>
       ) : null}
       {filled(draft.selfEvaluation) ? (

@@ -134,6 +134,8 @@ async function loadProfileFromFakeModel(): Promise<CandidateProfileData> {
       },
     ],
     domains: ['大模型应用', 'Agent'],
+    professionalSkills:
+      '熟练使用 TypeScript 构建类型安全的前端应用。\n具备大模型应用与 Agent 工作流开发经验。',
     yearsOfExperience: null,
     managementExperience: null,
   });

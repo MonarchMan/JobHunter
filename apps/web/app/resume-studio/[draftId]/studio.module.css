@@ -83,34 +83,97 @@
 .stale button {
   flex: none;
 }
+.formatToolbar {
+  position: sticky;
+  z-index: 7;
+  top: 4.5rem;
+  display: grid;
+  grid-template-columns: 10rem minmax(0, 1fr) auto minmax(0, 1fr);
+  min-height: 4rem;
+  align-items: center;
+  gap: 0;
+  padding: 0.55rem 1.2rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  background: rgb(249 250 252 / 97%);
+  scrollbar-width: thin;
+}
+.selectionHint {
+  display: grid;
+  grid-column: 1;
+  justify-self: start;
+  min-width: 10rem;
+  padding-right: 0.8rem;
+  border-right: 1px solid var(--line);
+}
+.selectionHint span {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+}
+.formatControls {
+  display: flex;
+  grid-column: 3;
+  align-items: center;
+  justify-self: center;
+  gap: 0.75rem;
+}
+.formatControl {
+  display: grid;
+  grid-template-columns: auto 1.9rem 3.4rem 1.9rem;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: max-content;
+}
+.formatControl > span {
+  margin-right: 0.2rem;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.formatControl button {
+  display: grid;
+  min-width: 1.9rem;
+  min-height: 1.9rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+}
+.formatControl output {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  text-align: center;
+}
+.entryActions {
+  display: flex;
+  grid-column: 4;
+  justify-self: end;
+  gap: 0.4rem;
+}
 .workspace {
   display: grid;
-  grid-template-columns: minmax(19rem, 24rem) minmax(0, 1fr);
+  grid-template-columns: 10rem minmax(0, 1fr);
   align-items: start;
 }
 .sidebar {
   position: sticky;
-  top: 4.5rem;
-  display: grid;
-  grid-template-columns: 8.5rem minmax(0, 1fr);
-  height: calc(100vh - 4.5rem);
+  top: 8.5rem;
+  height: calc(100vh - 8.5rem);
   border-right: 1px solid var(--line);
-  background: var(--surface);
-}
-.sidebar > div {
-  min-width: 0;
-  min-height: 0;
-}
-.stale + .workspace .sidebar {
-  top: 8rem;
-  height: calc(100vh - 8rem);
+  background: var(--canvas);
 }
 .tabs {
   overflow: auto;
   padding: 0.85rem 0.55rem;
-  border-right: 1px solid var(--line);
-  background: var(--canvas);
   scrollbar-gutter: stable;
+}
+.tabs p {
+  margin: 0.25rem 0.65rem 0.55rem;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
 }
 .tabs button {
   position: relative;
@@ -139,75 +202,17 @@
   background: var(--action);
   content: '';
 }
-.form {
-  height: 100%;
-  overflow: auto;
-  padding: 1rem;
-  scrollbar-gutter: stable;
-}
-.form > header {
-  margin-bottom: 1rem;
-}
-.form h1 {
-  margin: 0;
-  font-size: 1.2rem;
-}
-.form header p {
-  margin: 0.3rem 0 0;
-  color: var(--ink-muted);
-  font-size: 0.82rem;
-}
-.form label {
-  display: grid;
-  gap: 0.4rem;
-  margin-bottom: 0.8rem;
-  color: var(--ink);
-  font-size: 0.88rem;
-}
-.form input,
-.form textarea {
-  width: 100%;
-  font: inherit;
-}
-.form textarea {
-  min-height: 8rem;
-}
-.fieldGrid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.15rem;
-}
-.avatarField span {
-  color: var(--ink-muted);
-  font-size: 0.75rem;
-}
-.repeater {
-  display: grid;
-  gap: 0.8rem;
-}
-.repeaterHeading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  color: var(--ink-muted);
-  font-size: 0.8rem;
-}
-.entry {
-  display: grid;
-  gap: 0.55rem;
-  padding: 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--canvas);
-}
-.entry > button {
-  justify-self: end;
-}
 .canvas {
-  min-height: calc(100vh - 4.5rem);
+  min-height: calc(100vh - 8.5rem);
   padding: 1.5rem;
   overflow: auto;
+}
+.canvasHint {
+  width: min(210mm, 100%);
+  margin: 0 auto 0.65rem;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  text-align: right;
 }
 .paperFrame {
   width: min(210mm, 100%);
@@ -261,11 +266,13 @@
     justify-content: flex-start;
     text-align: left;
   }
+  .formatToolbar {
+    display: flex;
+  }
   .workspace {
     display: block;
   }
-  .sidebar,
-  .stale + .workspace .sidebar {
+  .sidebar {
     position: static;
     display: block;
     width: 100%;
@@ -275,21 +282,19 @@
   .tabs {
     position: sticky;
     z-index: 4;
-    top: 6.3rem;
+    top: 10.3rem;
     display: flex;
     overflow-x: auto;
     padding: 0.5rem;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
+  .tabs p {
+    display: none;
+  }
   .tabs button {
     width: auto;
     min-width: max-content;
-  }
-  .form {
-    height: auto;
-    overflow: visible;
-    padding: 1rem;
   }
   .canvas {
     min-height: 0;
@@ -315,16 +320,24 @@
 }
 @media (max-width: 560px) {
   .topbar {
+    position: static;
+    grid-template-columns: 1fr;
     gap: 0.5rem;
     padding: 0.6rem;
   }
   .back {
+    justify-self: start;
     font-size: 0.82rem;
   }
+  .saveState {
+    grid-column: 1;
+  }
   .exportActions {
+    width: 100%;
     gap: 0.35rem;
   }
   .exportActions button {
+    flex: 1;
     min-width: 0;
     padding: 0.65rem;
     font-size: 0.78rem;
@@ -336,11 +349,19 @@
   .stale button {
     width: 100%;
   }
-  .form {
-    padding: 0.85rem;
+  .formatToolbar {
+    position: static;
+    display: flex;
+    padding: 0.5rem 0.65rem;
+  }
+  .selectionHint {
+    min-width: 8.5rem;
   }
   .paperFrame iframe {
     height: 65vh;
+  }
+  .tabs {
+    position: static;
   }
   .dialog > div {
     display: grid;

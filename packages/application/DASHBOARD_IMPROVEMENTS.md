@@ -5,18 +5,20 @@
 ### 1. 数据层扩展
 
 **packages/application/src/contracts/web.ts**
+
 - 新增 `WebDashboardNextAction` 类型：决策光标数据结构
   - `create_profile`: 提示建立画像
   - `enable_sources`: 提示启用来源
   - `review_matches`: 显示新匹配职位（包含 top job 预览）
   - `handle_failures`: 显示失败任务数量
   - `all_good`: 一切正常状态
-  
+
 - 新增 `WebDashboardHighlightJob` 类型：高亮职位卡片数据
   - 包含公司名、职位名、地点、分数、匹配原因、发布时间
   - `isNew` 标记 7 天内新增职位
 
 **packages/db/src/dashboard-read-model.ts**
+
 - 扩展 `snapshot()` 方法，计算下一步行动和高亮职位
 - `#computeNextAction()`: 智能决策逻辑
   1. 优先级 1: 没有画像 → 引导建立画像
@@ -24,7 +26,7 @@
   3. 优先级 3: 有失败任务 → 提示处理失败
   4. 优先级 4: 有新的高分职位（7天内，≥80分）→ 突出显示待查看数量
   5. 否则: 显示"一切正常"
-  
+
 - `#getHighlightJobs()`: 获取最近 7 天内新增或更新的前 5 个职位
   - 按匹配分数降序排序
   - 同时查询匹配原因（前 3 个得分最高的维度）
@@ -32,12 +34,14 @@
 ### 2. 前端组件
 
 **apps/web/app/components/dashboard-next-action.tsx**
+
 - 决策光标组件，用 3px 珊瑚色边框突出显示
 - 根据不同 action 类型渲染不同内容
 - `review_matches` 类型会预览得分最高的职位
 - 响应式设计：移动端垂直布局
 
 **apps/web/app/components/dashboard-highlight-jobs.tsx**
+
 - 值得关注的职位网格
 - 每个职位卡片显示：
   - 公司名 + "新"标签（7天内）
@@ -52,11 +56,13 @@
 ### 3. 首页布局更新
 
 **apps/web/app/page.tsx**
+
 - 在 Hero 之后立即显示决策光标（如果有）
 - 在"工作台概览"之后显示"值得关注的职位"
 - 保留原有的指标卡、三步引导、最近同步
 
 **新的视觉层次：**
+
 ```
 Hero（保持原样）
   ↓

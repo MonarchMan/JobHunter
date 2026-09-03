@@ -68,6 +68,7 @@ describe('Web resume template composition', () => {
         const editedContent = {
           ...technical.draft.content,
           selfEvaluation: '模板草稿中的独立修改',
+          formatting: { work: { fontSize: 13, letterSpacing: 0.5, lineHeight: 1.5 } },
         };
         const edited = await service.save(technical.draft.id, 0, editedContent);
         await expect(service.save(technical.draft.id, 0, editedContent)).rejects.toBeInstanceOf(
@@ -101,6 +102,11 @@ describe('Web resume template composition', () => {
         expect((await service.detail(technical.draft.id)).stale).toBe(true);
         const refreshed = await service.refresh(technical.draft.id, withAvatar.draft.revision);
         expect(refreshed.draft.content.selfEvaluation).toBe('在线简历的新内容');
+        expect(refreshed.draft.content.formatting?.work).toEqual({
+          fontSize: 13,
+          letterSpacing: 0.5,
+          lineHeight: 1.5,
+        });
         expect(refreshed.avatarDataUrl).toBe(withAvatar.avatarDataUrl);
 
         const html = await service.export({
@@ -111,7 +117,7 @@ describe('Web resume template composition', () => {
         });
         const delivered = await service.deliver(technical.draft.id, html.id);
         expect(new TextDecoder().decode(delivered.bytes)).toContain('在线简历的新内容');
-        expect(delivered.fileName).toMatch(/模板候选人-技术蓝图-\d{8}\.html$/u);
+        expect(delivered.fileName).toMatch(/模板候选人-简洁单页-\d{8}\.html$/u);
         expect(() => service.getExport(technical.draft.id, html.id)).toThrow(
           ResumeTemplateNotFoundError,
         );

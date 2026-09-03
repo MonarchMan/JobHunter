@@ -7,8 +7,9 @@ import {
   resumeSectionLabels,
   type ResumeDocumentContent,
   type ResumeSectionId,
+  type ResumeTextStyle,
 } from '@jobhunter/resume-template';
-import type { ChangeEvent, ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../src/client/csrf.js';
 import styles from './studio.module.css';
@@ -17,101 +18,27 @@ interface Envelope<T> {
   readonly data?: T;
   readonly error?: { readonly code?: string; readonly message?: string };
 }
+
 type SaveState = 'saved' | 'dirty' | 'saving' | 'failed' | 'conflict';
-const text = (value: string): string | null => value.trim() || null;
-const lines = (value: string): string[] =>
-  value
-    .split('\n')
-    .map((item) => item.trim())
-    .filter(Boolean);
+type StudioSectionId = Exclude<ResumeSectionId, 'target'>;
+type RepeatableSectionId =
+  'education' | 'work' | 'projects' | 'works' | 'competitions' | 'certificates' | 'languages';
 
-function Field({
-  label,
-  value,
-  onChange,
-  type = 'text',
-}: Readonly<{
-  label: string;
-  value: string | null;
-  onChange: (value: string | null) => void;
-  type?: string;
-}>): ReactElement {
-  return (
-    <label>
-      {label}
-      <input
-        type={type}
-        value={value ?? ''}
-        onChange={(event) => {
-          onChange(text(event.currentTarget.value));
-        }}
-      />
-    </label>
-  );
-}
-
-function TextArea({
-  label,
-  value,
-  onChange,
-  rows = 6,
-}: Readonly<{
-  label: string;
-  value: string | null;
-  onChange: (value: string | null) => void;
-  rows?: number;
-}>): ReactElement {
-  return (
-    <label>
-      {label}
-      <textarea
-        className="resize-none"
-        rows={rows}
-        value={value ?? ''}
-        onChange={(event) => {
-          onChange(text(event.currentTarget.value));
-        }}
-      />
-    </label>
-  );
-}
-
-function Repeater({
-  title,
-  count,
-  onAdd,
-  children,
-}: Readonly<{
-  title: string;
-  count: number;
-  onAdd: () => void;
-  children: ReactNode;
-}>): ReactElement {
-  return (
-    <div className={styles.repeater}>
-      <div className={styles.repeaterHeading}>
-        <span>
-          {count} 条{title}
-        </span>
-        <button type="button" className="button-secondary" onClick={onAdd}>
-          添加{title}
-        </button>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function RemoveButton({
-  label,
-  onClick,
-}: Readonly<{ label: string; onClick: () => void }>): ReactElement {
-  return (
-    <button type="button" className="button-muted" onClick={onClick}>
-      删除{label}
-    </button>
-  );
-}
+const studioSectionIds = resumeSectionIds.filter(
+  (section): section is StudioSectionId => section !== 'target',
+);
+const repeatableSections: readonly RepeatableSectionId[] = [
+  'education',
+  'work',
+  'projects',
+  'works',
+  'competitions',
+  'certificates',
+  'languages',
+];
+const onePageDefault: ResumeTextStyle = { fontSize: 12, letterSpacing: 0, lineHeight: 1.42 };
+const standardDefault: ResumeTextStyle = { fontSize: 14, letterSpacing: 0, lineHeight: 1.55 };
+const rounded = (value: number): number => Math.round(value * 100) / 100;
 
 function ConfirmRefresh({
   onCancel,
@@ -120,6 +47,7 @@ function ConfirmRefresh({
 }: Readonly<{ onCancel: () => void; onConfirm: () => void; busy: boolean }>): ReactElement {
   const cancel = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     cancel.current?.focus();
     const keydown = (event: KeyboardEvent): void => {
@@ -143,6 +71,7 @@ function ConfirmRefresh({
       document.removeEventListener('keydown', keydown);
     };
   }, [busy, onCancel]);
+
   return (
     <div className={styles.backdrop}>
       <div
@@ -173,18 +102,83 @@ function ConfirmRefresh({
   );
 }
 
+function FormatControl({
+  label,
+  value,
+  unit,
+  onDecrease,
+  onIncrease,
+}: Readonly<{
+  label: string;
+  value: number;
+  unit: string;
+  onDecrease: () => void;
+  onIncrease: () => void;
+}>): ReactElement {
+  return (
+    <div className={styles.formatControl} role="group" aria-label={label}>
+      <span>{label}</span>
+      <button type="button" onClick={onDecrease} aria-label={`减小${label}`}>
+        −
+      </button>
+      <output aria-live="polite">
+        {value}
+        {unit}
+      </output>
+      <button type="button" onClick={onIncrease} aria-label={`增大${label}`}>
+        ＋
+      </button>
+    </div>
+  );
+}
+
+function setValueAtPath(
+  content: ResumeDocumentContent,
+  path: string,
+  value: string,
+): ResumeDocumentContent {
+  if (path === 'targetRoles') {
+    return {
+      ...content,
+      targetRoles: value
+        .split(/[/，,]/u)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    };
+  }
+  const next = structuredClone(content);
+  const segments = path.split('.');
+  let cursor: unknown = next;
+  for (const segment of segments.slice(0, -1)) {
+    if (Array.isArray(cursor)) cursor = cursor[Number(segment)];
+    else if (cursor && typeof cursor === 'object')
+      cursor = (cursor as Record<string, unknown>)[segment];
+  }
+  const final = segments.at(-1);
+  if (!final) return next;
+  if (Array.isArray(cursor)) cursor[Number(final)] = value.trim();
+  else if (cursor && typeof cursor === 'object')
+    (cursor as Record<string, unknown>)[final] = value.trim();
+  return next;
+}
+
+function eventElement(event: Event): HTMLElement | null {
+  const target = event.target as Partial<HTMLElement> | null;
+  return target && typeof target.closest === 'function' ? (target as HTMLElement) : null;
+}
+
 export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail }>): ReactElement {
   const [content, setContent] = useState(initial.draft.content);
   const [revision, setRevision] = useState(initial.draft.revision);
   const [stale, setStale] = useState(initial.stale);
-  const [avatar, setAvatar] = useState(initial.avatarDataUrl);
-  const [active, setActive] = useState<ResumeSectionId>('basic');
+  const [active, setActive] = useState<StudioSectionId>('basic');
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [message, setMessage] = useState('已保存');
   const [showRefresh, setShowRefresh] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState<'pdf' | 'html' | null>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
+  const pendingContent = useRef(initial.draft.content);
   const savedJson = useRef(JSON.stringify(initial.draft.content));
   const revisionRef = useRef(initial.draft.revision);
   const saveQueue = useRef(Promise.resolve(true));
@@ -195,22 +189,17 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
         templateKey: initial.draft.templateKey,
         templateVersion: initial.draft.templateVersion,
         content,
-        avatarDataUrl: avatar,
-        activeSection: active,
+        avatarDataUrl: initial.avatarDataUrl,
+        interactive: true,
       }),
-    [active, avatar, content, initial.draft.templateKey, initial.draft.templateVersion],
+    [content, initial.avatarDataUrl, initial.draft.templateKey, initial.draft.templateVersion],
   );
 
-  const change = (next: ResumeDocumentContent): void => {
-    setContent(next);
-    setSaveState('dirty');
-    setMessage('有尚未保存的修改');
-  };
-
-  const save = async (next = content): Promise<boolean> => {
+  const save = async (next = pendingContent.current): Promise<boolean> => {
     const snapshot = JSON.stringify(next);
     if (snapshot === savedJson.current) return true;
     const perform = async (): Promise<boolean> => {
+      if (snapshot === savedJson.current) return true;
       setSaveState('saving');
       setMessage('正在保存…');
       try {
@@ -243,79 +232,92 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
     return queued;
   };
 
-  const structural = (next: ResumeDocumentContent): void => {
-    change(next);
-    void save(next);
+  const replaceContent = (next: ResumeDocumentContent, saveImmediately = false): void => {
+    pendingContent.current = next;
+    setContent(next);
+    setSaveState('dirty');
+    setMessage('有尚未保存的修改');
+    if (saveImmediately) void save(next);
   };
 
-  const updateBasic = (
-    key: keyof ResumeDocumentContent['basicInfo'],
-    value: string | null,
-  ): void => {
-    change({ ...content, basicInfo: { ...content.basicInfo, [key]: value } });
-  };
-  const removeAt = (
-    key:
-      | 'education'
-      | 'workExperience'
-      | 'projects'
-      | 'works'
-      | 'competitions'
-      | 'certificates'
-      | 'languages',
-    index: number,
-  ): void => {
-    structural({ ...content, [key]: content[key].filter((_, itemIndex) => itemIndex !== index) });
+  const markSection = (section: StudioSectionId, focus = false): void => {
+    const canvasDocument = iframe.current?.contentDocument;
+    if (!canvasDocument) return;
+    for (const element of canvasDocument.querySelectorAll('.is-active'))
+      element.classList.remove('is-active');
+    const selected = canvasDocument.querySelector<HTMLElement>(`[data-section-id="${section}"]`);
+    selected?.classList.add('is-active');
+    selected?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (focus) selected?.querySelector<HTMLElement>('[data-field]')?.focus();
   };
 
-  const switchSection = (section: ResumeSectionId): void => {
+  const switchSection = (section: StudioSectionId, focus = false): void => {
     setActive(section);
-    window.setTimeout(
-      () =>
-        iframe.current?.contentDocument
-          ?.querySelector(`[data-section-id="${section}"]`)
-          ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-      20,
-    );
+    window.setTimeout(() => {
+      markSection(section, focus);
+    }, 20);
   };
+
+  useEffect(() => {
+    const frame = iframe.current;
+    if (!frame) return;
+    const connect = (): void => {
+      const canvasDocument = frame.contentDocument;
+      if (!canvasDocument) return;
+      markSection(active);
+      canvasDocument.addEventListener('click', (event) => {
+        const target = eventElement(event);
+        const section = target?.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId;
+        if (!studioSectionIds.includes(section as StudioSectionId)) return;
+        setActive(section as StudioSectionId);
+        markSection(section as StudioSectionId);
+      });
+      canvasDocument.addEventListener('focusin', (event) => {
+        const target = eventElement(event);
+        if (!target) return;
+        const section = target.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId;
+        if (!studioSectionIds.includes(section as StudioSectionId)) return;
+        setActive(section as StudioSectionId);
+        markSection(section as StudioSectionId);
+      });
+      canvasDocument.addEventListener('input', (event) => {
+        const target = eventElement(event);
+        if (!target) return;
+        const editable = target.closest<HTMLElement>('[data-field]');
+        const field = editable?.dataset.field;
+        if (!field) return;
+        pendingContent.current = setValueAtPath(
+          pendingContent.current,
+          field,
+          field === 'professionalSkills' ? editable.innerText : editable.textContent,
+        );
+        setSaveState('dirty');
+        setMessage('有尚未保存的修改');
+      });
+      canvasDocument.addEventListener('focusout', (event) => {
+        const target = eventElement(event);
+        if (!target?.closest('[data-field]')) return;
+        setContent(pendingContent.current);
+        void save(pendingContent.current);
+      });
+      canvasDocument.addEventListener('keydown', (event) => {
+        const target = eventElement(event);
+        if (!target) return;
+        if (event.key === 'Enter' && !target.closest('[data-multiline]')) event.preventDefault();
+      });
+    };
+    frame.addEventListener('load', connect);
+    connect();
+    return () => {
+      frame.removeEventListener('load', connect);
+    };
+  }, [html]);
 
   const leaveStudio = async (): Promise<void> => {
-    if (await save(content))
+    if (await save())
       window.location.assign(
         `/profile?profile=${encodeURIComponent(initial.draft.profileId)}#resume-basic`,
       );
-  };
-
-  const uploadAvatar = async (event: ChangeEvent<HTMLInputElement>): Promise<void> => {
-    const file = event.currentTarget.files?.[0];
-    if (!file) return;
-    if (!['image/jpeg', 'image/png'].includes(file.type) || file.size > 5 * 1024 * 1024) {
-      setSaveState('failed');
-      setMessage('头像仅支持不超过 5 MiB 的 JPEG 或 PNG。');
-      return;
-    }
-    setSaveState('saving');
-    setMessage('正在保存头像…');
-    const form = new FormData();
-    form.set('avatar', file);
-    form.set('expectedRevision', String(revisionRef.current));
-    try {
-      const response = await fetch(`/api/resume-drafts/${initial.draft.id}/avatar`, {
-        method: 'POST',
-        headers: await mutationHeaders(false),
-        body: form,
-      });
-      const body = (await response.json()) as Envelope<ResumeDraftDetail>;
-      if (!response.ok || !body.data) throw new Error(body.error?.message ?? '头像保存失败。');
-      revisionRef.current = body.data.draft.revision;
-      setRevision(body.data.draft.revision);
-      setAvatar(body.data.avatarDataUrl);
-      setSaveState('saved');
-      setMessage('头像已保存');
-    } catch (cause) {
-      setSaveState('failed');
-      setMessage(cause instanceof Error ? cause.message : '头像保存失败。');
-    }
   };
 
   const refresh = async (): Promise<void> => {
@@ -328,6 +330,7 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
       });
       const body = (await response.json()) as Envelope<ResumeDraftDetail>;
       if (!response.ok || !body.data) throw new Error(body.error?.message ?? '重新生成失败。');
+      pendingContent.current = body.data.draft.content;
       setContent(body.data.draft.content);
       savedJson.current = JSON.stringify(body.data.draft.content);
       revisionRef.current = body.data.draft.revision;
@@ -345,9 +348,7 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
   };
 
   const exportResume = async (format: 'pdf' | 'html'): Promise<void> => {
-    if (saveState === 'conflict') return;
-    const saved = await save(content);
-    if (!saved) return;
+    if (saveState === 'conflict' || !(await save())) return;
     setExporting(format);
     setMessage(format === 'pdf' ? '正在生成 PDF…' : '正在生成 HTML…');
     try {
@@ -369,15 +370,16 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
         attempt += 1
       ) {
         await new Promise((resolve) => window.setTimeout(resolve, 1000));
-        const poll = await fetch(`/api/resume-drafts/${initial.draft.id}/exports/${status.id}`, {
-          cache: 'no-store',
-        });
-        const polled = (await poll.json()) as Envelope<{
+        const response = await fetch(
+          `/api/resume-drafts/${initial.draft.id}/exports/${status.id}`,
+          { cache: 'no-store' },
+        );
+        const polled = (await response.json()) as Envelope<{
           id: string;
           status: string;
           errorSummary?: string | null;
         }>;
-        if (!poll.ok || !polled.data)
+        if (!response.ok || !polled.data)
           throw new Error(polled.error?.message ?? '无法读取 PDF 生成状态。');
         status = polled.data;
         if (status.status === 'failed')
@@ -399,539 +401,130 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
     }
   };
 
-  const sectionForm = (): ReactElement => {
+  const defaultStyle =
+    initial.draft.templateKey === 'technical-blueprint' ? onePageDefault : standardDefault;
+  const activeStyle = content.formatting?.[active] ?? defaultStyle;
+  const applyStyle = (patch: Partial<ResumeTextStyle>): void => {
+    replaceContent(
+      {
+        ...pendingContent.current,
+        formatting: {
+          ...pendingContent.current.formatting,
+          [active]: { ...activeStyle, ...patch },
+        },
+      },
+      true,
+    );
+  };
+  const resetStyle = (): void => {
+    const formatting = Object.fromEntries(
+      Object.entries(pendingContent.current.formatting ?? {}).filter(
+        ([section]) => section !== active,
+      ),
+    ) as ResumeDocumentContent['formatting'];
+    replaceContent({ ...pendingContent.current, formatting }, true);
+  };
+
+  const activeList = repeatableSections.includes(active as RepeatableSectionId)
+    ? pendingContent.current[
+        active === 'work' ? 'workExperience' : (active as Exclude<RepeatableSectionId, 'work'>)
+      ]
+    : null;
+  const addEntry = (): void => {
+    const current = pendingContent.current;
+    let next: ResumeDocumentContent;
     switch (active) {
-      case 'basic':
-        return (
-          <div className={styles.fieldGrid}>
-            <Field
-              label="姓名"
-              value={content.basicInfo.name}
-              onChange={(value) => {
-                updateBasic('name', value);
-              }}
-            />
-            <Field
-              label="手机号码"
-              value={content.basicInfo.phone}
-              onChange={(value) => {
-                updateBasic('phone', value);
-              }}
-              type="tel"
-            />
-            <Field
-              label="邮箱"
-              value={content.basicInfo.email}
-              onChange={(value) => {
-                updateBasic('email', value);
-              }}
-              type="email"
-            />
-            <Field
-              label="所在城市"
-              value={content.basicInfo.location}
-              onChange={(value) => {
-                updateBasic('location', value);
-              }}
-            />
-            <Field
-              label="个人主页"
-              value={content.basicInfo.website}
-              onChange={(value) => {
-                updateBasic('website', value);
-              }}
-              type="url"
-            />
-            <label className={styles.avatarField}>
-              个人头像
-              <input
-                type="file"
-                accept="image/jpeg,image/png"
-                onChange={(event) => void uploadAvatar(event)}
-              />
-              <span>JPEG / PNG，不超过 5 MiB</span>
-            </label>
-          </div>
-        );
-      case 'target':
-        return (
-          <label>
-            目标岗位
-            <input
-              value={content.targetRoles.join('，')}
-              onChange={(event) => {
-                change({
-                  ...content,
-                  targetRoles: event.currentTarget.value
-                    .split(/[，,]/u)
-                    .map((item) => item.trim())
-                    .filter(Boolean),
-                });
-              }}
-            />
-          </label>
-        );
       case 'education':
-        return (
-          <Repeater
-            title="教育经历"
-            count={content.education.length}
-            onAdd={() => {
-              structural({
-                ...content,
-                education: [
-                  ...content.education,
-                  { institution: null, degree: null, field: null, startDate: null, endDate: null },
-                ],
-              });
-            }}
-          >
-            {content.education.map((item, index) => (
-              <article className={styles.entry} key={index}>
-                <div className={styles.fieldGrid}>
-                  <Field
-                    label="学校"
-                    value={item.institution}
-                    onChange={(value) => {
-                      const next = [...content.education];
-                      next[index] = { ...item, institution: value };
-                      change({ ...content, education: next });
-                    }}
-                  />
-                  <Field
-                    label="学历"
-                    value={item.degree}
-                    onChange={(value) => {
-                      const next = [...content.education];
-                      next[index] = { ...item, degree: value };
-                      change({ ...content, education: next });
-                    }}
-                  />
-                  <Field
-                    label="专业"
-                    value={item.field}
-                    onChange={(value) => {
-                      const next = [...content.education];
-                      next[index] = { ...item, field: value };
-                      change({ ...content, education: next });
-                    }}
-                  />
-                  <Field
-                    label="开始日期"
-                    type="date"
-                    value={item.startDate}
-                    onChange={(value) => {
-                      const next = [...content.education];
-                      next[index] = { ...item, startDate: value };
-                      change({ ...content, education: next });
-                    }}
-                  />
-                  <Field
-                    label="结束日期"
-                    type="date"
-                    value={item.endDate}
-                    onChange={(value) => {
-                      const next = [...content.education];
-                      next[index] = { ...item, endDate: value };
-                      change({ ...content, education: next });
-                    }}
-                  />
-                </div>
-                <RemoveButton
-                  label="教育经历"
-                  onClick={() => {
-                    removeAt('education', index);
-                  }}
-                />
-              </article>
-            ))}
-          </Repeater>
-        );
+        next = {
+          ...current,
+          education: [
+            ...current.education,
+            { institution: '', degree: '', field: '', startDate: '', endDate: '' },
+          ],
+        };
+        break;
       case 'work':
-        return (
-          <Repeater
-            title="工作经历"
-            count={content.workExperience.length}
-            onAdd={() => {
-              structural({
-                ...content,
-                workExperience: [
-                  ...content.workExperience,
-                  { organization: null, title: '', startDate: null, endDate: null, highlights: [] },
-                ],
-              });
-            }}
-          >
-            {content.workExperience.map((item, index) => (
-              <article className={styles.entry} key={index}>
-                <div className={styles.fieldGrid}>
-                  <Field
-                    label="公司 / 组织"
-                    value={item.organization}
-                    onChange={(value) => {
-                      const next = [...content.workExperience];
-                      next[index] = { ...item, organization: value };
-                      change({ ...content, workExperience: next });
-                    }}
-                  />
-                  <Field
-                    label="职位"
-                    value={item.title}
-                    onChange={(value) => {
-                      const next = [...content.workExperience];
-                      next[index] = { ...item, title: value ?? '' };
-                      change({ ...content, workExperience: next });
-                    }}
-                  />
-                  <Field
-                    label="开始日期"
-                    type="date"
-                    value={item.startDate}
-                    onChange={(value) => {
-                      const next = [...content.workExperience];
-                      next[index] = { ...item, startDate: value };
-                      change({ ...content, workExperience: next });
-                    }}
-                  />
-                  <Field
-                    label="结束日期"
-                    type="date"
-                    value={item.endDate}
-                    onChange={(value) => {
-                      const next = [...content.workExperience];
-                      next[index] = { ...item, endDate: value };
-                      change({ ...content, workExperience: next });
-                    }}
-                  />
-                </div>
-                <TextArea
-                  label="工作描述（每行一条）"
-                  value={item.highlights.join('\n')}
-                  onChange={(value) => {
-                    const next = [...content.workExperience];
-                    next[index] = { ...item, highlights: lines(value ?? '') };
-                    change({ ...content, workExperience: next });
-                  }}
-                />
-                <RemoveButton
-                  label="工作经历"
-                  onClick={() => {
-                    removeAt('workExperience', index);
-                  }}
-                />
-              </article>
-            ))}
-          </Repeater>
-        );
+        next = {
+          ...current,
+          workExperience: [
+            ...current.workExperience,
+            { organization: '', title: '', startDate: '', endDate: '', highlights: [''] },
+          ],
+        };
+        break;
       case 'projects':
-        return (
-          <Repeater
-            title="项目"
-            count={content.projects.length}
-            onAdd={() => {
-              structural({
-                ...content,
-                projects: [
-                  ...content.projects,
-                  { name: '', role: null, startDate: null, endDate: null, highlights: [] },
-                ],
-              });
-            }}
-          >
-            {content.projects.map((item, index) => (
-              <article className={styles.entry} key={index}>
-                <div className={styles.fieldGrid}>
-                  <Field
-                    label="项目名称"
-                    value={item.name}
-                    onChange={(value) => {
-                      const next = [...content.projects];
-                      next[index] = { ...item, name: value ?? '' };
-                      change({ ...content, projects: next });
-                    }}
-                  />
-                  <Field
-                    label="项目角色"
-                    value={item.role}
-                    onChange={(value) => {
-                      const next = [...content.projects];
-                      next[index] = { ...item, role: value };
-                      change({ ...content, projects: next });
-                    }}
-                  />
-                  <Field
-                    label="开始日期"
-                    type="date"
-                    value={item.startDate}
-                    onChange={(value) => {
-                      const next = [...content.projects];
-                      next[index] = { ...item, startDate: value };
-                      change({ ...content, projects: next });
-                    }}
-                  />
-                  <Field
-                    label="结束日期"
-                    type="date"
-                    value={item.endDate}
-                    onChange={(value) => {
-                      const next = [...content.projects];
-                      next[index] = { ...item, endDate: value };
-                      change({ ...content, projects: next });
-                    }}
-                  />
-                </div>
-                <TextArea
-                  label="项目描述（每行一条）"
-                  value={item.highlights.join('\n')}
-                  onChange={(value) => {
-                    const next = [...content.projects];
-                    next[index] = { ...item, highlights: lines(value ?? '') };
-                    change({ ...content, projects: next });
-                  }}
-                />
-                <RemoveButton
-                  label="项目"
-                  onClick={() => {
-                    removeAt('projects', index);
-                  }}
-                />
-              </article>
-            ))}
-          </Repeater>
-        );
+        next = {
+          ...current,
+          projects: [
+            ...current.projects,
+            { name: '', role: '', startDate: '', endDate: '', highlights: [''] },
+          ],
+        };
+        break;
       case 'works':
-        return (
-          <Repeater
-            title="作品"
-            count={content.works.length}
-            onAdd={() => {
-              structural({
-                ...content,
-                works: [...content.works, { name: '', description: null, url: null }],
-              });
-            }}
-          >
-            {content.works.map((item, index) => (
-              <article className={styles.entry} key={index}>
-                <Field
-                  label="作品名称"
-                  value={item.name}
-                  onChange={(value) => {
-                    const next = [...content.works];
-                    next[index] = { ...item, name: value ?? '' };
-                    change({ ...content, works: next });
-                  }}
-                />
-                <Field
-                  label="链接"
-                  value={item.url}
-                  onChange={(value) => {
-                    const next = [...content.works];
-                    next[index] = { ...item, url: value };
-                    change({ ...content, works: next });
-                  }}
-                />
-                <TextArea
-                  label="说明"
-                  value={item.description}
-                  onChange={(value) => {
-                    const next = [...content.works];
-                    next[index] = { ...item, description: value };
-                    change({ ...content, works: next });
-                  }}
-                />
-                <RemoveButton
-                  label="作品"
-                  onClick={() => {
-                    removeAt('works', index);
-                  }}
-                />
-              </article>
-            ))}
-          </Repeater>
-        );
+        next = { ...current, works: [...current.works, { name: '', description: '', url: '' }] };
+        break;
       case 'competitions':
-        return (
-          <Repeater
-            title="竞赛"
-            count={content.competitions.length}
-            onAdd={() => {
-              structural({
-                ...content,
-                competitions: [...content.competitions, { name: '', award: null, date: null }],
-              });
-            }}
-          >
-            {content.competitions.map((item, index) => (
-              <article className={styles.entry} key={index}>
-                <Field
-                  label="竞赛名称"
-                  value={item.name}
-                  onChange={(value) => {
-                    const next = [...content.competitions];
-                    next[index] = { ...item, name: value ?? '' };
-                    change({ ...content, competitions: next });
-                  }}
-                />
-                <Field
-                  label="奖项"
-                  value={item.award}
-                  onChange={(value) => {
-                    const next = [...content.competitions];
-                    next[index] = { ...item, award: value };
-                    change({ ...content, competitions: next });
-                  }}
-                />
-                <Field
-                  label="时间"
-                  type="date"
-                  value={item.date}
-                  onChange={(value) => {
-                    const next = [...content.competitions];
-                    next[index] = { ...item, date: value };
-                    change({ ...content, competitions: next });
-                  }}
-                />
-                <RemoveButton
-                  label="竞赛"
-                  onClick={() => {
-                    removeAt('competitions', index);
-                  }}
-                />
-              </article>
-            ))}
-          </Repeater>
-        );
+        next = {
+          ...current,
+          competitions: [...current.competitions, { name: '', award: '', date: '' }],
+        };
+        break;
       case 'certificates':
-        return (
-          <Repeater
-            title="证书"
-            count={content.certificates.length}
-            onAdd={() => {
-              structural({
-                ...content,
-                certificates: [...content.certificates, { name: '', issuer: null, date: null }],
-              });
-            }}
-          >
-            {content.certificates.map((item, index) => (
-              <article className={styles.entry} key={index}>
-                <Field
-                  label="证书名称"
-                  value={item.name}
-                  onChange={(value) => {
-                    const next = [...content.certificates];
-                    next[index] = { ...item, name: value ?? '' };
-                    change({ ...content, certificates: next });
-                  }}
-                />
-                <Field
-                  label="颁发机构"
-                  value={item.issuer}
-                  onChange={(value) => {
-                    const next = [...content.certificates];
-                    next[index] = { ...item, issuer: value };
-                    change({ ...content, certificates: next });
-                  }}
-                />
-                <Field
-                  label="取得时间"
-                  type="date"
-                  value={item.date}
-                  onChange={(value) => {
-                    const next = [...content.certificates];
-                    next[index] = { ...item, date: value };
-                    change({ ...content, certificates: next });
-                  }}
-                />
-                <RemoveButton
-                  label="证书"
-                  onClick={() => {
-                    removeAt('certificates', index);
-                  }}
-                />
-              </article>
-            ))}
-          </Repeater>
-        );
+        next = {
+          ...current,
+          certificates: [...current.certificates, { name: '', issuer: '', date: '' }],
+        };
+        break;
       case 'languages':
-        return (
-          <Repeater
-            title="语言"
-            count={content.languages.length}
-            onAdd={() => {
-              structural({
-                ...content,
-                languages: [...content.languages, { name: '', proficiency: null }],
-              });
-            }}
-          >
-            {content.languages.map((item, index) => (
-              <article className={styles.entry} key={index}>
-                <Field
-                  label="语言"
-                  value={item.name}
-                  onChange={(value) => {
-                    const next = [...content.languages];
-                    next[index] = { ...item, name: value ?? '' };
-                    change({ ...content, languages: next });
-                  }}
-                />
-                <Field
-                  label="熟练程度"
-                  value={item.proficiency}
-                  onChange={(value) => {
-                    const next = [...content.languages];
-                    next[index] = { ...item, proficiency: value };
-                    change({ ...content, languages: next });
-                  }}
-                />
-                <RemoveButton
-                  label="语言"
-                  onClick={() => {
-                    removeAt('languages', index);
-                  }}
-                />
-              </article>
-            ))}
-          </Repeater>
-        );
-      case 'skills':
-        return (
-          <TextArea
-            label="专业技能"
-            value={content.professionalSkills}
-            onChange={(value) => {
-              change({ ...content, professionalSkills: value });
-            }}
-            rows={10}
-          />
-        );
-      case 'evaluation':
-        return (
-          <TextArea
-            label="自我评价"
-            value={content.selfEvaluation}
-            onChange={(value) => {
-              change({ ...content, selfEvaluation: value });
-            }}
-            rows={10}
-          />
-        );
+        next = {
+          ...current,
+          languages: [...current.languages, { name: '', proficiency: '' }],
+        };
+        break;
+      default:
+        return;
     }
+    replaceContent(next, true);
+    window.setTimeout(() => {
+      switchSection(active, true);
+    }, 50);
+  };
+
+  const removeLastEntry = (): void => {
+    const current = pendingContent.current;
+    let next: ResumeDocumentContent;
+    switch (active) {
+      case 'education':
+        next = { ...current, education: current.education.slice(0, -1) };
+        break;
+      case 'work':
+        next = { ...current, workExperience: current.workExperience.slice(0, -1) };
+        break;
+      case 'projects':
+        next = { ...current, projects: current.projects.slice(0, -1) };
+        break;
+      case 'works':
+        next = { ...current, works: current.works.slice(0, -1) };
+        break;
+      case 'competitions':
+        next = { ...current, competitions: current.competitions.slice(0, -1) };
+        break;
+      case 'certificates':
+        next = { ...current, certificates: current.certificates.slice(0, -1) };
+        break;
+      case 'languages':
+        next = { ...current, languages: current.languages.slice(0, -1) };
+        break;
+      default:
+        return;
+    }
+    replaceContent(next, true);
   };
 
   return (
-    <main
-      id="main-content"
-      className={styles.root}
-      data-resume-studio
-      tabIndex={-1}
-      onBlur={(event) => {
-        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-          void save(content);
-      }}
-    >
+    <main id="main-content" className={styles.root} data-resume-studio tabIndex={-1}>
+      <h1 className="sr-only">{initial.template.name}简历制作</h1>
       <header className={styles.topbar}>
         <button type="button" className={styles.back} onClick={() => void leaveStudio()}>
           ← 返回个人资料
@@ -947,7 +540,7 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
         >
           <span>{message}</span>
           {saveState === 'failed' ? (
-            <button type="button" onClick={() => void save(content)}>
+            <button type="button" onClick={() => void save()}>
               重试
             </button>
           ) : null}
@@ -997,57 +590,94 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
           </button>
         </section>
       ) : null}
+      <section className={styles.formatToolbar} aria-label="简历排版工具">
+        <div className={styles.selectionHint}>
+          <strong>{resumeSectionLabels[active]}</strong>
+          <span>点击画布文字直接修改</span>
+        </div>
+        <div className={styles.formatControls} data-format-controls>
+          <FormatControl
+            label="字号"
+            value={activeStyle.fontSize}
+            unit="px"
+            onDecrease={() => {
+              applyStyle({ fontSize: Math.max(9, activeStyle.fontSize - 1) });
+            }}
+            onIncrease={() => {
+              applyStyle({ fontSize: Math.min(24, activeStyle.fontSize + 1) });
+            }}
+          />
+          <FormatControl
+            label="字距"
+            value={activeStyle.letterSpacing}
+            unit="px"
+            onDecrease={() => {
+              applyStyle({
+                letterSpacing: rounded(Math.max(-0.5, activeStyle.letterSpacing - 0.25)),
+              });
+            }}
+            onIncrease={() => {
+              applyStyle({ letterSpacing: rounded(Math.min(3, activeStyle.letterSpacing + 0.25)) });
+            }}
+          />
+          <FormatControl
+            label="行高"
+            value={activeStyle.lineHeight}
+            unit=""
+            onDecrease={() => {
+              applyStyle({ lineHeight: rounded(Math.max(1.2, activeStyle.lineHeight - 0.1)) });
+            }}
+            onIncrease={() => {
+              applyStyle({ lineHeight: rounded(Math.min(2, activeStyle.lineHeight + 0.1)) });
+            }}
+          />
+          <button type="button" className="button-secondary" onClick={resetStyle}>
+            恢复默认
+          </button>
+        </div>
+        {activeList ? (
+          <div className={styles.entryActions}>
+            <button type="button" className="button-secondary" onClick={addEntry}>
+              添加一项
+            </button>
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={activeList.length === 0}
+              onClick={removeLastEntry}
+            >
+              删除末项
+            </button>
+          </div>
+        ) : null}
+      </section>
       <div className={styles.workspace}>
         <aside className={styles.sidebar}>
-          <nav className={styles.tabs} aria-label="简历章节" role="tablist">
-            {resumeSectionIds.map((section) => (
+          <nav className={styles.tabs} aria-label="简历章节">
+            <p>选择章节并在画布内编辑</p>
+            {studioSectionIds.map((section) => (
               <button
                 key={section}
                 type="button"
-                role="tab"
-                aria-selected={active === section}
-                aria-controls="resume-section-panel"
                 className={active === section ? styles.activeTab : undefined}
+                aria-current={active === section ? 'true' : undefined}
                 onClick={() => {
-                  switchSection(section);
+                  switchSection(section, true);
                 }}
               >
                 {resumeSectionLabels[section]}
               </button>
             ))}
           </nav>
-          <div
-            id="resume-section-panel"
-            role="tabpanel"
-            aria-label={`${resumeSectionLabels[active]}编辑表单`}
-          >
-            <form
-              className={styles.form}
-              noValidate
-              onSubmit={(event) => {
-                event.preventDefault();
-              }}
-            >
-              <header>
-                <h1>{resumeSectionLabels[active]}</h1>
-                <p>修改后离开字段即可保存。</p>
-              </header>
-              {sectionForm()}
-            </form>
-          </div>
         </aside>
-        <section className={styles.canvas} aria-label="简历模板实时预览">
+        <section className={styles.canvas} aria-label="可直接编辑的简历画布">
+          <p className={styles.canvasHint}>点击任意文字块即可输入；移开焦点后自动保存。</p>
           <div className={styles.paperFrame}>
             <iframe
               ref={iframe}
-              title={`${initial.template.name}简历实时预览`}
+              title={`${initial.template.name}可编辑简历`}
               srcDoc={html}
               sandbox="allow-same-origin"
-              onLoad={() =>
-                iframe.current?.contentDocument
-                  ?.querySelector(`[data-section-id="${active}"]`)
-                  ?.scrollIntoView({ block: 'start' })
-              }
             />
           </div>
         </section>

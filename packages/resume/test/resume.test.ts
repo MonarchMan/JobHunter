@@ -12,9 +12,10 @@ import {
   parseResumePolishAgentOutput,
   parseResumeText,
   resumeProfileAgentDefinition,
-  resumeProfilePromptV1,
+  resumeProfilePromptV2,
   resumePolishAgentDefinition,
   resumePolishPromptV1,
+  toCandidateProfile,
 } from '../src/index.js';
 
 const encoder = new TextEncoder();
@@ -141,6 +142,23 @@ describe('rule-first resume profile extraction', () => {
         ],
         projects: [{ name: '任务调度系统', role: '后端负责人' }],
         skills: [{ name: 'TypeScript' }, { name: 'Python' }],
+        professionalSkills: '编程语言包括TypeScript、Python。',
+      },
+    });
+  });
+
+  it('turns skill-name rows into separate complete delivery sentences', () => {
+    const result = extractResumeProfileByRules(
+      structuredResume.replace(
+        '编程语言：TypeScript、Python',
+        '- TypeScript、React\n- Python、SQL',
+      ),
+      emptyPreferences,
+    );
+    expect(result).toMatchObject({
+      kind: 'extracted',
+      profile: {
+        professionalSkills: '相关技能包括TypeScript、React。\n相关技能包括Python、SQL。',
       },
     });
   });
@@ -160,7 +178,7 @@ describe('rule-first resume profile extraction', () => {
 describe('resume profile Agent boundary schema', () => {
   it('keeps prompt, Agent and output schema versions consistent', () => {
     expect(() => {
-      assertPromptMatchesDefinition(resumeProfilePromptV1, resumeProfileAgentDefinition);
+      assertPromptMatchesDefinition(resumeProfilePromptV2, resumeProfileAgentDefinition);
     }).not.toThrow();
   });
 
@@ -180,6 +198,13 @@ describe('resume profile Agent boundary schema', () => {
         education: [],
         workExperience: [],
         projects: [],
+        professionalSkills: [
+          {
+            value: extracted,
+            confidence: 0.95,
+            evidenceRefs: [{ start: 0, end: extracted.length, summary: '完整技能描述' }],
+          },
+        ],
         skills: [
           {
             value: { name: 'TypeScript', level: 'proficient' },
@@ -194,6 +219,7 @@ describe('resume profile Agent boundary schema', () => {
       extracted,
     );
     expect(output.skills[0]?.value.name).toBe('TypeScript');
+    expect(toCandidateProfile(output, emptyPreferences).professionalSkills).toBe(extracted);
     expect(output).not.toHaveProperty('preferences');
   });
 
@@ -211,6 +237,7 @@ describe('resume profile Agent boundary schema', () => {
           education: [],
           workExperience: [],
           projects: [],
+          professionalSkills: [],
           skills: [],
           domains: [],
           yearsOfExperience: null,

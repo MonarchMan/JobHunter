@@ -161,7 +161,10 @@ export class ResumeTemplateService {
     const updated = this.#drafts.update({
       id,
       expectedRevision,
-      content: profileToResumeContent(current.effective),
+      content: {
+        ...profileToResumeContent(current.effective),
+        ...(currentDraft.content.formatting ? { formatting: currentDraft.content.formatting } : {}),
+      },
       sourceProfileVersionId: current.id,
       now: this.#clock.now(),
     });
