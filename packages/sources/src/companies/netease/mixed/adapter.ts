@@ -19,7 +19,7 @@ export function createNeteaseAdapter(): JobSourceAdapter<NeteaseConfig, never> {
   return createInlinePagedJsonAdapter({
     metadata: {
       key: 'netease.mixed',
-      version: '1.0.0',
+      version: '1.0.1',
       company: { slug: 'netease', name: '网易' },
       recruitmentType: 'mixed',
       canonicalEntryUrl: entryUrl,

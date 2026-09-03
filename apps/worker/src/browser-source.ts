@@ -10,6 +10,7 @@ import {
   type SourcePageClient,
   type SourcePageCollectionRequest,
   type SourcePageCollection,
+  type SourcePageCollectionResponseShape,
 } from '@jobhunter/source-core';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -51,28 +52,33 @@ export function resolveBrowserExecutablePath(
 ): string | undefined {
   if (options.executablePath) return options.executablePath;
   if (runtime.configuredPath) return runtime.configuredPath;
-  const candidates =
-    runtime.platform === 'win32'
-      ? [
-          'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-          'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-          'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-          'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-        ]
-      : runtime.platform === 'darwin'
-        ? [
-            '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-            path.join(
-              runtime.homeDirectory,
-              'Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-            ),
-            path.join(
-              runtime.homeDirectory,
-              'Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-            ),
-          ]
-        : [];
+  let candidates: readonly string[];
+  switch (runtime.platform) {
+    case 'win32':
+      candidates = [
+        'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      ];
+      break;
+    case 'darwin':
+      candidates = [
+        '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        path.posix.join(
+          runtime.homeDirectory,
+          'Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+        ),
+        path.posix.join(
+          runtime.homeDirectory,
+          'Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        ),
+      ];
+      break;
+    default:
+      candidates = [];
+  }
   return candidates.find((candidate) => runtime.exists(candidate));
 }
 
@@ -114,10 +120,80 @@ interface BrowserListPage {
   readonly offset: number | null;
 }
 
-interface BrowserRequestTemplate {
+export interface BrowserRequestTemplate {
   readonly url: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: Record<string, unknown>;
+}
+
+export interface BrowserPageRequest {
+  readonly url: string;
+  readonly method: 'GET' | 'POST';
+  readonly body: Record<string, unknown>;
+}
+
+export function buildBrowserPageRequest(
+  template: BrowserRequestTemplate,
+  responseShape: SourcePageCollectionResponseShape,
+  pageNumber: number,
+  offset: number,
+  pageSize?: number,
+): BrowserPageRequest {
+  const url = new URL(template.url);
+  const body = { ...template.body };
+  switch (responseShape) {
+    case 'ats-job-posts':
+      url.searchParams.set('offset', String(offset));
+      body.offset = offset;
+      if (pageSize !== undefined) {
+        url.searchParams.set('limit', String(pageSize));
+        body.limit = pageSize;
+      }
+      break;
+    case 'alibaba-campus':
+      body.pageIndex = pageNumber;
+      if (pageSize !== undefined) body.pageSize = pageSize;
+      break;
+    case 'meituan-jobs':
+      body.page = {
+        ...(isRecord(body.page) ? body.page : {}),
+        pageNo: pageNumber,
+        ...(pageSize === undefined ? {} : { pageSize }),
+      };
+      body.jobType = [{ code: '2', subCode: [] }];
+      break;
+    case 'qihoo360-jobs':
+      body.page = pageNumber;
+      if (pageSize !== undefined) body.limit = pageSize;
+      break;
+    case 'xiaomi-jobs':
+      url.searchParams.set('pageNum', String(pageNumber));
+      if (pageSize !== undefined) url.searchParams.set('pageSize', String(pageSize));
+      break;
+    case 'netease-jobs':
+      body.currentPage = pageNumber;
+      if (pageSize !== undefined) body.pageSize = pageSize;
+      break;
+    case 'huawei-campus':
+      body.curPage = pageNumber;
+      if (pageSize !== undefined) body.pageSize = pageSize;
+      break;
+  }
+  return {
+    url: url.toString(),
+    method: responseShape === 'xiaomi-jobs' ? 'GET' : 'POST',
+    body,
+  };
+}
+
+export function shouldReplayFirstPage(
+  request: SourcePageCollectionRequest,
+  capturedPageSize: number,
+): boolean {
+  return (
+    request.responseShape === 'meituan-jobs' ||
+    (request.pageSize !== undefined && request.pageSize !== capturedPageSize)
+  );
 }
 
 interface BrowserListResponse {
@@ -186,31 +262,39 @@ function readListResponse(
   let limit: number;
   let currentPage: number;
   let offset: number | null = null;
-  if (request.responseShape === 'ats-job-posts') {
-    limit = queryLimit;
-    offset = queryOffset;
-    currentPage = Math.floor(offset / limit) + 1;
-  } else if (request.responseShape === 'alibaba-campus') {
-    limit = Number(requestBody.pageSize);
-    currentPage = Number(requestBody.pageIndex);
-  } else if (request.responseShape === 'meituan-jobs') {
-    if (!isRecord(requestBody.page)) {
-      throw new SourceError('parse_changed', 'Meituan list request has no page object.');
-    }
-    limit = Number(requestBody.page.pageSize);
-    currentPage = Number(requestBody.page.pageNo);
-  } else if (request.responseShape === 'qihoo360-jobs') {
-    limit = Number(requestBody.limit);
-    currentPage = Number(requestBody.page);
-  } else if (request.responseShape === 'xiaomi-jobs') {
-    limit = Number(query.get('pageSize'));
-    currentPage = Number(query.get('pageNum'));
-  } else if (request.responseShape === 'netease-jobs') {
-    limit = Number(requestBody.pageSize);
-    currentPage = Number(requestBody.currentPage);
-  } else {
-    limit = Number(requestBody.pageSize);
-    currentPage = Number(requestBody.curPage);
+  switch (request.responseShape) {
+    case 'ats-job-posts':
+      limit = queryLimit;
+      offset = queryOffset;
+      currentPage = Math.floor(offset / limit) + 1;
+      break;
+    case 'alibaba-campus':
+      limit = Number(requestBody.pageSize);
+      currentPage = Number(requestBody.pageIndex);
+      break;
+    case 'meituan-jobs':
+      if (!isRecord(requestBody.page)) {
+        throw new SourceError('parse_changed', 'Meituan list request has no page object.');
+      }
+      limit = Number(requestBody.page.pageSize);
+      currentPage = Number(requestBody.page.pageNo);
+      break;
+    case 'qihoo360-jobs':
+      limit = Number(requestBody.limit);
+      currentPage = Number(requestBody.page);
+      break;
+    case 'xiaomi-jobs':
+      limit = Number(query.get('pageSize'));
+      currentPage = Number(query.get('pageNum'));
+      break;
+    case 'netease-jobs':
+      limit = Number(requestBody.pageSize);
+      currentPage = Number(requestBody.currentPage);
+      break;
+    case 'huawei-campus':
+      limit = Number(requestBody.pageSize);
+      currentPage = Number(requestBody.curPage);
+      break;
   }
   if (
     !Number.isSafeInteger(limit) ||
@@ -232,48 +316,56 @@ function readListResponse(
   const body = response.body;
   let items: unknown;
   let total: number;
-  if (request.responseShape === 'ats-job-posts') {
-    if (!isRecord(body) || !isRecord(body.data)) {
-      throw new SourceError('parse_changed', 'Browser list response has no data object.');
-    }
-    items = body.data.job_post_list;
-    total = Number(body.data.count);
-  } else if (request.responseShape === 'alibaba-campus') {
-    if (!isRecord(body) || !isRecord(body.content)) {
-      throw new SourceError('parse_changed', 'Alibaba list response has no content object.');
-    }
-    items = body.content.datas;
-    total = Number(body.content.totalCount);
-  } else if (request.responseShape === 'meituan-jobs') {
-    if (!isRecord(body) || !isRecord(body.data) || !isRecord(body.data.page)) {
-      throw new SourceError('parse_changed', 'Meituan list response has no data/page object.');
-    }
-    items = body.data.list;
-    total = Number(body.data.page.totalCount);
-  } else if (request.responseShape === 'qihoo360-jobs') {
-    if (!isRecord(body)) {
-      throw new SourceError('parse_changed', '360 list response has no response object.');
-    }
-    items = body.data;
-    total = Number(body.count);
-  } else if (request.responseShape === 'xiaomi-jobs') {
-    if (!isRecord(body) || !isRecord(body.data)) {
-      throw new SourceError('parse_changed', 'Xiaomi list response has no data object.');
-    }
-    items = body.data.list;
-    total = Number(body.data.total);
-  } else if (request.responseShape === 'netease-jobs') {
-    if (!isRecord(body) || !isRecord(body.data)) {
-      throw new SourceError('parse_changed', 'NetEase list response has no data object.');
-    }
-    items = body.data.list;
-    total = Number(body.data.total);
-  } else {
-    if (!isRecord(body) || !isRecord(body.data) || !isRecord(body.data.pageVO)) {
-      throw new SourceError('parse_changed', 'Huawei list response has no pageVO object.');
-    }
-    items = body.data.result;
-    total = Number(body.data.pageVO.totalRows);
+  switch (request.responseShape) {
+    case 'ats-job-posts':
+      if (!isRecord(body) || !isRecord(body.data)) {
+        throw new SourceError('parse_changed', 'Browser list response has no data object.');
+      }
+      items = body.data.job_post_list;
+      total = Number(body.data.count);
+      break;
+    case 'alibaba-campus':
+      if (!isRecord(body) || !isRecord(body.content)) {
+        throw new SourceError('parse_changed', 'Alibaba list response has no content object.');
+      }
+      items = body.content.datas;
+      total = Number(body.content.totalCount);
+      break;
+    case 'meituan-jobs':
+      if (!isRecord(body) || !isRecord(body.data) || !isRecord(body.data.page)) {
+        throw new SourceError('parse_changed', 'Meituan list response has no data/page object.');
+      }
+      items = body.data.list;
+      total = Number(body.data.page.totalCount);
+      break;
+    case 'qihoo360-jobs':
+      if (!isRecord(body)) {
+        throw new SourceError('parse_changed', '360 list response has no response object.');
+      }
+      items = body.data;
+      total = Number(body.count);
+      break;
+    case 'xiaomi-jobs':
+      if (!isRecord(body) || !isRecord(body.data)) {
+        throw new SourceError('parse_changed', 'Xiaomi list response has no data object.');
+      }
+      items = body.data.list;
+      total = Number(body.data.total);
+      break;
+    case 'netease-jobs':
+      if (!isRecord(body) || !isRecord(body.data)) {
+        throw new SourceError('parse_changed', 'NetEase list response has no data object.');
+      }
+      items = body.data.list;
+      total = Number(body.data.total);
+      break;
+    case 'huawei-campus':
+      if (!isRecord(body) || !isRecord(body.data) || !isRecord(body.data.pageVO)) {
+        throw new SourceError('parse_changed', 'Huawei list response has no pageVO object.');
+      }
+      items = body.data.result;
+      total = Number(body.data.pageVO.totalRows);
+      break;
   }
   if (
     !Array.isArray(items) ||
@@ -327,32 +419,19 @@ async function requestJsonPage(
   targetPage: number,
   expectedOffset: number,
 ): Promise<BrowserListPage> {
+  const target = buildBrowserPageRequest(
+    template,
+    request.responseShape,
+    targetPage,
+    expectedOffset,
+    request.pageSize,
+  );
   const response = await page.evaluate(
-    async ({ template: input, responseShape, pageNumber, offset }) => {
-      const url = new URL(input.url);
-      const body = { ...input.body };
-      if (responseShape === 'ats-job-posts') {
-        url.searchParams.set('offset', String(offset));
-        body.offset = offset;
-      } else if (responseShape === 'alibaba-campus') {
-        body.pageIndex = pageNumber;
-      } else if (responseShape === 'meituan-jobs') {
-        body.page = { ...(body.page ?? {}), pageNo: pageNumber };
-        body.jobType = [{ code: '2', subCode: [] }];
-      } else if (responseShape === 'qihoo360-jobs') {
-        body.page = pageNumber;
-      } else if (responseShape === 'xiaomi-jobs') {
-        url.searchParams.set('pageNum', String(pageNumber));
-      } else if (responseShape === 'netease-jobs') {
-        body.currentPage = pageNumber;
-      } else {
-        body.curPage = pageNumber;
-      }
-      const get = responseShape === 'xiaomi-jobs';
-      const result = await fetch(url, {
-        method: get ? 'GET' : 'POST',
-        headers: input.headers,
-        ...(get ? {} : { body: JSON.stringify(body) }),
+    async ({ target: input, headers }) => {
+      const result = await fetch(input.url, {
+        method: input.method,
+        headers,
+        ...(input.method === 'GET' ? {} : { body: JSON.stringify(input.body) }),
       });
       const text = await result.text();
       let parsed: unknown = null;
@@ -364,10 +443,8 @@ async function requestJsonPage(
       return { url: result.url, status: result.status, body: parsed };
     },
     {
-      template,
-      responseShape: request.responseShape,
-      pageNumber: targetPage,
-      offset: expectedOffset,
+      target,
+      headers: template.headers,
     },
   );
   browserDebug('replayed JSON response', targetPage, response.status, response.url);
@@ -379,26 +456,9 @@ async function requestJsonPage(
   }
   return readListResponse(
     {
-      url: response.url,
+      url: target.url,
       status: response.status,
-      requestBody:
-        request.responseShape === 'ats-job-posts'
-          ? { ...template.body, offset: expectedOffset }
-          : request.responseShape === 'alibaba-campus'
-            ? { ...template.body, pageIndex: targetPage }
-            : request.responseShape === 'meituan-jobs'
-              ? {
-                  ...template.body,
-                  page: {
-                    ...(isRecord(template.body.page) ? template.body.page : {}),
-                    pageNo: targetPage,
-                  },
-                }
-              : request.responseShape === 'qihoo360-jobs'
-                ? { ...template.body, page: targetPage }
-                : request.responseShape === 'netease-jobs'
-                  ? { ...template.body, currentPage: targetPage }
-                  : { ...template.body, curPage: targetPage },
+      requestBody: target.body,
       body: response.body,
     },
     request,
@@ -423,10 +483,9 @@ async function collectJsonPages(
   // The campus landing page initially requests graduate + internship jobs.
   // Reuse the initialized anonymous session but narrow the JSON body to the
   // independently configured internship channel before collecting page 1.
-  const first =
-    request.responseShape === 'meituan-jobs'
-      ? await requestJsonPage(page, request, firstTemplate, 1, 0)
-      : firstCapture.page;
+  const first = shouldReplayFirstPage(request, firstCapture.page.limit)
+    ? await requestJsonPage(page, request, firstTemplate, 1, 0)
+    : firstCapture.page;
   const pages = [];
   const maximumPages = Math.min(request.maximumPages, options.maximumPages ?? 1_000);
   let coverage: SourcePageCollection['coverage'] = 'complete';

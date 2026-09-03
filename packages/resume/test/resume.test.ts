@@ -55,37 +55,33 @@ describe('resume media detection and deterministic parsing', () => {
   });
 
   it('detects resume images by content and defers them to OCR', async () => {
-    const jpeg = await readFile(
-      new URL('../../../docs/resumes/nowcoder_1787802316450.jpeg', import.meta.url),
-    );
-    expect(detectResumeMediaType(jpeg)).toMatchObject({
-      mediaType: 'image/jpeg',
-      byteSize: jpeg.byteLength,
+    const png = await readFile(new URL('../../../docs/resumes/简历模板.png', import.meta.url));
+    expect(detectResumeMediaType(png)).toMatchObject({
+      mediaType: 'image/png',
+      byteSize: png.byteLength,
     });
-    await expect(parseResumeText(jpeg, 'image/jpeg')).resolves.toMatchObject({
+    await expect(parseResumeText(png, 'image/png')).resolves.toMatchObject({
       status: 'needs_ocr',
       parser: 'image',
       text: null,
     });
 
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
-    expect(detectResumeMediaType(png).mediaType).toBe('image/png');
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0xff, 0xd9]);
+    expect(detectResumeMediaType(jpeg).mediaType).toBe('image/jpeg');
   });
 
   it('recognizes stable education, skill and project anchors from the reference image locally', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'jobhunter-ocr-'));
     try {
-      const jpeg = await readFile(
-        new URL('../../../docs/resumes/nowcoder_1787802316450.jpeg', import.meta.url),
-      );
+      const png = await readFile(new URL('../../../docs/resumes/简历模板.png', import.meta.url));
       const result = await new TesseractResumeOcrEngine({ dataRoot: root }).recognize(
-        jpeg,
-        'image/jpeg',
+        png,
+        'image/png',
       );
-      expect(result.text).toContain('陕西师范大学');
-      expect(result.text).toContain('python');
-      expect(result.text).toContain('Prism');
-      expect(result.text).toContain('SuperMew');
+      expect(result.text).toContain('星河大学');
+      expect(result.text).toContain('Python');
+      expect(result.text).toContain('MiniCode');
+      expect(result.text).toContain('Agent');
       expect(result.characterCount).toBeGreaterThan(1_000);
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -23,6 +23,15 @@ export function DashboardHero(): ReactElement {
         </div>
       </div>
       <div className={styles.aside} aria-label="工作台状态">
+        <div className={styles.brandSymbol} aria-hidden="true">
+          <img
+            src="/assets/brand/jobhunter-logo.png"
+            alt=""
+            width={112}
+            height={112}
+            data-brand-logo="dashboard"
+          />
+        </div>
         <div className={styles.liveStatus}>
           <span className={styles.liveDot} aria-hidden="true" />
           <span>本地工作区</span>

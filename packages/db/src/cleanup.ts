@@ -68,25 +68,31 @@ export class SqliteCleanupRepository implements CleanupRepository {
   public deleteCandidates(candidates: readonly CleanupCandidate[]): void {
     this.#client.transaction(() => {
       for (const candidate of candidates) {
-        if (candidate.kind === 'observation') {
-          const [jobId, syncRunId] = z
-            .tuple([z.string(), z.string()])
-            .parse(JSON.parse(candidate.id));
-          this.#client
-            .prepare('DELETE FROM job_observations WHERE job_id = ? AND sync_run_id = ?')
-            .run(jobId, syncRunId);
-        } else if (candidate.kind === 'source_detail') {
-          const [sourceId, externalJobId] = z
-            .tuple([z.string(), z.string()])
-            .parse(JSON.parse(candidate.id));
-          this.#client
-            .prepare('DELETE FROM source_job_details WHERE source_id = ? AND external_job_id = ?')
-            .run(sourceId, externalJobId);
-        } else if (candidate.kind === 'agent_run') {
-          this.#client.prepare('DELETE FROM agent_runs WHERE id = ?').run(candidate.id);
-          this.#client
-            .prepare("DELETE FROM events WHERE stream_type = 'agent_run' AND stream_id = ?")
-            .run(candidate.id);
+        switch (candidate.kind) {
+          case 'observation': {
+            const [jobId, syncRunId] = z
+              .tuple([z.string(), z.string()])
+              .parse(JSON.parse(candidate.id));
+            this.#client
+              .prepare('DELETE FROM job_observations WHERE job_id = ? AND sync_run_id = ?')
+              .run(jobId, syncRunId);
+            break;
+          }
+          case 'source_detail': {
+            const [sourceId, externalJobId] = z
+              .tuple([z.string(), z.string()])
+              .parse(JSON.parse(candidate.id));
+            this.#client
+              .prepare('DELETE FROM source_job_details WHERE source_id = ? AND external_job_id = ?')
+              .run(sourceId, externalJobId);
+            break;
+          }
+          case 'agent_run':
+            this.#client.prepare('DELETE FROM agent_runs WHERE id = ?').run(candidate.id);
+            this.#client
+              .prepare("DELETE FROM events WHERE stream_type = 'agent_run' AND stream_id = ?")
+              .run(candidate.id);
+            break;
         }
       }
     })();

@@ -27,6 +27,8 @@ unresearched -> endpoint_found -> fixture_verified -> offline_passed -> online_s
 
 浏览器只负责访问公开页面、运行官网脚本并捕获官方 JSON/GraphQL 响应。不得从 DOM 猜测分页完整性；若官网只提供 DOM，则必须同时证明分页边界、稳定岗位链接和总数一致性。验证码、登录或设备验证出现时立即停止并记录 `access_blocked`。
 
+捕获到官网首个结构化请求后，Worker 使用同一匿名会话直接重放 JSON。重放请求统一写入 adapter 配置的页容量以及目标页码或 offset；首屏模板的 UI 页容量只用于识别协议，不能决定全量采集粒度。若配置页容量与首屏不同，第一页也必须重放，确保总页数、总数和后续页面使用同一分页参数。
+
 ## 拼多多签名 Spike 边界
 
 拼多多社招的首选研究方向是复用官网公开 bundle 中的原始签名模块，而不是自行设计 `anti_content` 算法。按以下顺序验证：

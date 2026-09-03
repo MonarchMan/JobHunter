@@ -72,18 +72,25 @@ export function CompanyCombobox({
           }}
           onKeyDown={(event) => {
             if (composing || event.nativeEvent.isComposing) return;
-            if (event.key === 'ArrowDown') {
-              event.preventDefault();
-              setOpen(true);
-              setActiveIndex((current) => Math.min(current + 1, Math.max(matches.length - 1, 0)));
-            } else if (event.key === 'ArrowUp') {
-              event.preventDefault();
-              setActiveIndex((current) => Math.max(current - 1, 0));
-            } else if (event.key === 'Enter' && open && matches[activeIndex]) {
-              event.preventDefault();
-              choose(matches[activeIndex]);
-            } else if (event.key === 'Escape') {
-              setOpen(false);
+            switch (event.key) {
+              case 'ArrowDown':
+                event.preventDefault();
+                setOpen(true);
+                setActiveIndex((current) => Math.min(current + 1, Math.max(matches.length - 1, 0)));
+                break;
+              case 'ArrowUp':
+                event.preventDefault();
+                setActiveIndex((current) => Math.max(current - 1, 0));
+                break;
+              case 'Enter':
+                if (open && matches[activeIndex]) {
+                  event.preventDefault();
+                  choose(matches[activeIndex]);
+                }
+                break;
+              case 'Escape':
+                setOpen(false);
+                break;
             }
           }}
         />

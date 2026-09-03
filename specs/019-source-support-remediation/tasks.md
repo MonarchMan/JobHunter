@@ -1,7 +1,7 @@
 # 019 非 supported 官网渠道闭环任务
 
 > 状态：In Progress
-> 显式覆盖：SSR-001, SSR-002, SSR-003, SSR-004, SSR-005, SSR-006, SSR-007, SSR-008, SSR-009, SSR-010, SSR-011
+> 显式覆盖：SSR-001, SSR-002, SSR-003, SSR-004, SSR-005, SSR-006, SSR-007, SSR-008, SSR-009, SSR-010, SSR-011, SSR-012
 
 - [x] **SSR-T001** 建立 29 个非 supported 逻辑渠道基线与统一晋级门禁。（SSR-001, SSR-002, SSR-003, SSR-005, SSR-006）
 - [x] **SSR-T002** 闭环 9 个 experimental 渠道的独立首页/末页定向 smoke 并晋级。（SSR-002, SSR-004, SSR-005, SSR-008, SSR-009）
@@ -11,6 +11,7 @@
 - [x] **SSR-T006** 更新 catalog、Registry、seed、Web/CLI 摘要与支持矩阵。（SSR-008）
 - [ ] **SSR-T007** 运行 45 渠道同轮 2–3 页首页/末页 smoke 及完整离线回归，证明 45 / 0 / 0。（SSR-010）
 - [ ] **SSR-T008** 完成拼多多社招 `anti_content` 签名运行时 Spike：固定 bundle 证据，验证逐请求 token、浏览器依赖和隔离运行边界；若不可稳定抽离，则以普通 Chrome + Playwright CDP 实现 fallback。（SSR-003, SSR-011）
+- [x] **SSR-T009** 修复浏览器 JSON 重放沿用官网 UI 小页容量的问题，并以网易实习来源验证配置页容量、唯一 ID 和完整覆盖。（SSR-005, SSR-012）
 
 ## 基线
 
@@ -35,3 +36,4 @@
 - 2026-08-28：进一步隔离启动方式后确认，失败会话均由 Playwright 直接 launch；普通 Chrome 使用空白临时 profile、无 stealth、无用户 Cookie 启动时完整列表返回 200。Chrome 首屏加载后再通过 CDP 附加，连续三轮独立首页/末页/详情 smoke 均通过：`navigator.webdriver=false`，总数稳定为 798，首页 10 条、末页第 80 页 8 条，末页样本 `T013636` 的职责、要求和加分项完整。阻断点从外部风控不可达收敛为尚未工程化 session-driven driver。
 - 2026-08-28：按 SSR-T008 开始签名 Spike。当前 `_app-3abf0c1e9008cfdd.js` 的原始 SHA-256 为 `40eac6ca03f3b43f56217276a7515ea4de364113c4f0b2d1f17a7ec58ccbb9e9`；请求包装器每次先取 `_stm`、更新风控实例，再调用 `messagePackSync()`。同一空白会话的两个详情请求生成 400/418 字符的不同 token，排除固定 token 重放。普通 Chrome + Playwright CDP 明确保留为 fallback。
 - 2026-08-28：SSR-T008 按既定顺序完成首轮实验：webpack bridge 通过；全新 profile 的最小同源浏览器运行时通过；Node + DOM shim 因模块读取 `screen.availWidth`、继续需要伪造指纹而停止；最小 headful 与原生 `--headless=new` 各连续三轮首页/末页/详情 smoke 通过。静态 AST 抽取 bundle 后前两轮通过，第三轮及随后单轮返回 `54001`，同期完整官网 headful 页面也显示 0 个职位，判断为风险/频控窗口但不做无限重试。待冷却后仍需补静态抽取路径的三轮复核，任务与渠道保持未完成/blocked。
+- 2026-09-04：网易实习最近批次沿用官网首屏 `pageSize=2`，抓取 265 页期间出现 46 个跨页重复 ID，正确报告 `partial + duplicate_job_ids`；浏览器 JSON 重放现改为使用来源配置 `pageSize=100`，避免 UI 分页粒度扩大一致性窗口。

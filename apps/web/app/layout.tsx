@@ -21,9 +21,14 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
         </a>
         <header className={styles.header}>
           <a className={styles.brand} href="/">
-            <span className={styles.brandMark} aria-hidden="true">
-              J
-            </span>
+            <img
+              className={styles.brandMark}
+              src="/assets/brand/jobhunter-logo.png"
+              alt=""
+              width={30}
+              height={30}
+              data-brand-logo="navigation"
+            />
             <span>JobHunter</span>
           </a>
           <SiteNav />

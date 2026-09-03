@@ -163,7 +163,7 @@ describe('Baidu campus source adapter', () => {
       title: 'AI产品实习生（J100001）',
       department: '移动生态事业群',
       jobFamily: '产品',
-      locations: ['上海市', '北京市'],
+      locations: ['北京市', '上海市'],
       employmentType: '实习',
       educationText: '本科',
     });

@@ -59,8 +59,8 @@
 | 得物实习       | supported | 是       | `dewu.intern@1.0.0`             | 通过         | 2026-08-28 飞书 ATS 校园列表不超过三页，边界 smoke 通过；按记录级类别筛选，样本 ID 唯一且均归一化为 internship                |
 | 小红书实习     | supported | 是       | `xiaohongshu.intern@1.0.0`      | 通过         | 2026-08-28 匿名 JSON 完整遍历校园物理列表，按记录级类别筛选后的实习集合、唯一 ID 与归一化独立门禁通过                         |
 | 360 社招       | supported | 是       | `qihoo360.social@1.0.0`         | 通过         | 2026-08-28 匿名浏览器列表与 `getjobone` 详情 API 通过；稳定 ID、深链、职责要求和经验归一化完成                                |
-| 网易实习       | supported | 是       | `netease.intern@1.0.0`          | 通过         | 2026-08-28 匿名浏览器捕获混合 JSON 首页/中间页/末页，记录级实习筛选、样本唯一 ID、深链与归一化通过                            |
-| 网易社招       | supported | 是       | `netease.social@1.0.0`          | 通过         | 2026-08-28 匿名浏览器捕获混合 JSON 首页/中间页/末页，记录级社招筛选、样本唯一 ID、深链与归一化通过                            |
+| 网易实习       | supported | 是       | `netease.intern@1.0.1`          | 通过         | 2026-09-04 浏览器会话按配置 `pageSize=100` 重放 JSON，首页/中间页/末页、唯一 ID、深链、记录级实习筛选与归一化通过             |
+| 网易社招       | supported | 是       | `netease.social@1.0.1`          | 通过         | 2026-09-04 浏览器会话按配置 `pageSize=100` 重放 JSON；复用同一混合协议并按记录级社招筛选                                      |
 | 小红书社招     | supported | 是       | `xiaohongshu.social@1.0.0`      | 通过         | 2026-08-28 `pageQueryPosition` 匿名 JSON 首页/末页 smoke 通过；总数、末页长度、唯一 `positionId` 与归一化一致                 |
 | 京东校招       | supported | 是       | `jd.campus@1.0.0`               | 通过         | 2026-08-28 正式计划 47/56/57/58 首页/末页 smoke 通过；总数、末页长度、唯一 `publishId` 与 campus 归一化一致                   |
 | 华为校招       | supported | 是       | `huawei.campus@1.0.0`           | 通过         | 2026-08-28 校园入口匿名浏览器首页/中间页/末页 smoke 通过；正式岗位样本 ID 唯一且归一化为 campus                               |

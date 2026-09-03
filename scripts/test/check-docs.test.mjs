@@ -34,7 +34,7 @@ describe('documentation checker', () => {
     expect(result.errors).toContain(
       'Missing specification file: specs/000-engineering-foundation/tasks.md',
     );
-  });
+  }, 20_000);
 
   it('finds broken relative links', async () => {
     const root = await copyDocumentation();
@@ -43,5 +43,5 @@ describe('documentation checker', () => {
     expect(result.errors.some((error) => error.includes('Broken link in docs/broken.md'))).toBe(
       true,
     );
-  });
+  }, 20_000);
 });

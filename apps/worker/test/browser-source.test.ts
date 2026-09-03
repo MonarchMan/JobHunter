@@ -1,8 +1,10 @@
 import { SourceError } from '@jobhunter/source-core';
 import { describe, expect, it } from 'vitest';
 import {
+  buildBrowserPageRequest,
   createPlaywrightSourcePageClient,
   resolveBrowserExecutablePath,
+  shouldReplayFirstPage,
   type BrowserExecutableRuntime,
 } from '../src/browser-source.js';
 
@@ -71,5 +73,45 @@ describe('browser startup diagnostics', () => {
     expect(cause).toBeInstanceOf(Error);
     expect((cause as Error).message).toMatch(/executable doesn't exist/i);
     expect((cause as Error).message).toContain('/definitely-missing-jobhunter-browser');
+  });
+});
+
+describe('browser JSON pagination', () => {
+  it('overrides the NetEase UI page size with the adapter configuration', () => {
+    const target = buildBrowserPageRequest(
+      {
+        url: 'https://hr.163.com/api/hr163/position/queryPage',
+        headers: { accept: 'application/json' },
+        body: { currentPage: 1, pageSize: 2 },
+      },
+      'netease-jobs',
+      3,
+      200,
+      100,
+    );
+
+    expect(target).toMatchObject({
+      method: 'POST',
+      body: { currentPage: 3, pageSize: 100 },
+    });
+  });
+
+  it('replays page one when the captured UI capacity differs from configured capacity', () => {
+    const request = {
+      sourceKey: 'netease.mixed',
+      requestId: 'netease-page-size-regression',
+      url: 'https://hr.163.com/job-list.html',
+      allowedHosts: ['hr.163.com'],
+      signal: new AbortController().signal,
+      timeoutMs: 15_000,
+      maximumPages: 1_000,
+      maximumResponseBytes: 2 * 1024 * 1024,
+      pageSize: 100,
+      listEndpointPath: '/api/hr163/position/queryPage',
+      responseShape: 'netease-jobs' as const,
+    };
+
+    expect(shouldReplayFirstPage(request, 2)).toBe(true);
+    expect(shouldReplayFirstPage(request, 100)).toBe(false);
   });
 });

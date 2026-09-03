@@ -81,6 +81,25 @@
   min-width: 0;
 }
 
+.brandSymbol {
+  display: flex;
+  width: 8rem;
+  height: 8rem;
+  align-items: center;
+  justify-content: flex-end;
+  align-self: flex-end;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 54%);
+  border-radius: 1.25rem;
+  background: rgb(255 255 255 / 94%);
+}
+
+.brandSymbol img {
+  width: 100%;
+  height: auto;
+  transform: scale(1.42);
+}
+
 .liveStatus {
   display: flex;
   align-items: center;
@@ -173,6 +192,12 @@
   .aside {
     align-self: stretch;
   }
+
+  .brandSymbol {
+    width: 7rem;
+    height: 7rem;
+    align-self: flex-start;
+  }
 }
 
 @media (max-width: 600px) {
@@ -184,6 +209,10 @@
 
   .hero h1 {
     font-size: 3rem;
+  }
+
+  .brandSymbol img {
+    width: 100%;
   }
 
   .actions {

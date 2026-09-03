@@ -302,50 +302,66 @@ export function extractResumeProfileByRules(
   };
 
   for (const section of parsedSections.value) {
-    if (section.key === 'targetRoles') profile.targetRoles = [...targetRoles(section)];
-    else if (section.key === 'education') {
-      const value = parseEducation(section);
-      if (!value) return { kind: 'fallback', reason: 'ambiguous_entry' };
-      profile.education = value;
-    } else if (section.key === 'workExperience') {
-      const value = parseDatedEntries(section, 'work') as
-        CandidateProfileData['workExperience'] | null;
-      if (!value) return { kind: 'fallback', reason: 'ambiguous_entry' };
-      profile.workExperience = value;
-    } else if (section.key === 'projects') {
-      const value = parseDatedEntries(section, 'project') as
-        CandidateProfileData['projects'] | null;
-      if (!value) return { kind: 'fallback', reason: 'ambiguous_entry' };
-      profile.projects = value;
-    } else if (section.key === 'professionalSkills') {
-      const value = parseSkills(section);
-      if (!value) return { kind: 'fallback', reason: 'unstructured_skills' };
-      profile.skills = value;
-      profile.professionalSkills = professionalSkillSentences(section.lines).join('\n');
-    } else if (section.key === 'selfEvaluation') {
-      profile.selfEvaluation = plainValues(section.lines).join('\n');
-    } else if (section.key === 'works') {
-      profile.works = plainValues(section.lines).map((name) => ({
-        name: name.replace(urlPattern, '').trim() || name,
-        description: null,
-        url: urlPattern.exec(name)?.[0] ?? null,
-      }));
-    } else if (section.key === 'competitions') {
-      profile.competitions = plainValues(section.lines).map((line) => {
-        const [name, award, date] = line.split(/\s*[|｜]\s*/u);
-        return { name: name ?? line, award: award ?? null, date: date ?? null };
-      });
-    } else if (section.key === 'certificates') {
-      profile.certificates = plainValues(section.lines).map((name) => ({
-        name,
-        issuer: null,
-        date: null,
-      }));
-    } else {
-      profile.languages = plainValues(section.lines).map((line) => {
-        const [name, proficiency] = line.split(/\s*[|｜]\s*/u);
-        return { name: name ?? line, proficiency: proficiency ?? null };
-      });
+    switch (section.key) {
+      case 'targetRoles':
+        profile.targetRoles = [...targetRoles(section)];
+        break;
+      case 'education': {
+        const value = parseEducation(section);
+        if (!value) return { kind: 'fallback', reason: 'ambiguous_entry' };
+        profile.education = value;
+        break;
+      }
+      case 'workExperience': {
+        const value = parseDatedEntries(section, 'work') as
+          CandidateProfileData['workExperience'] | null;
+        if (!value) return { kind: 'fallback', reason: 'ambiguous_entry' };
+        profile.workExperience = value;
+        break;
+      }
+      case 'projects': {
+        const value = parseDatedEntries(section, 'project') as
+          CandidateProfileData['projects'] | null;
+        if (!value) return { kind: 'fallback', reason: 'ambiguous_entry' };
+        profile.projects = value;
+        break;
+      }
+      case 'professionalSkills': {
+        const value = parseSkills(section);
+        if (!value) return { kind: 'fallback', reason: 'unstructured_skills' };
+        profile.skills = value;
+        profile.professionalSkills = professionalSkillSentences(section.lines).join('\n');
+        break;
+      }
+      case 'selfEvaluation':
+        profile.selfEvaluation = plainValues(section.lines).join('\n');
+        break;
+      case 'works':
+        profile.works = plainValues(section.lines).map((name) => ({
+          name: name.replace(urlPattern, '').trim() || name,
+          description: null,
+          url: urlPattern.exec(name)?.[0] ?? null,
+        }));
+        break;
+      case 'competitions':
+        profile.competitions = plainValues(section.lines).map((line) => {
+          const [name, award, date] = line.split(/\s*[|｜]\s*/u);
+          return { name: name ?? line, award: award ?? null, date: date ?? null };
+        });
+        break;
+      case 'certificates':
+        profile.certificates = plainValues(section.lines).map((name) => ({
+          name,
+          issuer: null,
+          date: null,
+        }));
+        break;
+      case 'languages':
+        profile.languages = plainValues(section.lines).map((line) => {
+          const [name, proficiency] = line.split(/\s*[|｜]\s*/u);
+          return { name: name ?? line, proficiency: proficiency ?? null };
+        });
+        break;
     }
     meaningfulSections += 1;
   }

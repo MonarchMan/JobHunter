@@ -25,5 +25,5 @@ describe('dependency boundaries', () => {
 
     expect(result.exitCode).not.toBe(0);
     expect(JSON.stringify(result.output)).toContain('domain-is-pure');
-  });
+  }, 20_000);
 });

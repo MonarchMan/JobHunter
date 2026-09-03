@@ -200,7 +200,12 @@ function CompanyOverview({
 export function CompanySourceCard({
   channels,
   syncReady,
-}: Readonly<{ channels: readonly WebSourceChannel[]; syncReady: boolean }>): ReactElement {
+  activeSyncChannel,
+}: Readonly<{
+  channels: readonly WebSourceChannel[];
+  syncReady: boolean;
+  activeSyncChannel: RecruitmentChannel;
+}>): ReactElement {
   const [selected, setSelected] = useState<SelectedChannel>('all');
   const sources = useMemo(() => channels.flatMap((channel) => channel.sources), [channels]);
   const selectedChannel =
@@ -254,13 +259,11 @@ export function CompanySourceCard({
           </p>
         </div>
         <div
-          className={styles['company-health-indicator']}
-          data-company-health-indicator
-          role="img"
-          aria-label={`综合状态：${healthLabels[companyHealth]}`}
+          className={styles['company-sync-channel']}
+          data-company-sync-channel={activeSyncChannel}
         >
-          <span className={styles['company-health-dot']} aria-hidden="true" />
-          <strong>{healthLabels[companyHealth]}</strong>
+          <span className="sr-only">同步招聘渠道：</span>
+          <strong>{channelLabels[activeSyncChannel]}</strong>
         </div>
         <div className={styles['company-source-controls']} data-company-source-controls>
           <label className={styles['company-channel-selector']} data-company-channel-selector>

@@ -563,6 +563,7 @@ describe('CodexLocalResearchExecutor', () => {
     const signals: NodeJS.Signals[] = [];
     const executor = new CodexLocalResearchExecutor({
       temporaryRoot: root,
+      platform: 'darwin',
       diagnosticLimitBytes: 8,
       terminationGraceMs: 5,
       spawn: () => {

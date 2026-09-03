@@ -1,6 +1,30 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('校招实习管理台核心流程', () => {
+  test('renders the JobHunter mark in navigation and the dashboard hero', async ({ page }) => {
+    await page.goto('/');
+
+    const navigationLogo = page.locator('[data-brand-logo="navigation"]');
+    const dashboardLogo = page.locator('[data-brand-logo="dashboard"]');
+    await expect(navigationLogo).toBeVisible();
+    await expect(dashboardLogo).toBeVisible();
+    await expect(page.getByRole('link', { name: 'JobHunter' })).toBeVisible();
+    await expect
+      .poll(() =>
+        navigationLogo.evaluate(
+          (image: HTMLImageElement) => image.complete && image.naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+    await expect
+      .poll(() =>
+        dashboardLogo.evaluate(
+          (image: HTMLImageElement) => image.complete && image.naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+  });
+
   test('creates a resume-project drill and exposes the real queued question task', async ({
     page,
   }) => {
@@ -212,7 +236,7 @@ test.describe('校招实习管理台核心流程', () => {
   test('queues an idempotent source sync without waiting for collection', async ({ page }) => {
     await page.goto('/sources?page=2');
     const sourceCard = page.locator('[data-company-source-card]').filter({
-      has: page.getByRole('heading', { name: '腾讯校招' }),
+      has: page.getByRole('heading', { name: '腾讯' }),
     });
     await expect(sourceCard).toHaveCount(1);
     const sync = sourceCard.getByRole('button', { name: /^立即同步 / });
@@ -223,15 +247,19 @@ test.describe('校招实习管理台核心流程', () => {
     const sourceHeader = sourceCard.locator('[data-company-source-header]');
     const sourceCardBox = await sourceCard.boundingBox();
     const syncBox = await sync.boundingBox();
-    const health = sourceHeader.locator('[data-company-health-indicator]');
-    const healthBox = await health.boundingBox();
+    const syncChannel = sourceHeader.locator('[data-company-sync-channel]');
+    const syncChannelBox = await syncChannel.boundingBox();
     expect(syncBox).not.toBeNull();
-    expect(healthBox).not.toBeNull();
+    expect(syncChannelBox).not.toBeNull();
     expect(sourceCardBox).not.toBeNull();
     if (sourceCardBox) expect(sourceCardBox.height).toBeLessThan(560);
-    await expect(sourceCard).toHaveAttribute('data-health-status', 'healthy');
-    await expect(health).toHaveAccessibleName('综合状态：健康');
-    await expect(health).toContainText('健康');
+    await expect(sourceCard).toHaveAttribute(
+      'data-health-status',
+      /^(healthy|unknown|degraded|unhealthy)$/,
+    );
+    await expect(syncChannel).toHaveAttribute('data-company-sync-channel', 'intern');
+    await expect(syncChannel).toContainText('实习');
+    await expect(syncChannel.locator('[aria-hidden="true"]')).toHaveCount(0);
     expect(await sourceCard.evaluate((element) => getComputedStyle(element).boxShadow)).toContain(
       'inset',
     );

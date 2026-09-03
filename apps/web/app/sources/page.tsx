@@ -28,6 +28,7 @@ export default async function SourcesPage({
   const container = await getWebContainer();
   const sourceChannels = container.services.webSources.listChannels();
   const syncReady = container.services.sources.isSyncReady();
+  const activeSyncChannel = container.services.settings.get().sourceSync.channel;
   const companies = Array.from(
     sourceChannels.reduce((groups, sourceChannel) => {
       const existing = groups.get(sourceChannel.companyId) ?? [];
@@ -106,6 +107,7 @@ export default async function SourcesPage({
                 key={company.companyId}
                 channels={company.channels}
                 syncReady={syncReady}
+                activeSyncChannel={activeSyncChannel}
               />
             ))}
           </div>

@@ -31,16 +31,11 @@
 }
 
 .brandMark {
-  display: grid;
   width: 1.85rem;
   height: 1.85rem;
-  place-items: center;
-  border-radius: 0.55rem;
-  background: var(--ink);
-  color: #fff;
-  font-size: 0.95rem;
-  font-weight: 850;
-  letter-spacing: 0;
+  flex: 0 0 auto;
+  object-fit: contain;
+  transform: scale(1.35);
 }
 
 @media (min-width: 1025px) {
@@ -73,10 +68,6 @@
     min-height: 3rem;
     padding: 0 0.75rem 1.1rem;
     border-bottom: 1px solid var(--line-soft);
-  }
-
-  .brandMark {
-    background: var(--primary);
   }
 }
 

@@ -24,6 +24,8 @@ export interface SourcePageCollectionRequest {
   readonly operationTimeoutMs?: number;
   readonly maximumPages: number;
   readonly maximumResponseBytes: number;
+  /** Adapter-configured JSON page capacity used after the browser initializes the session. */
+  readonly pageSize?: number;
   /** Official list endpoint path observed from the rendered page session. */
   readonly listEndpointPath: string;
   readonly responseShape: SourcePageCollectionResponseShape;

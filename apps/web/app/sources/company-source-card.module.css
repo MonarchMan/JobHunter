@@ -150,28 +150,19 @@
   line-height: 1.45;
 }
 
-.company-health-indicator {
+.company-sync-channel {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 0.38rem;
   min-height: 1.75rem;
   padding: 0.25rem 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--company-health) 40%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--primary) 34%, var(--line));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--company-health-soft) 86%, var(--surface));
-  color: var(--company-health);
+  background: var(--primary-soft);
+  color: var(--primary-hover);
 }
 
-.company-health-dot {
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 50%;
-  background: currentcolor;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--company-health) 14%, transparent);
-}
-
-.company-health-indicator strong {
+.company-sync-channel strong {
   font-size: 0.76rem;
   line-height: 1;
 }

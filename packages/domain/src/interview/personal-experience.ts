@@ -169,13 +169,31 @@ function parseExperience(
     if (metadata) {
       const key = metadata[1];
       const value = normalizedValue(metadata[2] ?? '');
-      if (key === '公司') company = value;
-      else if (key === '岗位') role = value;
-      else if (key === '面试阶段' || key === '阶段') stage = value;
-      else if (key === '结果') outcome = value;
-      else if (key === '难度') difficulty = value;
-      else if (key === '标签') tags = splitTags(value);
-      else if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) occurredOn = value;
+      switch (key) {
+        case '公司':
+          company = value;
+          break;
+        case '岗位':
+          role = value;
+          break;
+        case '面试阶段':
+        case '阶段':
+          stage = value;
+          break;
+        case '结果':
+          outcome = value;
+          break;
+        case '难度':
+          difficulty = value;
+          break;
+        case '标签':
+          tags = splitTags(value);
+          break;
+        case '面试日期':
+        case '日期':
+          if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) occurredOn = value;
+          break;
+      }
       currentField = null;
       continue;
     }

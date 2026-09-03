@@ -127,7 +127,7 @@ describe('Meituan source adapter contract', () => {
     expect(normalized.job).toMatchObject({
       externalJobId: raw.jobUnionId,
       title: '大模型应用算法工程师（智能客服）',
-      locations: ['上海市', '北京市'],
+      locations: ['北京市', '上海市'],
       publishedAt: 1787054202000,
       employmentType: '全职',
     });

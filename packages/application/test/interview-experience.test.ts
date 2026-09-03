@@ -7,13 +7,13 @@ import {
 } from '../src/interview/index.js';
 
 describe('personal interview experience template', () => {
-  it('keeps the downloadable template byte-identical to the repository reference', async () => {
+  it('keeps the downloadable template content identical to the repository reference', async () => {
     const reference = await readFile(
       new URL('../../../docs/templates/personal-interview-experience-v1.md', import.meta.url),
       'utf8',
     );
 
-    expect(personalExperienceTemplateMarkdown).toBe(reference);
+    expect(personalExperienceTemplateMarkdown).toBe(reference.replaceAll('\r\n', '\n'));
     expect(parsePersonalExperienceText(reference).experiences[0]?.questions).toHaveLength(2);
   });
 

@@ -70,6 +70,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
     readonly requestId: string;
     readonly signal: AbortSignal;
     readonly timeoutMs: number;
+    readonly config: TConfig;
   }): SourcePageCollectionRequest => ({
     sourceKey: definition.metadata.key,
     requestId: context.requestId,
@@ -79,6 +80,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
     timeoutMs: Math.max(context.timeoutMs, 120_000),
     maximumPages: 1_000,
     maximumResponseBytes: 2 * 1024 * 1024,
+    pageSize: definition.pageSize(context.config),
     listEndpointPath: definition.browser?.listEndpointPath ?? '',
     responseShape: definition.browser?.responseShape ?? ('ats-job-posts' as const),
   });
