@@ -17,17 +17,23 @@ export class TaskExecutionError extends Error {
   public readonly category: TaskErrorCategory;
   public readonly safeSummary: string;
   public readonly retryAfterAt: UtcInstant | null;
+  public readonly retryable: boolean | null;
 
   public constructor(
     category: TaskErrorCategory,
     safeSummary: string,
-    options: { readonly retryAfterAt?: UtcInstant; readonly cause?: unknown } = {},
+    options: {
+      readonly retryAfterAt?: UtcInstant;
+      readonly retryable?: boolean;
+      readonly cause?: unknown;
+    } = {},
   ) {
     super(sanitizeTaskErrorSummary(safeSummary), { cause: options.cause });
     this.name = 'TaskExecutionError';
     this.category = category;
     this.safeSummary = sanitizeTaskErrorSummary(safeSummary) || 'Task execution failed.';
     this.retryAfterAt = options.retryAfterAt ?? null;
+    this.retryable = options.retryable ?? null;
   }
 }
 
@@ -67,12 +73,14 @@ export class RetryPolicy {
     readonly maxAttempts: number;
     readonly now: UtcInstant;
     readonly retryAfterAt?: UtcInstant | null;
+    readonly retryable?: boolean | null;
   }): RetryDecision {
     const retryable =
-      input.category === 'rate_limited' ||
-      input.category === 'network_temporary' ||
-      input.category === 'io_temporary' ||
-      input.category === 'upstream_5xx';
+      input.retryable ??
+      (input.category === 'rate_limited' ||
+        input.category === 'network_temporary' ||
+        input.category === 'io_temporary' ||
+        input.category === 'upstream_5xx');
     if (!retryable || input.attemptCount >= input.maxAttempts) {
       return { retry: false, availableAt: null };
     }

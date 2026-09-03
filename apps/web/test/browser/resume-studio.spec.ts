@@ -21,6 +21,13 @@ test.describe('多模板简历制作', () => {
     await expect(page.locator('[data-resume-studio]')).toBeVisible();
     await expect(page.getByText('简洁单页', { exact: true })).toBeVisible();
     await expect(page.getByRole('navigation', { name: '简历章节' })).toBeVisible();
+    const backButton = page.getByRole('button', { name: /返回个人资料/u });
+    const backColor = await backButton.evaluate((element) => getComputedStyle(element).color);
+    await backButton.hover();
+    await expect(backButton).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect
+      .poll(() => backButton.evaluate((element) => getComputedStyle(element).color))
+      .not.toBe(backColor);
     const controlsBox = await page.locator('[data-format-controls]').boundingBox();
     const canvasBox = await page
       .getByRole('region', { name: '可直接编辑的简历画布' })
@@ -58,6 +65,19 @@ test.describe('多模板简历制作', () => {
     await expect(canvas.locator('[data-section-id="skills"] li')).toHaveCount(2);
     await expect(canvas.locator('[data-section-id="target"]')).toHaveCount(0);
     await expect(canvas.locator('[data-section-id="languages"]')).toHaveCount(0);
+
+    const previewButton = page.getByRole('button', { name: '预览', exact: true });
+    await previewButton.click();
+    const previewDialog = page.getByRole('dialog', { name: /导出效果预览/u });
+    await expect(previewDialog).toBeVisible();
+    const previewCanvas = previewDialog.locator('iframe').contentFrame();
+    await expect(previewCanvas.locator('body')).toHaveClass('template-one-page');
+    await expect(previewCanvas.locator('[contenteditable]')).toHaveCount(0);
+    await expect(previewCanvas.locator('.is-active')).toHaveCount(0);
+    await expect(previewCanvas.locator('[data-section-id="languages"]')).toHaveCount(0);
+    await previewDialog.getByRole('button', { name: '返回编辑' }).click();
+    await expect(previewDialog).toBeHidden();
+    await expect(previewButton).toBeFocused();
 
     await page.getByRole('button', { name: '工作经历', exact: true }).click();
     await page.getByRole('button', { name: '添加一项' }).click();

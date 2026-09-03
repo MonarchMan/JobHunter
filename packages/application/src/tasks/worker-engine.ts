@@ -237,6 +237,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       maxAttempts: task.maxAttempts,
       now: this.#clock.now(),
       retryAfterAt: classified.retryAfterAt,
+      retryable: classified.retryable,
     });
     if (decision.retry && decision.availableAt !== null) {
       this.#queue.reschedule({

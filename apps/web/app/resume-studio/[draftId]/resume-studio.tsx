@@ -102,6 +102,64 @@ function ConfirmRefresh({
   );
 }
 
+function TemplatePreviewDialog({
+  html,
+  templateName,
+  onClose,
+  returnFocusTo,
+}: Readonly<{
+  html: string;
+  templateName: string;
+  onClose: () => void;
+  returnFocusTo: HTMLButtonElement | null;
+}>): ReactElement {
+  const dialog = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+    return () => {
+      returnFocusTo?.focus();
+    };
+  }, [returnFocusTo]);
+
+  return (
+    <dialog
+      ref={dialog}
+      className={styles.previewDialog}
+      aria-labelledby="template-preview-title"
+      aria-describedby="template-preview-description"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <header className={styles.previewHeader}>
+        <div>
+          <h2 id="template-preview-title">{templateName} · 导出效果预览</h2>
+          <p id="template-preview-description">与 HTML、PDF 使用相同模板，编辑标记已隐藏。</p>
+        </div>
+        <button type="button" className="button-muted" onClick={onClose} autoFocus>
+          关闭预览
+        </button>
+      </header>
+      <div className={styles.previewViewport}>
+        <div className={styles.previewPaper}>
+          <iframe title={`${templateName}导出效果预览`} srcDoc={html} sandbox="allow-same-origin" />
+        </div>
+      </div>
+      <footer className={styles.previewFooter}>
+        <span>空白章节已自动隐藏</span>
+        <button type="button" className="button-secondary" onClick={onClose}>
+          返回编辑
+        </button>
+      </footer>
+    </dialog>
+  );
+}
+
 function FormatControl({
   label,
   value,
@@ -175,9 +233,11 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [message, setMessage] = useState('已保存');
   const [showRefresh, setShowRefresh] = useState(false);
+  const [previewContent, setPreviewContent] = useState<ResumeDocumentContent | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState<'pdf' | 'html' | null>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
+  const previewButton = useRef<HTMLButtonElement>(null);
   const pendingContent = useRef(initial.draft.content);
   const savedJson = useRef(JSON.stringify(initial.draft.content));
   const revisionRef = useRef(initial.draft.revision);
@@ -193,6 +253,25 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
         interactive: true,
       }),
     [content, initial.avatarDataUrl, initial.draft.templateKey, initial.draft.templateVersion],
+  );
+
+  const previewHtml = useMemo(
+    () =>
+      previewContent
+        ? renderResumeHtml({
+            templateKey: initial.draft.templateKey,
+            templateVersion: initial.draft.templateVersion,
+            content: previewContent,
+            avatarDataUrl: initial.avatarDataUrl,
+            interactive: false,
+          })
+        : null,
+    [
+      initial.avatarDataUrl,
+      initial.draft.templateKey,
+      initial.draft.templateVersion,
+      previewContent,
+    ],
   );
 
   const save = async (next = pendingContent.current): Promise<boolean> => {
@@ -557,6 +636,17 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
         </div>
         <div className={styles.exportActions}>
           <button
+            ref={previewButton}
+            type="button"
+            className="button-secondary"
+            disabled={exporting !== null}
+            onClick={() => {
+              setPreviewContent(pendingContent.current);
+            }}
+          >
+            预览
+          </button>
+          <button
             type="button"
             className="button-secondary"
             disabled={exporting !== null || saveState === 'conflict'}
@@ -689,6 +779,16 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
             setShowRefresh(false);
           }}
           onConfirm={() => void refresh()}
+        />
+      ) : null}
+      {previewHtml ? (
+        <TemplatePreviewDialog
+          html={previewHtml}
+          templateName={initial.template.name}
+          returnFocusTo={previewButton.current}
+          onClose={() => {
+            setPreviewContent(null);
+          }}
         />
       ) : null}
     </main>

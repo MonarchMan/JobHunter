@@ -742,8 +742,15 @@ test.describe('校招实习管理台核心流程', () => {
     await taskFilters.getByRole('button', { name: '应用筛选' }).click();
     await expect(page).toHaveURL(/(?:\?|&)status=failed(?:&|$)/);
     await page.goto('/tasks');
-    await expect(page.getByRole('button', { name: '来源同步' }).first()).toBeVisible();
+    const taskTitle = page.getByRole('button', { name: '来源同步' }).first();
+    await expect(taskTitle).toBeVisible();
     await expect(page.getByRole('button', { name: 'job-understanding' })).toBeVisible();
+    const titleColor = await taskTitle.evaluate((element) => getComputedStyle(element).color);
+    await taskTitle.hover();
+    await expect(taskTitle).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await expect
+      .poll(() => taskTitle.evaluate((element) => getComputedStyle(element).color))
+      .not.toBe(titleColor);
     const taskTable = page.getByRole('table', { name: '后台任务列表' });
     await expect(taskTable.getByRole('columnheader').first()).toHaveCSS('text-align', 'center');
     await expect(taskTable.getByRole('cell').first()).toHaveCSS('text-align', 'center');

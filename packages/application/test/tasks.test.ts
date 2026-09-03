@@ -1,8 +1,10 @@
 import { parseId, utcInstant } from '@jobhunter/domain';
+import { SourceError } from '@jobhunter/source-core';
 import { describe, expect, it, vi } from 'vitest';
 import {
   AsyncSemaphore,
   AsyncSemaphoreCancelledError,
+  createSourceJobDetailTaskHandler,
   createSourceSyncTaskHandler,
   HandlerRegistry,
   RetryPolicy,
@@ -311,6 +313,27 @@ describe('RetryPolicy', () => {
     ).toEqual({ retry: false, availableAt: null });
   });
 
+  it('honors an explicit task-level retry override without changing category defaults', () => {
+    const policy = new RetryPolicy({ next: () => 0.5 });
+    expect(
+      policy.decide({
+        category: 'parse_changed',
+        attemptCount: 1,
+        maxAttempts: 3,
+        now: utcInstant(1),
+      }).retry,
+    ).toBe(false);
+    expect(
+      policy.decide({
+        category: 'parse_changed',
+        attemptCount: 1,
+        maxAttempts: 3,
+        now: utcInstant(1),
+        retryable: true,
+      }).retry,
+    ).toBe(true);
+  });
+
   it('redacts credential-shaped text from safe summaries', () => {
     const summary = sanitizeTaskErrorSummary(
       'request failed\nAuthorization Bearer top-secret token=abc password:xyz',
@@ -321,5 +344,45 @@ describe('RetryPolicy', () => {
     expect(new TaskExecutionError('parse_changed', summary).safeSummary.length).toBeLessThanOrEqual(
       240,
     );
+  });
+});
+
+describe('source.job-detail retry diagnostics', () => {
+  it('keeps the parse category and diagnostic while marking it retryable', async () => {
+    const handler = createSourceJobDetailTaskHandler({
+      run: () =>
+        Promise.reject(
+          new SourceError(
+            'parse_changed',
+            'Tencent detail response changed: data.desc is missing.',
+          ),
+        ),
+    });
+
+    await expect(
+      handler.execute(
+        {
+          signal: new AbortController().signal,
+          clock: { now: () => utcInstant(1) },
+          logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+          services: {},
+        },
+        {
+          sourceId: '018f0000-0000-7000-8000-000000000211',
+          runId: '01a06074-96ee-7c4e-a89a-7027d4fc9c13',
+          listContentHash: 'a'.repeat(64),
+          adapterVersion: '1.0.0',
+          discovered: {
+            externalJobId: '1231829074692139076',
+            sourceUrl: 'https://join.qq.com/post_detail.html?postid=1231829074692139076',
+            raw: {},
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      category: 'parse_changed',
+      retryable: true,
+      safeSummary: 'Tencent detail response changed: data.desc is missing.',
+    });
   });
 });

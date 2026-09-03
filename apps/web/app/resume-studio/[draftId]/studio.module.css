@@ -25,6 +25,11 @@
   font-weight: 700;
   text-decoration: none;
 }
+.back:hover:not(:disabled) {
+  background: transparent;
+  color: var(--primary-hover);
+  transform: none;
+}
 .topbar > div:nth-child(2) {
   display: grid;
   gap: 0.1rem;
@@ -252,6 +257,65 @@
   justify-content: flex-end;
   gap: 0.6rem;
 }
+.previewDialog {
+  width: min(68rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+}
+.previewDialog::backdrop {
+  background: rgb(28 33 48 / 55%);
+  backdrop-filter: blur(3px);
+}
+.previewHeader,
+.previewFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+}
+.previewHeader {
+  border-bottom: 1px solid var(--line);
+}
+.previewHeader h2,
+.previewHeader p {
+  margin: 0;
+}
+.previewHeader p,
+.previewFooter span {
+  margin-top: 0.2rem;
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+.previewViewport {
+  max-height: calc(100dvh - 11rem);
+  padding: 1.25rem;
+  overflow: auto;
+  background: var(--canvas-tint);
+  scrollbar-gutter: stable;
+}
+.previewPaper {
+  width: 210mm;
+  margin: 0 auto;
+  box-shadow: 0 1.4rem 3rem rgb(28 33 48 / 16%);
+}
+.previewPaper iframe {
+  display: block;
+  width: 210mm;
+  height: 297mm;
+  border: 0;
+  background: #fff;
+}
+.previewFooter {
+  border-top: 1px solid var(--line);
+}
 @media (max-width: 900px) {
   .topbar {
     grid-template-columns: 1fr auto;
@@ -317,6 +381,17 @@
     display: grid;
     gap: 0.1rem;
   }
+  .previewDialog {
+    width: calc(100% - 1rem);
+    max-height: calc(100dvh - 1rem);
+  }
+  .previewViewport {
+    padding: 0.5rem;
+  }
+  .previewPaper {
+    width: 793.7px;
+    zoom: min(1, calc((100vw - 2rem) / 793.7px));
+  }
 }
 @media (max-width: 560px) {
   .topbar {
@@ -368,6 +443,23 @@
   }
   .dialog button {
     width: 100%;
+  }
+  .previewHeader {
+    align-items: flex-start;
+    padding: 0.8rem;
+  }
+  .previewHeader h2 {
+    font-size: 1rem;
+  }
+  .previewHeader p {
+    max-width: 15rem;
+  }
+  .previewHeader button {
+    flex: none;
+    padding: 0.55rem 0.65rem;
+  }
+  .previewFooter {
+    padding: 0.7rem 0.8rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {

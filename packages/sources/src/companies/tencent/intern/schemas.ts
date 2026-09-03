@@ -32,14 +32,32 @@ export const tencentCampusDetailSchema = z
     postId: z.string().min(1),
     title: z.string().min(1),
     tidName: z.string().nullable().optional(),
-    desc: z.string().min(1),
-    request: z.string().min(1),
+    desc: z.string().nullable().optional(),
+    request: z.string().nullable().optional(),
+    topicDetail: z.string().nullable().optional(),
+    topicRequirement: z.string().nullable().optional(),
     workCityList: z.array(z.string().min(1)),
     projectName: z.string().min(1),
     recruitLabelName: z.string().min(1),
     internBonus: z.string().nullable().optional(),
   })
-  .loose();
+  .loose()
+  .superRefine((detail, context) => {
+    if (!(detail.desc?.trim() || detail.topicDetail?.trim())) {
+      context.addIssue({
+        code: 'custom',
+        path: ['desc'],
+        message: 'Tencent detail has neither desc nor topicDetail.',
+      });
+    }
+    if (!(detail.request?.trim() || detail.topicRequirement?.trim())) {
+      context.addIssue({
+        code: 'custom',
+        path: ['request'],
+        message: 'Tencent detail has neither request nor topicRequirement.',
+      });
+    }
+  });
 export type TencentCampusDetail = z.infer<typeof tencentCampusDetailSchema>;
 
 export const tencentCampusDetailResponseSchema = z

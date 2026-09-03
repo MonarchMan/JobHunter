@@ -153,7 +153,11 @@ export class JobDetailService {
         });
       });
       if (isSourceError(error)) throw error;
-      throw new SourceError('parse_changed', 'Deferred detail enrichment failed.', {
+      const diagnostic =
+        error instanceof Error && error.message.trim()
+          ? `Deferred detail enrichment failed: ${error.message.slice(0, 200)}`
+          : 'Deferred detail enrichment failed.';
+      throw new SourceError('parse_changed', diagnostic, {
         cause: error,
       });
     }

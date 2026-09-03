@@ -1,4 +1,5 @@
 import { parseNormalizedJob } from '@jobhunter/domain';
+import { ZodError } from 'zod';
 import {
   SourceError,
   canonicalizeOfficialUrl,
@@ -53,6 +54,15 @@ function jobUrl(postId: string): string {
   return canonicalizeOfficialUrl(
     `https://join.qq.com/post_detail.html?postid=${encodeURIComponent(postId)}`,
     hosts,
+  );
+}
+
+function firstNonEmpty(
+  primary: string | null | undefined,
+  fallback: string | null | undefined,
+): string {
+  return (
+    [primary, fallback].map((value) => value?.trim() ?? '').find((value) => value.length > 0) ?? ''
   );
 }
 
@@ -155,7 +165,18 @@ function createTencentCampusVariant(
         responseType: 'json',
         timeoutMs: context.timeoutMs,
       });
-      const detail = tencentCampusDetailResponseSchema.parse(response.body).data;
+      let detail: TencentCampusDetail;
+      try {
+        detail = tencentCampusDetailResponseSchema.parse(response.body).data;
+      } catch (error) {
+        if (!(error instanceof ZodError)) throw error;
+        const diagnostic = error.issues
+          .map((issue) => `${issue.path.join('.') || 'response'}: ${issue.message}`)
+          .join('; ');
+        throw new SourceError('parse_changed', `Tencent detail response changed: ${diagnostic}`, {
+          cause: error,
+        });
+      }
       if (detail.postId !== job.externalJobId)
         throw new SourceError('parse_changed', 'Tencent campus detail returned another job ID.');
       return detail;
@@ -177,8 +198,8 @@ function createTencentCampusVariant(
           .filter(Boolean);
       const description = detail
         ? [
-            `岗位职责\n${detail.desc}`,
-            `岗位要求\n${detail.request}`,
+            `岗位职责\n${firstNonEmpty(detail.desc, detail.topicDetail)}`,
+            `岗位要求\n${firstNonEmpty(detail.request, detail.topicRequirement)}`,
             detail.internBonus ? `实习加分项\n${detail.internBonus}` : null,
           ]
             .filter(Boolean)
@@ -210,7 +231,7 @@ function createTencentCampusVariant(
         provenance: {
           title: '$.data.title',
           locations: '$.data.workCityList',
-          description: '$.data.desc+$.data.request',
+          description: `${detail?.desc?.trim() ? '$.data.desc' : '$.data.topicDetail'}+${detail?.request?.trim() ? '$.data.request' : '$.data.topicRequirement'}`,
         },
         sourcePrivateJson: {
           projectName: detail?.projectName ?? list.projectName,

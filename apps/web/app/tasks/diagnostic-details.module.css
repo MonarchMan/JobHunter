@@ -7,6 +7,12 @@
   text-underline-offset: 0.18rem;
 }
 
+.trigger:hover:not(:disabled) {
+  background: transparent;
+  color: var(--primary);
+  transform: none;
+}
+
 .dialog {
   width: min(48rem, 100%);
   max-height: min(42rem, 100%);

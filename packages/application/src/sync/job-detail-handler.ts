@@ -66,6 +66,7 @@ export function createSourceJobDetailTaskHandler(
       } catch (error) {
         if (isSourceError(error)) {
           throw new TaskExecutionError(taskCategory(error.category), error.safeDiagnostic, {
+            retryable: error.category === 'parse_changed',
             cause: error,
           });
         }
