@@ -21,6 +21,7 @@ test.describe('多模板简历制作', () => {
     await expect(page.locator('[data-resume-studio]')).toBeVisible();
     await expect(page.getByText('简洁单页', { exact: true })).toBeVisible();
     await expect(page.getByRole('navigation', { name: '简历章节' })).toBeVisible();
+    const saveStatus = page.locator('[data-resume-save-state]');
     const backButton = page.getByRole('button', { name: /返回个人资料/u });
     const backColor = await backButton.evaluate((element) => getComputedStyle(element).color);
     await backButton.hover();
@@ -47,7 +48,7 @@ test.describe('多模板简历制作', () => {
     await expect(name).toHaveAttribute('contenteditable', 'true');
     await name.fill('浏览器测试候选人');
     await page.getByRole('button', { name: '增大字号' }).click();
-    await expect(page.getByRole('status')).toContainText('已保存');
+    await expect(saveStatus).toContainText('已保存');
     await expect(canvas.locator('[data-field="basicInfo.name"]')).toHaveText('浏览器测试候选人');
     await expect(canvas.locator('[data-section-id="basic"]')).toHaveAttribute(
       'style',
@@ -85,7 +86,7 @@ test.describe('多模板简历制作', () => {
     await expect(organization).toBeVisible();
     await organization.fill('浏览器测试公司');
     await page.getByRole('button', { name: '增大字距' }).click();
-    await expect(page.getByRole('status')).toContainText('已保存');
+    await expect(saveStatus).toContainText('已保存');
     await expect(canvas.getByText('浏览器测试公司')).toBeVisible();
     expect((await new AxeBuilder({ page }).exclude('iframe').analyze()).violations).toEqual([]);
 
@@ -93,7 +94,7 @@ test.describe('多模板简历制作', () => {
     await page.getByRole('button', { name: '导出 HTML' }).click();
     const file = await exported;
     expect(file.suggestedFilename()).toMatch(/简洁单页-\d{8}\.html$/u);
-    await expect(page.getByRole('status')).toContainText('HTML 已导出');
+    await expect(saveStatus).toContainText('HTML 已导出');
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect

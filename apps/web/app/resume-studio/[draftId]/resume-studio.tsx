@@ -19,6 +19,17 @@ interface Envelope<T> {
   readonly error?: { readonly code?: string; readonly message?: string };
 }
 
+async function readEnvelope<T>(response: Response, fallback: string): Promise<Envelope<T>> {
+  if (!response.headers.get('content-type')?.includes('application/json')) {
+    throw new Error(`${fallback}（服务返回了无法识别的响应，HTTP ${String(response.status)}）。`);
+  }
+  try {
+    return (await response.json()) as Envelope<T>;
+  } catch {
+    throw new Error(`${fallback}（服务返回的数据格式无效）。`);
+  }
+}
+
 type SaveState = 'saved' | 'dirty' | 'saving' | 'failed' | 'conflict';
 type StudioSectionId = Exclude<ResumeSectionId, 'target'>;
 type RepeatableSectionId =
@@ -440,7 +451,7 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
           idempotencyToken: crypto.randomUUID(),
         }),
       });
-      const body = (await response.json()) as Envelope<{ id: string; status: string }>;
+      const body = await readEnvelope<{ id: string; status: string }>(response, '简历导出失败。');
       if (!response.ok || !body.data) throw new Error(body.error?.message ?? '简历导出失败。');
       let status = body.data;
       for (
@@ -453,11 +464,11 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
           `/api/resume-drafts/${initial.draft.id}/exports/${status.id}`,
           { cache: 'no-store' },
         );
-        const polled = (await response.json()) as Envelope<{
+        const polled = await readEnvelope<{
           id: string;
           status: string;
           errorSummary?: string | null;
-        }>;
+        }>(response, '无法读取 PDF 生成状态。');
         if (!response.ok || !polled.data)
           throw new Error(polled.error?.message ?? '无法读取 PDF 生成状态。');
         status = polled.data;
@@ -614,6 +625,7 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
         </div>
         <div
           className={styles.saveState}
+          data-resume-save-state
           data-state={saveState}
           role={saveState === 'failed' || saveState === 'conflict' ? 'alert' : 'status'}
         >

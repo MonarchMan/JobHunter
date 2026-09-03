@@ -14,7 +14,7 @@ cache/
 !.env.example
 var/
 backups/
-exports/
+/exports/
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

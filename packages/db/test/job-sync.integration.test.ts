@@ -383,6 +383,72 @@ describe('JobSyncService', () => {
     ).toBe(1);
   });
 
+  it('records recurring historical content and preserves the last successful detail cache', async () => {
+    const fixture = await setup({ deferredDetails: true });
+    await run(fixture);
+    const registry = new AdapterRegistry();
+    registry.register(fixtureAdapter(fixture.scenario, true));
+    const details = new JobDetailService({
+      uow: fixture.uow,
+      registry,
+      http: unusedHttp,
+      clock: fixture.clock,
+      ids: fixture.ids,
+      normalizerVersion: 'normalize-v1',
+    });
+    const detailCommand = (): JobDetailCommand => {
+      const row = fixture.handle.client
+        .prepare(
+          `SELECT payload_json FROM tasks
+           WHERE task_type = 'source.job-detail' AND payload_json LIKE '%"externalJobId":"job-1"%'
+           ORDER BY created_at DESC LIMIT 1`,
+        )
+        .get() as { readonly payload_json: string } | undefined;
+      if (!row) throw new Error('Deferred detail task for job-1 is missing.');
+      const payload = sourceJobDetailTaskPayloadSchema.parse(JSON.parse(row.payload_json));
+      return {
+        sourceId: parseId(payload.sourceId, 'JobSource'),
+        runId: parseId(payload.runId, 'SyncRun'),
+        listContentHash: parseContentHash(payload.listContentHash),
+        adapterVersion: payload.adapterVersion,
+        discovered: payload.discovered,
+      };
+    };
+
+    await details.run(detailCommand(), new AbortController().signal);
+    expect(count(fixture.handle, 'job_revisions')).toBe(4);
+
+    fixture.handle.client
+      .prepare('DELETE FROM source_job_details WHERE source_id = ? AND external_job_id = ?')
+      .run(sourceId, 'job-1');
+    const first = fixture.scenario.jobs[0];
+    if (!first) throw new Error('Fixture job-1 is missing.');
+    fixture.scenario.jobs[0] = { ...first, token: 'new-list-payload' };
+    await run(fixture);
+    expect(count(fixture.handle, 'job_revisions')).toBe(5);
+
+    await details.run(detailCommand(), new AbortController().signal);
+    expect(count(fixture.handle, 'job_revisions')).toBe(6);
+    expect(
+      fixture.handle.client
+        .prepare("SELECT status FROM source_job_details WHERE external_job_id = 'job-1'")
+        .pluck()
+        .get(),
+    ).toBe('succeeded');
+
+    fixture.scenario.detailFailure = true;
+    await expect(details.run(detailCommand(), new AbortController().signal)).rejects.toMatchObject({
+      category: 'temporary',
+    });
+    expect(
+      fixture.handle.client
+        .prepare(
+          "SELECT status, detail_json FROM source_job_details WHERE external_job_id = 'job-1'",
+        )
+        .get(),
+    ).toMatchObject({ status: 'succeeded' });
+  });
+
   it('streams a first run, replays idempotently and revises only changed content', async () => {
     const fixture = await setup();
     const first = await run(fixture);

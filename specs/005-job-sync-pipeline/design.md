@@ -16,6 +16,8 @@
 
 deferred 详情在独立 `source.job-detail` 队列执行。列表职位通过地域和画像 intake 后，按 `(sourceId, externalJobId, listContentHash, adapterVersion)` 创建幂等任务。任务读取固定的列表输入、请求详情、更新详情缓存，并按需创建 JobRevision；失败写入详情状态和任务错误，不回写 SyncRun coverage/health。后续列表同步优先复用已缓存详情，避免把已补全职位降回基础字段。
 
+Revision 是时序事实而不是内容集合：只对“与当前 Revision 相同”的输入判定 unchanged；职位恢复到历史内容时仍追加新 Revision，因此数据库仅约束 `(job_id, revision_no)` 唯一，不再约束 `(job_id, content_hash)`。详情刷新失败由 Task 保存失败诊断，但 `source_job_details` 保留同一职位最后一次成功的缓存；缓存的列表哈希过期时仍用于防止列表摘要覆盖完整 JD，同时继续为新列表哈希创建详情刷新任务。
+
 `sync_seen_jobs` 是运行时辅助表，可在运行结束后清理；其 Schema 纳入初始迁移但不属于长期领域事实。
 
 ## 事务边界
@@ -49,4 +51,4 @@ SyncRun 创建时即写入与最终统计同构的完整零值对象，不能以
 
 ## 测试
 
-使用 FakeAdapter 与真实临时 SQLite 测试所有验收场景。失败注入点覆盖分页、详情、文件、每个事务阶段、任务入队和取消。
+使用 FakeAdapter 与真实临时 SQLite 测试所有验收场景。失败注入点覆盖分页、详情、文件、每个事务阶段、任务入队和取消，并覆盖职位内容恢复为历史哈希及失败刷新保留成功详情缓存。

@@ -21,6 +21,6 @@ export default defineConfig({
     env: {
       PLAYWRIGHT_FIXTURE_PORT: process.env.PLAYWRIGHT_FIXTURE_PORT ?? '3210',
     },
-    timeout: 30_000,
+    timeout: 60_000,
   },
 });

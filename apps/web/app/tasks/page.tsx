@@ -147,11 +147,6 @@ export default async function TasksPage({
                         <TaskDetailsDialog task={task} />
                       </strong>
                       <small>
-                        {task.jobDetailBatch
-                          ? `成功 ${String(task.jobDetailBatch.counts.succeeded)} / ${String(task.jobDetailBatch.counts.total)}`
-                          : (taskTypeLabels[task.taskType] ?? task.taskType)}
-                      </small>
-                      <small>
                         <code>{task.id.slice(0, 8)}…</code>
                       </small>
                     </td>

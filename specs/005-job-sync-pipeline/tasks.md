@@ -1,7 +1,7 @@
 # 005 职位同步流水线任务
 
 > 状态：Implemented
-> 显式覆盖：SYNC-001, SYNC-002, SYNC-003, SYNC-004, SYNC-005, SYNC-006, SYNC-007, SYNC-008, SYNC-009, SYNC-010, SYNC-011, SYNC-012, SYNC-013, SYNC-014, SYNC-015, SYNC-016, SYNC-017, SYNC-018, SYNC-Q01, SYNC-Q02, SYNC-Q03, SYNC-Q04
+> 显式覆盖：SYNC-001, SYNC-002, SYNC-003, SYNC-004, SYNC-005, SYNC-006, SYNC-007, SYNC-008, SYNC-009, SYNC-010, SYNC-011, SYNC-012, SYNC-013, SYNC-014, SYNC-015, SYNC-016, SYNC-017, SYNC-018, SYNC-019, SYNC-Q01, SYNC-Q02, SYNC-Q03, SYNC-Q04
 
 - [x] **SYNC-T001** 实现 SyncRun 创建/结束、来源互斥和运行统计对象。（SYNC-001,002,012）
 - [x] **SYNC-T002** 实现流式 discover/fetch/normalize 编排与 AbortSignal 传播。（SYNC-003, SYNC-Q01）
@@ -17,3 +17,4 @@
 - [x] **SYNC-T012** 将详情请求拆为 intake 后的独立幂等任务，并使列表同步复用详情缓存。（SYNC-015）
 - [x] **SYNC-T013** 拆分列表健康与详情失败，支持 temporary partial 重试及结构化覆盖/隔离诊断。（SYNC-016,017）
 - [x] **SYNC-T014** 让新建 SyncRun 持久化完整零值统计，并把存量统计破坏性投影为当前字段集合，保证任务诊断可解析。（SYNC-018）
+- [x] **SYNC-T015** 允许职位内容按时序恢复为历史哈希，并在详情刷新失败时保留最后一次成功缓存。（SYNC-019）

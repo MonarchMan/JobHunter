@@ -25,10 +25,20 @@ export const taskTypeLabels: Readonly<Record<string, string>> = {
   'source.health-check': '来源健康检查',
   'source.job-detail': '职位详情同步',
   'resume.profile.extract': '简历画像提取',
+  'resume.polish': '简历润色',
+  'resume.export.pdf@v1': '简历 PDF 导出',
+  'resume.export.cleanup@v1': '简历导出文件清理',
+  'resume.delete.confirmed': '简历删除',
+  'resume.artifact.purge': '简历文件清理',
   'job.enrich': '职位理解',
   'match.compute-revision': '职位匹配',
   'match.score-job': '手动职位评分',
   'match.advise': '匹配建议',
+  'interview.project-question': '项目面试问题生成',
+  'interview.project-answer-digest': '项目回答分析',
+  'interview.project-notebook.render': '项目面试档案生成',
+  'interview.experience-research.execute': '面经研究',
+  'maintenance.cleanup': '系统数据清理',
 };
 
 export const supportStatusLabels = {

@@ -261,7 +261,8 @@ export class SqliteSyncRepository implements SyncRepository {
            adapter_version = excluded.adapter_version,
            status = 'failed', detail_json = NULL,
            error_category = excluded.error_category, error_summary = excluded.error_summary,
-           fetched_at = NULL, updated_at = excluded.updated_at`,
+           fetched_at = NULL, updated_at = excluded.updated_at
+         WHERE source_job_details.status != 'succeeded'`,
       )
       .run(
         input.sourceId,

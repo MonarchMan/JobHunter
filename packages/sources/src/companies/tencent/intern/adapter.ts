@@ -72,7 +72,7 @@ function createTencentCampusVariant(
   return {
     metadata: {
       key: variant.key,
-      version: '1.0.0',
+      version: '1.0.1',
       company: { slug: 'tencent', name: '腾讯' },
       recruitmentType: 'campus',
       canonicalEntryUrl: entryUrl,

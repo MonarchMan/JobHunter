@@ -43,6 +43,10 @@ function qingyunResponse(topicDetail: string, topicRequirement: string): unknown
 }
 
 describe('Tencent internship detail variants', () => {
+  it('uses a new adapter version so repaired detail tasks do not reuse failed idempotency keys', () => {
+    expect(createTencentInternAdapter().metadata.version).toBe('1.0.1');
+  });
+
   it('normalizes Qingyun topic fields when ordinary detail fields are empty', async () => {
     const adapter = createTencentInternAdapter();
     const detail = tencentCampusDetailResponseSchema.parse(

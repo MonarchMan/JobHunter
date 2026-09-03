@@ -204,6 +204,13 @@
       "when": 1788472800000,
       "tag": "0028_resume_template_export",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788559200000,
+      "tag": "0029_allow_recurring_job_revision_content",
+      "breakpoints": true
     }
   ]
 }

@@ -33,6 +33,7 @@
 - [x] **FPS-T009** 完成阿里巴巴访问 Spike 和适配器门禁。（FPS-002,003）
   - 2026-08-21：`smoke-20260821-alibaba-01` 复核 `/off-campus` 返回 HTTP 500，根页仅为空模板应用壳，未取得职位 DOM、稳定 ID 或分页证据；范围例外见 `FPS-EX-001`，保持 `blocked`，不创建适配器。
 - 2026-08-22：切换至当前校园实习入口 `campus-talent.alibaba.com/campus/position?batchId=100000560002`；匿名浏览器读取官网自身 `/position/search` 响应，完成 34 页/339 条、稳定 ID 唯一、字段归一化和 `complete` Smoke，晋级 `supported` 并启用默认 Registry。
+- 2026-09-03：腾讯实习/校招详情适配器升级为 `1.0.1`；兼容青云计划的 `topicDetail/topicRequirement`，并通过新版本幂等键重新派生曾由旧 Schema 误判失败的详情任务。
 - [x] **FPS-T010** 完成百度校园路由 Spike 和适配器门禁。（FPS-002,003）
   - 2026-08-21：`smoke-20260821-baidu-01` 确认 `/jobs/social` 为校园页、`/social-list` 返回 `need-login`，匿名列表请求被拒绝；范围例外见 `FPS-EX-002`，保持 `blocked`，不创建适配器。
   - 2026-08-22：确认校招列表使用匿名 form-urlencoded JSON 协议；`smoke-20260822-baidu-01` 完成实习与应届 31 页/617 条（458+159），稳定 `postId` 全部唯一，coverage `complete`，晋级 `supported` 并默认启用。
