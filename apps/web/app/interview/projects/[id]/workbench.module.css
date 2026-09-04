@@ -49,10 +49,100 @@
 .drill,
 .coverage,
 .history,
-.materials {
+.materials,
+.sessionArchive {
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
+}
+
+.sessionArchive {
+  padding: 1.25rem;
+}
+
+.sessionArchive > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sessionArchive h2,
+.sessionArchive p {
+  margin: 0;
+}
+
+.sessionArchive header p,
+.sessionArchive header > span {
+  color: var(--muted-ink);
+  font-size: 0.84rem;
+}
+
+.sessionArchive header p {
+  margin-top: 0.3rem;
+}
+
+.sessionArchive ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.65rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sessionArchive button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  min-height: 4rem;
+  padding: 0.7rem 0.85rem;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+}
+
+.sessionArchive button:hover {
+  border-color: var(--primary);
+  background: var(--canvas);
+}
+
+.sessionArchive button[aria-pressed='true'] {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.sessionArchive button[aria-pressed='true']::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--action);
+  content: '';
+}
+
+.sessionArchive button > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.sessionArchive button > span:last-child {
+  justify-items: end;
+}
+
+.sessionArchive button strong,
+.sessionArchive button b {
+  font-size: 0.88rem;
+}
+
+.sessionArchive button small {
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
 }
 
 .materials {
@@ -190,6 +280,18 @@
   width: 3px;
   min-height: 2.5rem;
   background: var(--action);
+}
+
+.nextStepActions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 8.5rem;
+}
+
+.nextStep > button,
+.nextStepActions > button {
+  min-inline-size: 8rem;
 }
 
 .failure {
@@ -603,6 +705,7 @@
   }
 
   .nextStep > button,
+  .nextStepActions,
   .pendingBlock > button {
     grid-column: 2;
     width: 100%;

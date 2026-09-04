@@ -3,9 +3,9 @@ import { contentHash, type ContentHash } from '../shared/canonical.js';
 import { DomainError } from '../shared/domain-error.js';
 
 /** 网友面经研究 Prompt 版本，参与研究请求指纹计算。 */
-export const communityResearchPromptVersion = 'community-research-prompt@v3' as const;
+export const communityResearchPromptVersion = 'community-research-prompt@v4' as const;
 /** 网友面经研究 Bundle 的持久化 Schema 版本。 */
-export const communityResearchSchemaVersion = 'community-research-bundle@v1' as const;
+export const communityResearchSchemaVersion = 'community-research-bundle@v2' as const;
 
 /** 创建允许为空但限制最大长度的文本 Schema。 */
 const nullableText = (maximum: number): z.ZodNullable<z.ZodString> =>
@@ -97,7 +97,6 @@ const communityQuestionSchema = z
     text: z.string().trim().min(1).max(2_000),
     answerExcerpt: nullableText(500),
     topics: z.array(z.string().trim().min(1).max(80)).max(20),
-    evidenceExcerpt: z.string().trim().min(1).max(500),
   })
   .strict();
 

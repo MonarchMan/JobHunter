@@ -77,7 +77,6 @@ function assertContainsResearchFindings(
     readonly questions: readonly {
       readonly text: string;
       readonly answerExcerpt: string | null;
-      readonly evidenceExcerpt: string;
     }[];
   }[],
   warnings: readonly string[],
@@ -91,9 +90,7 @@ function assertContainsResearchFindings(
   const containsOnlyFailureStatements = questions.every(
     (question) =>
       !looksLikeInterviewQuestion(question.text) &&
-      [question.text, question.answerExcerpt, question.evidenceExcerpt].filter(
-        hasEmptyResearchResultSignal,
-      ).length >= 2,
+      [question.text, question.answerExcerpt].some(hasEmptyResearchResultSignal),
   );
   if (containsOnlyFailureStatements) {
     throw new TypeError('Research bundle contains no verifiable interview findings.');

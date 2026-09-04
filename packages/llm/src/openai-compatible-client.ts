@@ -85,12 +85,36 @@ function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
   };
 }
 
-/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
-function shouldDisableDeepSeekThinking(baseUrl: string, model: string): boolean {
+/** 判断是否连接 DeepSeek 官方 OpenAI 兼容入口。 */
+function isDeepSeekApi(baseUrl: string): boolean {
   try {
-    return new URL(baseUrl).hostname === 'api.deepseek.com' && model.startsWith('deepseek-v4');
+    return new URL(baseUrl).hostname === 'api.deepseek.com';
   } catch {
     return false;
+  }
+}
+
+/** DeepSeek v4 的结构化任务关闭默认思考模式，避免正文生成延迟。 */
+function shouldDisableDeepSeekThinking(baseUrl: string, model: string): boolean {
+  return isDeepSeekApi(baseUrl) && model.startsWith('deepseek-v4');
+}
+
+/** 严格解析 JSON，并仅兼容包裹整个响应的单层 Markdown JSON 代码围栏。 */
+function parseStructuredContent(
+  content: string,
+): { readonly parsed: true; readonly value: unknown } | { readonly parsed: false } {
+  const trimmed = content.trim();
+  if (!trimmed) return { parsed: false };
+  try {
+    return { parsed: true, value: JSON.parse(trimmed) as unknown };
+  } catch {
+    const fenced = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/iu.exec(trimmed);
+    if (!fenced?.[1]) return { parsed: false };
+    try {
+      return { parsed: true, value: JSON.parse(fenced[1].trim()) as unknown };
+    } catch {
+      return { parsed: false };
+    }
   }
 }
 
@@ -210,16 +234,22 @@ export class OpenAiCompatibleModelClient implements ModelClient {
           }),
           signal: combined,
         });
-      let response = await dispatch({
-        type: 'json_schema',
-        json_schema: {
-          name: request.outputSchemaName,
-          strict: true,
-          schema: request.outputJsonSchema,
-        },
-      });
-      // Compatibility gateways commonly implement JSON mode before full json_schema mode.
-      if (response.status === 400) response = await dispatch({ type: 'json_object' });
+      const deepSeek = isDeepSeekApi(this.#config.baseUrl);
+      // 1、DeepSeek Chat Completions 直接使用 json_object；其他网关优先协商 json_schema。
+      let response = await dispatch(
+        deepSeek
+          ? { type: 'json_object' }
+          : {
+              type: 'json_schema',
+              json_schema: {
+                name: request.outputSchemaName,
+                strict: true,
+                schema: request.outputJsonSchema,
+              },
+            },
+      );
+      // 1.a、通用网关可能只支持 JSON mode；DeepSeek 或 JSON mode 被拒绝后最终回退纯文本。
+      if (!deepSeek && response.status === 400) response = await dispatch({ type: 'json_object' });
       if (response.status === 400) response = await dispatch();
       if (!response.ok) throw await responseError(response);
       const parsed = responseSchema.parse(await response.json());
@@ -245,15 +275,12 @@ export class OpenAiCompatibleModelClient implements ModelClient {
           usage: usage(parsed.usage),
         };
       }
-      if (!choice.message.content)
-        throw new ModelClientError('invalid_output', 'Model response content was empty.');
-      let output: unknown;
-      try {
-        output = JSON.parse(choice.message.content) as unknown;
-      } catch {
-        throw new ModelClientError('invalid_output', 'Model response content was not JSON.');
-      }
-      return { kind: 'output', output, usage: usage(parsed.usage) };
+      // 2、代码围栏在本地安全剥离；其他非 JSON（含 DeepSeek 偶发空正文）交给 Runner 修复一次。
+      const content = choice.message.content ?? '';
+      const structured = parseStructuredContent(content);
+      return structured.parsed
+        ? { kind: 'output', output: structured.value, usage: usage(parsed.usage) }
+        : { kind: 'unparsed_output', text: content, usage: usage(parsed.usage) };
     } catch (error) {
       if (error instanceof ModelClientError) throw error;
       if (combined.aborted) {

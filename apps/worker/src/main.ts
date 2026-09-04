@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
-import { resolveAppConfig, resolveBootstrapConfig, type AppConfig } from '@jobhunter/application';
+import { loadRuntimeAppConfig } from '@jobhunter/application';
 import { createSafeLogger } from '@jobhunter/observability';
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   createPlaywrightSourcePageClient,
@@ -10,34 +9,10 @@ import {
   runWorkerProcess,
 } from './index.js';
 
-/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
-async function readOptionalJson(filePath: string): Promise<unknown> {
-  try {
-    return JSON.parse(await readFile(filePath, 'utf8')) as unknown;
-  } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return {};
-    throw error;
-  }
-}
-
-/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
-async function loadConfig(): Promise<AppConfig> {
-  const bootstrap = resolveBootstrapConfig({ environment: process.env });
-  return resolveAppConfig({
-    bootstrap,
-    environment: process.env,
-    file: await readOptionalJson(bootstrap.configPath.value),
-  });
-}
-
-try {
-  process.loadEnvFile();
-} catch (error) {
-  if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-}
-
 // 1、加载配置；2、创建生产 Worker；3、注册退出处理；4、启动主循环。
-const config = await loadConfig();
+const workspaceRoot =
+  process.env.JOBHUNTER_WORKSPACE_ROOT ?? path.resolve(import.meta.dirname, '../../..');
+const config = await loadRuntimeAppConfig({ workspaceRoot });
 const logger = createSafeLogger({
   level: config.logLevel.value,
   logFile: path.join(config.bootstrap.dataRoot.value, 'logs', 'jobhunter.log'),

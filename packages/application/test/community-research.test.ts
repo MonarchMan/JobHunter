@@ -55,13 +55,11 @@ function bundle(): CommunityResearchBundle {
             text: '如何  定位\n慢查询？',
             answerExcerpt: '原文只提到了执行计划。',
             topics: ['数据库', '数据库'],
-            evidenceExcerpt: '面试官追问了慢查询的定位思路。',
           },
           {
             text: '如何 定位 慢查询?',
             answerExcerpt: null,
             topics: ['SQL'],
-            evidenceExcerpt: '面试官追问了慢查询的定位思路。',
           },
         ],
       },
@@ -84,7 +82,32 @@ describe('community research prompt and normalization', () => {
     expect(prompt).toContain('语义级归并');
     expect(prompt).toContain('SFT 算法如何优化');
     expect(prompt).toContain('不得为了合并而补写答案');
+    expect(prompt).toContain('不要输出或保存问题周边的证据摘录');
     expect(schema).toMatchObject({ type: 'object' });
+    expect(JSON.stringify(schema)).not.toContain('evidenceExcerpt');
+  });
+
+  it('rejects legacy bundles that still contain evidence excerpts', () => {
+    const value = bundle();
+    const firstExperience = value.experiences[0];
+    const firstQuestion = firstExperience?.questions[0];
+    if (!firstExperience || !firstQuestion) throw new Error('Expected a research fixture.');
+
+    expect(() =>
+      normalizeCommunityResearchBundle({
+        value: {
+          ...value,
+          experiences: [
+            {
+              ...firstExperience,
+              questions: [{ ...firstQuestion, evidenceExcerpt: '不应进入本地存储的正文。' }],
+            },
+          ],
+        },
+        brief,
+        expectedFingerprint: researchRequestFingerprint(brief),
+      }),
+    ).toThrow();
   });
 
   it('prioritizes stable domain-by-role queries and uses generic queries only as budget allows', () => {
@@ -227,7 +250,6 @@ describe('community research prompt and normalization', () => {
                   text: 'Unable to retrieve any interview reports or results.',
                   answerExcerpt: null,
                   topics: [],
-                  evidenceExcerpt: 'No verifiable sources were found.',
                 },
               ],
             },
@@ -255,7 +277,6 @@ describe('community research prompt and normalization', () => {
                   text: '未能检索到可核验的公开面经',
                   answerExcerpt: null,
                   topics: [],
-                  evidenceExcerpt: '没有找到有效来源或研究结果',
                 },
               ],
             },
@@ -295,7 +316,6 @@ describe('community research prompt and normalization', () => {
                 text: 'RAG 没有找到来源或结果时，如何设计降级策略？',
                 answerExcerpt: null,
                 topics: ['RAG'],
-                evidenceExcerpt: '面试官追问：RAG 没有找到来源或结果时，如何设计降级策略？',
               },
             ],
           },

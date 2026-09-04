@@ -950,6 +950,21 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     readonly now: UtcInstant;
   }): DrillSessionRecord | null {
     return this.#client.transaction(() => {
+      const target = this.#client
+        .prepare('SELECT dossier_id, status FROM drill_sessions WHERE id = ?')
+        .get(input.id) as { dossier_id: string; status: string } | undefined;
+      if (target?.status !== input.expectedStatus) return null;
+
+      // 1、恢复目标会话前暂停同档案的当前会话；2、再以 CAS 激活目标，始终只保留一个 active。
+      if (input.status === 'active') {
+        this.#client
+          .prepare(
+            `UPDATE drill_sessions SET status = 'paused', updated_at = ?, completed_at = NULL,
+               context_revision = context_revision + 1
+             WHERE dossier_id = ? AND id <> ? AND status = 'active'`,
+          )
+          .run(input.now, target.dossier_id, input.id);
+      }
       const result = this.#client
         .prepare(
           `UPDATE drill_sessions SET status = ?, updated_at = ?,
@@ -958,7 +973,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
            WHERE id = ? AND status = ?`,
         )
         .run(input.status, input.now, input.status, input.now, input.id, input.expectedStatus);
-      if (result.changes !== 1) return null;
+      if (result.changes !== 1) throw new TypeError('Drill session changed during status update.');
       const session = this.getSession(input.id);
       if (!session) return null;
       this.#bumpDossier(session.dossierId, input.now);
@@ -1112,10 +1127,10 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
           `UPDATE drill_turns SET status = 'awaiting_answer', question = ?, intent = ?,
              primary_dimension = ?, guidance_slots_json = ?, evidence_refs_json = ?,
              question_agent_run_id = ?, updated_at = ?
-           WHERE id = ? AND status = 'question_pending' AND question_task_id IS NOT NULL
+           WHERE id = ? AND status = 'question_pending'
              AND context_hash = ?
              AND (
-               ? IS NULL OR (
+               (? IS NULL AND question_task_id IS NULL) OR (
                  question_task_id = ?
                  AND EXISTS (
                    SELECT 1 FROM tasks task

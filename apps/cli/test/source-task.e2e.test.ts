@@ -185,7 +185,7 @@ describe('source and task commands', () => {
               bundle_file_id, bundle_file_version_no, current_task_id, state, revision,
               created_at, updated_at)
              VALUES (?, '{}', ?, ?,
-                     'community-research-bundle@v1', ?, 1, ?, 1,
+                     'community-research-bundle@v2', ?, 1, ?, 1,
                      NULL, NULL, ?, 'ready', 0, 1, 1)`,
           )
           .run(

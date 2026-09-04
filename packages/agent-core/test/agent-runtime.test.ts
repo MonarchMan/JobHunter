@@ -131,6 +131,9 @@ const output = (answer: unknown): ModelResponse => ({
   usage,
 });
 
+/** 构造供应商未能按 JSON 契约返回的终止正文。 */
+const unparsed = (text: string): ModelResponse => ({ kind: 'unparsed_output', text, usage });
+
 /** 构造测试输入或执行断言的辅助逻辑。 */
 function definition(
   overrides: Partial<AgentDefinition<{ text: string }, { answer: string }>> = {},
@@ -247,6 +250,38 @@ describe('agent runtime', () => {
     expect(model.requests).toHaveLength(2);
     expect(model.requests[1]?.repair).toBeDefined();
     expect(model.requests[1]?.tools).toEqual([]);
+  });
+
+  it('uses the same single repair budget for non-JSON model content', async () => {
+    const store = new MemoryStore();
+    const model = new QueueModel([unparsed('not json'), output('repaired')]);
+    const result = await runner(store, model).run({
+      definition: definition(),
+      value: { text: 'repair invalid json' },
+      signal: new AbortController().signal,
+    });
+
+    expect(result.output.answer).toBe('repaired');
+    expect(model.requests).toHaveLength(2);
+    expect(model.requests[1]?.repair).toEqual({
+      invalidOutput: 'not json',
+      validationSummary: '<root>: invalid_json',
+    });
+    expect(model.requests[1]?.tools).toEqual([]);
+  });
+
+  it('fails after one repair when the repaired response is still not JSON', async () => {
+    const store = new MemoryStore();
+    const model = new QueueModel([unparsed('first invalid'), unparsed('second invalid')]);
+
+    await expect(
+      runner(store, model).run({
+        definition: definition(),
+        value: { text: 'bounded repair' },
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({ category: 'invalid_output' });
+    expect(model.requests).toHaveLength(2);
   });
 
   it('rejects a tool that is not in the definition whitelist', async () => {

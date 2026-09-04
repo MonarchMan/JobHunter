@@ -151,7 +151,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      29,
+      32,
     );
   });
 
@@ -639,7 +639,7 @@ describe('SQLite migrations and capabilities', () => {
     expect(
       upgraded.client
         .prepare(
-          `SELECT answer, answer_excerpt, topics_json, evidence_excerpt, question_fingerprint
+          `SELECT answer, answer_excerpt, topics_json, question_fingerprint
            FROM interview_question_entries WHERE id = ?`,
         )
         .get('question'),
@@ -647,9 +647,15 @@ describe('SQLite migrations and capabilities', () => {
       answer: 'Because.',
       answer_excerpt: null,
       topics_json: '[]',
-      evidence_excerpt: null,
       question_fingerprint: null,
     });
+    expect(
+      (
+        upgraded.client.prepare("PRAGMA table_info('interview_question_entries')").all() as {
+          readonly name: string;
+        }[]
+      ).some((column) => column.name === 'evidence_excerpt'),
+    ).toBe(false);
     expect(
       upgraded.client
         .prepare(`SELECT source_payload_hash, source_url FROM job_revisions WHERE id = 'revision'`)

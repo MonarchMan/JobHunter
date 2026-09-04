@@ -2,14 +2,13 @@
 
 import { processCliIo } from './io.js';
 import { runLocalCli } from './local-runner.js';
+import path from 'node:path';
 
-// 1、加载本地环境变量；2、转交 CLI 运行器；3、将结果写入进程退出码。
-try {
-  process.loadEnvFile();
-} catch (error) {
-  if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
-}
+// 1、固定工作区根目录；2、由公共加载器读取配置；3、执行命令并写入退出码。
+const workspaceRoot = path.resolve(import.meta.dirname, '../../..');
 process.exitCode = await runLocalCli({
   argv: process.argv.slice(2),
   io: processCliIo,
+  cwd: workspaceRoot,
+  workspaceRoot,
 });

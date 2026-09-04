@@ -124,9 +124,7 @@ describe('interview project drill', () => {
     expect(drillCoverageDimensions).toHaveLength(10);
     expect(nextSessionStatus('active', 'pause')).toBe('paused');
     expect(nextSessionStatus('paused', 'resume')).toBe('active');
-    expect(() => {
-      nextSessionStatus('completed', 'resume');
-    }).toThrow(DomainError);
+    expect(nextSessionStatus('completed', 'resume')).toBe('active');
     expect(() => {
       assertCanRequestQuestion('paused', null);
     }).toThrow(DomainError);

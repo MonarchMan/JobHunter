@@ -236,7 +236,7 @@ export function nextSessionStatus(
   action: 'pause' | 'resume' | 'complete',
 ): DrillSessionStatus {
   if (action === 'pause' && current === 'active') return 'paused';
-  if (action === 'resume' && current === 'paused') return 'active';
+  if (action === 'resume' && (current === 'paused' || current === 'completed')) return 'active';
   if (action === 'complete' && current !== 'completed') return 'completed';
   throw new DomainError('INVALID_STATE_TRANSITION', 'Interview session transition is invalid.', {
     current,

@@ -75,10 +75,6 @@ export function CommunityExperienceRecord({
                   {question.answerExcerpt}
                 </p>
               ) : null}
-              <p>
-                <b>证据摘录：</b>
-                {question.evidenceExcerpt}
-              </p>
             </li>
           );
         })}

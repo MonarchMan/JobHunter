@@ -427,7 +427,6 @@ export class ExperienceResearchService {
           question: question.text,
           answerExcerpt: question.answerExcerpt,
           topics: question.topics,
-          evidenceExcerpt: question.evidenceExcerpt,
           questionFingerprint: communityQuestionFingerprint(question.text),
         });
       });

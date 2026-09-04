@@ -211,6 +211,20 @@
       "when": 1788559200000,
       "tag": "0029_allow_recurring_job_revision_content",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788562800000,
+      "tag": "0030_drop_community_evidence_excerpt",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788566400000,
+      "tag": "0031_resume_completed_drill_sessions",
+      "breakpoints": true
     }
   ]
 }

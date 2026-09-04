@@ -9,11 +9,18 @@ import {
   InterviewProjectConflictError,
   ProjectMaterialError,
   ProjectDossierNotFoundError,
+  TaskExecutionError,
   type InterviewTaskAccepted,
 } from '@jobhunter/application/web';
 import { DomainError } from '@jobhunter/domain';
 import { ZodError } from 'zod';
-import { badRequestResponse, conflictResponse, errorResponse, notFoundResponse } from './http.js';
+import {
+  badRequestResponse,
+  conflictResponse,
+  errorResponse,
+  notFoundResponse,
+  serviceUnavailableResponse,
+} from './http.js';
 
 /** 将应用层任务入队结果转换为 HTTP 响应载荷。 */
 export function presentInterviewTask(result: InterviewTaskAccepted): {
@@ -58,6 +65,22 @@ export function interviewErrorResponse(error: unknown): Response {
   }
   if (error instanceof InterviewProjectConflictError) {
     return conflictResponse('INTERVIEW_STATE_CHANGED', '拷打状态已变化，请刷新后重试。', {});
+  }
+  if (error instanceof TaskExecutionError) {
+    if (error.category === 'validation_failed') {
+      return badRequestResponse('模型返回的问题未通过安全校验，请重新生成。');
+    }
+    if (error.category === 'cancelled') {
+      return conflictResponse('QUESTION_CANCELLED', '问题生成已取消，可以重新生成。', {});
+    }
+    return serviceUnavailableResponse(
+      error.category === 'invalid_config'
+        ? 'AI 模型尚未配置，暂时无法生成问题。'
+        : 'AI 模型暂时不可用，请稍后重试。',
+    );
+  }
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return conflictResponse('QUESTION_CANCELLED', '问题生成已取消，可以重新生成。', {});
   }
   if (error instanceof DomainError) {
     if (error.code === 'INVALID_EXPERIENCE_TEXT') {

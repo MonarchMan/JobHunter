@@ -73,7 +73,6 @@ export interface CommunityInterviewQuestionRecord {
   readonly question: string;
   readonly answerExcerpt: string | null;
   readonly topics: readonly string[];
-  readonly evidenceExcerpt: string;
   readonly questionFingerprint: ContentHash;
 }
 

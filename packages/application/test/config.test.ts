@@ -1,8 +1,55 @@
-import { resolve } from 'node:path';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveAppConfig, resolveBootstrapConfig, SecretString } from '../src/index.js';
+import {
+  loadRuntimeAppConfig,
+  resolveAppConfig,
+  resolveBootstrapConfig,
+  SecretString,
+} from '../src/index.js';
 
 describe('two-stage configuration', () => {
+  it('loads workspace environment consistently and lets process values override it', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'jobhunter-runtime-config-'));
+    try {
+      // 1、准备工作区级 `.env` 与非敏感配置，模拟从任意应用子目录启动。
+      await writeFile(
+        join(workspaceRoot, '.env'),
+        [
+          'JOBHUNTER_DATA_ROOT=./runtime-data',
+          'BASE_URL=https://workspace-model.example.test/v1',
+          'MODEL=workspace-model',
+          'API_KEY=workspace-secret',
+        ].join('\n'),
+        'utf8',
+      );
+      await mkdir(join(workspaceRoot, 'runtime-data'));
+      await writeFile(
+        join(workspaceRoot, 'runtime-data', 'config.json'),
+        JSON.stringify({ logLevel: 'error' }),
+        'utf8',
+      );
+
+      // 2、显式进程环境覆盖 `.env` 同名模型名，其他模型字段继续来自工作区文件。
+      const config = await loadRuntimeAppConfig({
+        workspaceRoot,
+        environment: { MODEL: 'process-model' },
+      });
+
+      // 3、配置路径只相对工作区解析，密钥仍保持脱敏包装。
+      expect(config.bootstrap.dataRoot.value).toBe(join(workspaceRoot, 'runtime-data'));
+      expect(config.model.provider.value).toBe('openai-compatible');
+      expect(config.model.baseUrl.value).toBe('https://workspace-model.example.test/v1');
+      expect(config.model.modelName).toEqual({ value: 'process-model', source: 'environment' });
+      expect(config.model.apiKey.value?.reveal()).toBe('workspace-secret');
+      expect(JSON.stringify(config.model.apiKey)).not.toContain('workspace-secret');
+      expect(config.logLevel).toEqual({ value: 'error', source: 'file' });
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it('resolves bootstrap only from CLI, environment, and defaults', () => {
     const bootstrap = resolveBootstrapConfig({
       cwd: 'C:/workspace',

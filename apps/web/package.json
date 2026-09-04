@@ -12,9 +12,11 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@jobhunter/agent-core": "workspace:*",
     "@jobhunter/application": "workspace:*",
     "@jobhunter/db": "workspace:*",
     "@jobhunter/domain": "workspace:*",
+    "@jobhunter/llm": "workspace:*",
     "@jobhunter/resume-template": "workspace:*",
     "@jobhunter/sources": "workspace:*",
     "@radix-ui/react-select": "^2.3.7",

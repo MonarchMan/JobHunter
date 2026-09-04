@@ -1,5 +1,6 @@
 /** 应用层对 Web、CLI 和 Worker 暴露的公开装配入口。 */
 export * from './config/index.js';
+export { loadRuntimeAppConfig } from './config/runtime-config.js';
 export * from './contracts/index.js';
 export * from './dashboard/index.js';
 export * from './jobs/job-query-service.js';
@@ -50,6 +51,7 @@ export * from './sync/source-health-service.js';
 export * from './sync/web-source-service.js';
 export * from './tasks/schedule-service.js';
 export * from './tasks/handler-registry.js';
+export * from './tasks/retry-policy.js';
 export * from './tasks/task-service.js';
 export * from './tasks/web-diagnostics-service.js';
 export * from './settings/index.js';

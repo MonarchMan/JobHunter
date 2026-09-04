@@ -1,9 +1,9 @@
 import { AgentRuntimeError, type AgentRunner } from '@jobhunter/agent-core';
 import {
   assertAnswerDigest,
-  assertGeneratedProjectQuestion,
   contentHash,
   DomainError,
+  parseContentHash,
   parseId,
   type IdGenerator,
 } from '@jobhunter/domain';
@@ -13,13 +13,9 @@ import type { ArtifactStore } from '../ports/artifact-store.js';
 import type { InterviewProjectRepository } from '../ports/interview-projects.js';
 import type { TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
-import {
-  docsGroundedProjectQuestionAgentDefinition,
-  projectAnswerDigestAgentDefinition,
-  projectQuestionAgentDefinition,
-} from './agents.js';
-import { buildQuestionAgentInput, questionContextHash } from './context.js';
+import { projectAnswerDigestAgentDefinition } from './agents.js';
 import { renderProjectNotebook } from './notebook.js';
+import { ProjectQuestionGenerator } from './question-generator.js';
 
 /** 项目追问任务的幂等上下文和乐观锁参数。 */
 export const projectQuestionTaskPayloadSchema = z
@@ -88,6 +84,10 @@ export function createProjectQuestionTaskHandler(
   z.infer<typeof projectQuestionTaskPayloadSchema>,
   z.infer<typeof projectQuestionTaskOutputSchema>
 > {
+  const generator =
+    'unavailable' in input
+      ? null
+      : new ProjectQuestionGenerator({ runner: input.runner, repository: input.repository });
   return {
     taskType: 'interview.project-question',
     payloadSchema: projectQuestionTaskPayloadSchema,
@@ -98,79 +98,26 @@ export function createProjectQuestionTaskHandler(
     concurrencyKey: (payload) => `interview-session:${payload.sessionId}`,
     /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
-      // 1、校验任务上下文仍为最新；2、运行对应档位 Agent；3、校验证据；4、提交题目结果。
-      if ('unavailable' in input) {
+      // 1、保留遗留任务的恢复能力；2、复用同步链路的问题生成与安全校验；3、触发后续投影。
+      if (generator === null || 'unavailable' in input) {
         throw new TaskExecutionError(
           'invalid_config',
           'Interview question model is not configured.',
         );
       }
       const turnId = parseId(payload.turnId, 'DrillTurn');
-      const source = input.repository.getQuestionContext(turnId);
-      if (
-        source?.dossier.id !== payload.dossierId ||
-        source.session.id !== payload.sessionId ||
-        source.session.contextRevision !== payload.expectedContextRevision ||
-        source.turn.status !== 'question_pending' ||
-        (context.taskId !== undefined && source.turn.questionTaskId !== context.taskId) ||
-        source.turn.contextHash !== payload.contextHash ||
-        questionContextHash(source.session, source.turn.turnNo) !== payload.contextHash
-      ) {
-        throw new TaskExecutionError('cancelled', 'Interview question context is stale.');
-      }
-      const agentInput = buildQuestionAgentInput(source);
-      try {
-        const result = await input.runner.run({
-          definition:
-            source.session.profileKey === 'docs-grounded'
-              ? docsGroundedProjectQuestionAgentDefinition
-              : projectQuestionAgentDefinition,
-          value: agentInput,
-          signal: context.signal,
-        });
-        const question = assertGeneratedProjectQuestion(
-          result.output,
-          agentInput.allowedEvidenceRefs,
-        );
-        if (
-          source.session.profileKey === 'docs-grounded' &&
-          !question.evidenceRefs.some((reference) => reference.kind === 'project_material')
-        ) {
-          throw new DomainError(
-            'INTERVIEW_EVIDENCE_INVALID',
-            'Docs-grounded question must reference selected project material.',
-          );
-        }
-        context.signal.throwIfAborted();
-        const committed = input.repository.completeQuestion({
-          turnId,
-          ...(context.taskId ? { expectedTaskId: context.taskId } : {}),
-          expectedContextHash: source.turn.contextHash,
-          expectedSessionRevision: source.session.contextRevision,
-          ...question,
-          agentRunId: parseId(result.run.id, 'AgentRun'),
-          now: context.clock.now(),
-        });
-        if (!committed) {
-          throw new TaskExecutionError('cancelled', 'Interview question result became stale.');
-        }
-        input.onCommitted?.(payload.dossierId);
-        return { turnId, agentRunId: result.run.id, cacheHit: result.cacheHit };
-      } catch (error) {
-        if (error instanceof AgentRuntimeError) {
-          throw mapAgentRuntimeError(error, 'Interview question Agent');
-        }
-        if (error instanceof DomainError || error instanceof z.ZodError) {
-          throw new TaskExecutionError(
-            'validation_failed',
-            'Interview question output was rejected.',
-            {
-              cause: error,
-            },
-          );
-        }
-        throw error;
-      }
+      const result = await generator.generate({
+        dossierId: payload.dossierId,
+        sessionId: parseId(payload.sessionId, 'DrillSession'),
+        turnId,
+        expectedContextRevision: payload.expectedContextRevision,
+        contextHash: parseContentHash(payload.contextHash),
+        ...(context.taskId ? { expectedTaskId: context.taskId } : {}),
+        signal: context.signal,
+        now: context.clock.now(),
+      });
+      input.onCommitted?.(payload.dossierId);
+      return result;
     },
   };
 }

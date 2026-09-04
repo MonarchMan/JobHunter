@@ -1,9 +1,13 @@
 'use client';
 
-import type { ProjectDossierDetail } from '@jobhunter/application/web';
+import type {
+  ProjectDossierDetail,
+  ProjectQuestionGenerationStage,
+} from '@jobhunter/application/web';
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { z } from 'zod';
 import { mutationHeaders } from '../../../../src/client/csrf.js';
 import styles from './workbench.module.css';
 
@@ -17,6 +21,48 @@ interface ApiEnvelope<T> {
   readonly data?: T;
   readonly error?: { readonly message?: string };
 }
+
+/** 在浏览器边界严格校验同步问题接口发送的 SSE 事件。 */
+const questionGenerationStages = [
+  'preparing_context',
+  'generating_question',
+  'validating_question',
+  'saving_question',
+] as const satisfies readonly ProjectQuestionGenerationStage[];
+
+const questionStreamEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('stage'), stage: z.enum(questionGenerationStages) }).strict(),
+  z
+    .object({
+      type: z.literal('complete'),
+      data: z.object({ turnId: z.uuid(), agentRunId: z.uuid(), cacheHit: z.boolean() }).strict(),
+    })
+    .strict(),
+  z
+    .object({ type: z.literal('error'), error: z.object({ message: z.string() }).strict() })
+    .strict(),
+]);
+
+const questionStageCopy: Readonly<
+  Record<ProjectQuestionGenerationStage, { readonly title: string; readonly detail: string }>
+> = {
+  preparing_context: {
+    title: '正在准备项目上下文',
+    detail: '正在整理冻结快照、已有回答和覆盖缺口。',
+  },
+  generating_question: {
+    title: '正在生成面试问题',
+    detail: '模型正在选择最值得继续追问的项目事实。',
+  },
+  validating_question: {
+    title: '正在校验问题',
+    detail: '正在检查证据引用、提问边界和禁止代答规则。',
+  },
+  saving_question: {
+    title: '正在保存问题',
+    detail: '问题已通过校验，正在写入当前会话。',
+  },
+};
 
 const dimensionLabels = {
   background_goal: '背景目标',
@@ -60,6 +106,22 @@ function formatTime(value: number): string {
   }).format(new Date(value));
 }
 
+/** 将会话修改时间稳定显示到秒，作为用户可识别的会话名称。 */
+function formatSessionTime(value: number): string {
+  const parts = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((item) => item.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`;
+}
+
 export function DrillWorkbench({
   detail,
   tasks,
@@ -70,7 +132,9 @@ export function DrillWorkbench({
   const router = useRouter();
   const deleteDialog = useRef<HTMLDialogElement>(null);
   const materialInput = useRef<HTMLInputElement>(null);
+  const questionAbort = useRef<AbortController | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [questionStage, setQuestionStage] = useState<ProjectQuestionGenerationStage | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [answer, setAnswer] = useState('');
   const [answerToken, setAnswerToken] = useState(() => crypto.randomUUID());
@@ -82,13 +146,22 @@ export function DrillWorkbench({
   } | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
-  const session = useMemo(
+  const sessions = useMemo(
     () =>
-      detail.sessionRecords.find((item) => item.status !== 'completed') ??
-      detail.sessionRecords.toSorted((left, right) => right.createdAt - left.createdAt)[0] ??
-      null,
+      detail.sessionRecords.toSorted(
+        (left, right) =>
+          right.updatedAt - left.updatedAt ||
+          Number(right.status === 'active') - Number(left.status === 'active'),
+      ),
     [detail.sessionRecords],
   );
+  const activeSession = sessions.find((item) => item.status === 'active') ?? null;
+  const defaultSession = activeSession ?? sessions[0] ?? null;
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    () => defaultSession?.id ?? null,
+  );
+  const session = sessions.find((item) => item.id === selectedSessionId) ?? defaultSession;
+
   const currentMaterials = useMemo(() => {
     const latest = new Map<string, (typeof detail.materials)[number]>();
     for (const material of detail.materials) {
@@ -129,6 +202,13 @@ export function DrillWorkbench({
     };
   }, [router, shouldPoll]);
 
+  useEffect(
+    () => () => {
+      questionAbort.current?.abort();
+    },
+    [],
+  );
+
   const mutate = async <T,>(
     key: string,
     url: string,
@@ -154,10 +234,17 @@ export function DrillWorkbench({
 
   const startSession = async (): Promise<void> => {
     try {
-      await mutate('session', `/api/interview/projects/${detail.dossier.id}/sessions`, {
-        profileKey,
-        materialFileIds: profileKey === 'docs-grounded' ? selectedMaterialIds : [],
-      });
+      // 1、先建立新会话，再使用服务端返回的 ID 切换视图，避免刷新后仍停留在旧轮次。
+      const result = await mutate<{ readonly sessionId: string }>(
+        'session',
+        `/api/interview/projects/${detail.dossier.id}/sessions`,
+        {
+          profileKey,
+          materialFileIds: profileKey === 'docs-grounded' ? selectedMaterialIds : [],
+        },
+      );
+      // 2、选中新轮次后刷新权威详情，后续问题和覆盖记录都以服务端状态为准。
+      setSelectedSessionId(result.sessionId);
       setFeedback('新一轮拷打已建立，可以生成第一题。');
       router.refresh();
     } catch (error) {
@@ -224,17 +311,81 @@ export function DrillWorkbench({
     });
 
   const requestQuestion = async (): Promise<void> => {
-    if (!session) return;
+    if (!session || questionAbort.current) return;
+    const controller = new AbortController();
+    questionAbort.current = controller;
+    setBusy('question');
+    setQuestionStage('preparing_context');
+    setFeedback(null);
     try {
-      const result = await mutate<{ readonly taskId: string }>(
-        'question',
-        `/api/interview/sessions/${session.id}/questions`,
-      );
-      setFeedback(`问题生成任务已创建：${result.taskId}`);
+      // 1、保持当前页面稳定；2、按 SSE 消息消费真实阶段；3、完整问题提交后刷新权威详情。
+      const response = await fetch(`/api/interview/sessions/${session.id}/questions`, {
+        method: 'POST',
+        headers: await mutationHeaders(),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        const result = (await response.json()) as ApiEnvelope<never>;
+        throw new Error(result.error?.message ?? '无法生成下一题。');
+      }
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('浏览器无法读取问题生成进度。');
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let completed = false;
+
+      /** 处理一个完整 SSE 消息；网络分块可能拆开 JSON，因此只解析完整消息。 */
+      const consumeMessage = (message: string): boolean => {
+        const data = message
+          .split('\n')
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trimStart())
+          .join('\n');
+        if (!data) return false;
+        const event = questionStreamEventSchema.parse(JSON.parse(data) as unknown);
+        if (event.type === 'stage') setQuestionStage(event.stage);
+        if (event.type === 'error') throw new Error(event.error.message);
+        return event.type === 'complete';
+      };
+
+      let reading = true;
+      while (reading) {
+        const chunk = await reader.read();
+        if (chunk.done) {
+          reading = false;
+          continue;
+        }
+        buffer += decoder.decode(chunk.value, { stream: true });
+        let boundary = buffer.indexOf('\n\n');
+        while (boundary >= 0) {
+          completed = consumeMessage(buffer.slice(0, boundary)) || completed;
+          buffer = buffer.slice(boundary + 2);
+          boundary = buffer.indexOf('\n\n');
+        }
+      }
+      buffer += decoder.decode();
+      completed = consumeMessage(buffer) || completed;
+      if (!completed) throw new Error('问题生成连接提前结束，请重新生成。');
+      setFeedback('问题已生成。');
       router.refresh();
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : '无法生成下一题。');
+      setFeedback(
+        error instanceof DOMException && error.name === 'AbortError'
+          ? '已取消问题生成，可以重新生成。'
+          : error instanceof Error
+            ? error.message
+            : '无法生成下一题。',
+      );
+    } finally {
+      if (questionAbort.current === controller) questionAbort.current = null;
+      setQuestionStage(null);
+      setBusy(null);
     }
+  };
+
+  /** 中止当前浏览器请求，并由服务端清理尚未提交的问题占位。 */
+  const cancelQuestionGeneration = (): void => {
+    questionAbort.current?.abort();
   };
 
   const submitAnswer = async (): Promise<void> => {
@@ -269,11 +420,7 @@ export function DrillWorkbench({
     try {
       await mutate('state', `/api/interview/sessions/${session.id}/state`, { action });
       setFeedback(
-        action === 'pause'
-          ? '会话已暂停。'
-          : action === 'resume'
-            ? '会话已继续。'
-            : '本轮会话已完成。',
+        action === 'pause' ? '会话已暂停。' : action === 'resume' ? '会话已继续。' : '会话已完成。',
       );
       router.refresh();
     } catch (error) {
@@ -362,6 +509,48 @@ export function DrillWorkbench({
         )}
       </section>
 
+      {sessions.length > 0 ? (
+        <section className={styles.sessionArchive} aria-labelledby="session-archive-title">
+          <header>
+            <div>
+              <h2 id="session-archive-title">拷打会话</h2>
+              <p>会话按最后修改时间排列，可回看或继续任意历史会话。</p>
+            </div>
+            <span>{sessions.length} 个会话</span>
+          </header>
+          <nav aria-label="拷打会话">
+            <ol>
+              {sessions.map((item) => {
+                const turnCount = detail.turns.filter((turn) => turn.sessionId === item.id).length;
+                return (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      aria-pressed={item.id === session?.id}
+                      data-status={item.status}
+                      data-session-id={item.id}
+                      onClick={() => {
+                        setSelectedSessionId(item.id);
+                        setFeedback(null);
+                      }}
+                    >
+                      <span>
+                        <strong>会话 - {formatSessionTime(item.updatedAt)}</strong>
+                        <small>{item.profileKey === 'docs-grounded' ? '深档' : '浅档'}</small>
+                      </span>
+                      <span>
+                        <b>{sessionLabels[item.status]}</b>
+                        <small>{turnCount} 题</small>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </nav>
+        </section>
+      ) : null}
+
       <section className={styles.materials} aria-labelledby="project-materials-title">
         <header>
           <div>
@@ -421,12 +610,16 @@ export function DrillWorkbench({
             ) : null}
           </header>
 
-          {!session || session.status === 'completed' ? (
+          {!session || (session.status === 'completed' && !activeSession) ? (
             <div className={styles.nextStep}>
               <span className={styles.decisionCursor} aria-hidden="true" />
               <div>
-                <h3>{session ? '开始新一轮准备' : '建立第一轮会话'}</h3>
-                <p>每次只推进一个问题；可以随时暂停，历史记录不会被覆盖。</p>
+                <h3>{session ? '会话已完成' : '建立准备会话'}</h3>
+                <p>
+                  {session
+                    ? '可以继续当前会话并修改既有回答，也可以按新的档位和资料开始新会话。'
+                    : '每次只推进一个问题；可以随时暂停，历史记录不会被覆盖。'}
+                </p>
                 <div className={styles.profileChooser}>
                   <label htmlFor="drill-profile">拷打档位</label>
                   <select
@@ -466,23 +659,65 @@ export function DrillWorkbench({
                   ) : null}
                 </div>
               </div>
-              <button
-                type="button"
-                disabled={
-                  busy !== null ||
-                  (profileKey === 'docs-grounded' && selectedMaterialIds.length === 0)
-                }
-                onClick={() => void startSession()}
-              >
-                {busy === 'session' ? '正在建立…' : '开始拷打'}
-              </button>
+              <div className={styles.nextStepActions}>
+                {session ? (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void transition('resume')}
+                  >
+                    继续此会话
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className={session ? 'button-secondary' : undefined}
+                  disabled={
+                    busy !== null ||
+                    (profileKey === 'docs-grounded' && selectedMaterialIds.length === 0)
+                  }
+                  onClick={() => void startSession()}
+                >
+                  {busy === 'session' ? '正在建立…' : session ? '开始新会话' : '开始拷打'}
+                </button>
+              </div>
+            </div>
+          ) : session.status === 'completed' ? (
+            <div className={styles.nextStep}>
+              <span className={styles.decisionCursor} aria-hidden="true" />
+              <div>
+                <h3>正在查看已完成会话</h3>
+                <p>继续此会话会自动暂停当前进行中的会话，并保留双方已有记录。</p>
+              </div>
+              <div className={styles.nextStepActions}>
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void transition('resume')}
+                >
+                  继续此会话
+                </button>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => {
+                    setSelectedSessionId(activeSession?.id ?? null);
+                  }}
+                >
+                  返回当前会话
+                </button>
+              </div>
             </div>
           ) : session.status === 'paused' ? (
             <div className={styles.nextStep}>
               <span className={styles.decisionCursor} aria-hidden="true" />
               <div>
                 <h3>本轮已暂停</h3>
-                <p>继续后仍从当前项目上下文接着提问。</p>
+                <p>
+                  {activeSession
+                    ? '继续后仍从此会话上下文接着提问，当前进行中的会话会自动暂停。'
+                    : '继续后仍从当前项目上下文接着提问。'}
+                </p>
               </div>
               <button
                 type="button"
@@ -497,16 +732,39 @@ export function DrillWorkbench({
               <div className={styles.nextStep}>
                 <span className={styles.decisionCursor} aria-hidden="true" />
                 <div>
-                  <h3>上一题已归档</h3>
-                  <p>可以继续下一题，也可以追加一版回答修订；旧版本不会被覆盖。</p>
+                  <h3>
+                    {busy === 'question' && questionStage
+                      ? questionStageCopy[questionStage].title
+                      : '上一题已归档'}
+                  </h3>
+                  <p
+                    role={busy === 'question' ? 'status' : undefined}
+                    aria-live={busy === 'question' ? 'polite' : undefined}
+                  >
+                    {busy === 'question'
+                      ? questionStage
+                        ? questionStageCopy[questionStage].detail
+                        : '正在启动问题生成。'
+                      : '可以继续下一题，也可以追加一版回答修订；旧版本不会被覆盖。'}
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void requestQuestion()}
-                >
-                  {busy === 'question' ? '正在创建…' : '生成下一题'}
-                </button>
+                {busy === 'question' ? (
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={cancelQuestionGeneration}
+                  >
+                    取消生成
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void requestQuestion()}
+                  >
+                    生成下一题
+                  </button>
+                )}
               </div>
               <details className={styles.revisionPanel}>
                 <summary>补充或修订上一题回答</summary>
@@ -552,19 +810,52 @@ export function DrillWorkbench({
             <div className={styles.nextStep}>
               <span className={styles.decisionCursor} aria-hidden="true" />
               <div>
-                <h3>{currentTurn ? '上一题已归档' : '从简历描述开始'}</h3>
-                <p>下一题会结合冻结快照、已有回答和覆盖缺口生成。</p>
+                <h3>
+                  {busy === 'question' && questionStage
+                    ? questionStageCopy[questionStage].title
+                    : currentTurn
+                      ? '上一题已归档'
+                      : '从简历描述开始'}
+                </h3>
+                <p
+                  role={busy === 'question' ? 'status' : undefined}
+                  aria-live={busy === 'question' ? 'polite' : undefined}
+                >
+                  {busy === 'question'
+                    ? questionStage
+                      ? questionStageCopy[questionStage].detail
+                      : '正在启动问题生成。'
+                    : '下一题会结合冻结快照、已有回答和覆盖缺口生成。'}
+                </p>
               </div>
-              <button type="button" disabled={busy !== null} onClick={() => void requestQuestion()}>
-                {busy === 'question' ? '正在创建…' : currentTurn ? '生成下一题' : '生成第一题'}
-              </button>
+              {busy === 'question' ? (
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={cancelQuestionGeneration}
+                >
+                  取消生成
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void requestQuestion()}
+                >
+                  {currentTurn ? '生成下一题' : '生成第一题'}
+                </button>
+              )}
             </div>
           ) : currentTurn.status === 'question_pending' ? (
             <div className={styles.pendingBlock}>
               <span className={styles.decisionCursor} aria-hidden="true" />
               <div>
                 <h3>正在生成问题</h3>
-                <p>Worker 会根据当前项目事实生成一个主问题，页面将自动刷新。</p>
+                <p>
+                  {currentTaskId
+                    ? '遗留任务正在生成问题，页面将自动刷新。'
+                    : '系统正在当前请求中生成并校验问题，完成后页面将自动刷新。'}
+                </p>
                 {failure ? (
                   <p className={styles.failure} role="alert">
                     {failure}
@@ -742,7 +1033,7 @@ export function DrillWorkbench({
                 disabled={busy !== null || hasPendingTurn}
                 onClick={() => void transition('complete')}
               >
-                完成本轮
+                完成会话
               </button>
             </div>
           ) : null}

@@ -17,3 +17,4 @@
 - [x] **COMM-T013** 在 EvidencePack 前增加 `interview-page-quality@v1` 和有界拒绝分类/计数，覆盖登录/验证码/空壳、评论列表、最小正文、低问题密度及无问号编号技术题正样本。（COMM-015, COMM-016, COMM-019, COMM-Q02, COMM-Q07）
 - [x] **COMM-T014** 运行普通 CI 与显式牛客联网覆盖验收：`allowedDomains = ["nowcoder.com"]`，大模型算法和大模型应用开发方向各取得至少 2 个、合计至少 4 个不同 source identity 的高质量公开页面；执行完整研究任务进入 `needs_review`，不自动接受候选，并据结果更新规格与架构实现状态。（COMM-008, COMM-017, COMM-018, COMM-019, COMM-020, COMM-Q04, COMM-Q05, COMM-Q06, COMM-Q07）
 - [x] **COMM-T015** 固化受信任公网 IP pin 与透明网络转译边界：仅当系统 DNS 全部返回 `198.18/15` 且显式启用时用转译地址连接，安全判断仍使用有界受信任 DNS 验证的公网地址；补普通公网、全转译、混合答案、非公网字面 IP、DNS 失败与取消/超限测试。（COMM-015, COMM-021, COMM-Q06, COMM-Q08）
+- [x] **COMM-T016** 升级研究 Prompt/Bundle 契约，移除证据摘录的输出、数据库字段和页面展示；浏览器执行器仅在内存中使用临时正文校验问题，并保留原始来源链接供用户核对。（COMM-002, COMM-006, COMM-008, COMM-016）

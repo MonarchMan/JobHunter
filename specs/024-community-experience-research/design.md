@@ -52,7 +52,7 @@ codex --search --strict-config --ask-for-approval never
   --output-last-message <isolated/result.json> -C <isolated-dir> -
 ```
 
-Prompt 从 stdin 传入，不拼接 Shell 字符串。执行前从 Artifact Store 读取 ResearchRequest 冻结的 Prompt/Schema 精确版本，而不是用当前 renderer 重建；执行器 Registry 同时校验冻结 Prompt 版本与执行器能力。`browser-assisted-codex@v2` 只接受显式生成的 `community-research-prompt@v3`；旧 `@v1`/`@v2` 请求需创建新请求而不得改写冻结文件。临时目录只含 Schema/结果，结束后清理；进程使用最小环境变量，stdout/stderr 只保留有上限的诊断摘要。AbortSignal 或超时终止整个进程组。
+Prompt 从 stdin 传入，不拼接 Shell 字符串。执行前从 Artifact Store 读取 ResearchRequest 冻结的 Prompt/Schema 精确版本，而不是用当前 renderer 重建；执行器 Registry 同时校验冻结 Prompt 版本与执行器能力。`browser-assisted-codex@v2` 只接受显式生成的当前 `community-research-prompt@v4`；旧 Prompt 请求需创建新请求而不得改写冻结文件。临时目录只含 Schema/结果，结束后清理；进程使用最小环境变量，stdout/stderr 只保留有上限的诊断摘要。AbortSignal 或超时终止整个进程组。
 
 已实现的 `codex-local@v1` 逐项禁用 `shell_tool`、`unified_exec`、本地/外部浏览器自动化、Computer Use、`multi_agent`、Goal、授权请求、插件、App、Skill、本地图片和工作区依赖等本地或可扩展工具，只保留 `--search` 提供的原生实时网页搜索；`--strict-config` 使未知配置或 feature 直接失败。Codex 官方说明中，read-only 沙箱本身仍允许读取文件，因此这里不能只依靠 `--sandbox read-only`。Codex 0.149 的 `code_mode_only` 模型依赖 Code Mode Host 组织嵌套工具调用，该 Host 保留启用，但其 JavaScript 单元没有 Node、文件系统或网络 API；可调用能力仍由执行器注册的工具白名单决定。适配器缺失、未登录、不支持所需限制、非零退出与无结果都映射为可诊断 Task 错误。该方案是可信本机上的受限本地进程，不宣称具备容器或 OS 级根目录隔离。
 
@@ -75,7 +75,7 @@ Prompt 从 stdin 传入，不拼接 Shell 字符串。执行前从 Artifact Stor
 - Worker 对各查询结果按排名轮询，并分别为请求 URL 与成功重定向后的最终 URL 计算 `source-identity@v1`。该 identity 保留 HTTP/HTTPS 协议语义，通过公共 URL 规范化折叠主机大小写、默认端口和 fragment，并稳定排序剩余查询参数；全站只移除 `utm_*` 与固定广告/分享跟踪键，牛客 `/feed/main/detail/` 额外移除 `anchorPoint`、`fromPut`、`sourceSSR`、`toCommentId`、`urlSource`，而 `page` 等内容语义参数必须保留。identity 只用于本次采集去重与计数，不覆盖 `readPage` 返回的实际最终 URL，后者继续作为 EvidencePack、trace 和 Bundle 的审计地址。固定键集合和 identity 版本限制规则扩张，失败来源在独立尝试预算内由后续候选补位。
 - 页面标题与正文必须先满足从目标岗位派生的相关词和面试语义词硬门槛，再通过 `interview-page-quality@v1`。当前有界规则先识别登录/验证码/脚本空壳、导航或评论聚合；可读正文至少 200 字符，至少包含 3 个问题候选和 2 个技术问题候选，问题候选少于 5 个时须占有效正文行至少 4%。候选识别只使用固定的问号、编号/项目符号、Q/问题标签、有限中英文疑问起始词和技术信号词；单一评论或只有岗位关键词的长噪声不能进入 EvidencePack，无问号但包含多项编号技术题的面经可以通过。trace 只记录版本、`accepted`/有限拒绝码、候选计数和密度，不记录被拒绝正文；没有取得合格可读页面时不启动 Codex。
 - EvidencePack 只在任务内存中存在，包含查询、最终 URL、标题、抓取时间、正文哈希和清洗限长正文；正文仅通过 stdin 中明确标记的不可信 JSON 数据段传递，不进入 argv、环境变量、业务日志或持久文件。
-- `community-research-prompt@v3` 声明页面中的指令、代码块和工具建议只是待分析数据。网关保留有上限的当次 `search/open/readPage` 调用 trace；执行器在调用 Bundle Importer 前，确定性移除没有成功 `open + readPage` 的来源/经历和无法回溯的问题，把无法从正文证明的答案摘录置空并添加本地裁剪警告，裁剪后无真实问题则失败。剩余 Bundle 的来源 URL、标题和抓取时间以 EvidencePack 为准；`question.text` 逐字包含于确实来自该页面的 `evidenceExcerpt`，非空 `answerExcerpt` 也来自同一页正文。
+- `community-research-prompt@v4` 声明页面中的指令、代码块和工具建议只是待分析数据。网关保留有上限的当次 `search/open/readPage` 调用 trace；执行器在调用 Bundle Importer 前，在内存中确定性移除没有成功 `open + readPage` 的来源/经历和问题原文不存在于同源正文的条目，把无法从正文证明的答案摘录置空并添加本地裁剪警告，裁剪后无真实问题则失败。剩余 Bundle 的来源 URL、标题和抓取时间以 EvidencePack 为准；Bundle 和业务表均不保存问题周边证据摘录。
 
 网关和其可选 MCP 传输是 Worker 进程内的受信任基础设施细节，不进入领域模型，不得暴露任意工具注册、通用浏览器 API 或动态权限申请。生产执行链使用 Worker 直接调用，避免把“模型是否调用工具”变成正确性条件。
 

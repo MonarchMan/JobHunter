@@ -268,7 +268,56 @@ describe('OpenAI-compatible model client', () => {
 
     await client.complete(request, new AbortController().signal);
     expect(body?.thinking).toEqual({ type: 'disabled' });
+    expect(body?.response_format).toEqual({ type: 'json_object' });
   });
+
+  it('normalizes a whole-response JSON code fence without weakening schema validation', async () => {
+    const client = new OpenAiCompatibleModelClient({
+      baseUrl: 'https://models.example.test/v1',
+      apiKey: 'test-secret',
+      model: 'test-model',
+      fetchImplementation: () =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              choices: [
+                { finish_reason: 'stop', message: { content: '```json\n{"ok":true}\n```' } },
+              ],
+            }),
+            { status: 200 },
+          ),
+        ),
+    });
+
+    await expect(client.complete(request, new AbortController().signal)).resolves.toMatchObject({
+      kind: 'output',
+      output: { ok: true },
+    });
+  });
+
+  it.each(['plain text', ''])(
+    'returns unparsed output for one Runner repair: %j',
+    async (content) => {
+      const client = new OpenAiCompatibleModelClient({
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'test-secret',
+        model: 'deepseek-v4-flash',
+        fetchImplementation: () =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content } }] }),
+              { status: 200 },
+            ),
+          ),
+      });
+
+      await expect(client.complete(request, new AbortController().signal)).resolves.toEqual({
+        kind: 'unparsed_output',
+        text: content,
+        usage: { inputTokens: 0, outputTokens: 0, estimatedCostMicros: 0 },
+      });
+    },
+  );
 
   it('classifies authentication and rate-limit responses safely', async () => {
     const create = (status: number): OpenAiCompatibleModelClient =>

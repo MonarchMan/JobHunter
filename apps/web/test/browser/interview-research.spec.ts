@@ -72,7 +72,7 @@ test.describe('外部 Agent 网友面经研究', () => {
     const prompt = await promptResponse.text();
     expect(prompt).toContain(role);
     expect(prompt).toContain(request.requestFingerprint);
-    expect(prompt).toContain('community-research-prompt@v3');
+    expect(prompt).toContain('community-research-prompt@v4');
 
     expect(schemaResponse.ok()).toBe(true);
     expect(schemaResponse.headers()['content-type']).toContain('application/schema+json');
@@ -81,10 +81,10 @@ test.describe('外部 Agent 网友面经研究', () => {
         readonly schemaVersion?: { readonly const?: string };
       };
     };
-    expect(schema.properties?.schemaVersion?.const).toBe('community-research-bundle@v1');
+    expect(schema.properties?.schemaVersion?.const).toBe('community-research-bundle@v2');
 
     const bundle = {
-      schemaVersion: 'community-research-bundle@v1',
+      schemaVersion: 'community-research-bundle@v2',
       requestFingerprint: request.requestFingerprint,
       generatedAt: '2026-08-30T08:00:00.000Z',
       sources: [
@@ -113,7 +113,6 @@ test.describe('外部 Agent 网友面经研究', () => {
               text: '如何保证后台任务重复执行时的数据一致性？',
               answerExcerpt: '原文提到幂等键、唯一约束和短事务。',
               topics: ['幂等性', '数据库'],
-              evidenceExcerpt: '候选人记录了任务恢复和重复投递问题。',
             },
           ],
         },
@@ -128,7 +127,6 @@ test.describe('外部 Agent 网友面经研究', () => {
               text: '如何设计可追溯的异步任务系统？',
               answerExcerpt: null,
               topics: ['系统设计'],
-              evidenceExcerpt: '原文列出了任务状态、重试和审计要求。',
             },
           ],
         },
@@ -180,6 +178,7 @@ test.describe('外部 Agent 网友面经研究', () => {
     await expect(
       page.getByRole('link', { name: `${firstSourceTitle}（在新窗口打开来源）` }),
     ).toHaveAttribute('rel', 'noopener noreferrer');
+    await expect(acceptedArchive.getByText('证据摘录：')).toHaveCount(0);
     await expect(page.getByText('外部内容 · 未核验')).toBeVisible();
 
     await page.getByRole('link', { name: '清除' }).click();

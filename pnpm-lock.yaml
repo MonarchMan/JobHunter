@@ -77,6 +77,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@jobhunter/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
       '@jobhunter/application':
         specifier: workspace:*
         version: link:../../packages/application
@@ -86,6 +89,9 @@ importers:
       '@jobhunter/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@jobhunter/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
       '@jobhunter/resume-template':
         specifier: workspace:*
         version: link:../../packages/resume-template

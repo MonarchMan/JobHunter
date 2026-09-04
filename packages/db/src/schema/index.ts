@@ -653,9 +653,9 @@ export const drillSessions = sqliteTable(
     completedAt: epoch('completed_at'),
   },
   (table) => [
-    uniqueIndex('drill_sessions_one_open_per_dossier_idx')
+    uniqueIndex('drill_sessions_one_active_per_dossier_idx')
       .on(table.dossierId)
-      .where(sql`${table.status} in ('active', 'paused')`),
+      .where(sql`${table.status} = 'active'`),
     check(
       'drill_sessions_profile_key_check',
       sql`${table.profileKey} in ('resume-only', 'docs-grounded')`,
@@ -904,7 +904,7 @@ export const interviewExperiences = sqliteTable(
   ],
 );
 
-/** 面试经历中的问题、回答摘录和证据范围。 */
+/** 面试经历中的问题、回答内容和原始文档范围。 */
 export const interviewQuestionEntries = sqliteTable(
   'interview_question_entries',
   {
@@ -918,7 +918,6 @@ export const interviewQuestionEntries = sqliteTable(
     reflection: text(),
     answerExcerpt: text('answer_excerpt'),
     topicsJson: jsonText('topics_json').notNull().default('[]'),
-    evidenceExcerpt: text('evidence_excerpt'),
     questionFingerprint: text('question_fingerprint'),
     questionSourceStart: integer('question_source_start'),
     questionSourceEnd: integer('question_source_end'),

@@ -25,7 +25,7 @@ test.describe('校招实习管理台核心流程', () => {
       .toBe(true);
   });
 
-  test('creates a resume-project drill and exposes the real queued question task', async ({
+  test('creates a resume-project drill and synchronously returns a validated question', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -51,8 +51,14 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(page.getByRole('status')).toContainText('新一轮拷打已建立');
     await expect(page.getByText('浅档 · resume-only@v1')).toBeVisible();
     await page.getByRole('button', { name: '生成第一题' }).click();
-    await expect(page.getByRole('heading', { name: '正在生成问题' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '查看任务状态' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '取消生成' })).toBeVisible();
+    await expect(page.getByRole('status')).toContainText('模型正在选择最值得继续追问');
+    await page.getByRole('button', { name: '取消生成' }).click();
+    await expect(page.getByRole('status')).toContainText('已取消问题生成');
+    await expect(page.getByRole('button', { name: '生成第一题' })).toBeEnabled();
+    await page.getByRole('button', { name: '生成第一题' }).click();
+    await expect(page.getByText('这个项目最初要解决什么问题')).toBeVisible();
+    await expect(page.getByRole('link', { name: '查看任务状态' })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: '准备覆盖' })).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });

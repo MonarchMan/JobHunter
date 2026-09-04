@@ -72,7 +72,7 @@ function input(
 ): Parameters<CodexLocalResearchExecutor['execute']>[0] {
   return {
     requestId: '018f0000-0000-7000-8000-000000000024',
-    promptVersion: 'community-research-prompt@v3',
+    promptVersion: 'community-research-prompt@v4',
     prompt: 'Research public interview experiences and return JSON.',
     outputSchema: { type: 'object', additionalProperties: false },
     collectionPlan: {
@@ -148,7 +148,6 @@ const browserQuestion = 'SFT 训练不稳定时如何排查和优化？';
 const browserEvidence = `面试问题：${browserQuestion}`;
 
 function browserBundle(
-  evidenceExcerpt = browserEvidence,
   answerExcerpt: string | null = null,
   questionText = browserQuestion,
   sourceUrl = browserSourceUrl,
@@ -156,7 +155,7 @@ function browserBundle(
 ): string {
   const retrievedAt = '2026-08-30T08:00:00.000Z';
   return JSON.stringify({
-    schemaVersion: 'community-research-bundle@v1',
+    schemaVersion: 'community-research-bundle@v2',
     requestFingerprint: 'a'.repeat(64),
     generatedAt: retrievedAt,
     sources: [
@@ -179,7 +178,6 @@ function browserBundle(
             text: questionText,
             answerExcerpt,
             topics: ['SFT'],
-            evidenceExcerpt,
           },
         ],
       },
@@ -719,7 +717,7 @@ describe('BrowserAssistedCodexResearchExecutor', () => {
     if (!launched) throw new Error('Expected the Codex fixture process to launch.');
 
     expect(executor.version).toBe('v2');
-    expect(executor.supportedPromptVersions).toEqual(['community-research-prompt@v3']);
+    expect(executor.supportedPromptVersions).toEqual(['community-research-prompt@v4']);
     expect(executor.capabilitySummary).toEqual({
       liveWebSearch: false,
       browserTools: [],
@@ -845,17 +843,11 @@ describe('BrowserAssistedCodexResearchExecutor', () => {
   it.each([
     {
       name: 'source',
-      bundle: browserBundle(browserEvidence, null, browserQuestion, 'https://placeholder.invalid'),
+      bundle: browserBundle(null, browserQuestion, 'https://placeholder.invalid'),
     },
     {
       name: 'experience source',
-      bundle: browserBundle(
-        browserEvidence,
-        null,
-        browserQuestion,
-        browserSourceUrl,
-        'https://placeholder.invalid',
-      ),
+      bundle: browserBundle(null, browserQuestion, browserSourceUrl, 'https://placeholder.invalid'),
     },
   ])('rejects a non-public $name URL as permanent browser evidence', async ({ bundle }) => {
     const root = await temporaryRoot();
@@ -889,10 +881,7 @@ describe('BrowserAssistedCodexResearchExecutor', () => {
             closeCount += 1;
           }),
         ),
-      spawn: successfulSpawn(
-        browserBundle(browserEvidence, '这是模型自行补写的答案。'),
-        () => undefined,
-      ),
+      spawn: successfulSpawn(browserBundle('这是模型自行补写的答案。'), () => undefined),
     });
 
     const result = await executor.execute(input(), new AbortController().signal);
@@ -907,7 +896,7 @@ describe('BrowserAssistedCodexResearchExecutor', () => {
     expect(closeCount).toBe(1);
   });
 
-  it('rejects a fabricated question even when its evidence excerpt exists on the page', async () => {
+  it('rejects a fabricated question that does not exist on the page', async () => {
     const root = await temporaryRoot();
     let closeCount = 0;
     const executor = new BrowserAssistedCodexResearchExecutor({
@@ -919,7 +908,7 @@ describe('BrowserAssistedCodexResearchExecutor', () => {
           }),
         ),
       spawn: successfulSpawn(
-        browserBundle(browserEvidence, null, '解释 PPO clipped objective 的推导。'),
+        browserBundle(null, '解释 PPO clipped objective 的推导。'),
         () => undefined,
       ),
     });
@@ -945,7 +934,6 @@ describe('BrowserAssistedCodexResearchExecutor', () => {
           text: string;
           answerExcerpt: string | null;
           topics: string[];
-          evidenceExcerpt: string;
         }[];
       }[];
     };

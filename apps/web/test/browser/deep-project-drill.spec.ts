@@ -37,30 +37,47 @@ test.describe('深档项目文档拷打', () => {
     await page.getByLabel('拷打档位').selectOption('docs-grounded');
     await page.getByLabel('architecture.md · v1').check();
     await page.getByLabel('release-notes.md · v1').check();
-    await page.getByRole('button', { name: '开始拷打' }).click();
+    await page.getByRole('button', { name: '开始新会话' }).click();
 
     await expect(page.getByRole('status')).toContainText('新一轮拷打已建立');
     await expect(page.getByText('深档 · docs-grounded@v1')).toBeVisible();
     await expect(page.getByRole('button', { name: '生成第一题' })).toBeVisible();
 
-    const detail = await page.evaluate(async (dossierId) => {
-      const response = await fetch(`/api/interview/projects/${dossierId}`);
-      if (!response.ok) throw new Error('无法读取深档测试详情。');
-      return (await response.json()) as {
-        data: {
-          sessionRecords: readonly {
-            status: string;
-            profileKey: string;
-            materialBindings: readonly { fileName: string }[];
-          }[];
-        };
-      };
-    }, deepDossierId);
-    expect(detail.data.sessionRecords.find((session) => session.status === 'active')).toMatchObject(
-      {
-        profileKey: 'docs-grounded',
-        materialBindings: [{ fileName: 'architecture.md' }, { fileName: 'release-notes.md' }],
-      },
+    const completedSession = page.locator('button[data-status="completed"]');
+    await expect(completedSession).toHaveAccessibleName(
+      /会话 - \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} 深档 已完成 1 题/u,
     );
+    await expect(page.getByText(/第 [12] 轮/u)).toHaveCount(0);
+    await expect(page.locator('button[data-status="active"]')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await completedSession.focus();
+    await page.keyboard.press('Enter');
+    await expect(archivedQuestion).toBeVisible();
+    await expect(page.getByRole('button', { name: '继续此会话' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '返回当前会话' })).toBeVisible();
+    const [resumeResponse] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/interview/sessions/') && response.url().endsWith('/state'),
+      ),
+      page.getByRole('button', { name: '继续此会话' }).click(),
+    ]);
+    expect(resumeResponse.ok()).toBe(true);
+    await expect(page.locator('button[data-status="active"]')).toContainText('1 题');
+    await expect(page.locator('button[data-status="paused"]')).toContainText('0 题');
+    await expect(page.locator('nav[aria-label="拷打会话"] button').first()).toHaveAttribute(
+      'data-status',
+      'active',
+    );
+    await page.getByText('补充或修订上一题回答').click();
+    await page.getByLabel('新的完整回答版本').fill('补充后的完整回答');
+    await expect(page.getByRole('button', { name: '保存回答修订' })).toBeEnabled();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole('region', { name: '拷打会话' })).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
   });
 });

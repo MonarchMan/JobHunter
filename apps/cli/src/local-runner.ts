@@ -11,13 +11,16 @@ export async function runLocalCli(input: {
   readonly io: CliIo;
   readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly cwd?: string;
+  readonly workspaceRoot?: string;
 }): Promise<CliExitCode> {
   try {
     const config = await loadRuntimeConfig(input);
     return await runCli({
       argv: input.argv,
       container: createLocalCliContainer(config, {
-        ...(input.cwd ? { workspaceRoot: input.cwd } : {}),
+        ...(input.workspaceRoot || input.cwd
+          ? { workspaceRoot: input.workspaceRoot ?? input.cwd }
+          : {}),
       }),
       io: input.io,
     });

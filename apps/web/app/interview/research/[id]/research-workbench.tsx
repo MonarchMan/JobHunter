@@ -47,7 +47,7 @@ const taskStateLabels = {
 } as const;
 
 const maximumBundleBytes = 2 * 1024 * 1024;
-const browserPromptVersion = 'community-research-prompt@v3';
+const browserPromptVersion = 'community-research-prompt@v4';
 type ResearchExecutorKey = 'codex-local' | 'browser-assisted-codex';
 
 function defaultExecutor(promptVersion: string): ResearchExecutorKey {

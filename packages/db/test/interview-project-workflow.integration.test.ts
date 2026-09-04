@@ -4,6 +4,7 @@ import {
   createProjectQuestionTaskHandler,
   HandlerRegistry,
   InterviewProjectService,
+  ProjectQuestionGenerator,
   TaskService,
   type ArtifactStore,
   type TaskLogger,
@@ -165,6 +166,80 @@ function seedProfile(handle: SqliteDatabaseHandle): {
 }
 
 describe('interview project workflow', () => {
+  it('generates a question in the Web request without creating a question task', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-interview-sync-question-');
+    roots.push(root);
+    const handle = openSqliteDatabase({ dataRoot: root.path });
+    handles.push(handle);
+    const seeded = seedProfile(handle);
+    const ids = new SystemIdGenerator();
+    const clock = { now: () => utcInstant(1_800_000_000_000) };
+    const repository = new SqliteInterviewProjectRepository(handle.client);
+    const artifacts = new SqliteArtifactStore(handle.client, root.path);
+    const registry = new HandlerRegistry();
+    registry.register(createProjectNotebookTaskHandler({ repository, artifacts, ids }));
+    const queue = new SqliteTaskRepository(handle.client);
+    const tasks = new TaskService({ queue, clock, ids }, registry);
+    const runner = new AgentRunner({
+      store: new SqliteAgentRunStore(handle.client),
+      model: model(),
+      createId: () => ids.generate(),
+      now: () => clock.now(),
+    });
+    const service = new InterviewProjectService({
+      profiles: new SqliteCandidateProfileRepository(handle.client),
+      repository,
+      tasks,
+      taskPublisher: new SqliteInterviewTaskPublisher({
+        client: handle.client,
+        tasks,
+        projects: repository,
+        research: new SqliteInterviewResearchRepository(handle.client),
+      }),
+      questionGenerator: new ProjectQuestionGenerator({ runner, repository }),
+      clock,
+      ids,
+      artifacts,
+    });
+    const created = service.createDossier({
+      profileVersionId: seeded.profileVersionId,
+      projectIndex: 0,
+      expectedProjectHash: seeded.projectHash,
+    });
+    const session = service.startSession(created.dossier.dossier.id);
+
+    const stages: string[] = [];
+    const result = await service.generateQuestion(
+      session.sessionId,
+      new AbortController().signal,
+      (stage) => stages.push(stage),
+    );
+
+    expect(result.cacheHit).toBe(false);
+    expect(stages).toEqual([
+      'preparing_context',
+      'generating_question',
+      'validating_question',
+      'saving_question',
+    ]);
+    expect(tasks.list({ taskType: 'interview.project-question' })).toHaveLength(0);
+    expect(service.getDossier(created.dossier.dossier.id).turns[0]).toMatchObject({
+      id: result.turnId,
+      status: 'awaiting_answer',
+      questionTaskId: null,
+      primaryDimension: 'background_goal',
+    });
+
+    // 取消后的同步请求必须清理占位，避免会话永久停在 question_pending。
+    service.skipTurn(result.turnId);
+    const cancelled = new AbortController();
+    cancelled.abort();
+    await expect(
+      service.generateQuestion(session.sessionId, cancelled.signal),
+    ).rejects.toBeDefined();
+    expect(service.getDossier(created.dossier.dossier.id).turns).toHaveLength(1);
+  });
+
   it('runs one Web-enqueued question, answer digest, projection and dossier deletion', async () => {
     const root = await createTemporaryDataRoot('jobhunter-interview-workflow-');
     roots.push(root);
@@ -451,6 +526,15 @@ describe('interview project workflow', () => {
       mediaType: 'text/markdown; charset=utf-8',
     });
     expect(new TextDecoder().decode(download.content)).toBe(markdown);
+
+    // 1、完成旧会话并创建新会话；2、恢复旧会话；3、验证切换在同一档案内只保留一个 active。
+    service.transitionSession({ sessionId: started.sessionId, action: 'complete' });
+    const newerSession = service.startSession(created.dossier.dossier.id);
+    service.transitionSession({ sessionId: started.sessionId, action: 'resume' });
+    const resumed = service.getDossier(created.dossier.dossier.id).sessionRecords;
+    expect(resumed.find((session) => session.id === started.sessionId)?.status).toBe('active');
+    expect(resumed.find((session) => session.id === newerSession.sessionId)?.status).toBe('paused');
+    expect(resumed.filter((session) => session.status === 'active')).toHaveLength(1);
 
     const firstMaterialBytes = new TextEncoder().encode('# 架构\n\n第一版采用事件驱动。');
     const firstMaterial = await service.importMaterial({

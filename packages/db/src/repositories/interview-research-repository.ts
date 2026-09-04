@@ -68,7 +68,6 @@ interface CommunityQuestionRow {
   readonly question: string;
   readonly answer_excerpt: string | null;
   readonly topics_json: string;
-  readonly evidence_excerpt: string;
   readonly question_fingerprint: string;
 }
 
@@ -79,7 +78,7 @@ const experienceColumns = `id, file_id, sequence_no, research_request_id, review
   role, stage, occurred_on, tags_json, notes, source_url, source_title, source_published_at,
   source_retrieved_at, verification_status`;
 const questionColumns = `id, experience_id, sequence_no, question, answer_excerpt, topics_json,
-  evidence_excerpt, question_fingerprint`;
+  question_fingerprint`;
 const researchFilePropertiesSchema = z
   .object({ warnings: z.array(z.string().max(500)).max(50).optional() })
   .loose();
@@ -152,7 +151,6 @@ function questionRecord(row: CommunityQuestionRow): CommunityInterviewQuestionRe
     question: row.question,
     answerExcerpt: row.answer_excerpt,
     topics: json(row.topics_json, z.array(z.string())),
-    evidenceExcerpt: row.evidence_excerpt,
     questionFingerprint: parseContentHash(row.question_fingerprint),
   };
 }
@@ -578,9 +576,9 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
         const insertQuestion = this.#client.prepare(
           `INSERT INTO interview_question_entries
          (id, experience_id, sequence_no, question, answer, reflection, answer_excerpt, topics_json,
-          evidence_excerpt, question_fingerprint, question_source_start, question_source_end,
+          question_fingerprint, question_source_start, question_source_end,
           answer_source_start, answer_source_end)
-         VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, NULL, NULL, NULL, NULL)`,
+         VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, NULL, NULL)`,
         );
         for (const question of input.questions) {
           insertQuestion.run(
@@ -590,7 +588,6 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
             question.question,
             question.answerExcerpt,
             JSON.stringify(question.topics),
-            question.evidenceExcerpt,
             question.questionFingerprint,
           );
         }

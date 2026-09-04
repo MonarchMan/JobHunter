@@ -5,6 +5,7 @@ export * from './experience-template.js';
 export * from './material.js';
 export * from './notebook.js';
 export * from './profile.js';
+export * from './question-generator.js';
 export * from './research-normalization.js';
 export * from './research-collection-plan.js';
 export * from './research-prompt.js';

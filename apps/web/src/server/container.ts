@@ -18,6 +18,7 @@ import {
   createCleanupTaskHandler,
   HandlerRegistry,
   InterviewProjectService,
+  ProjectQuestionGenerator,
   InterviewExperienceService,
   ExperienceResearchService,
   JobQueryService,
@@ -42,7 +43,9 @@ import {
   WebSourceService,
   WebDiagnosticsService,
   type AppConfig,
+  loadRuntimeAppConfig,
 } from '@jobhunter/application/web';
+import { AgentRunner, type ModelClient } from '@jobhunter/agent-core';
 import {
   openSqliteDatabase,
   SqliteAgentRunStore,
@@ -72,8 +75,8 @@ import {
 } from '@jobhunter/db/web';
 import { firstPartySourceCatalog } from '@jobhunter/sources';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
+import { createConfiguredModelClient } from '@jobhunter/llm';
 import path from 'node:path';
-import { loadWebRuntimeConfig } from './config.js';
 
 /** 模块数据结构或契约。 */
 export interface WebApplicationServices {
@@ -111,7 +114,7 @@ export interface WebApplicationContainer {
 /** 打开本地数据库并装配 Web 查询和面试准备服务。 */
 export function createLocalWebContainer(
   config: AppConfig,
-  options: { readonly migrationsFolder?: string } = {},
+  options: { readonly migrationsFolder?: string; readonly modelClient?: ModelClient } = {},
 ): WebApplicationContainer {
   const database = openSqliteDatabase({
     dataRoot: config.bootstrap.dataRoot.value,
@@ -185,6 +188,30 @@ export function createLocalWebContainer(
     });
     const profileRepository = new SqliteCandidateProfileRepository(database.client);
     const agentRuns = new SqliteAgentRunStore(database.client);
+    const configuredModel =
+      config.model.provider.value &&
+      config.model.baseUrl.value &&
+      config.model.modelName.value &&
+      config.model.apiKey.value
+        ? createConfiguredModelClient({
+            provider: config.model.provider.value,
+            baseUrl: config.model.baseUrl.value,
+            model: config.model.modelName.value,
+            apiKey: config.model.apiKey.value.reveal(),
+          })
+        : null;
+    const questionModel = options.modelClient ?? configuredModel;
+    const questionGenerator = questionModel
+      ? new ProjectQuestionGenerator({
+          runner: new AgentRunner({
+            store: agentRuns,
+            model: questionModel,
+            createId: () => ids.generate(),
+            now: () => clock.now(),
+          }),
+          repository: interviewRepository,
+        })
+      : undefined;
     const candidateProfiles = new CandidateProfileService({
       repository: profileRepository,
       clock,
@@ -292,6 +319,7 @@ export function createLocalWebContainer(
           database.client,
           config.bootstrap.dataRoot.value,
         ),
+        ...(questionGenerator ? { questionGenerator } : {}),
       }),
       experiences: new InterviewExperienceService({
         repository: new SqliteInterviewExperienceRepository(database.client),
@@ -326,7 +354,7 @@ let sharedContainer: Promise<WebApplicationContainer> | undefined;
 /** 获取进程级单例 Web 容器，避免每个请求重复打开数据库。 */
 export function getWebContainer(): Promise<WebApplicationContainer> {
   const workspaceRoot = process.env.JOBHUNTER_WORKSPACE_ROOT ?? process.cwd();
-  sharedContainer ??= loadWebRuntimeConfig({ cwd: workspaceRoot }).then((config) =>
+  sharedContainer ??= loadRuntimeAppConfig({ workspaceRoot }).then((config) =>
     createLocalWebContainer(config, {
       migrationsFolder: path.join(workspaceRoot, 'packages', 'db', 'migrations'),
     }),

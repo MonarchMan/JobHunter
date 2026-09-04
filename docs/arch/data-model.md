@@ -576,7 +576,7 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 | `context_revision`                         | INTEGER | NOT NULL DEFAULT 0            | 问题生成上下文修订号                                   |
 | `created_at`、`updated_at`、`completed_at` | INTEGER | NOT NULL / NOT NULL / NULL    | 生命周期时间                                           |
 
-部分唯一索引保证一个档案最多一个 `active` 或 `paused` 会话。深档绑定必须包含 1–8 个不同逻辑文件且在创建事务中重验；浅档绑定必须为空。项目资料本身不建立专用表：`files(kind=project_material)` 标识逻辑资料，映射的 `normalized_text` 保存规范文本，`metadata_json` 保存所属 dossier、安全文件名、解析器版本和带哈希的标题分块范围。
+部分唯一索引保证一个档案最多一个 `active` 会话；同一档案可保留多个 `paused` 或 `completed` 会话。恢复旧会话时，在同一事务中暂停当前 active 会话并激活目标会话。深档绑定必须包含 1–8 个不同逻辑文件且在创建事务中重验；浅档绑定必须为空。项目资料本身不建立专用表：`files(kind=project_material)` 标识逻辑资料，映射的 `normalized_text` 保存规范文本，`metadata_json` 保存所属 dossier、安全文件名、解析器版本和带哈希的标题分块范围。
 
 #### 3.6.4 `drill_turns`
 
@@ -683,7 +683,6 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 | `answer`、`reflection`      | TEXT    | NULL                               | 用户回答和复盘；网友内容必须为空       |
 | `answer_excerpt`            | TEXT    | NULL                               | 网友来源中的有限回答摘录，不是用户回答 |
 | `topics_json`               | TEXT    | NOT NULL DEFAULT `'[]'`            | 网友问题主题标签                       |
-| `evidence_excerpt`          | TEXT    | NULL                               | 网友来源中的有限证据摘录               |
 | `question_fingerprint`      | TEXT    | NULL CHECK SHA-256                 | 规范问题指纹，用于独立来源计数         |
 | `question_source_start/end` | INTEGER | 成对为空或合法范围                 | 问题在规范文本中的证据范围             |
 | `answer_source_start/end`   | INTEGER | 成对为空或合法范围                 | 回答在规范文本中的证据范围             |
@@ -824,6 +823,7 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 | 保存面经草稿  | 文件 revision CAS，替换经历和问题                                             | 旧 revision 返回冲突，不部分更新                                          |
 | 登记项目资料  | 逻辑文件新版本、解析元数据与 dossier revision                                 | Markdown 校验、规范化和分块在事务外                                       |
 | 开始深档拷打  | 重验 1–8 个当前资料版本并冻结 session bindings、初始化覆盖状态                | 不读取项目目录；问题片段在 Worker 执行期按冻结版本选择                    |
+| 恢复拷打会话  | 暂停同档案当前 active 会话、激活目标会话并递增双方上下文修订号                | 切换前拒绝仍有待处理任务的当前会话；列表按最后修改时间重新排序            |
 | 导入研究包    | claim/finalize 均核验当前 running 且未取消的 Task；提升 mapping、CAS 替换候选 | JSON/Schema/URL 校验和 staging Bundle 文件写入在事务外；失败/过期补偿清理 |
 | 审核网友面经  | 单条候选状态、request revision 与聚合状态 CAS                                 | 外部链接不在事务中访问                                                    |
 | 删除敏感文档  | 重验影响快照、删除业务引用和逻辑文件、追加审计事件                            | 先隔离独占物理实体；事务失败恢复，成功后清除                              |

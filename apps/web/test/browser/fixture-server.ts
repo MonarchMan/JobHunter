@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -565,6 +566,58 @@ async function seedFixture(dataRoot: string): Promise<void> {
 const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'jobhunter-web-browser-'));
 await seedFixture(dataRoot);
 
+// 浏览器用例使用本地 OpenAI 兼容端点，验证 Web 同步生成链路且不依赖公网模型。
+const modelServer = createServer((request, response) => {
+  let body = '';
+  request.setEncoding('utf8');
+  request.on('data', (chunk: string) => {
+    body += chunk;
+  });
+  request.on('end', () => {
+    // 1、读取 Agent 输入中的允许证据；2、返回满足结构化契约的确定性问题。
+    const payload = JSON.parse(body) as {
+      readonly messages: readonly { readonly role: string; readonly content: string }[];
+    };
+    const userMessage = payload.messages.find((message) => message.role === 'user');
+    const agentRequest = JSON.parse(userMessage?.content ?? '{}') as {
+      readonly input?: {
+        readonly allowedEvidenceRefs?: readonly { readonly kind: string; readonly id: string }[];
+      };
+    };
+    const evidence = agentRequest.input?.allowedEvidenceRefs?.[0];
+    setTimeout(() => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          choices: [
+            {
+              finish_reason: 'stop',
+              message: {
+                content: JSON.stringify({
+                  question: '这个项目最初要解决什么问题，你如何判断目标已经达成？',
+                  intent: '确认项目背景和成功标准。',
+                  primaryDimension: 'background_goal',
+                  guidanceSlots: ['业务背景', '目标用户', '成功标准'],
+                  evidenceRefs: evidence ? [evidence] : [],
+                }),
+              },
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 40 },
+        }),
+      );
+    }, 800);
+  });
+});
+await new Promise<void>((resolve, reject) => {
+  modelServer.once('error', reject);
+  modelServer.listen(0, '127.0.0.1', resolve);
+});
+const modelAddress = modelServer.address();
+if (!modelAddress || typeof modelAddress === 'string') {
+  throw new Error('Browser fixture model server did not bind a TCP port.');
+}
+
 const require = createRequire(import.meta.url);
 const nextBin = require.resolve('next/dist/bin/next');
 const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
@@ -575,6 +628,10 @@ const child = spawn(process.execPath, [nextBin, 'dev', '--hostname', '127.0.0.1'
     ...process.env,
     JOBHUNTER_DATA_ROOT: dataRoot,
     JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
+    JOBHUNTER_MODEL_PROVIDER: 'openai-compatible',
+    JOBHUNTER_MODEL_BASE_URL: `http://127.0.0.1:${String(modelAddress.port)}/v1`,
+    JOBHUNTER_MODEL_NAME: 'browser-fixture',
+    JOBHUNTER_MODEL_API_KEY: 'browser-fixture-key',
     NEXT_DIST_DIR: '.next-browser-fixture',
   },
 });
@@ -583,6 +640,7 @@ let cleaned = false;
 const cleanup = async (): Promise<void> => {
   if (cleaned) return;
   cleaned = true;
+  modelServer.close();
   for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
       await rm(dataRoot, { recursive: true, force: true });

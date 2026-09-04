@@ -78,3 +78,17 @@ export function conflictResponse(
     { status: 409 },
   );
 }
+
+/** 返回 503 临时能力不可用响应，客户端可以保留上下文后重试。 */
+export function serviceUnavailableResponse(message: string): NextResponse {
+  return NextResponse.json(
+    {
+      error: {
+        code: 'SERVICE_UNAVAILABLE',
+        message,
+        correlationId: randomUUID(),
+      },
+    },
+    { status: 503 },
+  );
+}

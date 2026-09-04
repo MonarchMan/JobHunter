@@ -30,6 +30,7 @@ import {
   type InterviewTaskPublisher,
 } from '../ports/interview-task-publisher.js';
 import type { EnqueueTaskResult, TaskRecord } from '../tasks/model.js';
+import { TaskExecutionError } from '../tasks/retry-policy.js';
 import type { TaskService } from '../tasks/task-service.js';
 import { latestTurn, questionContextHash } from './context.js';
 import {
@@ -39,6 +40,11 @@ import {
 } from './agents.js';
 import { ProjectMaterialService } from './material.js';
 import { drillProfile, drillProfileDefinitionHash, type DrillProfileKey } from './profile.js';
+import type {
+  ProjectQuestionGenerator,
+  ProjectQuestionGenerationResult,
+  ProjectQuestionGenerationStage,
+} from './question-generator.js';
 
 /** 项目拷打档案不存在。 */
 export class ProjectDossierNotFoundError extends Error {
@@ -153,6 +159,7 @@ export class InterviewProjectService {
   readonly #artifacts: ArtifactStore | null;
   readonly #notebooks: ProjectNotebookReader | null;
   readonly #materials: ProjectMaterialService | null;
+  readonly #questionGenerator: ProjectQuestionGenerator | null;
 
   /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
@@ -164,6 +171,7 @@ export class InterviewProjectService {
     readonly ids: IdGenerator;
     readonly artifacts?: ArtifactStore;
     readonly notebooks?: ProjectNotebookReader;
+    readonly questionGenerator?: ProjectQuestionGenerator;
   }) {
     this.#profiles = input.profiles;
     this.#repository = input.repository;
@@ -173,6 +181,7 @@ export class InterviewProjectService {
     this.#ids = input.ids;
     this.#artifacts = input.artifacts ?? null;
     this.#notebooks = input.notebooks ?? null;
+    this.#questionGenerator = input.questionGenerator ?? null;
     this.#materials = input.artifacts
       ? new ProjectMaterialService({
           repository: input.repository,
@@ -180,6 +189,83 @@ export class InterviewProjectService {
           ids: input.ids,
         })
       : null;
+  }
+
+  /** 在当前 Web 请求中生成并提交下一题，不创建后台任务。 */
+  public async generateQuestion(
+    sessionIdValue: string,
+    signal: AbortSignal,
+    onStage?: (stage: ProjectQuestionGenerationStage) => void,
+  ): Promise<ProjectQuestionGenerationResult> {
+    // 1、确认同步模型能力和会话状态；同一会话只允许一个尚未完成的问题请求。
+    onStage?.('preparing_context');
+    if (!this.#questionGenerator) {
+      throw new TaskExecutionError('invalid_config', 'Interview question model is not configured.');
+    }
+    const sessionId = parseId(sessionIdValue, 'DrillSession');
+    const session = this.#repository.getSession(sessionId);
+    if (!session) throw new DrillSessionNotFoundError();
+    let detail = this.#repository.getDossier(session.dossierId);
+    if (!detail) throw new ProjectDossierNotFoundError();
+    let current = latestTurn(detail, sessionId);
+    if (current?.status === 'question_pending') {
+      if (current.questionTaskId) {
+        throw new InterviewProjectConflictError('Legacy question task is still running.');
+      }
+      // 1.a、浏览器取消与服务端清理存在短暂竞态；新请求替换无任务占位，旧结果会被 CAS 拒绝。
+      this.#repository.removeUnqueuedQuestionTurn(current.id);
+      detail = this.#repository.getDossier(session.dossierId);
+      if (!detail) throw new ProjectDossierNotFoundError();
+      current = latestTurn(detail, sessionId);
+    }
+    assertCanRequestQuestion(session.status, current?.status ?? null);
+
+    // 2、用短事务创建不可见占位回合，随后在事务外等待模型完成。
+    const turnNo = (current?.turnNo ?? 0) + 1;
+    const turnId = parseId(this.#ids.generate(), 'DrillTurn');
+    const contextHash = questionContextHash(session, turnNo);
+    const now = this.#clock.now();
+    this.#repository.createQuestionTurn({
+      expectedSessionRevision: session.contextRevision,
+      turn: {
+        id: turnId,
+        sessionId,
+        turnNo,
+        status: 'question_pending',
+        contextHash,
+        question: null,
+        intent: null,
+        primaryDimension: null,
+        guidanceSlots: [],
+        evidenceRefs: [],
+        questionTaskId: null,
+        questionAgentRunId: null,
+        digestTaskId: null,
+        digestAgentRunId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+
+    try {
+      // 3、生成器完成结构化校验后再提交题目；4、提交成功后异步维护项目备忘录。
+      const result = await this.#questionGenerator.generate({
+        dossierId: session.dossierId,
+        sessionId,
+        turnId,
+        expectedContextRevision: session.contextRevision,
+        contextHash,
+        signal,
+        now: this.#clock.now(),
+        ...(onStage ? { onStage } : {}),
+      });
+      this.enqueueNotebook(session.dossierId);
+      return result;
+    } catch (error) {
+      // 5、取消或失败时只删除本请求创建且尚未提交的问题占位，允许用户立即重试。
+      this.#repository.removeUnqueuedQuestionTurn(turnId);
+      throw error;
+    }
   }
 
   /** 列出当前简历版本中的可拷打项目。 */
@@ -351,7 +437,7 @@ export class InterviewProjectService {
     return { sessionId, deduplicated: false };
   }
 
-  /** 为会话申请下一题，并幂等投递问题生成任务。 */
+  /** 为遗留问题占位恢复后台任务；新的 Web 请求应调用 generateQuestion。 */
   public requestQuestion(sessionIdValue: string): InterviewTaskAccepted {
     const sessionId = parseId(sessionIdValue, 'DrillSession');
     const session = this.#repository.getSession(sessionId);
@@ -569,6 +655,11 @@ export class InterviewProjectService {
     if (!session) throw new DrillSessionNotFoundError();
     const detail = this.#repository.getDossier(session.dossierId);
     const current = detail ? latestTurn(detail, sessionId) : null;
+    const otherActiveSession = detail?.sessionRecords.find(
+      (candidate) => candidate.id !== sessionId && candidate.status === 'active',
+    );
+    const otherActiveTurn =
+      detail && otherActiveSession ? latestTurn(detail, otherActiveSession.id) : null;
     if (
       input.action !== 'resume' &&
       current &&
@@ -576,6 +667,15 @@ export class InterviewProjectService {
     ) {
       throw new InterviewProjectConflictError(
         'Cancel or wait for the current task before changing the session state.',
+      );
+    }
+    if (
+      input.action === 'resume' &&
+      otherActiveTurn &&
+      ['question_pending', 'digest_pending'].includes(otherActiveTurn.status)
+    ) {
+      throw new InterviewProjectConflictError(
+        'Cancel or wait for the current task before resuming another session.',
       );
     }
     const status = nextSessionStatus(session.status, input.action);

@@ -40,6 +40,13 @@ export interface ModelOutputResponse {
   readonly usage: ModelUsage;
 }
 
+/** Provider 返回了终止正文但无法解析为 JSON；原文只允许交给一次内存内修复。 */
+export interface ModelUnparsedOutputResponse {
+  readonly kind: 'unparsed_output';
+  readonly text: string;
+  readonly usage: ModelUsage;
+}
+
 /** 模块数据结构或契约。 */
 export interface ModelToolCallResponse {
   readonly kind: 'tool_calls';
@@ -52,7 +59,8 @@ export interface ModelToolCallResponse {
 }
 
 /** 模块使用的类型约束。 */
-export type ModelResponse = ModelOutputResponse | ModelToolCallResponse;
+export type ModelResponse =
+  ModelOutputResponse | ModelUnparsedOutputResponse | ModelToolCallResponse;
 
 /** 模块数据结构或契约。 */
 export interface ModelClient {

@@ -179,7 +179,7 @@ export class AgentRunner {
       );
       addUsage(totals, response.usage);
       this.#checkUsage(definition, totals);
-      if (response.kind === 'output') break;
+      if (response.kind !== 'tool_calls') break;
       // 1、b 工具输入输出均在边界校验，成功调用才会加入下一轮上下文。
       for (const call of response.calls) {
         if (toolResults.length >= definition.limits.maxSteps) {
@@ -224,9 +224,18 @@ export class AgentRunner {
       }
     }
 
-    // 2、模型直接输出若不符合 Schema，只允许额外消耗一个步骤进行修复。
-    const initial = definition.outputSchema.safeParse(response.output);
-    if (initial.success) return initial.data;
+    // 2、无效 JSON 与 Schema 不匹配共享同一个修复预算，原始正文只在内存中传回模型。
+    let invalidOutput: unknown;
+    let invalidSummary: string;
+    if (response.kind === 'output') {
+      const initial = definition.outputSchema.safeParse(response.output);
+      if (initial.success) return initial.data;
+      invalidOutput = response.output;
+      invalidSummary = validationSummary(initial.error);
+    } else {
+      invalidOutput = response.text;
+      invalidSummary = '<root>: invalid_json';
+    }
     steps += 1;
     if (steps > definition.limits.maxSteps) {
       throw new AgentRuntimeError('budget_exceeded', 'No step budget remains for output repair.');
@@ -241,17 +250,19 @@ export class AgentRunner {
         tools: [],
         toolResults: [],
         repair: {
-          invalidOutput: response.output,
-          validationSummary: validationSummary(initial.error),
+          invalidOutput,
+          validationSummary: invalidSummary,
         },
       },
       signal,
     );
     addUsage(totals, repaired.usage);
     this.#checkUsage(definition, totals);
-    if (repaired.kind !== 'output') {
+    if (repaired.kind === 'tool_calls') {
       throw new AgentRuntimeError('invalid_output', 'Repair response cannot request tools.');
     }
+    if (repaired.kind === 'unparsed_output')
+      throw new AgentRuntimeError('invalid_output', 'Repair response was not JSON.');
     const result = definition.outputSchema.safeParse(repaired.output);
     if (!result.success)
       throw new AgentRuntimeError('invalid_output', 'Model output remains invalid.');
