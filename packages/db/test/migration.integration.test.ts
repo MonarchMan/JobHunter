@@ -13,6 +13,7 @@ afterEach(async () => {
   await Promise.all(dataRoots.splice(0).map((root) => root.cleanup()));
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function openTestDatabase(): Promise<SqliteDatabaseHandle> {
   const dataRoot = await createTemporaryDataRoot('jobhunter-db-');
   dataRoots.push(dataRoot);
@@ -21,6 +22,7 @@ async function openTestDatabase(): Promise<SqliteDatabaseHandle> {
   return handle;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function migrationsBefore(
   root: string,
   directoryName: string,

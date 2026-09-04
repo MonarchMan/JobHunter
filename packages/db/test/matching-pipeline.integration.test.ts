@@ -38,6 +38,7 @@ import {
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class AdvancingClock implements Clock {
   #value = 1_800_000_000_000;
 
@@ -47,6 +48,7 @@ class AdvancingClock implements Clock {
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds implements IdGenerator {
   #counter = 0xd000;
 

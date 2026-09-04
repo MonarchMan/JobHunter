@@ -6,6 +6,7 @@ import type {
 import { resumeDocumentContentSchema, resumeTemplateKeySchema } from '@jobhunter/resume-template';
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 interface DraftRow {
   readonly id: string;
   readonly profile_id: string;
@@ -20,6 +21,7 @@ interface DraftRow {
   readonly updated_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface ExportRow {
   readonly id: string;
   readonly draft_id: string;
@@ -38,6 +40,7 @@ interface ExportRow {
   readonly updated_at: number;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function draft(row: DraftRow): ResumeTemplateDraftRecord {
   return {
     id: row.id,
@@ -54,6 +57,7 @@ function draft(row: DraftRow): ResumeTemplateDraftRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function exportRequest(row: ExportRow): ResumeExportRequestRecord {
   if (row.format !== 'pdf' && row.format !== 'html')
     throw new TypeError('Stored resume export format is invalid.');
@@ -85,6 +89,7 @@ const exportSelect = `SELECT id, draft_id, format, draft_revision, input_file_id
   input_file_version, output_file_id, output_file_version, task_id, status,
   file_name, error_summary, expires_at, created_at, updated_at FROM resume_export_requests`;
 
+/** 持久化简历草稿、解析证据和确认状态。 */
 export class SqliteResumeDraftRepository implements ResumeDraftRepository {
   readonly #client: Database.Database;
 
@@ -92,6 +97,7 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public find(
     profileId: string,
     templateKey: ResumeTemplateDraftRecord['templateKey'],
@@ -103,11 +109,13 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
     return row ? draft(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(id: string): ResumeTemplateDraftRecord | null {
     const row = this.#client.prepare(`${draftSelect} WHERE id = ?`).get(id) as DraftRow | undefined;
     return row ? draft(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public create(record: ResumeTemplateDraftRecord): ResumeTemplateDraftRecord {
     this.#client
       .prepare(
@@ -132,6 +140,7 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
     return this.get(record.id) ?? record;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public update(
     input: Parameters<ResumeDraftRepository['update']>[0],
   ): ResumeTemplateDraftRecord | null {
@@ -152,6 +161,7 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
     return result.changes === 1 ? this.get(input.id) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public setAvatar(
     input: Parameters<ResumeDraftRepository['setAvatar']>[0],
   ): ResumeTemplateDraftRecord | null {
@@ -165,6 +175,7 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
     return result.changes === 1 ? this.get(input.id) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createExport(record: ResumeExportRequestRecord): ResumeExportRequestRecord {
     this.#client
       .prepare(
@@ -194,18 +205,21 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
     return this.getExport(record.id) ?? record;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getExport(id: string): ResumeExportRequestRecord | null {
     const row = this.#client.prepare(`${exportSelect} WHERE id = ?`).get(id) as
       ExportRow | undefined;
     return row ? exportRequest(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public attachTask(id: string, taskId: string, now: ResumeTemplateDraftRecord['updatedAt']): void {
     this.#client
       .prepare('UPDATE resume_export_requests SET task_id = ?, updated_at = ? WHERE id = ?')
       .run(taskId, now, id);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public completeExport(input: Parameters<ResumeDraftRepository['completeExport']>[0]): void {
     this.#client
       .prepare(
@@ -214,6 +228,7 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
       .run(input.outputFileId, input.outputFileVersion, input.now, input.id);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public failExport(
     id: string,
     message: string,
@@ -226,6 +241,7 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
       .run(message, now, id);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public markDelivered(id: string, now: ResumeTemplateDraftRecord['updatedAt']): void {
     this.#client
       .prepare(
@@ -234,6 +250,7 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
       .run(now, id);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listExpired(
     now: ResumeTemplateDraftRecord['updatedAt'],
   ): readonly ResumeExportRequestRecord[] {
@@ -242,6 +259,7 @@ export class SqliteResumeDraftRepository implements ResumeDraftRepository {
     ).map(exportRequest);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public deleteExport(id: string): void {
     this.#client.prepare('DELETE FROM resume_export_requests WHERE id = ?').run(id);
   }

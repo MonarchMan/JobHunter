@@ -9,6 +9,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { createTencentAdapter, type TencentConfig } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class OnlineSmokeGate implements SourceRateLimitGate {
   #nextAt = 0;
 

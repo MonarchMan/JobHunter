@@ -10,6 +10,7 @@ import {
   type ProfileVersionId,
 } from '../shared/index.js';
 
+/** 模块数据结构或契约。 */
 export interface MatchIdentityInput {
   readonly profileVersionId: ProfileVersionId;
   readonly jobRevisionId: JobRevisionId;
@@ -19,6 +20,7 @@ export interface MatchIdentityInput {
   readonly jobEnrichmentId?: JobEnrichmentId | null;
 }
 
+/** 模块数据结构或契约。 */
 export interface MatchIdentity {
   readonly profileVersionId: ProfileVersionId;
   readonly jobRevisionId: JobRevisionId;
@@ -28,6 +30,7 @@ export interface MatchIdentity {
   readonly inputHash: ContentHash;
 }
 
+/** 校验增强数据一致性并生成匹配输入身份。 */
 export function buildMatchIdentity(input: MatchIdentityInput): MatchIdentity {
   const enrichment = input.jobEnrichmentId ?? null;
   if (input.usesEnrichment !== (enrichment !== null)) {
@@ -56,6 +59,7 @@ export function buildMatchIdentity(input: MatchIdentityInput): MatchIdentity {
   };
 }
 
+/** 模块数据结构或契约。 */
 export interface MatchAdviceIdentityInput {
   readonly matchResultId: MatchResultId;
   readonly agentRunId: AgentRunId;
@@ -64,9 +68,11 @@ export interface MatchAdviceIdentityInput {
   readonly modelConfigHash: ContentHash;
 }
 
+/** 计算匹配建议输入的稳定内容哈希。 */
 export function buildMatchAdviceIdentity(input: MatchAdviceIdentityInput): ContentHash {
   return contentHash(input);
 }
 
+/** 匹配筛选结果状态。 */
 export const MATCH_FILTER_STATUSES = ['eligible', 'excluded', 'uncertain'] as const;
 export type MatchFilterStatus = (typeof MATCH_FILTER_STATUSES)[number];

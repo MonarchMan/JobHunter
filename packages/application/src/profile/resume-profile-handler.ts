@@ -21,6 +21,7 @@ import type { TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
 import type { CandidateProfileService } from './candidate-profile-service.js';
 
+/** 简历画像任务输入，绑定文档和档案版本。 */
 export const resumeProfileTaskPayloadSchema = z
   .object({
     profileId: z.string().trim().min(1),
@@ -29,6 +30,7 @@ export const resumeProfileTaskPayloadSchema = z
   })
   .strict();
 
+/** 简历画像任务输出。 */
 export const resumeProfileTaskOutputSchema = z
   .object({
     agentRunId: z.string().trim().min(1).nullable(),
@@ -46,7 +48,9 @@ const emptyPreferences: CandidatePreferences = {
   remoteAccepted: null,
 };
 
+/** 创建简历画像 Agent 任务处理器。 */
 export function createResumeProfileTaskHandler(
+  // 1、校验导入文档状态；2、运行画像 Agent；3、校验结构化画像；4、追加档案版本。
   input:
     | {
         readonly runner?: AgentRunner;
@@ -72,6 +76,7 @@ export function createResumeProfileTaskHandler(
     defaultMaxAttempts: 3,
     leaseDurationMs: 180_000,
     concurrencyKey: (payload) => `resume-profile:${payload.profileId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       if ('unavailable' in input)
         throw new TaskExecutionError(
@@ -147,6 +152,7 @@ export function createResumeProfileTaskHandler(
   };
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 async function completeDocumentOcr(
   input: {
     readonly documents: ResumeDocumentRepository;

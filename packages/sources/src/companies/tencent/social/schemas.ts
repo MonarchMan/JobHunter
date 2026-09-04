@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 腾讯社会招聘接口配置 Schema。 */
 export const tencentConfigSchema = z
   .object({
     language: z.literal('zh-cn').default('zh-cn'),
@@ -7,8 +8,10 @@ export const tencentConfigSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type TencentConfig = z.infer<typeof tencentConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const tencentListJobSchema = z
   .object({
     PostId: z.string().min(1),
@@ -29,8 +32,10 @@ export const tencentListJobSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type TencentListJob = z.infer<typeof tencentListJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const tencentListResponseSchema = z
   .object({
     Code: z.literal(200),
@@ -43,14 +48,17 @@ export const tencentListResponseSchema = z
   })
   .loose();
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const tencentDetailSchema = tencentListJobSchema.extend({
   Requirement: z.string().min(1),
   DepartmentIntroduction: z.string().nullable().optional(),
   OuterPostTypeID: z.string().nullable().optional(),
 });
 
+/** 来源适配器使用的类型约束。 */
 export type TencentDetail = z.infer<typeof tencentDetailSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const tencentDetailResponseSchema = z
   .object({ Code: z.literal(200), Data: tencentDetailSchema })
   .loose();

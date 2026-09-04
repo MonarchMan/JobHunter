@@ -4,12 +4,14 @@ import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { PersistenceError } from './errors.js';
 
+/** 数据库查询结果对应的行结构。 */
 interface ArtifactRow {
   readonly relative_path: string;
   readonly byte_size: number;
   readonly media_type: string;
 }
 
+/** 从文件实体映射读取项目拷打备忘录的最新物理版本。 */
 export class SqliteProjectNotebookReader implements ProjectNotebookReader {
   readonly #client: Database.Database;
   readonly #dataRoot: string;
@@ -19,6 +21,7 @@ export class SqliteProjectNotebookReader implements ProjectNotebookReader {
     this.#dataRoot = path.resolve(dataRoot);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async read(
     artifactId: string,
     maximumBytes: number,

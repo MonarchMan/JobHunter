@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { TaskHandler } from '../tasks/model.js';
 import type { MatchingBatchService, MatchBatchResult } from './matching-batch-service.js';
 
+// Agent 任务输出在持久化前统一通过 Schema 校验。
 const outputSchema = z
   .object({
     matchResultId: z.string().trim().min(1),
@@ -12,6 +13,7 @@ const outputSchema = z
   })
   .strict();
 
+/** 匹配修订任务的输入，绑定职位修订和简历版本。 */
 export const matchRevisionTaskPayloadSchema = z
   .object({
     jobRevisionId: z.string().trim().min(1),
@@ -20,6 +22,7 @@ export const matchRevisionTaskPayloadSchema = z
   })
   .strict();
 
+/** 创建匹配任务处理器，执行确定性评分并写入匹配结果。 */
 export function createMatchRevisionTaskHandler(
   batches: MatchingBatchService | null,
 ): TaskHandler<z.infer<typeof matchRevisionTaskPayloadSchema>, MatchBatchResult> {

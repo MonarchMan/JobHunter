@@ -13,6 +13,7 @@ import {
 import type { z } from 'zod';
 import { normalizeJobTaxonomy } from '../normalization/job-taxonomy.js';
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface InlineJobFields {
   readonly externalJobId: string;
   readonly title: string;
@@ -31,11 +32,13 @@ export interface InlineJobFields {
   readonly sourcePrivateJson?: Readonly<Record<string, unknown>>;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface ParsedInlinePage<TRecord> {
   readonly records: readonly TRecord[];
   readonly total: number;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface InlinePagedJsonDefinition<TConfig, TRecord> {
   readonly metadata: SourceMetadata;
   readonly configSchema: z.ZodType<TConfig>;
@@ -56,13 +59,16 @@ export interface InlinePagedJsonDefinition<TConfig, TRecord> {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function fallbackCategory(
   type: SourceMetadata['recruitmentType'],
 ): 'internship' | 'campus' | 'social' | null {
   return type === 'mixed' ? null : type;
 }
 
+/** 创建具备 JSON/浏览器分页双路径的 inline 来源适配器。 */
 export function createInlinePagedJsonAdapter<TConfig, TRecord>(
+  // 1、准备官方请求构造器；2、优先使用浏览器采集；3、否则走受限 JSON 分页；4、统一规范化职位。
   definition: InlinePagedJsonDefinition<TConfig, TRecord>,
 ): JobSourceAdapter<TConfig, never> {
   const officialHosts = definition.metadata.officialHosts;
@@ -113,6 +119,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
   return {
     metadata: definition.metadata,
     configSchema: definition.configSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       if (definition.browser && context.page?.collect) {
         const collection = await context.page.collect(browserRequest(context));
@@ -227,6 +234,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
         },
       };
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       const record = definition.parseRecord(input.discovered.raw);
       const fields = definition.fields(record);

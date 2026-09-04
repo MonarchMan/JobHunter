@@ -31,16 +31,19 @@ import {
 const companyId = parseId('018f0000-0000-7000-8000-000000000111', 'Company');
 const sourceId = parseId('018f0000-0000-7000-8000-000000000214', 'JobSource');
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function fixture(path: string): Promise<unknown> {
   return JSON.parse(
     await readFile(new URL(`../fixtures/${path}`, import.meta.url), 'utf8'),
   ) as unknown;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function fixtureText(path: string): Promise<string> {
   return readFile(new URL(`../fixtures/${path}`, import.meta.url), 'utf8');
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function http(body: unknown): SourceHttpClient {
   return {
     request: (request) =>
@@ -53,6 +56,7 @@ function http(body: unknown): SourceHttpClient {
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function httpSequence(bodies: readonly unknown[]): SourceHttpClient {
   let index = 0;
   return {
@@ -69,6 +73,7 @@ function httpSequence(bodies: readonly unknown[]): SourceHttpClient {
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function context<TConfig>(config: TConfig, body: unknown): DiscoverContext<TConfig> {
   return {
     companyId,
@@ -82,6 +87,7 @@ function context<TConfig>(config: TConfig, body: unknown): DiscoverContext<TConf
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function discoveredJobs<TConfig>(
   adapter: JobSourceAdapter<TConfig, never>,
   discoverContext: DiscoverContext<TConfig>,
@@ -93,6 +99,7 @@ async function discoveredJobs<TConfig>(
   return jobs;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function runContract<TConfig>(
   factory: () => JobSourceAdapter<TConfig, never>,
   discoverContext: DiscoverContext<TConfig>,

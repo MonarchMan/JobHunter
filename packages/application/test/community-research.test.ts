@@ -28,6 +28,7 @@ const brief: ExperienceResearchBrief = {
   blockedDomains: ['ads.nowcoder.com'],
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function bundle(): CommunityResearchBundle {
   const fingerprint = researchRequestFingerprint(brief);
   return {

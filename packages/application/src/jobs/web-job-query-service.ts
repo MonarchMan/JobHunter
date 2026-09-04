@@ -7,6 +7,7 @@ import {
 } from '../contracts/web.js';
 import type { JobQueryService } from './job-query-service.js';
 
+/** 将职位查询服务适配为 Web 分页契约。 */
 export class WebJobQueryService {
   readonly #jobs: JobQueryService;
 
@@ -14,6 +15,7 @@ export class WebJobQueryService {
     this.#jobs = jobs;
   }
 
+  /** 返回 Web 页面所需的职位列表和下一页游标。 */
   public list(input: WebJobQuery): WebJobPage {
     const query = webJobQuerySchema.parse(input);
     const page = this.#jobs.list({

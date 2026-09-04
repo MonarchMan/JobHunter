@@ -1,4 +1,5 @@
 /** Small seeded PRNG for reproducible test data; it is not suitable for security tokens. */
+/** 可复现的伪随机数生成器。 */
 export class SeededRandom {
   #state: number;
 
@@ -6,6 +7,7 @@ export class SeededRandom {
     this.#state = seed >>> 0;
   }
 
+  /** 生成 [0,1) 范围内的下一个随机数。 */
   public next(): number {
     let value = (this.#state += 0x6d2b79f5);
     value = Math.imul(value ^ (value >>> 15), value | 1);
@@ -13,6 +15,7 @@ export class SeededRandom {
     return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
   }
 
+  /** 生成指定半开区间内的整数。 */
   public integer(minimum: number, maximumExclusive: number): number {
     if (!Number.isSafeInteger(minimum) || !Number.isSafeInteger(maximumExclusive)) {
       throw new TypeError('Random integer bounds must be safe integers.');

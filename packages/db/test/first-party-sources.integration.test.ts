@@ -23,12 +23,14 @@ import {
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FixedClock implements Clock {
   public now(): UtcInstant {
     return utcInstant(1_800_000_000_000);
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds {
   #counter = 0x5000;
 
@@ -51,6 +53,7 @@ afterEach(async () => {
   }
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function database(): Promise<{
   readonly root: Awaited<ReturnType<typeof createTemporaryDataRoot>>;
   readonly handle: SqliteDatabaseHandle;
@@ -100,6 +103,7 @@ const fixtureHttp: SourceHttpClient = {
   },
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function meituanFixture(name: string): Promise<unknown> {
   const text = await readFile(
     new URL(`../../sources/test/fixtures/meituan/${name}`, import.meta.url),
@@ -108,6 +112,7 @@ async function meituanFixture(name: string): Promise<unknown> {
   return JSON.parse(text) as unknown;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function meituanSyncHttp(input: {
   readonly listJob: unknown;
   readonly detail: unknown;

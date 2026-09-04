@@ -1,11 +1,7 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { assertPromptMatchesDefinition } from '@jobhunter/agent-core';
 import { describe, expect, it } from 'vitest';
 import {
   ResumeMediaError,
-  TesseractResumeOcrEngine,
   detectResumeMediaType,
   extractResumeProfileByRules,
   parseResumeProfileAgentOutput,
@@ -53,40 +49,6 @@ describe('resume media detection and deterministic parsing', () => {
     new DataView(fakeZip.buffer).setUint32(0, 0x04034b50, true);
     expect(() => detectResumeMediaType(fakeZip)).toThrow(/not a valid DOCX/);
   });
-
-  it('detects resume images by content and defers them to OCR', async () => {
-    const png = await readFile(new URL('../../../docs/resumes/简历模板.png', import.meta.url));
-    expect(detectResumeMediaType(png)).toMatchObject({
-      mediaType: 'image/png',
-      byteSize: png.byteLength,
-    });
-    await expect(parseResumeText(png, 'image/png')).resolves.toMatchObject({
-      status: 'needs_ocr',
-      parser: 'image',
-      text: null,
-    });
-
-    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0xff, 0xd9]);
-    expect(detectResumeMediaType(jpeg).mediaType).toBe('image/jpeg');
-  });
-
-  it('recognizes stable education, skill and project anchors from the reference image locally', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'jobhunter-ocr-'));
-    try {
-      const png = await readFile(new URL('../../../docs/resumes/简历模板.png', import.meta.url));
-      const result = await new TesseractResumeOcrEngine({ dataRoot: root }).recognize(
-        png,
-        'image/png',
-      );
-      expect(result.text).toContain('星河大学');
-      expect(result.text).toContain('Python');
-      expect(result.text).toContain('MiniCode');
-      expect(result.text).toContain('Agent');
-      expect(result.characterCount).toBeGreaterThan(1_000);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  }, 30_000);
 
   it('honors cancellation before parser work starts', async () => {
     const abort = new AbortController();

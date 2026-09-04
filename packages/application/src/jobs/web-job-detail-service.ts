@@ -1,15 +1,18 @@
 import { webJobDetailSchema, type WebJobDetail } from '../contracts/web.js';
 import type { JobQueryService } from './job-query-service.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface WebJobTrace {
   readonly revisions: WebJobDetail['revisions'];
   readonly matches: WebJobDetail['matches'];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface WebJobTraceRepository {
   get(jobId: string): WebJobTrace;
 }
 
+/** 组合职位详情和可追溯变化链路。 */
 export class WebJobDetailService {
   readonly #jobs: JobQueryService;
   readonly #trace: WebJobTraceRepository;
@@ -22,6 +25,7 @@ export class WebJobDetailService {
     this.#trace = input.trace;
   }
 
+  /** 获取 Web 职位详情及追踪信息。 */
   public get(id: string, profileVersionId?: string): WebJobDetail {
     const job = this.#jobs.show(id, profileVersionId);
     const trace = this.#trace.get(job.id);

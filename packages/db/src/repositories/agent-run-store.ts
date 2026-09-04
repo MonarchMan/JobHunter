@@ -7,6 +7,7 @@ import {
 } from '@jobhunter/agent-core';
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 interface AgentRunRow {
   readonly id: string;
   readonly agent_key: string;
@@ -33,20 +34,24 @@ const columns = `id, agent_key, agent_version, prompt_version, model_config_hash
                  output_tokens, estimated_cost_micros, cost_currency, pricing_version,
                  started_at, finished_at`;
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function isStatus(value: string): value is AgentRunRecord['status'] {
   return (
     value === 'running' || value === 'succeeded' || value === 'failed' || value === 'cancelled'
   );
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function isCategory(value: string): value is AgentErrorCategory {
   return (agentErrorCategories as readonly string[]).includes(value);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function parseJson(value: string | null): unknown {
   return value === null ? null : (JSON.parse(value) as unknown);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function toRecord(row: AgentRunRow): AgentRunRecord {
   if (!isStatus(row.status)) throw new TypeError(`Invalid stored agent run status: ${row.status}.`);
   if (row.error_category !== null && !isCategory(row.error_category)) {
@@ -74,6 +79,7 @@ function toRecord(row: AgentRunRow): AgentRunRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function isUniqueConstraint(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -83,6 +89,7 @@ function isUniqueConstraint(error: unknown): boolean {
   );
 }
 
+/** 保存 Agent 运行状态、缓存键和输出摘要。 */
 export class SqliteAgentRunStore implements AgentRunStore {
   readonly #client: Database.Database;
 
@@ -90,6 +97,7 @@ export class SqliteAgentRunStore implements AgentRunStore {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public findSucceeded(cacheKey: string): AgentRunRecord | null {
     const row = this.#client
       .prepare(`SELECT ${columns} FROM agent_runs WHERE cache_key = ? AND status = 'succeeded'`)
@@ -97,12 +105,14 @@ export class SqliteAgentRunStore implements AgentRunStore {
     return row ? toRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(id: string): AgentRunRecord | null {
     const row = this.#client.prepare(`SELECT ${columns} FROM agent_runs WHERE id = ?`).get(id) as
       AgentRunRow | undefined;
     return row ? toRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createRunning(record: AgentRunRecord): void {
     if (record.status !== 'running') throw new TypeError('New agent run must be running.');
     this.#client
@@ -126,6 +136,7 @@ export class SqliteAgentRunStore implements AgentRunStore {
       );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public completeSucceeded(
     input: Parameters<AgentRunStore['completeSucceeded']>[0],
   ): ReturnType<AgentRunStore['completeSucceeded']> {
@@ -177,6 +188,7 @@ export class SqliteAgentRunStore implements AgentRunStore {
     }
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public completeFailed(input: Parameters<AgentRunStore['completeFailed']>[0]): AgentRunRecord {
     const changed = this.#client
       .prepare(
@@ -202,6 +214,7 @@ export class SqliteAgentRunStore implements AgentRunStore {
     return this.#required(input.id);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public saveToolCall(record: ToolCallRecord): void {
     this.#client
       .prepare(
@@ -226,6 +239,7 @@ export class SqliteAgentRunStore implements AgentRunStore {
       );
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #required(id: string): AgentRunRecord {
     const row = this.#client.prepare(`SELECT ${columns} FROM agent_runs WHERE id = ?`).get(id) as
       AgentRunRow | undefined;

@@ -5,11 +5,13 @@ import {
   type ModelResponse,
 } from '@jobhunter/agent-core';
 
+/** 模块使用的类型约束。 */
 export type FakeModelStep =
   | ModelResponse
   | ModelClientError
   | ((request: ModelRequest, signal: AbortSignal) => ModelResponse | Promise<ModelResponse>);
 
+/** 用预设步骤模拟模型响应，避免单元测试访问网络。 */
 export class FakeModelClient implements ModelClient {
   public readonly metadata;
   public readonly requests: ModelRequest[] = [];
@@ -29,6 +31,7 @@ export class FakeModelClient implements ModelClient {
     this.metadata = metadata;
   }
 
+  /** 消费下一步预设响应并记录请求。 */
   public async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
     if (signal.aborted) throw new ModelClientError('cancelled', 'Fake model request cancelled.');
     this.requests.push(request);

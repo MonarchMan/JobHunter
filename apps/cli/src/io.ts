@@ -1,3 +1,4 @@
+/** 模块数据结构或契约。 */
 export interface CliIo {
   readonly stdout: { write(value: string): void };
   readonly stderr: { write(value: string): void };

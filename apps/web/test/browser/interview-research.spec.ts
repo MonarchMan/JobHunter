@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface CreateResearchResponse {
   readonly data?: {
     readonly detail: {

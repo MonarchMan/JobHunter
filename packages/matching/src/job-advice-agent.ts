@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { deterministicMatchOutputSchema } from './model.js';
 import { jobAdvicePromptV1 } from './prompts/job-advice/v1.js';
 
+/** 建议引用的职位或简历证据。 */
 export const adviceReferenceSchema = z
   .object({
     kind: z.enum(['evidence', 'missing', 'uncertainty']),
@@ -18,6 +19,7 @@ const advicePointSchema = z
   })
   .strict();
 
+/** 职位准备建议结构。 */
 export const jobAdviceSchema = z
   .object({
     highlights: z.array(advicePointSchema).max(10),
@@ -28,8 +30,10 @@ export const jobAdviceSchema = z
   })
   .strict();
 
+/** 模块使用的类型约束。 */
 export type JobAdvice = z.infer<typeof jobAdviceSchema>;
 
+/** 职位建议 Agent 输入 Schema。 */
 export const jobAdviceInputSchema = z
   .object({
     profile: candidateProfileSchema,
@@ -38,8 +42,10 @@ export const jobAdviceInputSchema = z
   })
   .strict();
 
+/** 模块使用的类型约束。 */
 export type JobAdviceInput = z.infer<typeof jobAdviceInputSchema>;
 
+/** 职位准备建议 Agent 定义。 */
 export const jobAdviceAgentDefinition = defineAgent({
   key: jobAdvicePromptV1.agentKey,
   version: '1.0.0',
@@ -59,10 +65,12 @@ export const jobAdviceAgentDefinition = defineAgent({
   },
 });
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function referenceKey(kind: z.infer<typeof adviceReferenceSchema>['kind'], value: string): string {
   return `${kind}\u0000${value}`;
 }
 
+/** 校验建议 Agent 输出并验证引用边界。 */
 export function parseJobAdviceAgentOutput(output: unknown, input: JobAdviceInput): JobAdvice {
   const parsed = jobAdviceSchema.parse(output);
   const allowed = new Set<string>();

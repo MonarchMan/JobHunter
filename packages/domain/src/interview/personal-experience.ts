@@ -1,15 +1,22 @@
 import { z } from 'zod';
 import { DomainError } from '../shared/domain-error.js';
 
+/** 个人面经解析器版本。 */
 export const personalExperienceParserVersion = 'personal-experience-parser@v1' as const;
+/** 个人面经模板版本。 */
 export const personalExperienceTemplateVersion = 'personal-experience@v1' as const;
 
+/** 个人面经文档审核状态。 */
 export const experienceDocumentStatusSchema = z.enum(['draft', 'accepted', 'rejected']);
+/** 领域模型的类型约束。 */
 export type ExperienceDocumentStatus = z.infer<typeof experienceDocumentStatusSchema>;
 
+/** 个人面经来源模式。 */
 export const experienceSourceModeSchema = z.enum(['upload', 'online']);
+/** 领域模型的类型约束。 */
 export type ExperienceSourceMode = z.infer<typeof experienceSourceModeSchema>;
 
+/** 解析后需要用户补充或确认的面经警告。 */
 export const experienceWarningCodeSchema = z.enum([
   'missing_company',
   'missing_role',
@@ -17,8 +24,10 @@ export const experienceWarningCodeSchema = z.enum([
   'unanswered_questions',
   'unclassified_notes',
 ]);
+/** 领域模型的类型约束。 */
 export type ExperienceWarningCode = z.infer<typeof experienceWarningCodeSchema>;
 
+/** 面经问题或回答在规范化原文中的左闭右开字符范围。 */
 export const textEvidenceRangeSchema = z
   .object({ start: z.number().int().nonnegative(), end: z.number().int().positive() })
   .strict()
@@ -27,6 +36,7 @@ export const textEvidenceRangeSchema = z
 const optionalText = (maximum: number): z.ZodNullable<z.ZodString> =>
   z.string().trim().min(1).max(maximum).nullable();
 
+/** 单个面试问题及可选回答、复盘和原文证据范围。 */
 export const interviewQuestionDraftSchema = z
   .object({
     sequenceNo: z.number().int().positive(),
@@ -37,8 +47,10 @@ export const interviewQuestionDraftSchema = z
     answerEvidence: textEvidenceRangeSchema.nullable(),
   })
   .strict();
+/** 领域模型的类型约束。 */
 export type InterviewQuestionDraft = z.infer<typeof interviewQuestionDraftSchema>;
 
+/** 一段面试经历及其问题列表的草稿 Schema。 */
 export const interviewExperienceDraftSchema = z
   .object({
     sequenceNo: z.number().int().positive(),
@@ -53,8 +65,10 @@ export const interviewExperienceDraftSchema = z
     questions: z.array(interviewQuestionDraftSchema).max(100),
   })
   .strict();
+/** 领域模型的类型约束。 */
 export type InterviewExperienceDraft = z.infer<typeof interviewExperienceDraftSchema>;
 
+/** 个人面经清洗解析结果和待处理警告。 */
 export const personalExperienceParseResultSchema = z
   .object({
     normalizedText: z.string().min(1).max(250_000),
@@ -62,14 +76,17 @@ export const personalExperienceParseResultSchema = z
     warnings: z.array(experienceWarningCodeSchema),
   })
   .strict();
+/** 领域模型的类型约束。 */
 export type PersonalExperienceParseResult = z.infer<typeof personalExperienceParseResultSchema>;
 
+/** 模块数据结构或契约。 */
 interface SourceLine {
   readonly text: string;
   readonly start: number;
   readonly end: number;
 }
 
+/** 模块数据结构或契约。 */
 interface MutableQuestion {
   sequenceNo: number;
   question: string;
@@ -79,11 +96,13 @@ interface MutableQuestion {
   answerEvidence: { start: number; end: number } | null;
 }
 
+/** 规范化单行文本，空行转换为 null。 */
 function normalizedValue(value: string): string | null {
   const result = value.replaceAll(/[\t ]+/g, ' ').trim();
   return result || null;
 }
 
+/** 将文本拆为保留字符偏移的行，供问题和回答证据引用。 */
 function sourceLines(value: string): readonly SourceLine[] {
   const lines: SourceLine[] = [];
   let start = 0;
@@ -94,6 +113,7 @@ function sourceLines(value: string): readonly SourceLine[] {
   return lines;
 }
 
+/** 清洗个人面经原文，统一换行、去除 BOM 和过量空行。 */
 export function cleanPersonalExperienceText(value: string): string {
   return value
     .replaceAll('\u0000', '')
@@ -107,6 +127,7 @@ export function cleanPersonalExperienceText(value: string): string {
     .trim();
 }
 
+/** 计算一段值在原文行中的左闭右开字符范围。 */
 function valueRange(line: SourceLine, value: string): { start: number; end: number } | null {
   if (!value.trim()) return null;
   const offset = line.text.indexOf(value);
@@ -119,6 +140,7 @@ function valueRange(line: SourceLine, value: string): { start: number; end: numb
   };
 }
 
+/** 拆分、去重并限制面经标签数量。 */
 function splitTags(value: string | null): readonly string[] {
   if (!value) return [];
   return [
@@ -131,6 +153,7 @@ function splitTags(value: string | null): readonly string[] {
   ].slice(0, 30);
 }
 
+/** 解析单段面试经历，识别元数据、问题、回答、复盘和备注。 */
 function parseExperience(
   lines: readonly SourceLine[],
   sequenceNo: number,
@@ -279,7 +302,9 @@ function parseExperience(
   });
 }
 
+/** 执行领域校验、归一化或合并逻辑。 */
 export function parsePersonalExperienceText(value: string): PersonalExperienceParseResult {
+  // 1、清洗并限制原文规模，再按经历标题切分文本块。
   const normalizedText = cleanPersonalExperienceText(value);
   if (!normalizedText)
     throw new DomainError('INVALID_EXPERIENCE_TEXT', 'Experience text is empty.');
@@ -301,11 +326,13 @@ export function parsePersonalExperienceText(value: string): PersonalExperiencePa
       blocks.push(lines.slice(start + 1, end));
     });
   }
+  // 2、逐块解析问题和回答，最后统一计算提醒并通过结果 Schema。
   const experiences = blocks.map((block, index) => parseExperience(block, index + 1));
   const warnings = experienceWarnings(experiences);
   return personalExperienceParseResultSchema.parse({ normalizedText, experiences, warnings });
 }
 
+/** 根据面经完整性生成可解释的补充提醒。 */
 export function experienceWarnings(
   experiences: readonly InterviewExperienceDraft[],
 ): readonly ExperienceWarningCode[] {
@@ -320,6 +347,7 @@ export function experienceWarnings(
   return [...warnings];
 }
 
+/** 接受面经前确认至少存在一个可复用的面试问题。 */
 export function assertExperienceDraftCanBeAccepted(
   experiences: readonly InterviewExperienceDraft[],
 ): void {

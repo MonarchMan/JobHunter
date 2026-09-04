@@ -1,6 +1,7 @@
 import type { CompanyId, JobSourceId, SourceChannelId, UtcInstant } from '@jobhunter/domain';
 import type { SourceSyncChannel } from './settings.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface SourceOverview {
   readonly id: JobSourceId;
   readonly companyId: CompanyId;
@@ -23,6 +24,7 @@ export interface SourceOverview {
   } | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface SourceChannelOverview {
   readonly id: SourceChannelId;
   readonly companyId: CompanyId;
@@ -37,6 +39,7 @@ export interface SourceChannelOverview {
   readonly sources: readonly SourceOverview[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface SourceManagementRepository {
   list(): readonly SourceOverview[];
   get(id: JobSourceId): SourceOverview | null;

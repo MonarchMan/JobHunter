@@ -7,6 +7,7 @@ import {
 import type { ScriptedConfig } from '../../../shared/scripted/schemas.js';
 import { xiaohongshuCampusJobSchema } from './schemas.js';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function definition(
   key: 'xiaohongshu.campus' | 'xiaohongshu.social',
   recruitType: 'campus' | 'social',
@@ -45,11 +46,15 @@ function definition(
   };
 }
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const xiaohongshuDefinition = definition('xiaohongshu.campus', 'campus');
+/** 来源适配器使用的稳定配置或常量。 */
 export const xiaohongshuSocialDefinition = definition('xiaohongshu.social', 'social');
 
+/** 招聘来源适配器实例。 */
 export const createXiaohongshuAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(xiaohongshuDefinition);
 
+/** 招聘来源适配器实例。 */
 export const createXiaohongshuSocialAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(xiaohongshuSocialDefinition);

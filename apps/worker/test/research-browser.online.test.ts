@@ -6,6 +6,7 @@ import { startResearchBrowserGateway } from '../src/research-browser-gateway.js'
 const online = process.env.JOBHUNTER_ONLINE_RESEARCH_BROWSER === '1';
 const nowcoderCoverageOnline = process.env.JOBHUNTER_ONLINE_NOWCODER_COVERAGE === '1';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function boundedDiagnosticTrace(
   trace: ReturnType<Awaited<ReturnType<typeof startResearchBrowserGateway>>['readTrace']>,
 ): readonly Readonly<Record<string, unknown>>[] {

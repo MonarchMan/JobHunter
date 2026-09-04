@@ -26,6 +26,7 @@ let internJobs: BaiduJob[];
 let graduateJobs: BaiduJob[];
 let fixtureText: string;
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function fixture(name: string): Promise<{ readonly text: string; readonly value: unknown }> {
   const text = await readFile(new URL(`./fixtures/baidu/${name}`, import.meta.url), 'utf8');
   return { text, value: JSON.parse(text) as unknown };
@@ -41,10 +42,12 @@ beforeAll(async () => {
   fixtureText = `${intern.text}\n${graduate.text}`;
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function response<T>(body: T, url: string): SourceHttpResponse<T> {
   return { status: 200, url, headers: new Headers({ 'content-type': 'application/json' }), body };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function fixtureHttp(options: { readonly duplicateIntern?: boolean } = {}): SourceHttpClient {
   return {
     request<TBody>(request: SourceHttpRequest): Promise<SourceHttpResponse<TBody>> {
@@ -72,6 +75,7 @@ function fixtureHttp(options: { readonly duplicateIntern?: boolean } = {}): Sour
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function context(http: SourceHttpClient = fixtureHttp()): DiscoverContext<BaiduConfig> {
   return {
     sourceId,

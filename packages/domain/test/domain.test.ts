@@ -33,6 +33,7 @@ const IDS = {
   agentRun: '018f0000-0000-7000-8000-000000000009',
 } as const;
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function normalizedJob(overrides: Record<string, unknown> = {}): NormalizedJob {
   return parseNormalizedJob({
     companyId: IDS.company,
@@ -53,6 +54,7 @@ function normalizedJob(overrides: Record<string, unknown> = {}): NormalizedJob {
   });
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function profile(overrides: Record<string, unknown> = {}): CandidateProfileData {
   return parseCandidateProfile({
     targetRoles: ['Agent 开发', '大模型应用'],

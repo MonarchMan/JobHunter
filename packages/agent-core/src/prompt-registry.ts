@@ -1,5 +1,6 @@
 import type { AgentDefinition } from './definition.js';
 
+/** 模块数据结构或契约。 */
 export interface PromptDescriptor {
   readonly agentKey: string;
   readonly promptVersion: string;
@@ -7,6 +8,7 @@ export interface PromptDescriptor {
   readonly text: string;
 }
 
+/** 确认 Prompt 元数据和 Agent 定义完全一致，避免版本错配。 */
 export function assertPromptMatchesDefinition<TInput, TOutput>(
   prompt: PromptDescriptor,
   definition: AgentDefinition<TInput, TOutput>,
@@ -21,10 +23,12 @@ export function assertPromptMatchesDefinition<TInput, TOutput>(
   }
 }
 
+/** 进程内提示词注册表，按 Agent 键和提示词版本索引。 */
 export class PromptRegistry {
   readonly #prompts = new Map<string, PromptDescriptor>();
 
   public register(prompt: PromptDescriptor): void {
+    // 1、先校验最小元数据，再拒绝同一版本的重复登记。
     if (!prompt.agentKey.trim() || !prompt.promptVersion.trim() || !prompt.text.trim()) {
       throw new TypeError('Prompt agent key, version and text are required.');
     }
@@ -33,6 +37,7 @@ export class PromptRegistry {
     this.#prompts.set(key, Object.freeze(prompt));
   }
 
+  /** 执行模块组件对外暴露的操作。 */
   public get(agentKey: string, promptVersion: string): PromptDescriptor | null {
     return this.#prompts.get(`${agentKey}@${promptVersion}`) ?? null;
   }

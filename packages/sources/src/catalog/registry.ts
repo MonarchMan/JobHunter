@@ -61,7 +61,9 @@ import {
   createXiaohongshuSocialAdapter,
 } from '../companies/xiaohongshu/campus/index.js';
 
+/** 注册全部一方职位来源适配器及渠道视图。 */
 export function registerFirstPartyAdapters(registry: AdapterRegistry): void {
+  // 1、注册社会招聘来源；2、注册校招/实习渠道视图；3、完成官方来源集合装配。
   registry.register(
     createInlineChannelViewAdapter({
       key: 'alibaba.campus',

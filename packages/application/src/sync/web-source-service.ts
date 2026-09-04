@@ -20,6 +20,7 @@ import type { ScheduleService } from '../tasks/schedule-service.js';
 import type { TaskService } from '../tasks/task-service.js';
 import type { SourceManagementService } from './source-management-service.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface WebSourceRepository {
   list(): readonly WebSource[];
   get(id: JobSourceId): WebSource | null;
@@ -29,12 +30,14 @@ export interface WebSourceRepository {
   setChannelEnabled(id: SourceChannelId, enabled: boolean): WebSourceChannel;
 }
 
+/** 应用层使用的类型约束。 */
 export type WebSourceMutationResult =
   | { readonly kind: 'task'; readonly task: WebTaskAccepted }
   | { readonly kind: 'tasks'; readonly tasks: readonly WebTaskAccepted[] }
   | { readonly kind: 'source'; readonly source: WebSource }
   | { readonly kind: 'channel'; readonly channel: WebSourceChannel };
 
+/** 编排 Web 来源和渠道的启停、编辑与策略更新。 */
 export class WebSourceService {
   readonly #repository: WebSourceRepository;
   readonly #sources: SourceManagementService;
@@ -42,6 +45,7 @@ export class WebSourceService {
   readonly #schedules: ScheduleService;
   readonly #ids: IdGenerator;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly repository: WebSourceRepository;
     readonly sources: SourceManagementService;
@@ -56,14 +60,17 @@ export class WebSourceService {
     this.#ids = input.ids;
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public list(): readonly WebSource[] {
     return this.#repository.list().map((source) => webSourceSchema.parse(source));
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public listChannels(): readonly WebSourceChannel[] {
     return this.#repository.listChannels().map((channel) => webSourceChannelSchema.parse(channel));
   }
 
+  /** 修改来源渠道并同步关联来源状态。 */
   public mutateChannel(input: WebSourceChannelMutation): WebSourceMutationResult {
     const mutation = webSourceChannelMutationSchema.parse(input);
     const channelId = parseId(mutation.channelId, 'SourceChannel');
@@ -87,6 +94,7 @@ export class WebSourceService {
     return { kind: 'tasks', tasks: results.map((result) => this.#task(result)) };
   }
 
+  /** 修改单个来源配置并返回变更结果。 */
   public mutate(input: WebSourceMutation): WebSourceMutationResult {
     const mutation = webSourceMutationSchema.parse(input);
     const sourceId = parseId(mutation.sourceId, 'JobSource');
@@ -137,6 +145,7 @@ export class WebSourceService {
     }
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #task(result: ReturnType<TaskService['enqueue']>): WebTaskAccepted {
     return webTaskAcceptedSchema.parse({
       taskId: result.task.id,

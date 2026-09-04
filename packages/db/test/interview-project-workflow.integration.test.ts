@@ -50,6 +50,7 @@ const silentLogger: TaskLogger = {
   },
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function model(): ModelClient {
   return {
     metadata: {
@@ -103,6 +104,7 @@ function model(): ModelClient {
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedProfile(handle: SqliteDatabaseHandle): {
   profileVersionId: string;
   projectHash: string;

@@ -7,9 +7,12 @@ import type {
   UtcInstant,
 } from '@jobhunter/domain';
 
+/** 应用层使用的类型约束。 */
 export type JobQuerySort = 'updated_desc' | 'published_desc' | 'score_desc';
+/** 应用层使用的类型约束。 */
 export type RecruitmentCategory = 'internship' | 'campus' | 'social';
 
+/** 应用层数据结构或端口契约。 */
 export interface JobQueryFilter {
   readonly search?: string;
   readonly companyIds?: readonly CompanyId[];
@@ -27,6 +30,7 @@ export interface JobQueryFilter {
   readonly limit?: number;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface JobListItem {
   readonly id: JobId;
   readonly companyId: CompanyId;
@@ -45,6 +49,7 @@ export interface JobListItem {
   readonly score: number | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface JobDetail extends JobListItem {
   readonly sourceId: JobSourceId;
   readonly externalJobId: string;
@@ -58,6 +63,7 @@ export interface JobDetail extends JobListItem {
   readonly closedAt: UtcInstant | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface JobQueryPage {
   readonly items: readonly JobListItem[];
   readonly nextCursor: string | null;
@@ -66,21 +72,25 @@ export interface JobQueryPage {
   readonly pageSize?: number;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface JobQueryRepository {
   query(filter: JobQueryFilter): JobQueryPage;
   get(jobId: JobId, profileVersionId?: ProfileVersionId): JobDetail | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CompanySummary {
   readonly id: CompanyId;
   readonly slug: string;
   readonly name: string;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CompanyLookupRepository {
   findBySelector(selector: string): CompanySummary | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface JobExportFileStore {
   writeAtomic(
     path: string,

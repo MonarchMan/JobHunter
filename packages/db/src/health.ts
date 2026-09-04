@@ -1,10 +1,12 @@
 import type Database from 'better-sqlite3';
 import { PersistenceError } from './errors.js';
 
+/** 数据库查询结果对应的行结构。 */
 interface IntegrityRow {
   readonly integrity_check: string;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface ForeignKeyViolation {
   readonly table: string;
   readonly rowid: number;
@@ -12,6 +14,7 @@ interface ForeignKeyViolation {
   readonly fkid: number;
 }
 
+/** 检查 SQLite 版本和必要扩展能力。 */
 export function assertSqliteCapabilities(client: Database.Database): void {
   try {
     client.exec('CREATE VIRTUAL TABLE temp.__jobhunter_fts_probe USING fts5(value)');
@@ -29,6 +32,7 @@ export function assertSqliteCapabilities(client: Database.Database): void {
   }
 }
 
+/** 检查外键、完整性和必要表结构。 */
 export function assertDatabaseIntegrity(client: Database.Database): void {
   const integrityRows = client.prepare('PRAGMA integrity_check').all() as IntegrityRow[];
   if (integrityRows.length !== 1 || integrityRows[0]?.integrity_check !== 'ok') {

@@ -13,18 +13,22 @@ import type {
   ProjectMaterialRecord,
 } from '../ports/interview-projects.js';
 
+/** 应用服务使用的稳定配置或常量。 */
 export const projectMaterialParserVersion = 'project-material-markdown@v1' as const;
 const maximumBytes = 512 * 1024;
 const maximumChunkCharacters = 3_000;
 const maximumChunks = 200;
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 export class ProjectMaterialError extends Error {
+  /** 项目资料无法读取、解析或超出安全边界时抛出的错误。 */
   public constructor(message: string) {
     super(message);
     this.name = 'ProjectMaterialError';
   }
 }
 
+/** 清理文件名，避免目录穿越和不支持的扩展名。 */
 function safeFileName(value: string): string {
   const result = value.replaceAll('\\', '/').split('/').at(-1)?.trim() ?? '';
   if (!result || result.length > 255 || !/\.(?:md|mdx)$/iu.test(result)) {
@@ -33,6 +37,7 @@ function safeFileName(value: string): string {
   return result;
 }
 
+/** 将正文范围裁剪到非空字符边界。 */
 function trimRange(
   text: string,
   start: number,
@@ -43,6 +48,7 @@ function trimRange(
   return start === end ? null : { start, end };
 }
 
+/** 按段落或换行边界切分 Markdown 正文。 */
 function splitRange(
   text: string,
   start: number,
@@ -68,10 +74,12 @@ function splitRange(
   return ranges;
 }
 
+/** 解析项目 Markdown，生成规范化正文和可检索分块。 */
 export function parseProjectMaterial(
   bytes: Uint8Array,
   ids: IdGenerator,
 ): { readonly normalizedText: string; readonly chunks: readonly ProjectMaterialChunkRecord[] } {
+  // 1、校验大小与编码；2、规范化正文；3、解析标题路径；4、切块并计算内容哈希。
   if (bytes.byteLength === 0 || bytes.byteLength > maximumBytes) {
     throw new ProjectMaterialError('项目资料必须非空且不超过 512 KiB。');
   }
@@ -155,6 +163,7 @@ export function parseProjectMaterial(
   return { normalizedText, chunks };
 }
 
+/** 负责项目资料导入、版本复用、分块持久化和删除。 */
 export class ProjectMaterialService {
   readonly #repository: InterviewProjectRepository;
   readonly #artifacts: ArtifactStore;
@@ -170,7 +179,9 @@ export class ProjectMaterialService {
     this.#ids = input.ids;
   }
 
+  /** 导入 Markdown 资料，最多保留同一逻辑文件的五个版本。 */
   public async import(input: {
+    // 1、校验档案和文件名；2、解析并计算物理哈希；3、复用或创建逻辑文件；4、保存分块映射。
     readonly dossierId: ProjectDossierId;
     readonly fileName: string;
     readonly bytes: Uint8Array;

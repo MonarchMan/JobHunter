@@ -10,6 +10,7 @@ import { interviewErrorResponse } from '../../../../../../src/server/interview-h
 
 const maximumBundleBytes = 2 * 1024 * 1024;
 
+/** 处理 Web API 的 POST 请求，校验输入并提交业务操作。 */
 export async function POST(
   request: Request,
   context: { readonly params: Promise<{ readonly id: string }> },

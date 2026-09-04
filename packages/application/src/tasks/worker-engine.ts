@@ -6,16 +6,19 @@ import { classifyTaskError, TaskExecutionError } from './retry-policy.js';
 import type { RetryPolicy } from './retry-policy.js';
 import type { ScheduleService } from './schedule-service.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface WorkerDelay {
   wait(milliseconds: number, signal: AbortSignal): Promise<void>;
 }
 
+/** 基于 Node 定时器的默认延时实现。 */
 export const nativeWorkerDelay: WorkerDelay = {
   async wait(milliseconds, signal): Promise<void> {
     await delay(milliseconds, undefined, { signal });
   },
 };
 
+/** 应用层数据结构或端口契约。 */
 export interface WorkerEngineOptions {
   readonly workerId: string;
   readonly heartbeatIntervalMs?: number;
@@ -42,8 +45,10 @@ const silentLogger: TaskLogger = {
   },
 };
 
+/** 应用层使用的类型约束。 */
 type AbortReason = 'shutdown' | 'lease_lost' | 'cancelled';
 
+/** 领取任务、维护租约、执行处理器、重试并优雅退出的 Worker 引擎。 */
 export class WorkerEngine implements TaskCancellationNotifier {
   readonly #queue: TaskQueue;
   readonly #registry: HandlerRegistry;
@@ -57,6 +62,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
   readonly #inFlight = new Set<Promise<void>>();
   #stopping = false;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly queue: TaskQueue;
     readonly registry: HandlerRegistry;
@@ -93,9 +99,11 @@ export class WorkerEngine implements TaskCancellationNotifier {
     }
   }
 
+  /** 尝试领取并执行一个任务；返回是否实际领取到任务。 */
   public async runOnce(taskType?: string): Promise<boolean> {
     if (this.#stopping) return false;
     const queues = taskType ? [taskType] : this.#registry.taskTypes();
+    // 1、按任务类型领取一个租约；2. 执行完成后再返回给轮询器。
     for (const queueType of queues) {
       const task = this.#queue.claim({
         taskType: queueType,
@@ -119,6 +127,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     return false;
   }
 
+  /** 执行单个任务并协调心跳、取消、成功提交和失败重试。 */
   async #execute(task: TaskRecord): Promise<void> {
     const handler = this.#registry.has(task.taskType) ? this.#registry.get(task.taskType) : null;
     const controller = new AbortController();
@@ -135,6 +144,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       leaseOwner: this.#options.workerId,
     });
 
+    // 1、执行处理器并根据晚到取消策略决定结果优先级。
     try {
       if (!handler) {
         throw new TaskExecutionError('invalid_config', 'No handler is registered for task type.');
@@ -181,6 +191,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
         }
       }
     } catch (error) {
+      // 2、失败路径统一交给分类、退避和最终失败处理。
       this.#handleFailure(task, controller, error);
     } finally {
       heartbeatStopped = true;
@@ -190,6 +201,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     }
   }
 
+  /** 定期续租，并在租约丢失或收到取消请求时中止处理器。 */
   async #heartbeat(
     task: TaskRecord,
     controller: AbortController,
@@ -214,7 +226,9 @@ export class WorkerEngine implements TaskCancellationNotifier {
     }
   }
 
+  /** 按关闭、租约丢失、取消、可重试和永久失败顺序收敛任务状态。 */
   #handleFailure(task: TaskRecord, controller: AbortController, error: unknown): void {
+    // 1、关闭或租约丢失时停止本地处理，不再写入不属于自己的结果。
     const reason = controller.signal.reason as AbortReason | undefined;
     if (reason === 'shutdown' || reason === 'lease_lost') return;
     if (reason === 'cancelled') {
@@ -228,6 +242,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       return;
     }
 
+    // 2、优先完成已请求取消的任务状态，再决定是否重试。
     if (this.#finalizeRequestedCancellation(task)) return;
 
     const classified = classifyTaskError(error);
@@ -239,6 +254,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       retryAfterAt: classified.retryAfterAt,
       retryable: classified.retryable,
     });
+    // 3、可重试错误进入退避队列，否则写入最终失败状态。
     if (decision.retry && decision.availableAt !== null) {
       this.#queue.reschedule({
         taskId: task.id,
@@ -275,6 +291,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     });
   }
 
+  /** 将仍持有租约且已请求取消的任务安全标记为 cancelled。 */
   #finalizeRequestedCancellation(task: TaskRecord): boolean {
     const current = this.#queue.get(task.id);
     if (current?.status !== 'running' || current.cancelRequestedAt === null) return false;
@@ -290,7 +307,9 @@ export class WorkerEngine implements TaskCancellationNotifier {
     return true;
   }
 
+  /** 启动调度循环和按任务类型拆分的领取循环，直到 Worker 停止。 */
   public async run(signal?: AbortSignal): Promise<void> {
+    // 1、监听外部退出信号；2. 并行运行调度器和任务领取器。
     const shutdown = (): void => {
       void this.shutdown();
     };
@@ -312,6 +331,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     }
   }
 
+  /** 以指数退避轮询指定任务类型，领取成功后恢复最小空轮询间隔。 */
   async #runClaimLoop(taskType: string): Promise<void> {
     let emptyDelay = this.#options.emptyPollMinimumMs;
     while (!this.#stopping) {
@@ -329,6 +349,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     }
   }
 
+  /** 周期扫描到期调度，并将其转换为幂等任务。 */
   async #runSchedulerLoop(): Promise<void> {
     while (!this.#stopping) {
       this.#scheduleService.enqueueDue();
@@ -343,6 +364,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     }
   }
 
+  /** 停止领取、取消活动任务，并在宽限期内等待在途执行结束。 */
   public async shutdown(): Promise<void> {
     if (this.#stopping) return;
     this.#stopping = true;
@@ -356,6 +378,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     ]);
   }
 
+  /** 接收应用层取消通知并中止对应任务的本地执行。 */
   public notifyCancellation(taskId: TaskId): void {
     this.#controllers.get(taskId)?.abort('cancelled' satisfies AbortReason);
   }

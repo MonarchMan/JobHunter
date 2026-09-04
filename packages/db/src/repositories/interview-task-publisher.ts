@@ -10,6 +10,7 @@ import type {
 import { canonicalJson } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function assertSameTaskIntent(result: EnqueueTaskResult, command: EnqueueTaskCommand): void {
   if (result.kind === 'enqueued') return;
   if (
@@ -20,12 +21,14 @@ function assertSameTaskIntent(result: EnqueueTaskResult, command: EnqueueTaskCom
   }
 }
 
+/** 将面试领域任务发布到通用 tasks 队列并维护幂等绑定。 */
 export class SqliteInterviewTaskPublisher implements InterviewTaskPublisher {
   readonly #client: Database.Database;
   readonly #tasks: TaskService;
   readonly #projects: InterviewProjectRepository;
   readonly #research: InterviewResearchRepository;
 
+  /** 执行数据库组件对外暴露的操作。 */
   public constructor(input: {
     readonly client: Database.Database;
     readonly tasks: TaskService;
@@ -38,6 +41,7 @@ export class SqliteInterviewTaskPublisher implements InterviewTaskPublisher {
     this.#research = input.research;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public publishProjectQuestion(
     input: Parameters<InterviewTaskPublisher['publishProjectQuestion']>[0],
   ): ReturnType<InterviewTaskPublisher['publishProjectQuestion']> {
@@ -55,6 +59,7 @@ export class SqliteInterviewTaskPublisher implements InterviewTaskPublisher {
       .immediate();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public publishProjectAnswerDigest(
     input: Parameters<InterviewTaskPublisher['publishProjectAnswerDigest']>[0],
   ): ReturnType<InterviewTaskPublisher['publishProjectAnswerDigest']> {
@@ -72,6 +77,7 @@ export class SqliteInterviewTaskPublisher implements InterviewTaskPublisher {
       .immediate();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public publishExperienceResearch(
     input: Parameters<InterviewTaskPublisher['publishExperienceResearch']>[0],
   ): ReturnType<InterviewTaskPublisher['publishExperienceResearch']> {

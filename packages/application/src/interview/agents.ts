@@ -9,6 +9,7 @@ import {
 } from '@jobhunter/domain';
 import { z } from 'zod';
 
+// 所有模型边界输入均采用严格 Schema，拒绝未声明字段和不完整证据。
 const projectSchema = z
   .object({
     name: z.string().min(1),
@@ -26,6 +27,7 @@ const coverageSchema = z
   })
   .strict();
 
+/** 应用层输入输出的运行时校验 Schema。 */
 export const projectQuestionAgentInputSchema = z
   .object({
     project: projectSchema,
@@ -68,6 +70,7 @@ export const projectQuestionAgentInputSchema = z
   })
   .strict();
 
+/** 应用层输入输出的运行时校验 Schema。 */
 export const projectAnswerDigestAgentInputSchema = z
   .object({
     project: projectSchema,
@@ -85,6 +88,7 @@ const limits = {
   maxEstimatedCostMicros: 250_000,
 } as const;
 
+/** 仅基于简历、回答与允许证据提出下一道项目追问。 */
 export const projectQuestionAgentDefinition = defineAgent({
   key: 'interview.project-question',
   version: 'v1',
@@ -102,6 +106,7 @@ evidenceRefs 必须逐字选自 allowedEvidenceRefs。guidanceSlots 只写回答
   limits,
 });
 
+/** 基于已冻结项目 Markdown 资料提出必须引用资料证据的深层追问。 */
 export const docsGroundedProjectQuestionAgentDefinition = defineAgent({
   key: 'interview.project-question-docs',
   version: 'v1',
@@ -121,6 +126,7 @@ guidanceSlots 只写回答应覆盖的槽位名称。`,
   limits,
 });
 
+/** 从用户回答中抽取知识项与覆盖变化，不生成示范答案。 */
 export const projectAnswerDigestAgentDefinition = defineAgent({
   key: 'interview.project-answer-digest',
   version: 'v1',

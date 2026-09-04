@@ -5,6 +5,7 @@ import { z } from 'zod';
  * scripts. Secrets and browser session state are deliberately not part of the
  * schema; short-lived provider-issued values may be supplied by the caller.
  */
+/** 脚本化来源适配器配置，排除持久化密钥和浏览器会话状态。 */
 export const scriptedConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(100).default(10),
@@ -27,4 +28,5 @@ export const scriptedConfigSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type ScriptedConfig = z.infer<typeof scriptedConfigSchema>;

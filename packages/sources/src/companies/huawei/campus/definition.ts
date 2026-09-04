@@ -8,6 +8,7 @@ import {
 import type { ScriptedConfig } from '../../../shared/scripted/schemas.js';
 import { huaweiCampusJobSchema } from './schemas.js';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function definition(
   key: 'huawei.intern' | 'huawei.campus',
   entryUrl: string,
@@ -57,18 +58,22 @@ function definition(
   };
 }
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const huaweiDefinition = definition(
   'huawei.intern',
   'https://career.huawei.com/cn/campus-recruitment-job-list?recruitmentType=INTERN',
 );
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const huaweiCampusDefinition = definition(
   'huawei.campus',
   'https://career.huawei.com/cn/campus-recruitment-job-list',
 );
 
+/** 招聘来源适配器实例。 */
 export const createHuaweiAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(huaweiDefinition);
 
+/** 招聘来源适配器实例。 */
 export const createHuaweiCampusAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(huaweiCampusDefinition);

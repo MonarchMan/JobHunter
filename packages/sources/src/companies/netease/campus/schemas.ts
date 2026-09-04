@@ -1,13 +1,16 @@
 import { z } from 'zod';
 
+/** 网易校园招聘接口配置 Schema。 */
 export const neteaseCampusConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(100).default(50),
     keyword: z.string().default(''),
   })
   .strict();
+/** 来源适配器使用的类型约束。 */
 export type NeteaseCampusConfig = z.infer<typeof neteaseCampusConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const neteaseCampusJobSchema = z
   .object({
     id: z.number().int().positive(),
@@ -20,8 +23,10 @@ export const neteaseCampusJobSchema = z
     updateTime: z.number().int().nonnegative().nullable().optional(),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type NeteaseCampusJob = z.infer<typeof neteaseCampusJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const neteaseCampusListSchema = z
   .object({
     code: z.literal(200),
@@ -35,6 +40,7 @@ export const neteaseCampusListSchema = z
   })
   .loose();
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const neteaseLeihuoJobSchema = z
   .object({
     job_code: z.string().min(1),
@@ -48,8 +54,10 @@ export const neteaseLeihuoJobSchema = z
     job_detail_url: z.url({ protocol: /^https$/ }),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type NeteaseLeihuoJob = z.infer<typeof neteaseLeihuoJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const neteaseLeihuoListSchema = z
   .object({
     status: z.literal(200),

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 import { nextPageHref, parseWebJobQuery } from '../src/server/job-query.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedJobs(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
   const profile = JSON.stringify(makeCandidateProfile({ targetRoles: ['研发'] }));

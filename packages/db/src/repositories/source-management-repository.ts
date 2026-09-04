@@ -6,6 +6,7 @@ import type {
 import { parseId, utcInstant } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 interface SourceOverviewRow {
   readonly id: string;
   readonly company_id: string;
@@ -43,6 +44,7 @@ const query = `
     ORDER BY latest.started_at DESC, latest.id DESC LIMIT 1
   )`;
 
+/** 数据库查询结果对应的行结构。 */
 function overview(row: SourceOverviewRow): SourceOverview {
   return {
     id: parseId(row.id, 'JobSource'),
@@ -70,6 +72,7 @@ function overview(row: SourceOverviewRow): SourceOverview {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 interface ChannelRow {
   readonly id: string;
   readonly company_id: string;
@@ -81,6 +84,7 @@ interface ChannelRow {
   readonly support_note: string | null;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function aggregateSupport(
   sources: readonly SourceOverview[],
 ): SourceChannelOverview['supportStatus'] {
@@ -93,6 +97,7 @@ function aggregateSupport(
     : 'experimental';
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function aggregateHealth(
   sources: readonly SourceOverview[],
 ): SourceChannelOverview['healthStatus'] {
@@ -106,6 +111,7 @@ function aggregateHealth(
   return 'degraded';
 }
 
+/** 管理来源目录、同步策略和来源启停配置。 */
 export class SqliteSourceManagementRepository implements SourceManagementRepository {
   readonly #client: Database.Database;
 
@@ -113,6 +119,7 @@ export class SqliteSourceManagementRepository implements SourceManagementReposit
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public list(): readonly SourceOverview[] {
     const rows = this.#client
       .prepare(`${query} ORDER BY company.name, source.id`)
@@ -120,12 +127,14 @@ export class SqliteSourceManagementRepository implements SourceManagementReposit
     return rows.map(overview);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(id: Parameters<SourceManagementRepository['get']>[0]): SourceOverview | null {
     const row = this.#client.prepare(`${query} WHERE source.id = ?`).get(id) as
       SourceOverviewRow | undefined;
     return row ? overview(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listChannels(): readonly SourceChannelOverview[] {
     const sources = this.list();
     const sourcesByChannel = new Map<string, SourceOverview[]>();
@@ -162,6 +171,7 @@ export class SqliteSourceManagementRepository implements SourceManagementReposit
     });
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getChannel(
     id: Parameters<SourceManagementRepository['getChannel']>[0],
   ): SourceChannelOverview | null {

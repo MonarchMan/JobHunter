@@ -11,6 +11,7 @@ import type { CandidateProfileRepository } from '../ports/profiles.js';
 import type { TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
 
+/** 简历润色任务输入。 */
 export const resumePolishTaskPayloadSchema = z
   .object({
     suggestionId: z.uuid(),
@@ -20,11 +21,14 @@ export const resumePolishTaskPayloadSchema = z
   })
   .strict();
 
+/** 简历润色任务输出。 */
 export const resumePolishTaskOutputSchema = z
   .object({ suggestionId: z.uuid(), agentRunId: z.uuid(), cacheHit: z.boolean() })
   .strict();
 
+/** 创建简历润色 Agent 任务处理器。 */
 export function createResumePolishTaskHandler(
+  // 1、校验简历版本；2、运行润色 Agent；3、校验建议证据；4、提交建议结果。
   input:
     | {
         readonly runner: AgentRunner;
@@ -42,6 +46,7 @@ export function createResumePolishTaskHandler(
     defaultMaxAttempts: 3,
     leaseDurationMs: 180_000,
     concurrencyKey: (payload) => `resume-polish:${payload.profileId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       if ('unavailable' in input) {
         throw new TaskExecutionError('invalid_config', 'Resume polish model is not configured.');

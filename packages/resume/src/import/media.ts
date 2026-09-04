@@ -1,3 +1,4 @@
+/** 模块使用的类型约束。 */
 export type ResumeMediaType =
   | 'application/pdf'
   | 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -5,11 +6,13 @@ export type ResumeMediaType =
   | 'image/jpeg'
   | 'image/png';
 
+/** 模块数据结构或契约。 */
 export interface ResumeMediaDetection {
   readonly mediaType: ResumeMediaType;
   readonly byteSize: number;
 }
 
+/** 简历文件为空、过大、格式不支持或 DOCX 容器无效时抛出的领域错误。 */
 export class ResumeMediaError extends Error {
   public readonly code: 'empty_file' | 'file_too_large' | 'unsupported_media_type' | 'invalid_docx';
 
@@ -27,10 +30,12 @@ const zipLocalHeader = 0x04034b50;
 const zipCentralHeader = 0x02014b50;
 const zipEndOfCentralDirectory = 0x06054b50;
 
+/** 判断文件是否以指定二进制签名开头。 */
 function startsWith(bytes: Uint8Array, expected: Uint8Array): boolean {
   return expected.every((value, index) => bytes[index] === value);
 }
 
+/** 在 ZIP 尾部查找中央目录结束记录，限制扫描范围以避免无界读取。 */
 function findEndOfCentralDirectory(bytes: Uint8Array, view: DataView): number {
   const minimum = Math.max(0, bytes.byteLength - 65_557);
   for (let offset = bytes.byteLength - 22; offset >= minimum; offset -= 1) {
@@ -39,6 +44,7 @@ function findEndOfCentralDirectory(bytes: Uint8Array, view: DataView): number {
   return -1;
 }
 
+/** 读取 DOCX ZIP 中央目录的条目名，不解压文件内容。 */
 function zipEntryNames(bytes: Uint8Array): ReadonlySet<string> {
   if (bytes.byteLength < 22) return new Set();
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -78,6 +84,7 @@ function zipEntryNames(bytes: Uint8Array): ReadonlySet<string> {
   return names;
 }
 
+/** 判断字节是否为不含二进制控制字符的严格 UTF-8 文本。 */
 function isStrictUtf8Text(bytes: Uint8Array): boolean {
   try {
     const value = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -95,10 +102,12 @@ function isStrictUtf8Text(bytes: Uint8Array): boolean {
   }
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 export function detectResumeMediaType(
   bytes: Uint8Array,
   maximumBytes = 10 * 1024 * 1024,
 ): ResumeMediaDetection {
+  // 1、先校验大小，再按可靠性从固定签名到 UTF-8 逐级识别。
   if (bytes.byteLength === 0) throw new ResumeMediaError('empty_file', 'Resume file is empty.');
   if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1) {
     throw new TypeError('Maximum resume byte size must be a positive safe integer.');
@@ -106,6 +115,7 @@ export function detectResumeMediaType(
   if (bytes.byteLength > maximumBytes) {
     throw new ResumeMediaError('file_too_large', 'Resume file exceeds the configured size limit.');
   }
+  // 1、a PDF、图片和 DOCX 使用内容签名，避免伪造扩展名绕过解析器选择。
   if (startsWith(bytes, pdfHeader)) {
     return { mediaType: 'application/pdf', byteSize: bytes.byteLength };
   }
@@ -128,6 +138,7 @@ export function detectResumeMediaType(
       throw new ResumeMediaError('invalid_docx', 'ZIP input is not a valid DOCX document.');
     }
   }
+  // 1、b 只有通过严格 UTF-8 检查的剩余内容才按纯文本处理。
   if (isStrictUtf8Text(bytes)) return { mediaType: 'text/plain', byteSize: bytes.byteLength };
   throw new ResumeMediaError(
     'unsupported_media_type',
@@ -135,6 +146,7 @@ export function detectResumeMediaType(
   );
 }
 
+/** 判断媒体类型是否需要交给图片 OCR 引擎处理。 */
 export function isResumeOcrMediaType(
   mediaType: ResumeMediaType,
 ): mediaType is 'image/jpeg' | 'image/png' {

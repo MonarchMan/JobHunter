@@ -1,6 +1,7 @@
 import type { ResumeDocumentContent, ResumeTemplateKey } from '@jobhunter/resume-template';
 import type { UtcInstant } from '@jobhunter/domain';
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeTemplateDraftRecord {
   readonly id: string;
   readonly profileId: string;
@@ -15,9 +16,12 @@ export interface ResumeTemplateDraftRecord {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层使用的类型约束。 */
 export type ResumeExportFormat = 'pdf' | 'html';
+/** 应用层使用的类型约束。 */
 export type ResumeExportStatus = 'pending' | 'succeeded' | 'failed' | 'delivered';
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeExportRequestRecord {
   readonly id: string;
   readonly draftId: string;
@@ -36,6 +40,7 @@ export interface ResumeExportRequestRecord {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeDraftRepository {
   find(
     profileId: string,

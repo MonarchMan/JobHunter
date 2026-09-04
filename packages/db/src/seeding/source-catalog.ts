@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 export interface SourceCatalogSeedRecord {
   readonly company: {
     readonly id: string;
@@ -39,12 +40,14 @@ const defaultSyncPolicy = {
   requestTimeoutMs: 15_000,
 } as const;
 
+/** 数据库查询结果对应的行结构。 */
 export interface SeedSourceCatalogOptions {
   readonly now?: number;
   readonly syncPolicyVersion?: string;
   readonly syncPolicy?: Readonly<Record<string, unknown>>;
 }
 
+/** 幂等写入公司、渠道和职位来源目录。 */
 export function seedSourceCatalog(
   database: Database.Database,
   records: readonly SourceCatalogSeedRecord[],

@@ -24,6 +24,7 @@ const turnId = parseId('018f0000-0000-7000-8000-000000000105', 'DrillTurn');
 const answerId = parseId('018f0000-0000-7000-8000-000000000106', 'DrillAnswerRevision');
 const agentRunId = '018f0000-0000-7000-8000-000000000107';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function handlerContext(controller: AbortController): TaskHandlerContext {
   return {
     taskId,
@@ -47,6 +48,7 @@ function handlerContext(controller: AbortController): TaskHandlerContext {
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function commonContext(): Pick<ProjectQuestionContext, 'dossier' | 'snapshot' | 'session'> {
   const dossier = {
     id: dossierId,

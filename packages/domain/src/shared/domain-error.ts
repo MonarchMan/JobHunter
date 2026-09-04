@@ -1,3 +1,4 @@
+/** 领域模型的类型约束。 */
 export type DomainErrorCode =
   | 'INVALID_DOMAIN_VALUE'
   | 'INVALID_ID'
@@ -12,6 +13,7 @@ export type DomainErrorCode =
   | 'MATCH_IDENTITY_INCOMPLETE'
   | 'PROFILE_LOCK_INVALID';
 
+/** 领域规则校验失败时抛出的错误，允许携带脱敏结构化细节。 */
 export class DomainError extends Error {
   public readonly code: DomainErrorCode;
   public readonly details: Readonly<Record<string, boolean | number | string | null>> | undefined;

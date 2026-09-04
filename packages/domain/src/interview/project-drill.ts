@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DomainError } from '../shared/domain-error.js';
 
+/** 项目拷打覆盖的事实、技术、协作和复盘维度。 */
 export const drillCoverageDimensions = [
   'background_goal',
   'personal_responsibility',
@@ -14,9 +15,11 @@ export const drillCoverageDimensions = [
   'reflection_evolution',
 ] as const;
 
+/** 项目拷打覆盖维度 Schema。 */
 export const drillCoverageDimensionSchema = z.enum(drillCoverageDimensions);
 export type DrillCoverageDimension = z.infer<typeof drillCoverageDimensionSchema>;
 
+/** 单个覆盖维度的准备状态。 */
 export const drillCoverageStatusSchema = z.enum([
   'unasked',
   'asked',
@@ -24,11 +27,14 @@ export const drillCoverageStatusSchema = z.enum([
   'evidence_sufficient',
   'needs_clarification',
 ]);
+/** 领域模型的类型约束。 */
 export type DrillCoverageStatus = z.infer<typeof drillCoverageStatusSchema>;
 
+/** 项目拷打会话状态。 */
 export const drillSessionStatusSchema = z.enum(['active', 'paused', 'completed']);
 export type DrillSessionStatus = z.infer<typeof drillSessionStatusSchema>;
 
+/** 项目拷打单轮问题状态。 */
 export const drillTurnStatusSchema = z.enum([
   'question_pending',
   'awaiting_answer',
@@ -37,24 +43,30 @@ export const drillTurnStatusSchema = z.enum([
   'skipped',
   'cancelled',
 ]);
+/** 领域模型的类型约束。 */
 export type DrillTurnStatus = z.infer<typeof drillTurnStatusSchema>;
 
+/** 项目拷打允许引用的证据来源类型。 */
 export const drillEvidenceKindSchema = z.enum([
   'resume_project',
   'user_answer',
   'derived_claim',
   'project_material',
 ]);
+/** 领域模型的类型约束。 */
 export type DrillEvidenceKind = z.infer<typeof drillEvidenceKindSchema>;
 
+/** 单条拷打证据引用。 */
 export const drillEvidenceRefSchema = z
   .object({
     kind: drillEvidenceKindSchema,
     id: z.uuid(),
   })
   .strict();
+/** 领域模型的类型约束。 */
 export type DrillEvidenceRef = z.infer<typeof drillEvidenceRefSchema>;
 
+/** Agent 生成的项目问题及其意图、覆盖维度和证据引用。 */
 export const generatedProjectQuestionSchema = z
   .object({
     question: z.string().trim().min(8).max(600),
@@ -64,8 +76,10 @@ export const generatedProjectQuestionSchema = z
     evidenceRefs: z.array(drillEvidenceRefSchema).min(1).max(12),
   })
   .strict();
+/** 领域模型的类型约束。 */
 export type GeneratedProjectQuestion = z.infer<typeof generatedProjectQuestionSchema>;
 
+/** 回答提炼出的项目知识分类。 */
 export const projectKnowledgeKindSchema = z.enum([
   'fact',
   'decision',
@@ -75,8 +89,10 @@ export const projectKnowledgeKindSchema = z.enum([
   'ambiguity',
   'conflict',
 ]);
+/** 领域模型的类型约束。 */
 export type ProjectKnowledgeKind = z.infer<typeof projectKnowledgeKindSchema>;
 
+/** 领域对象的运行时校验 Schema。 */
 export const answerKnowledgeCandidateSchema = z
   .object({
     kind: projectKnowledgeKindSchema,
@@ -87,6 +103,7 @@ export const answerKnowledgeCandidateSchema = z
   })
   .strict();
 
+/** 回答摘要 Agent 输出的知识项和覆盖更新。 */
 export const answerDigestOutputSchema = z
   .object({
     knowledgeItems: z.array(answerKnowledgeCandidateSchema).max(40),
@@ -103,6 +120,7 @@ export const answerDigestOutputSchema = z
       .max(drillCoverageDimensions.length),
   })
   .strict();
+/** 领域模型的类型约束。 */
 export type AnswerDigestOutput = z.infer<typeof answerDigestOutputSchema>;
 
 const unsafeQuestionPatterns = [
@@ -125,6 +143,7 @@ const answerLikePatterns = [
   /(?:suggested|recommended|reference|sample|model|complete)\s+(?:answer|response)|(?:you|candidate)\s+(?:can|could|should)\s+(?:answer|say)|(?:answer|response)\s*:/iu,
 ];
 
+/** 将证据引用转换为可比较的稳定键。 */
 function evidenceKey(ref: DrillEvidenceRef): string {
   return `${ref.kind}:${ref.id}`;
 }
@@ -133,6 +152,7 @@ export function assertGeneratedProjectQuestion(
   input: unknown,
   allowedEvidence: readonly DrillEvidenceRef[],
 ): GeneratedProjectQuestion {
+  // 1、校验结构和安全边界，再确认每条证据都来自本轮允许的上下文。
   const question = generatedProjectQuestionSchema.parse(input);
   const combined = [question.question, question.intent, ...question.guidanceSlots].join('\n');
   if (unsafeQuestionPatterns.some((pattern) => pattern.test(combined))) {
@@ -158,7 +178,9 @@ export function assertGeneratedProjectQuestion(
   return question;
 }
 
+/** 校验回答摘要中的引用范围、原文逐字匹配和覆盖索引。 */
 export function assertAnswerDigest(input: unknown, answer: string): AnswerDigestOutput {
+  // 1、先验证知识项证据，再验证覆盖更新引用的知识项下标。
   const digest = answerDigestOutputSchema.parse(input);
   for (const [index, item] of digest.knowledgeItems.entries()) {
     if (item.start >= item.end || item.end > answer.length) {
@@ -182,6 +204,7 @@ export function assertAnswerDigest(input: unknown, answer: string): AnswerDigest
   return digest;
 }
 
+/** 判断当前会话是否可以请求下一道项目拷打问题。 */
 export function assertCanRequestQuestion(
   sessionStatus: DrillSessionStatus,
   latestTurnStatus: DrillTurnStatus | null,
@@ -197,6 +220,7 @@ export function assertCanRequestQuestion(
   }
 }
 
+/** 判断当前会话轮次是否允许提交回答。 */
 export function assertCanSubmitAnswer(
   sessionStatus: DrillSessionStatus,
   turnStatus: DrillTurnStatus,
@@ -206,6 +230,7 @@ export function assertCanSubmitAnswer(
   }
 }
 
+/** 根据暂停、恢复或完成动作计算项目拷打会话的下一状态。 */
 export function nextSessionStatus(
   current: DrillSessionStatus,
   action: 'pause' | 'resume' | 'complete',

@@ -12,6 +12,7 @@ import {
 } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 interface ProfileRow {
   readonly id: string;
   readonly name: string;
@@ -19,6 +20,7 @@ interface ProfileRow {
   readonly updated_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface VersionRow {
   readonly id: string;
   readonly profile_id: string;
@@ -41,6 +43,7 @@ const versionSelection = `SELECT id, profile_id, version_no,
                                  is_current, created_at
                           FROM profile_versions`;
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function profileRecord(row: ProfileRow): CandidateProfileRecord {
   return {
     id: parseId(row.id, 'CandidateProfile'),
@@ -50,6 +53,7 @@ function profileRecord(row: ProfileRow): CandidateProfileRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function versionRecord(row: VersionRow): ProfileVersionRecord {
   const locked = JSON.parse(row.locked_paths_json) as unknown;
   if (!Array.isArray(locked) || !locked.every((value) => typeof value === 'string')) {
@@ -70,6 +74,7 @@ function versionRecord(row: VersionRow): ProfileVersionRecord {
   };
 }
 
+/** 持久化候选人简历档案、版本及当前版本指针。 */
 export class SqliteCandidateProfileRepository implements CandidateProfileRepository {
   readonly #client: Database.Database;
 
@@ -77,6 +82,7 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createProfile(profile: CandidateProfileRecord): CandidateProfileRecord {
     this.#client
       .prepare(
@@ -87,6 +93,7 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
     return profile;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listProfiles(): readonly CandidateProfileRecord[] {
     const rows = this.#client
       .prepare(
@@ -96,6 +103,7 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
     return rows.map(profileRecord);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getProfile(profileId: CandidateProfileId): CandidateProfileRecord | null {
     const row = this.#client
       .prepare('SELECT id, name, created_at, updated_at FROM candidate_profiles WHERE id = ?')
@@ -103,6 +111,7 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
     return row ? profileRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getCurrentVersion(profileId: CandidateProfileId): ProfileVersionRecord | null {
     const row = this.#client
       .prepare(`${versionSelection} WHERE profile_id = ? AND is_current = 1`)
@@ -110,12 +119,14 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
     return row ? versionRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getVersion(versionId: ProfileVersionRecord['id']): ProfileVersionRecord | null {
     const row = this.#client.prepare(`${versionSelection} WHERE id = ?`).get(versionId) as
       VersionRow | undefined;
     return row ? versionRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listVersions(profileId: CandidateProfileId): readonly ProfileVersionRecord[] {
     const rows = this.#client
       .prepare(`${versionSelection} WHERE profile_id = ? ORDER BY version_no DESC`)
@@ -123,6 +134,7 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
     return rows.map(versionRecord);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public appendVersion(input: {
     readonly expectedCurrentVersionId: ProfileVersionRecord['id'] | null;
     readonly version: ProfileVersionRecord;

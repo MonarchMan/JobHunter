@@ -4,6 +4,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly stderr: string[] } {
   const stdout: string[] = [];
   const stderr: string[] = [];

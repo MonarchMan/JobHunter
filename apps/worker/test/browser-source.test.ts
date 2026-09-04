@@ -8,6 +8,7 @@ import {
   type BrowserExecutableRuntime,
 } from '../src/browser-source.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function runtime(overrides: Partial<BrowserExecutableRuntime> = {}): BrowserExecutableRuntime {
   return {
     platform: 'darwin',

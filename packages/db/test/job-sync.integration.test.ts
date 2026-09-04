@@ -29,6 +29,7 @@ import { SqliteWebDiagnosticsRepository } from '../src/web.js';
 const companyId = parseId('018f0000-0000-7000-8000-000000000001', 'Company');
 const sourceId = parseId('018f0000-0000-7000-8000-000000000002', 'JobSource');
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class TestClock {
   #now = utcInstant(1_000);
 
@@ -36,11 +37,13 @@ class TestClock {
     return this.#now;
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public advance(milliseconds = 1_000): void {
     this.#now = utcInstant(this.#now + milliseconds);
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds {
   #counter = 0x1000;
 
@@ -51,6 +54,7 @@ class SequentialIds {
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface FixtureJob {
   readonly id: string;
   readonly title: string;
@@ -59,6 +63,7 @@ interface FixtureJob {
   readonly failNormalize?: boolean;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface AdapterScenario {
   jobs: FixtureJob[];
   coverage: 'complete' | 'partial';
@@ -68,6 +73,7 @@ interface AdapterScenario {
   detailFetches: number;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function fixtureAdapter(
   scenario: AdapterScenario,
   deferredDetails = false,
@@ -179,6 +185,7 @@ afterEach(async () => {
   }
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface SyncFixture {
   readonly root: Awaited<ReturnType<typeof createTemporaryDataRoot>>;
   readonly handle: SqliteDatabaseHandle;
@@ -189,6 +196,7 @@ interface SyncFixture {
   readonly uow: SqliteUnitOfWork;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(
   options: {
     readonly rejectAllJobs?: boolean;
@@ -269,6 +277,7 @@ async function setup(
   return { root, handle, clock, ids, scenario, service, uow };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function run(
   fixture: Awaited<ReturnType<typeof setup>>,
   trigger: SyncTrigger = 'manual',
@@ -279,6 +288,7 @@ async function run(
   return result;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function count(handle: SqliteDatabaseHandle, table: string): number {
   const allowed = new Set([
     'jobs',

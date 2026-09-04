@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 创建项目拷打档案请求。 */
 export const webCreateProjectDossierSchema = z
   .object({
     profileVersionId: z.uuid(),
@@ -8,6 +9,7 @@ export const webCreateProjectDossierSchema = z
   })
   .strict();
 
+/** 提交项目拷打回答请求。 */
 export const webSubmitDrillAnswerSchema = z
   .object({
     sessionId: z.uuid(),
@@ -16,6 +18,7 @@ export const webSubmitDrillAnswerSchema = z
   })
   .strict();
 
+/** 启动指定档位拷打会话请求。 */
 export const webStartDrillSessionSchema = z
   .object({
     profileKey: z.enum(['resume-only', 'docs-grounded']).default('resume-only'),
@@ -23,10 +26,12 @@ export const webStartDrillSessionSchema = z
   })
   .strict();
 
+/** 项目拷打会话状态响应。 */
 export const webDrillSessionStateSchema = z
   .object({ action: z.enum(['pause', 'resume', 'complete']) })
   .strict();
 
+/** 删除项目拷打档案请求。 */
 export const webDeleteProjectDossierSchema = z
   .object({
     expectedImpactHash: z.string().length(64),

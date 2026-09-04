@@ -3,6 +3,7 @@ import { interviewErrorResponse } from '../../../../../../src/server/interview-h
 
 export const dynamic = 'force-dynamic';
 
+/** 处理 Web API 的 GET 请求，读取并返回对应资源。 */
 export async function GET(
   request: Request,
   context: { readonly params: Promise<{ readonly id: string }> },

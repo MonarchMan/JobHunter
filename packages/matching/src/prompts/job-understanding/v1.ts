@@ -1,5 +1,6 @@
 import type { PromptDescriptor } from '@jobhunter/agent-core';
 
+/** 模块使用的稳定配置或常量。 */
 export const jobUnderstandingPromptV1: PromptDescriptor = {
   agentKey: 'job-understanding',
   promptVersion: '2026-08-20.v1',

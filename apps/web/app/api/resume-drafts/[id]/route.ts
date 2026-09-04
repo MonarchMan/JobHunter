@@ -5,6 +5,7 @@ import { verifyMutationRequest } from '../../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../../src/server/http.js';
 import { resumeErrorResponse } from '../../../../src/server/resume-http.js';
 
+/** 模块数据结构或契约。 */
 interface RouteContext {
   readonly params: Promise<{ readonly id: string }>;
 }
@@ -15,6 +16,7 @@ const saveSchema = z
   })
   .strict();
 
+/** 处理 Web API 的 GET 请求，读取并返回对应资源。 */
 export async function GET(_request: Request, context: RouteContext): Promise<Response> {
   try {
     const { id } = await context.params;
@@ -25,6 +27,7 @@ export async function GET(_request: Request, context: RouteContext): Promise<Res
   }
 }
 
+/** 处理 Web API 的 PATCH 请求，校验输入并更新资源。 */
 export async function PATCH(request: Request, context: RouteContext): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {

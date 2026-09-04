@@ -5,6 +5,7 @@ import type { TaskErrorCategory, TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
 import type { JobDetailService } from './job-detail-service.js';
 
+/** 职位详情补抓任务输入。 */
 export const sourceJobDetailTaskPayloadSchema = z
   .object({
     sourceId: z.string().trim().min(1),
@@ -21,6 +22,7 @@ export const sourceJobDetailTaskPayloadSchema = z
   })
   .strict();
 
+/** 将详情服务错误分类为任务错误类型。 */
 function taskCategory(category: string): TaskErrorCategory {
   switch (category) {
     case 'temporary':
@@ -36,6 +38,7 @@ function taskCategory(category: string): TaskErrorCategory {
   }
 }
 
+/** 创建职位详情补抓任务处理器。 */
 export function createSourceJobDetailTaskHandler(
   service: Pick<JobDetailService, 'run'>,
 ): TaskHandler<z.infer<typeof sourceJobDetailTaskPayloadSchema>, void> {
@@ -51,6 +54,7 @@ export function createSourceJobDetailTaskHandler(
     leaseDurationMs: 2 * 60_000,
     concurrencyKey: (payload) =>
       `source-detail:${payload.sourceId}:${payload.discovered.externalJobId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       try {
         await service.run(

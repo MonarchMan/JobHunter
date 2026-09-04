@@ -14,6 +14,7 @@ import type {
 } from './profile-inspection-service.js';
 import type { ProfileManagementService } from './resume-profile-workflow.js';
 
+/** 将候选人档案服务适配为 Web 查询与变更契约。 */
 export class WebProfileService {
   readonly #profiles: CandidateProfileService;
   readonly #inspection: ProfileInspectionService;
@@ -29,6 +30,7 @@ export class WebProfileService {
     this.#management = input.management;
   }
 
+  /** 返回 Web 简历档案摘要列表。 */
   public list(): readonly ReturnType<typeof webProfileSummarySchema.parse>[] {
     return this.#profiles.listProfiles().map((profile) => {
       const current = this.#profiles.getCurrent(profile.id);
@@ -41,6 +43,7 @@ export class WebProfileService {
     });
   }
 
+  /** 返回指定档案的当前版本详情。 */
   public get(id: string): WebProfileDetail {
     const profileId = parseId(id, 'CandidateProfile');
     const profile = this.#profiles.getProfile(profileId);
@@ -61,6 +64,7 @@ export class WebProfileService {
     });
   }
 
+  /** 执行 Web 档案锁定、解锁或字段修改。 */
   public mutate(input: WebProfileMutation): WebProfileDetail {
     const mutation = webProfileMutationSchema.parse(input);
     switch (mutation.kind) {
@@ -93,6 +97,7 @@ export class WebProfileService {
     return this.get(mutation.profileId);
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #version(inspection: ProfileVersionInspection): ReturnType<typeof webProfileVersionSchema.parse> {
     const { version } = inspection;
     return webProfileVersionSchema.parse({

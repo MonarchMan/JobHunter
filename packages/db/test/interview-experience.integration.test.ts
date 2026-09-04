@@ -18,12 +18,14 @@ import {
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FixedClock implements Clock {
   public now(): UtcInstant {
     return utcInstant(1_800_000_000_000);
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds {
   #counter = 0x9000;
 
@@ -46,6 +48,7 @@ afterEach(async () => {
   }
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(): Promise<{
   readonly handle: SqliteDatabaseHandle;
   readonly service: InterviewExperienceService;
@@ -64,6 +67,7 @@ async function setup(): Promise<{
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function draftsFrom(
   detail: ReturnType<InterviewExperienceService['get']>,
 ): readonly InterviewExperienceDraft[] {

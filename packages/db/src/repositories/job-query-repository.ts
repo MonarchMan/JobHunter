@@ -36,11 +36,13 @@ const filterSchema = z
 
 const cursorSchema = z.object({ sortValue: z.number(), id: z.uuidv7() }).strict();
 
+/** 数据库查询结果对应的行结构。 */
 interface QueryCursor {
   readonly sortValue: number;
   readonly id: string;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface JobQueryRow {
   readonly id: string;
   readonly company_id: string;
@@ -60,6 +62,7 @@ interface JobQueryRow {
   readonly sort_value: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface JobDetailRow extends JobQueryRow {
   readonly company_name: string;
   readonly source_id: string;
@@ -73,23 +76,28 @@ interface JobDetailRow extends JobQueryRow {
   readonly closed_at: number | null;
 }
 
+/** 数据库查询结果对应的行结构。 */
 function encodeCursor(cursor: QueryCursor): string {
   return Buffer.from(JSON.stringify(cursor), 'utf8').toString('base64url');
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function decodeCursor(value: string): QueryCursor {
   const decoded: unknown = JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
   return cursorSchema.parse(decoded);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function placeholders(count: number): string {
   return Array.from({ length: count }, () => '?').join(', ');
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function likePattern(value: string): string {
   return `%${value.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_')}%`;
 }
 
+/** 执行职位列表、筛选、详情和全文替代查询。 */
 export class SqliteJobQueryRepository implements JobQueryRepository {
   readonly #client: Database.Database;
 
@@ -97,6 +105,7 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public query(input: JobQueryFilter): JobQueryPage {
     const filter = filterSchema.parse(input);
     if (
@@ -244,6 +253,7 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(
     jobId: Parameters<JobQueryRepository['get']>[0],
     profileVersionId?: Parameters<JobQueryRepository['get']>[1],
@@ -298,12 +308,14 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
   }
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 interface CompanyRow {
   readonly id: string;
   readonly slug: string;
   readonly name: string;
 }
 
+/** 提供公司名称与别名的只读查询。 */
 export class SqliteCompanyLookupRepository implements CompanyLookupRepository {
   readonly #client: Database.Database;
 
@@ -311,6 +323,7 @@ export class SqliteCompanyLookupRepository implements CompanyLookupRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public findBySelector(selector: string): CompanySummary | null {
     const normalized = selector.trim();
     if (!normalized) return null;

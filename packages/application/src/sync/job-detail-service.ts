@@ -19,6 +19,7 @@ import {
 } from '@jobhunter/source-core';
 import type { UnitOfWork } from '../ports/unit-of-work.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface JobDetailCommand {
   readonly sourceId: JobSourceId;
   readonly runId: SyncRunId;
@@ -27,6 +28,7 @@ export interface JobDetailCommand {
   readonly discovered: DiscoveredJob;
 }
 
+/** 编排职位详情补抓、规范化和修订写入。 */
 export class JobDetailService {
   readonly #uow: UnitOfWork;
   readonly #registry: AdapterRegistry;
@@ -36,6 +38,7 @@ export class JobDetailService {
   readonly #ids: IdGenerator;
   readonly #normalizerVersion: string;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly uow: UnitOfWork;
     readonly registry: AdapterRegistry;
@@ -54,6 +57,7 @@ export class JobDetailService {
     this.#normalizerVersion = input.normalizerVersion;
   }
 
+  /** 执行详情抓取并在成功后写入来源观测。 */
   public async run(command: JobDetailCommand, signal: AbortSignal): Promise<void> {
     const source = this.#uow.run(({ sync }) => sync.getSource(command.sourceId));
     if (!source?.enabled) throw new SourceError('invalid_config', 'Source is not enabled.');

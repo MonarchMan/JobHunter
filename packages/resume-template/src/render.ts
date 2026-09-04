@@ -6,6 +6,7 @@ import {
   type ResumeSectionId,
 } from './model.js';
 
+/** 转义用户编辑内容，避免在线简历 HTML 注入。 */
 function escapeHtml(value: string | null | undefined): string {
   return (value ?? '')
     .replaceAll('&', '&amp;')
@@ -15,10 +16,12 @@ function escapeHtml(value: string | null | undefined): string {
     .replaceAll("'", '&#039;');
 }
 
+/** 生成可选的 contenteditable 字段标记及其 JSON 路径。 */
 function editable(path: string, interactive: boolean, placeholder?: string): string {
   return ` data-editable data-field="${path}"${placeholder ? ` data-placeholder="${placeholder}"` : ''}${interactive ? ' contenteditable="true" spellcheck="false"' : ''}`;
 }
 
+/** 将章节排版设置转换为受控 CSS 自定义属性。 */
 function sectionStyle(content: ResumeDocumentContent, id: ResumeSectionId): string {
   const style = content.formatting?.[id];
   return style
@@ -70,6 +73,7 @@ const contactIcons = {
   ),
 } as const;
 
+/** 渲染单个简历章节；空章节在非交互模式下不输出。 */
 function section(
   id: ResumeSectionId,
   body: string,
@@ -81,6 +85,7 @@ function section(
   return `<section class="resume-section${active === id ? ' is-active' : ''}" data-section-id="${id}"${sectionStyle(content, id)}${interactive ? ' tabindex="0"' : ''}><div class="section-heading"><span class="section-icon" aria-hidden="true">${sectionIcons[id]}</span><h2>${resumeSectionLabels[id]}</h2><span class="section-rule"></span></div><div class="section-body">${body}</div></section>`;
 }
 
+/** 渲染工作/项目描述列表并绑定字段路径。 */
 function lines(items: readonly string[], path: string, interactive: boolean): string {
   const content = items
     .filter((item) => interactive || item.trim())
@@ -92,6 +97,7 @@ function lines(items: readonly string[], path: string, interactive: boolean): st
   return content ? `<ul class="detail-list">${content}</ul>` : '';
 }
 
+/** 将多行专业技能描述渲染为技能列表。 */
 function professionalSkills(value: string | null, interactive: boolean): string {
   const items = (value ?? '')
     .split(/\r?\n|(?<=[。；;])\s*/u)
@@ -102,6 +108,7 @@ function professionalSkills(value: string | null, interactive: boolean): string 
   return `<ul class="detail-list skills-list" data-multiline${editable('professionalSkills', interactive)}>${items.map((item) => `<li data-placeholder="输入一条完整的技能描述">${escapeHtml(item)}</li>`).join('')}</ul>`;
 }
 
+/** 将结构化经历渲染为各章节卡片 HTML。 */
 function cards(content: ResumeDocumentContent, interactive: boolean): Record<string, string> {
   const education = content.education
     .filter((item) => interactive || [item.institution, item.degree, item.field].some(Boolean))
@@ -184,7 +191,9 @@ export interface RenderResumeHtmlInput {
   readonly interactive?: boolean;
 }
 
+/** 根据固定模板将在线简历内容渲染为可预览、可编辑或可导出的完整 HTML。 */
 export function renderResumeHtml(input: RenderResumeHtmlInput): string {
+  // 1、校验模板和草稿内容，再渲染章节、联系方式和头像。
   const template = getResumeTemplate(input.templateKey, input.templateVersion);
   const content = resumeDocumentContentSchema.parse(input.content);
   const interactive = input.interactive ?? false;
@@ -245,6 +254,7 @@ export function renderResumeHtml(input: RenderResumeHtmlInput): string {
       interactive,
     ),
   ].join('');
+  // 2、按输出模式附加编辑/打印工具栏，并返回无外部资源依赖的 HTML 快照。
   const exportToolbar = input.editable
     ? `<div class="export-toolbar"><button type="button" data-action="edit">编辑文字</button><button type="button" data-action="save">保存当前 HTML</button><button type="button" data-action="print">打印 / 导出 PDF</button></div>`
     : '';

@@ -21,6 +21,7 @@ import {
 const companyId = parseId('018f0000-0000-7000-8000-000000000102', 'Company');
 const sourceId = parseId('018f0000-0000-7000-8000-000000000202', 'JobSource');
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function collectionFixture(
   company: string,
   name = 'collection.json',
@@ -30,6 +31,7 @@ async function collectionFixture(
   ) as SourcePageCollection;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function context(
   http: SourceHttpClient,
   config: ScriptedConfig,

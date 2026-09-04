@@ -1,6 +1,7 @@
 import { resolveAppConfig, resolveBootstrapConfig, type AppConfig } from '@jobhunter/application';
 import { readFile } from 'node:fs/promises';
 
+/** 读取命令行选项的下一个参数。 */
 function optionValue(argv: readonly string[], name: string): string | undefined {
   const assignment = argv.find((value) => value.startsWith(`${name}=`));
   if (assignment) return assignment.slice(name.length + 1);
@@ -8,6 +9,7 @@ function optionValue(argv: readonly string[], name: string): string | undefined 
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
+/** 读取可选的 JSON 配置文件，不存在时返回空对象。 */
 async function readOptionalJson(path: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(path, 'utf8')) as unknown;
@@ -17,6 +19,7 @@ async function readOptionalJson(path: string): Promise<unknown> {
   }
 }
 
+/** 合并命令行、环境变量和配置文件，生成 CLI 运行配置。 */
 export async function loadRuntimeConfig(input: {
   readonly argv: readonly string[];
   readonly environment?: Readonly<Record<string, string | undefined>>;

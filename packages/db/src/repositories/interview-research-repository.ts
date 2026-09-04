@@ -20,6 +20,7 @@ import {
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
+/** 数据库查询结果对应的行结构。 */
 interface RequestRow {
   readonly id: string;
   readonly brief_json: string;
@@ -39,6 +40,7 @@ interface RequestRow {
   readonly updated_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface CommunityExperienceRow {
   readonly id: string;
   readonly file_id: string;
@@ -58,6 +60,7 @@ interface CommunityExperienceRow {
   readonly verification_status: string;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface CommunityQuestionRow {
   readonly id: string;
   readonly experience_id: string;
@@ -81,10 +84,12 @@ const researchFilePropertiesSchema = z
   .object({ warnings: z.array(z.string().max(500)).max(50).optional() })
   .loose();
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function json<T>(value: string, schema: z.ZodType<T>): T {
   return schema.parse(JSON.parse(value) as unknown);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function requestRecord(row: RequestRow): ExperienceResearchRequestRecord {
   if (!['ready', 'needs_review', 'completed'].includes(row.state)) {
     throw new TypeError('Stored research request state is invalid.');
@@ -109,6 +114,7 @@ function requestRecord(row: RequestRow): ExperienceResearchRequestRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function experienceRecord(row: CommunityExperienceRow): CommunityInterviewExperienceRecord {
   if (
     !['needs_review', 'accepted', 'rejected'].includes(row.review_status) ||
@@ -137,6 +143,7 @@ function experienceRecord(row: CommunityExperienceRow): CommunityInterviewExperi
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function questionRecord(row: CommunityQuestionRow): CommunityInterviewQuestionRecord {
   return {
     id: parseId(row.id, 'InterviewQuestionEntry'),
@@ -150,6 +157,7 @@ function questionRecord(row: CommunityQuestionRow): CommunityInterviewQuestionRe
   };
 }
 
+/** 持久化网友面经研究请求、来源、候选问题和审核状态。 */
 export class SqliteInterviewResearchRepository implements InterviewResearchRepository {
   readonly #client: Database.Database;
 
@@ -157,6 +165,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public findByFingerprint(
     fingerprint: ExperienceResearchRequestRecord['requestFingerprint'],
   ): ExperienceResearchDetail | null {
@@ -167,6 +176,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     return id ? this.getRequest(parseId(id, 'ExperienceResearchRequest')) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createRequest(request: ExperienceResearchRequestRecord): ExperienceResearchDetail {
     return this.#client
       .transaction(() => {
@@ -215,6 +225,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       .immediate();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listRequests(): readonly ExperienceResearchRequestRecord[] {
     return (
       this.#client
@@ -225,6 +236,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     ).map(requestRecord);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getRequest(id: ExperienceResearchRequestId): ExperienceResearchDetail | null {
     const request = this.#client
       .prepare(`SELECT ${requestColumns} FROM experience_research_requests WHERE id = ?`)
@@ -269,6 +281,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public attachTask(input: {
     readonly requestId: ExperienceResearchRequestId;
     readonly expectedRevision: number;
@@ -329,6 +342,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public claimBundleImport(input: {
     readonly requestId: ExperienceResearchRequestId;
     readonly expectedRevision: number;
@@ -417,6 +431,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       .immediate();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public replaceCandidates(input: {
     readonly requestId: ExperienceResearchRequestId;
     readonly expectedRevision: number;
@@ -611,6 +626,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       .immediate();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public abandonBundleImport(input: {
     readonly requestId: ExperienceResearchRequestId;
     readonly claimToken: string;
@@ -631,6 +647,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       .immediate();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public reviewCandidate(input: {
     readonly requestId: ExperienceResearchRequestId;
     readonly experienceId: InterviewExperienceId;
@@ -685,6 +702,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listAccepted(
     filter: CommunityExperienceFilter = {},
   ): readonly CommunityExperienceSummary[] {
@@ -723,6 +741,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     }));
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #deleteUnreferencedStagingFile(fileId: string): void {
     const entityIds = this.#client
       .prepare('SELECT entity_id FROM file_entity_mappings WHERE file_id = ?')
@@ -754,6 +773,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     for (const entityId of entityIds) removeOrphanEntity.run(entityId);
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #taskMayPublish(taskId: TaskId, currentTaskId: string | null): boolean {
     if (currentTaskId !== taskId) return false;
     return (
@@ -767,6 +787,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     );
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #deleteUncommittedFileVersions(fileId: string, committedVersion: number): void {
     const entityIds = this.#client
       .prepare(
@@ -791,6 +812,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     for (const entityId of entityIds) removeOrphanEntity.run(entityId);
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #occurrenceCounts(
     where: string,
     parameters: readonly unknown[],

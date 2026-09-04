@@ -75,6 +75,7 @@ import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
 import path from 'node:path';
 import { loadWebRuntimeConfig } from './config.js';
 
+/** 模块数据结构或契约。 */
 export interface WebApplicationServices {
   readonly dashboard: DashboardQueryService;
   readonly jobs: JobQueryService;
@@ -97,6 +98,7 @@ export interface WebApplicationServices {
   readonly research: ExperienceResearchService;
 }
 
+/** 模块数据结构或契约。 */
 export interface WebApplicationContainer {
   readonly services: WebApplicationServices;
   close(): void;
@@ -106,6 +108,7 @@ export interface WebApplicationContainer {
  * Web composition root. Handlers are registered for validation and enqueue/retry only;
  * the Web process never executes background work.
  */
+/** 打开本地数据库并装配 Web 查询和面试准备服务。 */
 export function createLocalWebContainer(
   config: AppConfig,
   options: { readonly migrationsFolder?: string } = {},
@@ -320,6 +323,7 @@ export function createLocalWebContainer(
 let sharedContainer: Promise<WebApplicationContainer> | undefined;
 
 /** One SQLite handle per Next.js server process; development reloads may recreate the module. */
+/** 获取进程级单例 Web 容器，避免每个请求重复打开数据库。 */
 export function getWebContainer(): Promise<WebApplicationContainer> {
   const workspaceRoot = process.env.JOBHUNTER_WORKSPACE_ROOT ?? process.cwd();
   sharedContainer ??= loadWebRuntimeConfig({ cwd: workspaceRoot }).then((config) =>

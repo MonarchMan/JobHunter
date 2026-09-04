@@ -26,6 +26,7 @@ afterEach(async () => {
   }
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(): Promise<SqliteDatabaseHandle> {
   const root = await createTemporaryDataRoot('jobhunter-repository-');
   const handle = openSqliteDatabase({ dataRoot: root.path });
@@ -33,6 +34,7 @@ async function setup(): Promise<SqliteDatabaseHandle> {
   return handle;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedSync(handle: SqliteDatabaseHandle): void {
   handle.client.exec(`
     INSERT INTO companies

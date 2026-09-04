@@ -7,6 +7,7 @@ import type {
 import type { DeterministicMatchingService } from './matching-service.js';
 import type { MatchResultRecord } from '../ports/matching.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface MatchBatchResult {
   readonly matchResultId: string;
   readonly processedInputs: number;
@@ -14,6 +15,7 @@ export interface MatchBatchResult {
   readonly existingResults: number;
 }
 
+/** 控制批量匹配规模并汇总每个职位结果。 */
 export class MatchingBatchService {
   readonly #calculator: DeterministicMatchingService;
   readonly #onMatch: ((match: MatchResultRecord) => void) | null;
@@ -26,6 +28,7 @@ export class MatchingBatchService {
     this.#onMatch = input.onMatch ?? null;
   }
 
+  /** 为指定简历版本执行批量匹配。 */
   public forRevision(input: {
     readonly jobRevisionId: JobRevisionId;
     readonly jobEnrichmentId: JobEnrichmentId | null;

@@ -5,6 +5,7 @@ import { runCli } from './program.js';
 import { HumanRenderer, JsonRenderer } from './renderer.js';
 import { loadRuntimeConfig } from './runtime-config.js';
 
+/** 装配本地 CLI 容器并执行命令，统一渲染配置错误。 */
 export async function runLocalCli(input: {
   readonly argv: readonly string[];
   readonly io: CliIo;

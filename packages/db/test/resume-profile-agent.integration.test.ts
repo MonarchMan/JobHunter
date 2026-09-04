@@ -20,6 +20,7 @@ import {
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class AdvancingClock implements Clock {
   #value = 1_800_000_000_000;
 
@@ -29,6 +30,7 @@ class AdvancingClock implements Clock {
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds implements IdGenerator {
   #counter = 0xa000;
 
@@ -87,6 +89,7 @@ function evidence(text: string, value: string): { start: number; end: number; su
   return { start, end: start + value.length, summary: value };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function modelOutput(request: ModelRequest): unknown {
   const parsed = request.input as { readonly extractedText: string };
   const text = parsed.extractedText;
@@ -139,6 +142,7 @@ function modelOutput(request: ModelRequest): unknown {
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(
   model: FakeModelClient,
   options: {

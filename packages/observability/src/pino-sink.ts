@@ -3,6 +3,7 @@ import pino, { multistream, type DestinationStream } from 'pino';
 import { RotatingFileStream } from './rotating-file-stream.js';
 import { PinoSafeLogger, type LogLevel, type SafeLogger } from './safe-logger.js';
 
+/** 创建配置好脱敏、文件输出和上下文的安全日志器。 */
 export function createSafeLogger(
   input: {
     readonly level?: LogLevel;

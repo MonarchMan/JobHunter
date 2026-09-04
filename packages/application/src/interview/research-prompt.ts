@@ -7,6 +7,7 @@ import {
 } from '@jobhunter/domain';
 import { z } from 'zod';
 
+/** 为外部研究 Agent 生成严格约束的 JSON Schema。 */
 export function communityResearchJsonSchema(): Readonly<Record<string, unknown>> {
   return z.toJSONSchema(communityResearchBundleSchema, {
     target: 'draft-2020-12',
@@ -14,14 +15,17 @@ export function communityResearchJsonSchema(): Readonly<Record<string, unknown>>
   });
 }
 
+/** 将数组渲染为提示词中的稳定中文列表。 */
 function list(values: readonly string[], empty: string): string {
   return values.length ? values.join('、') : empty;
 }
 
+/** 根据冻结的研究简报生成可交给浏览器/外部 Agent 的任务 Prompt。 */
 export function renderCommunityResearchPrompt(
   briefValue: ExperienceResearchBrief,
   requestFingerprint: string,
 ): string {
+  // 1、运行时校验简报；2、注入范围、版本与指纹；3、声明证据、去重和安全边界。
   const brief = experienceResearchBriefSchema.parse(briefValue);
   return `# 公开面试经历研究任务
 

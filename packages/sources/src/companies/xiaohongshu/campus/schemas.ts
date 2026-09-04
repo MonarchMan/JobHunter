@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 小红书校园招聘职位响应 Schema。 */
 export const xiaohongshuCampusJobSchema = z
   .object({
     positionId: z.union([z.string().min(1), z.number().int()]),
@@ -11,8 +12,10 @@ export const xiaohongshuCampusJobSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type XiaohongshuCampusJob = z.infer<typeof xiaohongshuCampusJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const xiaohongshuListResponseSchema = z
   .object({
     success: z.literal(true),

@@ -16,6 +16,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface BrowserSourceOptions {
   readonly headless?: boolean;
   readonly executablePath?: string;
@@ -24,6 +25,7 @@ export interface BrowserSourceOptions {
   readonly pageSampling?: 'sequential' | 'first-last';
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface BrowserExecutableRuntime {
   readonly platform: NodeJS.Platform;
   readonly homeDirectory: string;
@@ -33,6 +35,7 @@ export interface BrowserExecutableRuntime {
 
 const browserDebugEnabled = process.env.JOBHUNTER_BROWSER_DEBUG === '1';
 
+/** Worker 运行时数据结构或执行契约。 */
 function browserDebug(...values: unknown[]): void {
   if (browserDebugEnabled) console.error('[browser-source]', ...values);
 }
@@ -46,6 +49,7 @@ const systemBrowserRuntime = (): BrowserExecutableRuntime => ({
   exists: existsSync,
 });
 
+/** 按显式配置、环境变量和系统默认值解析浏览器路径。 */
 export function resolveBrowserExecutablePath(
   options: BrowserSourceOptions = {},
   runtime: BrowserExecutableRuntime = systemBrowserRuntime(),
@@ -82,6 +86,7 @@ export function resolveBrowserExecutablePath(
   return candidates.find((candidate) => runtime.exists(candidate));
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function launchBrowser(options: BrowserSourceOptions): Promise<Browser> {
   const executablePath = resolveBrowserExecutablePath(options);
   return chromium.launch({
@@ -90,10 +95,12 @@ async function launchBrowser(options: BrowserSourceOptions): Promise<Browser> {
   });
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function detailUrlFor(requestUrl: string, id: string): string {
   const url = new URL(requestUrl);
   const basePath = url.pathname.replace(/\/list\/?$/, '').replace(/\/$/, '');
@@ -103,6 +110,7 @@ function detailUrlFor(requestUrl: string, id: string): string {
   return url.toString();
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function postData(response: Awaited<ReturnType<Page['waitForResponse']>>): Record<string, unknown> {
   try {
     const value: unknown = response.request().postDataJSON();
@@ -113,6 +121,7 @@ function postData(response: Awaited<ReturnType<Page['waitForResponse']>>): Recor
   throw new SourceError('parse_changed', 'Browser list request body was not valid JSON.');
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 interface BrowserListPage {
   readonly items: Record<string, unknown>[];
   readonly total: number;
@@ -120,18 +129,21 @@ interface BrowserListPage {
   readonly offset: number | null;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface BrowserRequestTemplate {
   readonly url: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly body: Record<string, unknown>;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface BrowserPageRequest {
   readonly url: string;
   readonly method: 'GET' | 'POST';
   readonly body: Record<string, unknown>;
 }
 
+/** 根据模板构造指定页的可重放请求。 */
 export function buildBrowserPageRequest(
   template: BrowserRequestTemplate,
   responseShape: SourcePageCollectionResponseShape,
@@ -186,6 +198,7 @@ export function buildBrowserPageRequest(
   };
 }
 
+/** 判断分页游标是否需要重新请求第一页。 */
 export function shouldReplayFirstPage(
   request: SourcePageCollectionRequest,
   capturedPageSize: number,
@@ -196,6 +209,7 @@ export function shouldReplayFirstPage(
   );
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 interface BrowserListResponse {
   readonly url: string;
   readonly status: number;
@@ -203,11 +217,13 @@ interface BrowserListResponse {
   readonly body: unknown;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 interface BrowserCapturedPage {
   readonly page: BrowserListPage;
   readonly template: BrowserRequestTemplate;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function requestHeaders(
   response: Awaited<ReturnType<Page['waitForResponse']>>,
 ): Readonly<Record<string, string>> {
@@ -218,6 +234,7 @@ function requestHeaders(
   );
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function requestTemplate(
   response: Awaited<ReturnType<Page['waitForResponse']>>,
 ): BrowserRequestTemplate {
@@ -228,6 +245,7 @@ function requestTemplate(
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function browserListResponse(
   response: Awaited<ReturnType<Page['waitForResponse']>>,
 ): Promise<BrowserListResponse> {
@@ -247,6 +265,7 @@ async function browserListResponse(
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function readListResponse(
   response: BrowserListResponse,
   request: SourcePageCollectionRequest,
@@ -381,6 +400,7 @@ function readListResponse(
   return { items, total, limit, offset };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function waitForListResponse(
   page: Page,
   request: SourcePageCollectionRequest,
@@ -412,6 +432,7 @@ async function waitForListResponse(
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function requestJsonPage(
   page: Page,
   request: SourcePageCollectionRequest,
@@ -467,6 +488,7 @@ async function requestJsonPage(
   );
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function collectJsonPages(
   page: Page,
   request: SourcePageCollectionRequest,
@@ -569,6 +591,7 @@ async function collectJsonPages(
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function createSessionFactory(
   options: BrowserSourceOptions,
 ): BrowserSessionFactory<SourcePageClient> {
@@ -615,6 +638,7 @@ function createSessionFactory(
   };
 }
 
+/** 创建使用本机 Playwright 浏览器会话的来源客户端。 */
 export function createPlaywrightSourcePageClient(
   options: BrowserSourceOptions = {},
 ): SourcePageClient {

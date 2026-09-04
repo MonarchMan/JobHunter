@@ -3,6 +3,7 @@ import { access, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { OfflineDoctorCheck } from './doctor-service.js';
 
+/** 检查当前 Node.js 运行时版本。 */
 export function nodeRuntimeCheck(version = process.versions.node): OfflineDoctorCheck {
   return {
     key: 'runtime.node',
@@ -20,6 +21,7 @@ export function nodeRuntimeCheck(version = process.versions.node): OfflineDoctor
   };
 }
 
+/** 检查本地数据目录可读写性。 */
 export function dataRootCheck(dataRoot: string): OfflineDoctorCheck {
   const path = resolve(dataRoot);
   return {
@@ -46,6 +48,7 @@ export function dataRootCheck(dataRoot: string): OfflineDoctorCheck {
   };
 }
 
+/** 检查来源适配器注册完整性。 */
 export function adapterRegistryCheck(input: {
   readonly registeredKeys: readonly string[];
   readonly configuredKeys: readonly string[];
@@ -73,6 +76,7 @@ export function adapterRegistryCheck(input: {
   };
 }
 
+/** 检查本地数据库和状态快照健康度。 */
 export function localStateHealthCheck(input: {
   readonly sources: {
     readonly enabled: number;

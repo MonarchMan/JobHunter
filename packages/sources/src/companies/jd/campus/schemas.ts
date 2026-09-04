@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 京东校园招聘接口配置 Schema。 */
 export const jdCampusConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(100).default(10),
@@ -8,6 +9,7 @@ export const jdCampusConfigSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type JdCampusConfig = z.infer<typeof jdCampusConfigSchema>;
 
 const jdCampusRequirementSchema = z
@@ -18,6 +20,7 @@ const jdCampusRequirementSchema = z
   })
   .loose();
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const jdCampusJobSchema = z
   .object({
     publishId: z.number().int().positive(),
@@ -39,8 +42,10 @@ export const jdCampusJobSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type JdCampusJob = z.infer<typeof jdCampusJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const jdCampusListResponseSchema = z
   .object({
     success: z.literal(true),
@@ -53,4 +58,5 @@ export const jdCampusListResponseSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type JdCampusListResponse = z.infer<typeof jdCampusListResponseSchema>;

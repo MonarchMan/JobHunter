@@ -16,6 +16,7 @@ const datedExperience = {
   evidence: z.array(evidenceSchema),
 };
 
+/** 候选人项目经历的领域 Schema。 */
 export const candidateProjectSchema = z
   .object({
     name: normalizedText,
@@ -24,8 +25,10 @@ export const candidateProjectSchema = z
   })
   .readonly();
 
+/** 领域模型的类型约束。 */
 export type CandidateProject = z.infer<typeof candidateProjectSchema>;
 
+/** 候选人求职偏好 Schema。 */
 export const candidatePreferencesSchema = z
   .object({
     locations: z.array(normalizedText),
@@ -36,6 +39,7 @@ export const candidatePreferencesSchema = z
   })
   .readonly();
 
+/** 候选人画像完整领域 Schema，负责统一默认值和文本约束。 */
 export const candidateProfileSchema = z
   .object({
     basicInfo: z
@@ -105,8 +109,10 @@ export const candidateProfileSchema = z
   })
   .readonly();
 
+/** 领域模型的类型约束。 */
 export type CandidateProfileData = z.infer<typeof candidateProfileSchema>;
 
+/** 在领域边界校验并返回候选人画像。 */
 export function parseCandidateProfile(input: unknown): CandidateProfileData {
   return candidateProfileSchema.parse(input);
 }

@@ -2,6 +2,7 @@ import { parseId } from '@jobhunter/domain';
 import { z } from 'zod';
 import type { TaskHandler } from '../tasks/model.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface SourceHealthTaskService {
   check(
     sourceId: string,
@@ -14,7 +15,9 @@ export interface SourceHealthTaskService {
   }>;
 }
 
+/** 来源探活任务输入。 */
 export const sourceHealthTaskPayloadSchema = z.object({ sourceId: z.uuid() }).strict();
+/** 来源探活任务输出。 */
 export const sourceHealthTaskOutputSchema = z
   .object({
     status: z.enum(['healthy', 'degraded', 'unhealthy']),
@@ -24,6 +27,7 @@ export const sourceHealthTaskOutputSchema = z
   })
   .strict();
 
+/** 创建来源探活任务处理器。 */
 export function createSourceHealthTaskHandler(
   service: SourceHealthTaskService,
 ): TaskHandler<
@@ -37,6 +41,7 @@ export function createSourceHealthTaskHandler(
     defaultMaxAttempts: 2,
     leaseDurationMs: 60_000,
     concurrencyKey: (payload) => `source-health:${payload.sourceId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       const health = await service.check(parseId(payload.sourceId, 'JobSource'), context.signal);
       return {

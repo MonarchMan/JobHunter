@@ -22,6 +22,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => root.cleanup()));
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function container(): Promise<string> {
   const root = await createTemporaryDataRoot('jobhunter-backup-');
   roots.push(root);

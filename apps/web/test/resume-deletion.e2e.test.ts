@@ -6,6 +6,7 @@ import { createLocalWebContainer } from '../src/server/container.js';
 
 const resumeId = '018f0000-0000-7000-8000-000000000801';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedResume(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
   const profile = JSON.stringify(makeCandidateProfile());

@@ -10,6 +10,7 @@ import {
 
 const hosts = ['360campus.zhiye.com'] as const;
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createQihoo360CampusChannelAdapter(options: {
   readonly key: 'qihoo360.intern' | 'qihoo360.campus';
   readonly categoryId: '2' | '3';
@@ -92,6 +93,7 @@ function createQihoo360CampusChannelAdapter(options: {
   });
 }
 
+/** 招聘来源适配器实例。 */
 export const createQihoo360InternAdapter = (): JobSourceAdapter<Qihoo360CampusConfig, never> =>
   createQihoo360CampusChannelAdapter({
     key: 'qihoo360.intern',
@@ -99,6 +101,7 @@ export const createQihoo360InternAdapter = (): JobSourceAdapter<Qihoo360CampusCo
     category: 'internship',
   });
 
+/** 招聘来源适配器实例。 */
 export const createQihoo360CampusAdapter = (): JobSourceAdapter<Qihoo360CampusConfig, never> =>
   createQihoo360CampusChannelAdapter({
     key: 'qihoo360.campus',

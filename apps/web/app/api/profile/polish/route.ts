@@ -15,6 +15,7 @@ import { verifyMutationRequest } from '../../../../src/server/csrf.js';
 
 export const dynamic = 'force-dynamic';
 
+/** 处理 Web API 的 POST 请求，校验输入并提交业务操作。 */
 export async function POST(request: Request): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {

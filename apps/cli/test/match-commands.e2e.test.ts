@@ -6,6 +6,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly stderr: string[] } {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -19,6 +20,7 @@ function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly s
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function command(
   dataRoot: string,
   argv: readonly string[],
@@ -49,6 +51,7 @@ const ids = {
   profileVersion: '018f0000-0000-7000-8000-000000000606',
 } as const;
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedMatchingInputs(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
   const profile = parseCandidateProfile({

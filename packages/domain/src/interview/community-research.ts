@@ -2,16 +2,21 @@ import { z } from 'zod';
 import { contentHash, type ContentHash } from '../shared/canonical.js';
 import { DomainError } from '../shared/domain-error.js';
 
+/** 网友面经研究 Prompt 版本，参与研究请求指纹计算。 */
 export const communityResearchPromptVersion = 'community-research-prompt@v3' as const;
+/** 网友面经研究 Bundle 的持久化 Schema 版本。 */
 export const communityResearchSchemaVersion = 'community-research-bundle@v1' as const;
 
+/** 创建允许为空但限制最大长度的文本 Schema。 */
 const nullableText = (maximum: number): z.ZodNullable<z.ZodString> =>
   z.string().trim().min(1).max(maximum).nullable();
 
+/** 判断主机名是否等于后缀或其子域名。 */
 function matchesHostnameSuffix(hostname: string, suffix: string): boolean {
   return hostname === suffix || hostname.endsWith(`.${suffix}`);
 }
 
+/** 拦截保留、示例和本地用途的研究主机名。 */
 function isSpecialUseResearchHostname(hostname: string): boolean {
   return (
     ['localhost', 'local', 'invalid', 'example', 'test'].some((suffix) =>
@@ -40,6 +45,7 @@ const researchDomainSchema = z
       ),
   );
 
+/** 外部面经研究请求的岗位范围、来源和数量约束。 */
 export const experienceResearchBriefSchema = z
   .object({
     targetRoles: z.array(z.string().trim().min(1).max(120)).min(1).max(10),
@@ -74,6 +80,7 @@ export const experienceResearchBriefSchema = z
       });
     }
   });
+/** 领域模型的类型约束。 */
 export type ExperienceResearchBrief = z.infer<typeof experienceResearchBriefSchema>;
 
 const researchSourceSchema = z
@@ -94,6 +101,7 @@ const communityQuestionSchema = z
   })
   .strict();
 
+/** 面经研究输出 Bundle，包含来源、经历、问题和警告。 */
 export const communityResearchBundleSchema = z
   .object({
     schemaVersion: z.literal(communityResearchSchemaVersion),
@@ -118,8 +126,10 @@ export const communityResearchBundleSchema = z
     warnings: z.array(z.string().trim().min(1).max(500)).max(50),
   })
   .strict();
+/** 领域模型的类型约束。 */
 export type CommunityResearchBundle = z.infer<typeof communityResearchBundleSchema>;
 
+/** 面经研究请求生命周期状态。 */
 export const experienceResearchStatusSchema = z.enum([
   'ready',
   'queued',
@@ -129,16 +139,20 @@ export const experienceResearchStatusSchema = z.enum([
   'failed',
   'cancelled',
 ]);
+/** 领域模型的类型约束。 */
 export type ExperienceResearchStatus = z.infer<typeof experienceResearchStatusSchema>;
 
+/** 单条网友面经的人工审核状态。 */
 export const communityExperienceReviewStatusSchema = z.enum([
   'draft',
   'needs_review',
   'accepted',
   'rejected',
 ]);
+/** 领域模型的类型约束。 */
 export type CommunityExperienceReviewStatus = z.infer<typeof communityExperienceReviewStatusSchema>;
 
+/** 归一化字符串集合，去重后用于稳定指纹计算。 */
 function fingerprintSet(values: readonly string[], domain = false): readonly string[] {
   return [
     ...new Set(
@@ -150,6 +164,7 @@ function fingerprintSet(values: readonly string[], domain = false): readonly str
   ];
 }
 
+/** 计算研究请求指纹，使同一语义 Brief 可复用历史请求。 */
 export function researchRequestFingerprint(brief: ExperienceResearchBrief): ContentHash {
   const normalized = experienceResearchBriefSchema.parse(brief);
   return contentHash(
@@ -179,6 +194,7 @@ export function researchRequestFingerprint(brief: ExperienceResearchBrief): Cont
   );
 }
 
+/** 判断 IPv4 是否属于本机、内网、链路本地或零地址范围。 */
 function privateIpv4(hostname: string): boolean {
   const parts = hostname.split('.').map(Number);
   if (
@@ -197,6 +213,7 @@ function privateIpv4(hostname: string): boolean {
   );
 }
 
+/** 规范化并校验公开研究来源 URL，同时阻止 SSRF 和凭据嵌入。 */
 export function normalizePublicResearchUrl(value: string): string {
   let url: URL;
   try {
@@ -230,10 +247,12 @@ export function normalizePublicResearchUrl(value: string): string {
   return url.toString();
 }
 
+/** 统一网友面经问题的 Unicode 和空白表示。 */
 export function normalizeCommunityQuestion(value: string): string {
   return value.normalize('NFKC').replaceAll(/\s+/g, ' ').trim();
 }
 
+/** 计算归一化问题指纹，用于高度相似问题去重。 */
 export function communityQuestionFingerprint(value: string): ContentHash {
   const normalized = normalizeCommunityQuestion(value).toLocaleLowerCase('en-US');
   if (!normalized) {

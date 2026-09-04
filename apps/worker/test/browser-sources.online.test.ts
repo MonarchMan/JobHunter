@@ -72,6 +72,7 @@ describe.skipIf(!online || !selected.has('qihoo360'))('360 controlled browser on
   }, 130_000);
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface BrowserSmokeDefinition {
   readonly slug: 'alibaba' | 'bytedance' | 'bytedance-campus' | 'dewu' | 'huawei';
   readonly factory: () => JobSourceAdapter<ScriptedConfig, never>;

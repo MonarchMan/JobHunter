@@ -21,6 +21,7 @@ import {
 } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 interface TaskRow {
   readonly id: string;
   readonly task_type: string;
@@ -46,6 +47,7 @@ interface TaskRow {
   readonly finished_at: number | null;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface ScheduleRow {
   readonly id: string;
   readonly schedule_key: string;
@@ -60,6 +62,7 @@ interface ScheduleRow {
   readonly updated_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface QueueSummaryRow {
   readonly pending: number;
   readonly running: number;
@@ -70,6 +73,7 @@ interface QueueSummaryRow {
   readonly oldest_pending_at: number | null;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface ClaimTaskInput {
   readonly taskType: string;
   readonly workerId: string;
@@ -77,6 +81,7 @@ interface ClaimTaskInput {
   readonly leaseDurationMsFor: (taskType: string) => number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface CommitScheduleInput {
   readonly scheduleId: string;
   readonly expectedNextRunAt: UtcInstant;
@@ -86,10 +91,12 @@ interface CommitScheduleInput {
   readonly now: UtcInstant;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function nullableInstant(value: number | null): UtcInstant | null {
   return value === null ? null : utcInstant(value);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function taskFromRow(row: TaskRow): TaskRecord {
   return {
     id: parseId(row.id, 'Task'),
@@ -117,6 +124,7 @@ function taskFromRow(row: TaskRow): TaskRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function scheduleFromRow(row: ScheduleRow): ScheduleRecord {
   return {
     id: row.id,
@@ -143,6 +151,7 @@ const SCHEDULE_COLUMNS = `
   id, schedule_key, task_type, payload_json, cron_expression, timezone, enabled,
   next_run_at, last_enqueued_at, created_at, updated_at`;
 
+/** 实现通用任务队列的入队、租约、完成和失败重试。 */
 export class SqliteTaskRepository implements TaskQueue {
   readonly #client: Database.Database;
   readonly #claimTransaction: (input: {
@@ -165,6 +174,7 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly now: UtcInstant;
   }) => EnqueueTaskResult | null;
 
+  /** 执行数据库组件对外暴露的操作。 */
   public constructor(client: Database.Database) {
     this.#client = client;
     const claimTransaction = client.transaction((input: ClaimTaskInput) =>
@@ -186,6 +196,7 @@ export class SqliteTaskRepository implements TaskQueue {
     this.#scheduleTransaction = (input) => scheduleTransaction.immediate(input);
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #insert(input: PersistedTaskInput): TaskRecord {
     const row = this.#client
       .prepare(
@@ -214,6 +225,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return taskFromRow(row);
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #resolveInsertConflict(input: PersistedTaskInput, error: unknown): EnqueueTaskResult {
     const idempotent = this.#findByIdempotencyKey(input.idempotencyKey);
     if (idempotent) return { kind: 'idempotent', task: idempotent };
@@ -224,6 +236,7 @@ export class SqliteTaskRepository implements TaskQueue {
     throw error;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public enqueue(input: PersistedTaskInput): EnqueueTaskResult {
     try {
       return { kind: 'enqueued', task: this.#insert(input) };
@@ -232,6 +245,7 @@ export class SqliteTaskRepository implements TaskQueue {
     }
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #findByIdempotencyKey(idempotencyKey: string): TaskRecord | null {
     const row = this.#client
       .prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE idempotency_key = ?`)
@@ -239,6 +253,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return row ? taskFromRow(row) : null;
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #findActiveByConcurrencyKey(concurrencyKey: string): TaskRecord | null {
     const row = this.#client
       .prepare(
@@ -249,6 +264,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return row ? taskFromRow(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(taskId: TaskId): TaskRecord | null {
     const row = this.#client
       .prepare(`SELECT ${TASK_COLUMNS} FROM tasks WHERE id = ?`)
@@ -256,6 +272,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return row ? taskFromRow(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public list(filter: TaskListFilter): readonly TaskRecord[] {
     const conditions: string[] = [];
     const parameters: unknown[] = [];
@@ -289,6 +306,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return rows.map(taskFromRow);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public count(filter: Omit<TaskListFilter, 'limit' | 'offset'>): number {
     const conditions: string[] = [];
     const parameters: unknown[] = [];
@@ -313,6 +331,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return row.total;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public summary(now: UtcInstant): TaskQueueSummary {
     const row = this.#client
       .prepare(
@@ -340,6 +359,7 @@ export class SqliteTaskRepository implements TaskQueue {
     };
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #recoverExpiredInside(now: UtcInstant): {
     readonly recovered: number;
     readonly exhausted: number;
@@ -372,6 +392,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return { recovered, exhausted };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public recoverExpired(now: UtcInstant): {
     readonly recovered: number;
     readonly exhausted: number;
@@ -379,6 +400,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return this.#recoveryTransaction(now);
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #claimInside(input: {
     readonly taskType: string;
     readonly workerId: string;
@@ -412,6 +434,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return row ? taskFromRow(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public claim(input: {
     readonly taskType: string;
     readonly workerId: string;
@@ -421,6 +444,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return this.#claimTransaction(input);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public heartbeat(input: {
     readonly taskId: TaskId;
     readonly workerId: string;
@@ -446,6 +470,7 @@ export class SqliteTaskRepository implements TaskQueue {
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public complete(
     taskId: TaskId,
     workerId: string,
@@ -472,6 +497,7 @@ export class SqliteTaskRepository implements TaskQueue {
     );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public reschedule(input: {
     readonly taskId: TaskId;
     readonly workerId: string;
@@ -499,6 +525,7 @@ export class SqliteTaskRepository implements TaskQueue {
     );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public fail(input: {
     readonly taskId: TaskId;
     readonly workerId: string;
@@ -525,6 +552,7 @@ export class SqliteTaskRepository implements TaskQueue {
     );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public markCancelled(taskId: TaskId, workerId: string, finishedAt: UtcInstant): boolean {
     return (
       this.#client
@@ -538,6 +566,7 @@ export class SqliteTaskRepository implements TaskQueue {
     );
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #cancelInside(taskId: TaskId, requestedAt: UtcInstant): CancelTaskResult {
     const task = this.get(taskId);
     if (!task) return { kind: 'not_found' };
@@ -568,10 +597,12 @@ export class SqliteTaskRepository implements TaskQueue {
     return { kind: 'not_cancellable', task };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public cancel(taskId: TaskId, requestedAt: UtcInstant): CancelTaskResult {
     return this.#cancelTransaction(taskId, requestedAt);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public upsertSchedule(input: PersistedScheduleInput): ScheduleRecord {
     const row = this.#client
       .prepare(
@@ -607,6 +638,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return scheduleFromRow(row);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public dueSchedules(now: UtcInstant, limit: number): readonly ScheduleRecord[] {
     const rows = this.#client
       .prepare(
@@ -618,6 +650,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return rows.map(scheduleFromRow);
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #commitScheduleOccurrenceInside(input: {
     readonly scheduleId: string;
     readonly expectedNextRunAt: UtcInstant;
@@ -652,6 +685,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return result;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public commitScheduleOccurrence(input: {
     readonly scheduleId: string;
     readonly expectedNextRunAt: UtcInstant;

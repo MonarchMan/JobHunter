@@ -17,6 +17,7 @@ import {
 } from './schemas.js';
 
 const hosts = ['careers.pddglobalhr.com'] as const;
+/** 来源适配器使用的数据结构或契约。 */
 interface PinduoduoChannelOptions {
   readonly key: 'pinduoduo.intern' | 'pinduoduo.campus';
   readonly route: 'intern' | 'grad';
@@ -34,6 +35,7 @@ function parseSource<T>(parse: () => T, diagnostic: string): T {
   }
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function requestHeaders(entryUrl: string): Readonly<Record<string, string>> {
   return {
     'content-type': 'application/json',
@@ -42,10 +44,12 @@ function requestHeaders(entryUrl: string): Readonly<Record<string, string>> {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function listBody(config: PinduoduoConfig, page: number): string {
   return JSON.stringify({ page, pageSize: config.pageSize, t: config.token });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function jobUrl(entryUrl: string, externalJobId: string): string {
   return canonicalizeOfficialUrl(
     `${entryUrl}/detail?positionId=${encodeURIComponent(externalJobId)}`,
@@ -53,18 +57,21 @@ function jobUrl(entryUrl: string, externalJobId: string): string {
   );
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function locations(job: PinduoduoJob): string[] {
   return [job.workLocationName, job.workLocation]
     .filter((value): value is string => Boolean(value?.trim()) && value !== '/')
     .map((value) => value.trim());
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function description(job: PinduoduoJob): string {
   const text = job.jobDuty?.trim();
   if (!text) throw new SourceError('parse_changed', 'Pinduoduo job has no usable description.');
   return text;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function healthFailure(error: unknown, startedAt: number): SourceHealth {
   const sourceError =
     error instanceof SourceError
@@ -87,6 +94,7 @@ function healthFailure(error: unknown, startedAt: number): SourceHealth {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createPinduoduoChannelAdapter(
   options: PinduoduoChannelOptions,
 ): JobSourceAdapter<PinduoduoConfig, never> {
@@ -104,6 +112,7 @@ function createPinduoduoChannelAdapter(
       externalIdFingerprintVersion: null,
     },
     configSchema: pinduoduoConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       const firstPage = 1;
       let page = firstPage;
@@ -167,6 +176,7 @@ function createPinduoduoChannelAdapter(
         discoveredCount,
       };
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       return Promise.resolve().then(() => {
         const job = parseSource(
@@ -250,6 +260,7 @@ function createPinduoduoChannelAdapter(
   };
 }
 
+/** 招聘来源适配器实例。 */
 export const createPinduoduoAdapter = (): JobSourceAdapter<PinduoduoConfig, never> =>
   createPinduoduoChannelAdapter({
     key: 'pinduoduo.intern',

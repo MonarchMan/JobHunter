@@ -4,6 +4,7 @@ import type { OfflineDoctorCheck } from '@jobhunter/application';
 import Database from 'better-sqlite3';
 import { assertDatabaseIntegrity, assertSqliteCapabilities } from './health.js';
 
+/** 数据库查询结果对应的行结构。 */
 interface TableRow {
   readonly name: string;
 }
@@ -33,6 +34,7 @@ const requiredTables = [
   'interview_question_entries',
 ] as const;
 
+/** 数据库查询结果对应的行结构。 */
 export function sqliteDoctorCheck(client: Database.Database): OfflineDoctorCheck {
   return {
     key: 'database.sqlite',
@@ -59,6 +61,7 @@ export function sqliteDoctorCheck(client: Database.Database): OfflineDoctorCheck
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export function sqliteFileDoctorCheck(dataRoot: string): OfflineDoctorCheck {
   const databasePath = join(resolve(dataRoot), 'jobhunter.sqlite');
   return {
@@ -83,14 +86,17 @@ export function sqliteFileDoctorCheck(dataRoot: string): OfflineDoctorCheck {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 interface CountRow {
   readonly count: number;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function count(client: Database.Database, sql: string): number {
   return (client.prepare(sql).get() as CountRow).count;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export function readLocalHealthSnapshot(
   client: Database.Database,
   dataRoot: string,

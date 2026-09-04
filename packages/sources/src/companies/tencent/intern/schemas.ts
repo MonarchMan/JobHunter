@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 腾讯校园招聘接口配置 Schema。 */
 export const tencentCampusConfigSchema = z
   .object({ pageSize: z.number().int().min(1).max(1000).default(100) })
   .strict();
@@ -17,6 +18,7 @@ export const tencentCampusListJobSchema = z
   })
   .loose();
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const tencentCampusListResponseSchema = z
   .object({
     status: z.literal(0),
@@ -27,6 +29,7 @@ export const tencentCampusListResponseSchema = z
   })
   .loose();
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const tencentCampusDetailSchema = z
   .object({
     postId: z.string().min(1),
@@ -58,8 +61,10 @@ export const tencentCampusDetailSchema = z
       });
     }
   });
+/** 来源适配器使用的类型约束。 */
 export type TencentCampusDetail = z.infer<typeof tencentCampusDetailSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const tencentCampusDetailResponseSchema = z
   .object({ status: z.literal(0), data: tencentCampusDetailSchema })
   .loose();

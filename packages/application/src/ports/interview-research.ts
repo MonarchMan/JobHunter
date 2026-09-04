@@ -9,8 +9,10 @@ import type {
 } from '@jobhunter/domain';
 import type { TaskErrorCategory, TaskStatus } from '../tasks/model.js';
 
+/** 应用层使用的类型约束。 */
 export type ResearchRequestState = 'ready' | 'needs_review' | 'completed';
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceResearchRequestRecord {
   readonly id: ExperienceResearchRequestId;
   readonly brief: ExperienceResearchBrief;
@@ -30,17 +32,20 @@ export interface ExperienceResearchRequestRecord {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceResearchTaskSnapshot {
   readonly id: TaskId;
   readonly status: TaskStatus;
   readonly errorCategory: TaskErrorCategory | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceResearchRequestSummary {
   readonly request: ExperienceResearchRequestRecord;
   readonly currentTask: ExperienceResearchTaskSnapshot | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CommunityInterviewExperienceRecord {
   readonly id: InterviewExperienceId;
   readonly fileId: string;
@@ -60,6 +65,7 @@ export interface CommunityInterviewExperienceRecord {
   readonly verificationStatus: 'unverified';
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CommunityInterviewQuestionRecord {
   readonly id: InterviewQuestionEntryId;
   readonly experienceId: InterviewExperienceId;
@@ -71,6 +77,7 @@ export interface CommunityInterviewQuestionRecord {
   readonly questionFingerprint: ContentHash;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceResearchDetail {
   readonly request: ExperienceResearchRequestRecord;
   readonly experiences: readonly CommunityInterviewExperienceRecord[];
@@ -79,18 +86,21 @@ export interface ExperienceResearchDetail {
   readonly occurrenceCounts: Readonly<Record<string, number>>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CommunityExperienceSummary {
   readonly experience: CommunityInterviewExperienceRecord;
   readonly questions: readonly CommunityInterviewQuestionRecord[];
   readonly occurrenceCounts: Readonly<Record<string, number>>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CommunityExperienceFilter {
   readonly company?: string;
   readonly role?: string;
   readonly stage?: string;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface InterviewResearchRepository {
   findByFingerprint(fingerprint: ContentHash): ExperienceResearchDetail | null;
   createRequest(request: ExperienceResearchRequestRecord): ExperienceResearchDetail;

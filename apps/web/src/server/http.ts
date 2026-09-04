@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server.js';
 
+/** 生成统一 JSON 成功响应。 */
 export function dataResponse(data: unknown, init?: ResponseInit): NextResponse {
   return NextResponse.json({ data }, init);
 }
 
+/** 将未知异常映射为统一 JSON 错误响应。 */
 export function errorResponse(error: unknown): NextResponse {
   const correlationId = randomUUID();
   // Detailed failures belong in the redacted server logger; HTTP never exposes stacks.
@@ -23,6 +25,7 @@ export function errorResponse(error: unknown): NextResponse {
   );
 }
 
+/** 返回 400 参数错误响应。 */
 export function badRequestResponse(message = '筛选参数无效。'): NextResponse {
   return NextResponse.json(
     {
@@ -36,6 +39,7 @@ export function badRequestResponse(message = '筛选参数无效。'): NextRespo
   );
 }
 
+/** 返回 404 资源不存在响应。 */
 export function notFoundResponse(message = '资源不存在。'): NextResponse {
   return NextResponse.json(
     {
@@ -49,6 +53,7 @@ export function notFoundResponse(message = '资源不存在。'): NextResponse {
   );
 }
 
+/** 返回 403 安全校验失败响应。 */
 export function forbiddenResponse(message = '安全校验失败，请刷新页面后重试。'): NextResponse {
   return NextResponse.json(
     {
@@ -62,6 +67,7 @@ export function forbiddenResponse(message = '安全校验失败，请刷新页�
   );
 }
 
+/** 返回 409 乐观锁或幂等冲突响应。 */
 export function conflictResponse(
   code: string,
   message: string,

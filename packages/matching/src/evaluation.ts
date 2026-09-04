@@ -19,6 +19,7 @@ const goldenJobSchema = z
   })
   .strict();
 
+/** 匹配黄金样例 Schema。 */
 export const matchingGoldenCaseSchema = z
   .object({
     id: z.string().trim().min(1),
@@ -37,8 +38,10 @@ export const matchingGoldenCaseSchema = z
   })
   .strict();
 
+/** 模块使用的类型约束。 */
 export type MatchingGoldenCase = z.infer<typeof matchingGoldenCaseSchema>;
 
+/** 模块数据结构或契约。 */
 export interface MatchingEvaluationMetrics {
   readonly topK: number;
   readonly topKRelevant: number;
@@ -49,6 +52,7 @@ export interface MatchingEvaluationMetrics {
   readonly adviceFactConsistencyRate: number;
 }
 
+/** 执行一组黄金样例并汇总匹配准确性指标。 */
 export function evaluateMatchingGoldenCase(
   value: unknown,
   options: { readonly topK?: number } = {},

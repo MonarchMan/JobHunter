@@ -18,6 +18,7 @@ import type {
   ResearchBrowserTraceEntry,
 } from '../src/research-browser-gateway.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface SpawnCapture {
   readonly command: string;
   readonly args: readonly string[];
@@ -27,6 +28,7 @@ interface SpawnCapture {
   schema: unknown;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FakeChild extends EventEmitter implements CodexResearchChildProcess {
   public readonly pid: number | undefined = 987_654_321;
   public readonly stdin = new PassThrough();
@@ -34,6 +36,7 @@ class FakeChild extends EventEmitter implements CodexResearchChildProcess {
   public readonly stderr = new PassThrough();
   public readonly killedSignals: NodeJS.Signals[] = [];
 
+  /** 执行测试替身或时钟的操作。 */
   public kill(signal: NodeJS.Signals = 'SIGTERM'): boolean {
     this.killedSignals.push(signal);
     return true;
@@ -48,12 +51,14 @@ afterEach(async () => {
   );
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function temporaryRoot(): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), 'jobhunter-codex-executor-test-'));
   temporaryRoots.push(directory);
   return directory;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function argumentAfter(args: readonly string[], key: string): string {
   const index = args.indexOf(key);
   const value = index < 0 ? undefined : args[index + 1];
@@ -61,6 +66,7 @@ function argumentAfter(args: readonly string[], key: string): string {
   return value;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function input(
   overrides: Partial<Parameters<CodexLocalResearchExecutor['execute']>[0]> = {},
 ): Parameters<CodexLocalResearchExecutor['execute']>[0] {
@@ -92,6 +98,7 @@ function input(
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
   let resolvePromise: () => void = () => undefined;
   const promise = new Promise<void>((resolve) => {
@@ -100,6 +107,7 @@ function deferred(): { readonly promise: Promise<void>; readonly resolve: () => 
   return { promise, resolve: resolvePromise };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function successfulSpawn(
   bundleText: string,
   onCapture: (capture: SpawnCapture) => void,
@@ -180,6 +188,7 @@ function browserBundle(
   });
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function browserTrace(
   bodyText = `原文上下文。${browserEvidence}后续上下文。`,
 ): readonly ResearchBrowserTraceEntry[] {
@@ -207,6 +216,7 @@ function browserTrace(
   ];
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function fakeBrowserGateway(
   trace: readonly ResearchBrowserTraceEntry[],
   onClose: () => void,
@@ -235,6 +245,7 @@ function fakeBrowserGateway(
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function configValues(args: readonly string[]): readonly string[] {
   const values: string[] = [];
   for (let index = 0; index < args.length; index += 1) {

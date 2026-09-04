@@ -1,13 +1,16 @@
 import { z } from 'zod';
 
+/** 华为社会招聘接口配置 Schema。 */
 export const huaweiSocialConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(100).default(100),
     keyword: z.string().default(''),
   })
   .strict();
+/** 来源适配器使用的类型约束。 */
 export type HuaweiSocialConfig = z.infer<typeof huaweiSocialConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const huaweiSocialJobSchema = z
   .object({
     jobId: z.number().int().positive(),
@@ -23,8 +26,10 @@ export const huaweiSocialJobSchema = z
     degree: z.string().nullable().optional(),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type HuaweiSocialJob = z.infer<typeof huaweiSocialJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const huaweiSocialListSchema = z
   .object({
     pageVO: z

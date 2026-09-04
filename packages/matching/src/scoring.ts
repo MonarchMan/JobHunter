@@ -8,20 +8,24 @@ import type {
 import { evaluateEligibility } from './rules.js';
 import { matchRulesetV1, weightFor, type MatchRuleset } from './rulesets.js';
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function normalized(value: string): string {
   return value.toLocaleLowerCase().replaceAll(/[\s\p{P}\p{S}]+/gu, '');
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function includesText(container: string, value: string): boolean {
   const left = normalized(container);
   const right = normalized(value);
   return right.length > 0 && (left.includes(right) || right.includes(left));
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function rounded(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function component(input: {
   readonly dimension: ScoreComponent['dimension'];
   readonly ratio: number;
@@ -41,6 +45,7 @@ function component(input: {
   };
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function skills(input: DeterministicMatchInput, ruleset: MatchRuleset): ScoreComponent {
   const candidateSkills = input.profile.skills;
   if (candidateSkills.length === 0) {
@@ -201,7 +206,9 @@ function filterStatus(outcomes: readonly RuleOutcome[]): DeterministicMatchOutpu
   return 'eligible';
 }
 
+/** 计算各维度得分、总分和过滤状态。 */
 export function calculateDeterministicMatch(
+  // 1、计算技能/经验/角色/行业/地点分项；2、汇总权重；3、根据资格结果确定过滤状态。
   input: DeterministicMatchInput,
   ruleset: MatchRuleset = matchRulesetV1,
 ): DeterministicMatchOutput {

@@ -1,10 +1,12 @@
 import { SourceError } from './errors.js';
 import { validateOfficialUrl } from './url-policy.js';
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourceRateLimitGate {
   beforeRequest(input: { readonly sourceKey: string; readonly signal: AbortSignal }): Promise<void>;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourceHttpRequest {
   readonly sourceKey: string;
   readonly requestId: string;
@@ -19,6 +21,7 @@ export interface SourceHttpRequest {
   readonly responseType: 'json' | 'text';
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourceHttpResponse<TBody> {
   readonly status: number;
   readonly url: string;
@@ -26,10 +29,12 @@ export interface SourceHttpResponse<TBody> {
   readonly body: TBody;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourceHttpClient {
   request<TBody = unknown>(request: SourceHttpRequest): Promise<SourceHttpResponse<TBody>>;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface FetchSourceHttpClientOptions {
   readonly fetchImplementation?: typeof fetch;
   readonly rateLimitGate?: SourceRateLimitGate;
@@ -39,6 +44,7 @@ export interface FetchSourceHttpClientOptions {
   readonly maximumRedirects?: number;
 }
 
+/** 解析 Retry-After 响应头为绝对时间。 */
 function retryAfter(headers: Headers): number | undefined {
   const value = headers.get('retry-after');
   if (!value) return undefined;
@@ -48,6 +54,7 @@ function retryAfter(headers: Headers): number | undefined {
   return Number.isNaN(date) ? undefined : date;
 }
 
+/** 将 HTTP 状态码映射为来源错误分类。 */
 function classifyStatus(status: number, headers: Headers): void {
   if (status === 401 || status === 403) {
     throw new SourceError(
@@ -75,6 +82,7 @@ function classifyStatus(status: number, headers: Headers): void {
   }
 }
 
+/** 流式读取响应并强制执行字节上限。 */
 async function readLimited(response: Response, maximumBytes: number): Promise<Uint8Array> {
   const declared = Number(response.headers.get('content-length'));
   if (Number.isFinite(declared) && declared > maximumBytes) {
@@ -104,11 +112,13 @@ async function readLimited(response: Response, maximumBytes: number): Promise<Ui
   return body;
 }
 
+/** 识别验证码或访问验证页面。 */
 function containsAccessChallenge(text: string): boolean {
   const sample = text.slice(0, 20_000).toLowerCase();
   return /captcha|验证码|访问验证|安全验证|verify you are human/.test(sample);
 }
 
+/** 基于 Fetch 的官方来源 HTTP 客户端。 */
 export class FetchSourceHttpClient implements SourceHttpClient {
   readonly #fetch: typeof fetch;
   readonly #gate: SourceRateLimitGate | null;
@@ -117,6 +127,7 @@ export class FetchSourceHttpClient implements SourceHttpClient {
   readonly #defaultMaximumResponseBytes: number;
   readonly #maximumRedirects: number;
 
+  /** 执行来源组件对外暴露的操作。 */
   public constructor(options: FetchSourceHttpClientOptions = {}) {
     this.#fetch = options.fetchImplementation ?? fetch;
     this.#gate = options.rateLimitGate ?? null;
@@ -126,7 +137,9 @@ export class FetchSourceHttpClient implements SourceHttpClient {
     this.#maximumRedirects = options.maximumRedirects ?? 3;
   }
 
+  /** 执行受限请求、跟随官方重定向并解析正文。 */
   public async request<TBody = unknown>(
+    // 1、执行限流和输入校验；2、校验官方 URL；3、处理有限重定向；4、限制响应并解析。
     request: SourceHttpRequest,
   ): Promise<SourceHttpResponse<TBody>> {
     await this.#gate?.beforeRequest({ sourceKey: request.sourceKey, signal: request.signal });

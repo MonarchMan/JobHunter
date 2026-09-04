@@ -1,3 +1,4 @@
+/** 应用层使用的类型约束。 */
 export type {
   WebDashboardNextAction,
   WebDashboardHighlightJob,

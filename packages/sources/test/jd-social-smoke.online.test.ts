@@ -16,6 +16,7 @@ const headers = {
   referer: entryUrl,
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function filters(): Record<string, string> {
   return { workCityJson: '[]', jobTypeJson: '[]', jobSearch: '', depTypeJson: '[]' };
 }

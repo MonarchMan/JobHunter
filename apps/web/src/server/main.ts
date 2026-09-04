@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { resolveWebServerConfig } from './host.js';
 
+// 1、解析 Web 配置；2、启动 Worker；3、启动 Next 服务；4、统一转发退出和子进程错误。
 const config = resolveWebServerConfig({
   ...process.env,
   ...(process.argv.includes('--production') ? { NODE_ENV: 'production' } : {}),
@@ -43,10 +44,12 @@ const next = spawn(
 
 let shuttingDown = false;
 
+/** 请求单个子进程优雅退出。 */
 function stop(child: ChildProcess): void {
   if (!child.killed && child.exitCode === null) child.kill('SIGTERM');
 }
 
+/** 在主进程退出时停止 Web 与 Worker 子进程。 */
 function stopAll(): void {
   if (shuttingDown) return;
   shuttingDown = true;
@@ -54,6 +57,7 @@ function stopAll(): void {
   stop(worker);
 }
 
+/** 处理子进程启动错误并触发统一退出。 */
 function handleChildError(error: Error): void {
   if (shuttingDown) return;
   console.error('Web 或 Worker 子进程启动失败:', error);
@@ -69,6 +73,7 @@ worker.once('error', handleChildError);
 next.once('exit', (code, signal) => {
   if (!shuttingDown) {
     process.exitCode = code ?? (signal ? 1 : 0);
+    /** 执行模块适配器的该项操作。 */
     stop(worker);
   }
 });
@@ -76,6 +81,7 @@ next.once('exit', (code, signal) => {
 worker.once('exit', (code, signal) => {
   if (!shuttingDown) {
     process.exitCode = code ?? (signal ? 1 : 0);
+    /** 执行模块适配器的该项操作。 */
     stop(next);
   }
 });

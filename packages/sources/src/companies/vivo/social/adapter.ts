@@ -11,6 +11,7 @@ import {
 const hosts = ['hr.vivo.com'] as const;
 const entryUrl = 'https://hr.vivo.com/jobs';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function experience(job: VivoSocialJob): string | null {
   if (job.yoe_min < 0 && job.yoe_max < 0) return null;
   if (job.yoe_min > 0 && job.yoe_max < 0) return `${String(job.yoe_min)}年及以上`;

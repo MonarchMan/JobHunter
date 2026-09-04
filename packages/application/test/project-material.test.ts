@@ -13,6 +13,7 @@ import {
   ProjectMaterialService,
 } from '../src/interview/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds implements IdGenerator {
   #next = 1;
 

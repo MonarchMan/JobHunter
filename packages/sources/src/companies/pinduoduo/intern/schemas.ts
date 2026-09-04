@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 拼多多实习招聘接口配置 Schema。 */
 export const pinduoduoConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(100).default(10),
@@ -7,8 +8,10 @@ export const pinduoduoConfigSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type PinduoduoConfig = z.infer<typeof pinduoduoConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const pinduoduoJobSchema = z
   .object({
     id: z.string().min(1),
@@ -26,8 +29,10 @@ export const pinduoduoJobSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type PinduoduoJob = z.infer<typeof pinduoduoJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const pinduoduoListResponseSchema = z
   .object({
     success: z.literal(true),
@@ -42,4 +47,5 @@ export const pinduoduoListResponseSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type PinduoduoListResponse = z.infer<typeof pinduoduoListResponseSchema>;

@@ -3,6 +3,7 @@ import type { RandomSource, TaskErrorCategory } from './model.js';
 
 const REDACTED = '[redacted]';
 
+/** 脱敏并截断任务错误摘要，避免凭据进入日志或数据库。 */
 export function sanitizeTaskErrorSummary(summary: string): string {
   return summary
     .replaceAll(/Bearer\s+[^\s]+/gi, `Bearer ${REDACTED}`)
@@ -13,12 +14,14 @@ export function sanitizeTaskErrorSummary(summary: string): string {
     .slice(0, 240);
 }
 
+/** 带任务分类、重试提示和安全摘要的处理器错误。 */
 export class TaskExecutionError extends Error {
   public readonly category: TaskErrorCategory;
   public readonly safeSummary: string;
   public readonly retryAfterAt: UtcInstant | null;
   public readonly retryable: boolean | null;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(
     category: TaskErrorCategory,
     safeSummary: string,
@@ -37,23 +40,27 @@ export class TaskExecutionError extends Error {
   }
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface RetryDecision {
   readonly retry: boolean;
   readonly availableAt: UtcInstant | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface RetryPolicyOptions {
   readonly baseDelayMs?: number;
   readonly maximumDelayMs?: number;
   readonly jitterRatio?: number;
 }
 
+/** 根据错误分类、尝试次数和 Retry-After 计算退避时间。 */
 export class RetryPolicy {
   readonly #random: RandomSource;
   readonly #baseDelayMs: number;
   readonly #maximumDelayMs: number;
   readonly #jitterRatio: number;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(random: RandomSource, options: RetryPolicyOptions = {}) {
     this.#random = random;
     this.#baseDelayMs = options.baseDelayMs ?? 1_000;
@@ -67,6 +74,7 @@ export class RetryPolicy {
     }
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public decide(input: {
     readonly category: TaskErrorCategory;
     readonly attemptCount: number;
@@ -75,6 +83,7 @@ export class RetryPolicy {
     readonly retryAfterAt?: UtcInstant | null;
     readonly retryable?: boolean | null;
   }): RetryDecision {
+    // 1、先判断错误是否可重试及是否耗尽次数，再计算指数退避和抖动。
     const retryable =
       input.retryable ??
       (input.category === 'rate_limited' ||
@@ -94,6 +103,7 @@ export class RetryPolicy {
   }
 }
 
+/** 将任意处理器异常转换为任务执行错误。 */
 export function classifyTaskError(error: unknown): TaskExecutionError {
   if (error instanceof TaskExecutionError) return error;
   return new TaskExecutionError('permanent', 'Task handler failed.', { cause: error });

@@ -24,6 +24,7 @@ const entryUrl = 'https://zhaopin.meituan.com/web/social';
 const listEndpoint = 'https://zhaopin.meituan.com/api/official/job/getJobList';
 const detailEndpoint = 'https://zhaopin.meituan.com/api/official/job/getJobDetail';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function parseSource<T>(parse: () => T, diagnostic: string): T {
   try {
     return parse();
@@ -33,6 +34,7 @@ function parseSource<T>(parse: () => T, diagnostic: string): T {
   }
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function requestHeaders(referer: string): Readonly<Record<string, string>> {
   return {
     'content-type': 'application/json',
@@ -41,6 +43,7 @@ function requestHeaders(referer: string): Readonly<Record<string, string>> {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function listBody(config: MeituanConfig, page: number, jobTypeCodes: readonly string[]): string {
   return JSON.stringify({
     page: { pageNo: page, pageSize: config.pageSize },
@@ -57,10 +60,12 @@ function listBody(config: MeituanConfig, page: number, jobTypeCodes: readonly st
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function detailBody(externalJobId: string, config: MeituanConfig): string {
   return JSON.stringify({ jobUnionId: externalJobId, jobShareType: config.jobShareType });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function canonicalJobUrl(
   pathname: '/web/position/detail' | '/web/delivery-confirm',
   id: string,
@@ -71,6 +76,7 @@ function canonicalJobUrl(
   return canonicalizeOfficialUrl(url.toString(), hosts);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function optionalText(...values: readonly (string | null | undefined)[]): string | null {
   for (const value of values) {
     if (value?.trim()) return value;
@@ -78,11 +84,13 @@ function optionalText(...values: readonly (string | null | undefined)[]): string
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function publishedAt(detail: MeituanDetail): ReturnType<typeof utcInstant> | null {
   const value = detail.firstPostTime ?? detail.refreshTime;
   return value === null || value === undefined ? null : utcInstant(value);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function descriptions(detail: MeituanDetail): string {
   return [
     detail.desc ? `岗位简介\n${detail.desc}` : null,
@@ -109,6 +117,7 @@ function hasOnlyDuplicateMeituanRecords(collection: SourcePageCollection): boole
   );
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createMeituanChannelAdapter(options: {
   readonly key: 'meituan.social' | 'meituan.intern' | 'meituan.campus';
   readonly entryUrl: string;
@@ -132,6 +141,7 @@ function createMeituanChannelAdapter(options: {
       externalIdFingerprintVersion: null,
     },
     configSchema: meituanConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       if (options.category === 'internship') {
         if (!context.page?.collect) {
@@ -318,6 +328,7 @@ function createMeituanChannelAdapter(options: {
           },
         }
       : {}),
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       return Promise.resolve().then(() => {
         const list = parseSource(
@@ -481,6 +492,7 @@ function createMeituanChannelAdapter(options: {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanDetail> {
   return createMeituanChannelAdapter({
     key: 'meituan.social',
@@ -490,6 +502,7 @@ export function createMeituanAdapter(): JobSourceAdapter<MeituanConfig, MeituanD
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createMeituanInternAdapter(): JobSourceAdapter<MeituanConfig, MeituanDetail> {
   return createMeituanChannelAdapter({
     key: 'meituan.intern',
@@ -499,6 +512,7 @@ export function createMeituanInternAdapter(): JobSourceAdapter<MeituanConfig, Me
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createMeituanCampusAdapter(): JobSourceAdapter<MeituanConfig, MeituanDetail> {
   return createMeituanChannelAdapter({
     key: 'meituan.campus',

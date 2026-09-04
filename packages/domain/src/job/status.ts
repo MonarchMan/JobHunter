@@ -1,10 +1,13 @@
 import { DomainError, type UtcInstant } from '../shared/index.js';
 
+/** 领域模型的类型约束。 */
 type MissingObservationCoverage = 'complete' | 'partial' | 'unknown';
 
+/** 职位生命周期状态。 */
 export const JOB_STATUSES = ['active', 'stale', 'closed'] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 
+/** 领域模型的类型约束。 */
 export type JobStatusReason =
   | 'first_observed'
   | 'missing_threshold_stale'
@@ -12,6 +15,7 @@ export type JobStatusReason =
   | 'explicitly_closed'
   | 'reobserved';
 
+/** 模块数据结构或契约。 */
 export interface JobLifecycleSnapshot {
   readonly status: JobStatus;
   readonly missingCount: number;
@@ -19,6 +23,7 @@ export interface JobLifecycleSnapshot {
   readonly closedAt: UtcInstant | null;
 }
 
+/** 模块数据结构或契约。 */
 export interface JobStatusEventIntent {
   readonly fromStatus: JobStatus | null;
   readonly toStatus: JobStatus;
@@ -26,16 +31,19 @@ export interface JobStatusEventIntent {
   readonly occurredAt: UtcInstant;
 }
 
+/** 模块数据结构或契约。 */
 export interface StatusTransition {
   readonly next: JobLifecycleSnapshot;
   readonly event: JobStatusEventIntent | null;
 }
 
+/** 模块数据结构或契约。 */
 export interface MissingTransitionPolicy {
   readonly staleAfterMisses: number;
   readonly closeAfterMisses: number;
 }
 
+/** 校验缺失状态推进策略的单调阈值。 */
 function validatePolicy(policy: MissingTransitionPolicy): void {
   if (
     !Number.isSafeInteger(policy.staleAfterMisses) ||
@@ -47,6 +55,7 @@ function validatePolicy(policy: MissingTransitionPolicy): void {
   }
 }
 
+/** 创建状态变更快照，并仅在状态实际变化时生成事件意图。 */
 function transition(
   current: JobLifecycleSnapshot,
   status: JobStatus,
@@ -68,12 +77,14 @@ function transition(
   };
 }
 
+/** 执行领域校验、归一化或合并逻辑。 */
 export function decideMissingTransition(
   current: JobLifecycleSnapshot,
   coverage: MissingObservationCoverage,
   policy: MissingTransitionPolicy,
   at: UtcInstant,
 ): StatusTransition {
+  // 1、只对完整覆盖的同步增加缺失次数，再按关闭优先、过期次之判断阈值。
   validatePolicy(policy);
   if (coverage !== 'complete') return { next: current, event: null };
 
@@ -87,6 +98,7 @@ export function decideMissingTransition(
   return { next: { ...current, missingCount }, event: null };
 }
 
+/** 重新观测到职位时恢复 active 并清零缺失计数。 */
 export function decideObservedTransition(
   current: JobLifecycleSnapshot,
   observedAt: UtcInstant,
@@ -105,6 +117,7 @@ export function decideObservedTransition(
   };
 }
 
+/** 处理来源明确声明关闭的职位。 */
 export function decideExplicitClosure(
   current: JobLifecycleSnapshot,
   closedAt: UtcInstant,

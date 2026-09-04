@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
 
+/** 应用层使用的类型约束。 */
 export type CleanupCandidateKind = 'orphan_file' | 'source_detail' | 'observation' | 'agent_run';
 
+/** 应用层数据结构或端口契约。 */
 export interface CleanupCandidate {
   readonly kind: CleanupCandidateKind;
   readonly id: string;
@@ -10,6 +12,7 @@ export interface CleanupCandidate {
   readonly createdAt: number;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CleanupRepository {
   listCandidates(cutoffs: {
     readonly sourceDetailsBefore: number;
@@ -20,6 +23,7 @@ export interface CleanupRepository {
   deleteCandidates(candidates: readonly CleanupCandidate[]): void;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CleanupFileStore {
   listArtifactFiles(): Promise<
     readonly {
@@ -31,6 +35,7 @@ export interface CleanupFileStore {
   remove(relativePaths: readonly string[]): Promise<void>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CleanupPolicy {
   readonly sourceDetailsDays: number;
   readonly observationsDays: number;
@@ -38,6 +43,7 @@ export interface CleanupPolicy {
   readonly orphanSafetyWindowMs?: number;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CleanupOperationPlan {
   readonly kind: 'cleanup';
   readonly candidates: readonly CleanupCandidate[];
@@ -51,6 +57,7 @@ export interface CleanupOperationPlan {
 
 const dayMs = 24 * 60 * 60 * 1_000;
 
+/** 校验清理策略边界。 */
 function validatePolicy(policy: CleanupPolicy): Required<CleanupPolicy> {
   for (const [key, value] of Object.entries({
     sourceDetailsDays: policy.sourceDetailsDays,
@@ -72,12 +79,14 @@ function validatePolicy(policy: CleanupPolicy): Required<CleanupPolicy> {
   return { ...policy, orphanSafetyWindowMs };
 }
 
+/** 按稳定键排序清理候选，保证确认令牌可复现。 */
 function sorted(candidates: readonly CleanupCandidate[]): readonly CleanupCandidate[] {
   return candidates.toSorted(
     (left, right) => left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id),
   );
 }
 
+/** 应用层数据结构或端口契约。 */
 function tokenFor(input: {
   readonly plannedAt: number;
   readonly expiresAt: number;
@@ -89,6 +98,7 @@ function tokenFor(input: {
   return `${payload}.${digest}`;
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 interface CleanupTokenPayload {
   readonly plannedAt: number;
   readonly expiresAt: number;
@@ -96,6 +106,7 @@ interface CleanupTokenPayload {
   readonly candidates: readonly CleanupCandidate[];
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function parseToken(token: string): CleanupTokenPayload {
   const separator = token.lastIndexOf('.');
   if (separator < 1) throw new TypeError('Cleanup confirmation token is invalid.');
@@ -107,6 +118,7 @@ function parseToken(token: string): CleanupTokenPayload {
   return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as CleanupTokenPayload;
 }
 
+/** 生成并执行需显式确认的本地数据清理计划。 */
 export class CleanupService {
   readonly #repository: CleanupRepository;
   readonly #files: CleanupFileStore;
@@ -119,6 +131,7 @@ export class CleanupService {
     this.#files = input.files;
   }
 
+  /** 生成当前清理候选和确认令牌。 */
   public async plan(
     policyInput: CleanupPolicy,
     options: { readonly now?: number; readonly tokenLifetimeMs?: number } = {},
@@ -146,7 +159,9 @@ export class CleanupService {
     };
   }
 
+  /** 校验确认令牌后执行清理。 */
   public async execute(
+    // 1、解析计划令牌；2、重新查询并比对候选；3、删除数据库记录；4、清理文件。
     confirmationToken: string,
     options: { readonly now?: number } = {},
   ): Promise<{ readonly deleted: number; readonly bytes: number }> {

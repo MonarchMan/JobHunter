@@ -7,12 +7,14 @@ import {
 } from '@jobhunter/source-core';
 import type { SyncSourceRecord } from '../sync/model.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface OnlineSourceHealthResult {
   readonly sourceId: JobSourceId;
   readonly adapterKey: string;
   readonly health: SourceHealth;
 }
 
+/** 编排来源探活任务的创建、等待和结果汇总。 */
 export class OnlineSourceHealthService {
   readonly #registry: AdapterRegistry;
   readonly #context: (
@@ -22,6 +24,7 @@ export class OnlineSourceHealthService {
   ) => SourceRequestContext<unknown>;
   readonly #now: () => number;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly registry: AdapterRegistry;
     readonly createContext: (
@@ -36,7 +39,9 @@ export class OnlineSourceHealthService {
     this.#now = input.now ?? Date.now;
   }
 
+  /** 批量探活来源并等待任务完成。 */
   public async check(
+    // 1、投递探活任务；2、等待任务终态；3、汇总来源状态和失败信息。
     sources: readonly SyncSourceRecord[],
     signal: AbortSignal,
   ): Promise<readonly OnlineSourceHealthResult[]> {

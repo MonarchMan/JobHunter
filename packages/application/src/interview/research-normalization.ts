@@ -8,6 +8,7 @@ import {
   type ExperienceResearchBrief,
 } from '@jobhunter/domain';
 
+/** 规范化域名后再执行允许/禁止列表匹配。 */
 function normalizedDomain(value: string): string {
   return value
     .trim()
@@ -15,11 +16,13 @@ function normalizedDomain(value: string): string {
     .replace(/^\.+|\.+$/gu, '');
 }
 
+/** 判断主机名是否属于配置域名或其子域。 */
 function matchesDomain(hostname: string, configured: string): boolean {
   const domain = normalizedDomain(configured);
   return Boolean(domain) && (hostname === domain || hostname.endsWith(`.${domain}`));
 }
 
+/** 校验公开研究来源没有越过研究简报的域名边界。 */
 function assertDomainPolicy(urlValue: string, brief: ExperienceResearchBrief): void {
   const hostname = new URL(urlValue).hostname.toLowerCase();
   if (
@@ -53,6 +56,7 @@ function hasEmptyResearchResultSignal(value: string | null | undefined): boolean
   return emptyResearchResultPatterns.some((pattern) => pattern.test(normalized));
 }
 
+/** 识别文本是否像可用于准备的面试问题。 */
 function looksLikeInterviewQuestion(value: string): boolean {
   const normalized = value.normalize('NFKC').replaceAll(/\s+/g, ' ').trim().toLowerCase();
   return (
@@ -66,6 +70,7 @@ function looksLikeInterviewQuestion(value: string): boolean {
   );
 }
 
+/** 拒绝“检索失败”伪装成研究结果的空包。 */
 function assertContainsResearchFindings(
   sources: readonly { readonly title: string }[],
   experiences: readonly {
@@ -95,11 +100,13 @@ function assertContainsResearchFindings(
   }
 }
 
+/** 校验、规范化和按来源去重外部面经研究结果。 */
 export function normalizeCommunityResearchBundle(input: {
   readonly value: unknown;
   readonly brief: ExperienceResearchBrief;
   readonly expectedFingerprint: string;
 }): CommunityResearchBundle {
+  // 1、校验简报、Schema 和请求指纹；2、规范化来源 URL；3、按来源去重问题；4、检查配额和空结果。
   const brief = experienceResearchBriefSchema.parse(input.brief);
   const parsed = communityResearchBundleSchema.parse(input.value);
   if (parsed.requestFingerprint !== input.expectedFingerprint) {

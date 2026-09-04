@@ -8,16 +8,19 @@ import { scoreComponentSchema } from '@jobhunter/matching';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
+/** 数据库查询结果对应的行结构。 */
 interface CountRow {
   readonly count: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface LatestSyncRow {
   readonly source_name: string;
   readonly status: string;
   readonly finished_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface HighlightJobRow {
   readonly id: string;
   readonly company_name: string;
@@ -29,18 +32,22 @@ interface HighlightJobRow {
   readonly first_seen_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface ProfileExistsRow {
   readonly has_profile: 0 | 1;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface MatchComponentsRow {
   readonly components_json: string;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function count(client: Database.Database, sql: string, ...parameters: readonly unknown[]): number {
   return (client.prepare(sql).get(...parameters) as CountRow).count;
 }
 
+/** 为 Web 仪表盘提供只读聚合查询，避免页面直接拼装多表关系。 */
 export class SqliteDashboardReadModel implements DashboardReadModel {
   readonly #client: Database.Database;
 
@@ -48,6 +55,7 @@ export class SqliteDashboardReadModel implements DashboardReadModel {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public snapshot(): WebDashboard {
     const latestSync = this.#client
       .prepare(
@@ -133,6 +141,7 @@ export class SqliteDashboardReadModel implements DashboardReadModel {
     };
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #computeNextAction(
     hasProfile: boolean,
     enabledSources: number,
@@ -232,6 +241,7 @@ export class SqliteDashboardReadModel implements DashboardReadModel {
     return null;
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #getHighlightJobs(): WebDashboardHighlightJob[] {
     const rows = this.#client
       .prepare(
@@ -283,6 +293,7 @@ export class SqliteDashboardReadModel implements DashboardReadModel {
     }));
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #getMatchReasons(jobId: string): string[] {
     const row = this.#client
       .prepare(

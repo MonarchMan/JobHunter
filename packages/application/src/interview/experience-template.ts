@@ -1,6 +1,8 @@
 import type { InterviewExperienceDraft } from '@jobhunter/domain';
 
+/** 个人面经导入与在线填写共用的模板文件名。 */
 export const personalExperienceTemplateFileName = 'personal-interview-experience-v1.md';
+/** 面向用户展示和下载的标准 Markdown 模板；空回答必须保持为空。 */
 export const personalExperienceTemplateMarkdown = `# 个人面试经历
 
 > 模板版本：personal-experience@v1
@@ -41,11 +43,14 @@ export const personalExperienceTemplateMarkdown = `# 个人面试经历
 记录面试流程、面试官追问、自己需要补充准备的内容，或无法归入具体问题的原始信息。
 `;
 
+/** 渲染单个字段，统一在线填写文档的可读格式。 */
 function field(label: string, value: string | null): string {
   return `- ${label}：${value ?? ''}`;
 }
 
+/** 将结构化面经草稿转换成可再次导入的标准 Markdown。 */
 export function renderPersonalExperienceMarkdown(experience: InterviewExperienceDraft): string {
+  // 1、先写基本信息；2、按问题顺序写问答；3、最后写过程备注。
   const lines = [
     '# 个人面试经历',
     '',

@@ -6,6 +6,7 @@ import { interviewErrorResponse } from '../../../../../../src/server/interview-h
 
 export const dynamic = 'force-dynamic';
 
+/** 处理 Web API 的 GET 请求，读取并返回对应资源。 */
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
@@ -19,6 +20,7 @@ export async function GET(
   }
 }
 
+/** 处理 Web API 的 DELETE 请求，校验输入并删除资源。 */
 export async function DELETE(
   request: Request,
   context: { params: Promise<{ id: string }> },

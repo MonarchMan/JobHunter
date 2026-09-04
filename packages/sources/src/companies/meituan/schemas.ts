@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 美团招聘接口配置 Schema。 */
 export const meituanConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(200).default(100),
@@ -8,6 +9,7 @@ export const meituanConfigSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type MeituanConfig = z.infer<typeof meituanConfigSchema>;
 
 const meituanCitySchema = z
@@ -24,6 +26,7 @@ const meituanDepartmentSchema = z
   })
   .loose();
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const meituanJobSchema = z
   .object({
     jobUnionId: z.string().min(1),
@@ -49,8 +52,10 @@ export const meituanJobSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type MeituanJob = z.infer<typeof meituanJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const meituanPageSchema = z
   .object({
     pageNo: z.number().int().positive(),
@@ -60,6 +65,7 @@ export const meituanPageSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type MeituanPage = z.infer<typeof meituanPageSchema>;
 
 const meituanListDataSchema = z
@@ -69,6 +75,7 @@ const meituanListDataSchema = z
   })
   .loose();
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const meituanListResponseSchema = z
   .object({
     data: meituanListDataSchema,
@@ -77,8 +84,10 @@ export const meituanListResponseSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type MeituanListResponse = z.infer<typeof meituanListResponseSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const meituanDetailResponseSchema = z
   .object({
     data: meituanJobSchema,
@@ -87,4 +96,5 @@ export const meituanDetailResponseSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type MeituanDetail = z.infer<typeof meituanDetailResponseSchema>['data'];

@@ -8,6 +8,7 @@ import {
 import type { ScriptedConfig } from '../../../shared/scripted/schemas.js';
 import { dewuCampusJobSchema } from './schemas.js';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function definition(
   key: 'dewu.campus' | 'dewu.social',
   recruitmentType: 'campus' | 'social',
@@ -64,20 +65,24 @@ function definition(
   };
 }
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const dewuDefinition = definition(
   'dewu.campus',
   'campus',
   'https://poizon.jobs.feishu.cn/578078/position/list?keywords=&category=&location=&project=7623619302324226314%2C7309753987297167679&type=&job_hot_flag=&current=1&limit=100&functionCategory=&tag=',
 );
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const dewuSocialDefinition = definition(
   'dewu.social',
   'social',
   'https://poizon.jobs.feishu.cn/index/position',
 );
 
+/** 招聘来源适配器实例。 */
 export const createDewuAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(dewuDefinition);
 
+/** 招聘来源适配器实例。 */
 export const createDewuSocialAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(dewuSocialDefinition);

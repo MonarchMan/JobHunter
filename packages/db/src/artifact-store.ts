@@ -13,6 +13,7 @@ import { parseContentHash } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 import { PersistenceError } from './errors.js';
 
+/** 数据库查询结果对应的行结构。 */
 interface ArtifactRow {
   readonly id: string;
   readonly entity_id: string;
@@ -25,6 +26,7 @@ interface ArtifactRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface ArtifactContentRow {
   readonly relative_path: string;
   readonly media_type: string;
@@ -32,6 +34,7 @@ interface ArtifactContentRow {
   readonly byte_size: number;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function rowToArtifact(row: ArtifactRow): StoredArtifact {
   return {
     id: row.id,
@@ -46,6 +49,7 @@ function rowToArtifact(row: ArtifactRow): StoredArtifact {
   };
 }
 
+/** 基于 files/entities 映射持久化物理文件，并执行版本上限与幂等复用。 */
 export class SqliteArtifactStore implements ArtifactStore {
   readonly #client: Database.Database;
   readonly #dataRoot: string;
@@ -55,6 +59,7 @@ export class SqliteArtifactStore implements ArtifactStore {
     this.#dataRoot = path.resolve(dataRoot);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public resolve(relativePath: string): string {
     if (!relativePath || path.isAbsolute(relativePath)) {
       throw new PersistenceError('ARTIFACT_PATH_INVALID', 'Artifact path must be relative.');
@@ -67,6 +72,7 @@ export class SqliteArtifactStore implements ArtifactStore {
     return target;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async put(input: {
     readonly id: string;
     readonly kind: ArtifactKind;
@@ -219,6 +225,7 @@ export class SqliteArtifactStore implements ArtifactStore {
     }
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async read(input: {
     readonly id: string;
     readonly versionNo: number;
@@ -273,6 +280,7 @@ export class SqliteArtifactStore implements ArtifactStore {
     }
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async remove(input: { readonly id: string; readonly kind: ArtifactKind }): Promise<void> {
     const rows = this.#client
       .prepare(
@@ -302,6 +310,7 @@ export class SqliteArtifactStore implements ArtifactStore {
     }
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async quarantine(artifactId: string, relativePath: string): Promise<QuarantinedArtifact> {
     if (!artifactId.trim()) {
       throw new PersistenceError('ARTIFACT_PATH_INVALID', 'Artifact ID must not be empty.');
@@ -333,6 +342,7 @@ export class SqliteArtifactStore implements ArtifactStore {
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async restoreQuarantined(artifact: QuarantinedArtifact): Promise<void> {
     if (!artifact.fileExisted) return;
     const source = this.resolve(artifact.quarantinedRelativePath);
@@ -346,6 +356,7 @@ export class SqliteArtifactStore implements ArtifactStore {
     }
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async purgeQuarantined(artifact: QuarantinedArtifact): Promise<void> {
     await rm(this.resolve(artifact.quarantinedRelativePath), { force: true });
   }

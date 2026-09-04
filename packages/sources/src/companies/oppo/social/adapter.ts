@@ -11,6 +11,7 @@ import {
 const hosts = ['career.oppo.com'] as const;
 const entryUrl = 'https://career.oppo.com/recruitment/post?recruitType=SOCIAL-RECRUITMENT';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function experience(job: OppoSocialJob): string | null {
   const min = job.minWorkYears;
   const max = job.maxWorkYears;

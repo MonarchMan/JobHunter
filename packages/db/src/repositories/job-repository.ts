@@ -17,6 +17,7 @@ import {
 } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 interface CurrentJobRow {
   readonly id: string;
   readonly revision_id: string;
@@ -31,6 +32,7 @@ interface CurrentJobRow {
   readonly closed_at: number | null;
 }
 
+/** 持久化职位规范化结果、修订快照和来源观测。 */
 export class SqliteJobRepository implements JobRepository {
   readonly #client: Database.Database;
 
@@ -38,6 +40,7 @@ export class SqliteJobRepository implements JobRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public findCurrent(identity: {
     readonly sourceId: CurrentJobRecord['identity']['sourceId'];
     readonly externalJobId: string;
@@ -74,6 +77,7 @@ export class SqliteJobRepository implements JobRepository {
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public persistMutation(input: PersistJobMutation): void {
     const normalized = input.decision.normalized;
     if (input.decision.type === 'create') {
@@ -190,6 +194,7 @@ export class SqliteJobRepository implements JobRepository {
     });
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public persistDetailRevision(input: Parameters<JobRepository['persistDetailRevision']>[0]): void {
     const normalized = input.decision.normalized;
     this.#client
@@ -240,6 +245,7 @@ export class SqliteJobRepository implements JobRepository {
       );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public recordObservation(input: {
     readonly jobId: JobId;
     readonly syncRunId: SyncRunId;
@@ -260,6 +266,7 @@ export class SqliteJobRepository implements JobRepository {
       .run(input.syncRunId, input.jobId);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public persistStatus(input: PersistJobStatus): void {
     if (input.fromStatus !== input.lifecycle.status && (!input.eventId || !input.reason)) {
       throw new Error('A status change requires an event ID and reason.');

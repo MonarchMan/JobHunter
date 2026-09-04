@@ -16,6 +16,7 @@ import {
 } from '../src/index.js';
 import { describe, expect, it, vi } from 'vitest';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly stderr: string[] } {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -37,6 +38,7 @@ function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly s
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function container(get: () => Readonly<Record<string, string>> = () => ({ app: 'test' })): {
   readonly value: CliContainer;
   readonly close: ReturnType<typeof vi.fn>;

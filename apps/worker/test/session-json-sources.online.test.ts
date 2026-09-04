@@ -25,6 +25,7 @@ const selected = new Set(
     .filter(Boolean),
 );
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface SessionGate<TConfig> {
   readonly slug:
     'xiaomi-intern' | 'xiaomi-campus' | 'xiaomi-social' | 'netease-intern' | 'netease-social';
@@ -35,6 +36,7 @@ interface SessionGate<TConfig> {
   readonly factory: () => JobSourceAdapter<TConfig, never>;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function defineGate<TConfig>(gate: SessionGate<TConfig>): void {
   describe.skipIf(!online || !selected.has(gate.slug))(`${gate.slug} browser smoke`, () => {
     it('validates the first, middle, and last anonymous JSON pages', async () => {

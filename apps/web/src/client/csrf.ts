@@ -1,3 +1,4 @@
+/** 模块数据结构或契约。 */
 interface CsrfEnvelope {
   readonly data?: { readonly token?: string };
 }

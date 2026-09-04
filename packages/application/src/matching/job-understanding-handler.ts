@@ -10,6 +10,7 @@ import type { MatchingRepository } from '../ports/matching.js';
 import type { TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
 
+/** 职位理解任务输入，绑定职位和修订版本。 */
 export const jobUnderstandingTaskPayloadSchema = z
   .object({
     jobRevisionId: z.string().trim().min(1),
@@ -17,6 +18,7 @@ export const jobUnderstandingTaskPayloadSchema = z
   })
   .strict();
 
+/** 职位理解任务输出摘要。 */
 export const jobUnderstandingTaskOutputSchema = z
   .object({
     jobEnrichmentId: z.string().trim().min(1),
@@ -25,6 +27,7 @@ export const jobUnderstandingTaskOutputSchema = z
   })
   .strict();
 
+/** 创建职位理解 Agent 任务处理器。 */
 export function createJobUnderstandingTaskHandler(
   input:
     | {
@@ -48,6 +51,7 @@ export function createJobUnderstandingTaskHandler(
     defaultMaxAttempts: 3,
     leaseDurationMs: 120_000,
     concurrencyKey: (payload) => `job-enrich:${payload.jobRevisionId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       if ('unavailable' in input) {
         throw new TaskExecutionError('invalid_config', 'Job enrichment model is not configured.');

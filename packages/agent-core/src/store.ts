@@ -1,7 +1,9 @@
 import type { AgentErrorCategory } from './errors.js';
 
+/** 模块使用的类型约束。 */
 export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
+/** 模块数据结构或契约。 */
 export interface AgentRunRecord {
   readonly id: string;
   readonly agentKey: string;
@@ -23,6 +25,7 @@ export interface AgentRunRecord {
   readonly finishedAt: number | null;
 }
 
+/** 模块数据结构或契约。 */
 export interface AgentRunUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
@@ -31,6 +34,7 @@ export interface AgentRunUsage {
   readonly pricingVersion: string;
 }
 
+/** 模块数据结构或契约。 */
 export interface ToolCallRecord {
   readonly id: string;
   readonly agentRunId: string;
@@ -43,6 +47,7 @@ export interface ToolCallRecord {
   readonly errorSummary: string | null;
 }
 
+/** 模块数据结构或契约。 */
 export interface AgentRunStore {
   get(id: string): AgentRunRecord | null;
   findSucceeded(cacheKey: string): AgentRunRecord | null;
@@ -65,4 +70,5 @@ export interface AgentRunStore {
   saveToolCall(record: ToolCallRecord): void;
 }
 
+/** 模块使用的类型约束。 */
 export type AgentRunReader = Pick<AgentRunStore, 'get'>;

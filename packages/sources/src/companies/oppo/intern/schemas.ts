@@ -1,13 +1,16 @@
 import { z } from 'zod';
 
+/** OPPO 实习招聘接口配置 Schema。 */
 export const oppoInternConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(300).default(100),
     keyword: z.string().default(''),
   })
   .strict();
+/** 来源适配器使用的类型约束。 */
 export type OppoInternConfig = z.infer<typeof oppoInternConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const oppoInternJobSchema = z
   .object({
     idRecruitPosition: z.number().int().positive(),
@@ -24,8 +27,10 @@ export const oppoInternJobSchema = z
     releaseTime: z.string().nullable().optional(),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type OppoInternJob = z.infer<typeof oppoInternJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const oppoInternListSchema = z
   .object({
     code: z.literal(0),

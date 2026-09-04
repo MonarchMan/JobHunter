@@ -11,6 +11,7 @@ import { interviewErrorResponse } from '../../../../../src/server/interview-http
 export const dynamic = 'force-dynamic';
 const maximumFileBytes = 10 * 1024 * 1024;
 
+/** 处理 Web API 的 POST 请求，校验输入并提交业务操作。 */
 export async function POST(request: Request): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {

@@ -11,6 +11,7 @@ import {
 const hosts = ['careers.oppo.com'] as const;
 const entryUrl = 'https://careers.oppo.com/university/oppo/campus/post';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createOppoCampusChannelAdapter(options: {
   readonly key: 'oppo.intern' | 'oppo.campus';
   readonly projects: readonly {
@@ -92,6 +93,7 @@ function createOppoCampusChannelAdapter(options: {
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createOppoInternAdapter(): JobSourceAdapter<OppoInternConfig, never> {
   return createOppoCampusChannelAdapter({
     key: 'oppo.intern',
@@ -100,6 +102,7 @@ export function createOppoInternAdapter(): JobSourceAdapter<OppoInternConfig, ne
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createOppoCampusAdapter(): JobSourceAdapter<OppoInternConfig, never> {
   return createOppoCampusChannelAdapter({
     key: 'oppo.campus',

@@ -9,6 +9,7 @@ import type { TaskService } from '../tasks/task-service.js';
 import type { JobIntakePolicy } from './job-intake-policy.js';
 import type { SourceSyncChannel } from '../ports/settings.js';
 
+/** 未指定来源同步目标时抛出的参数错误。 */
 export class SourceSyncTargetRequiredError extends TypeError {
   public constructor() {
     super('请先在个人资料中确认目标岗位，再同步职位。');
@@ -16,6 +17,7 @@ export class SourceSyncTargetRequiredError extends TypeError {
   }
 }
 
+/** 管理来源查询、启停和同步任务投递。 */
 export class SourceManagementService {
   readonly #sources: SourceManagementRepository;
   readonly #tasks: TaskService;
@@ -23,6 +25,7 @@ export class SourceManagementService {
   readonly #jobIntakePolicy: JobIntakePolicy;
   readonly #activeChannel: () => SourceSyncChannel;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly sources: SourceManagementRepository;
     readonly tasks: TaskService;
@@ -37,34 +40,42 @@ export class SourceManagementService {
     this.#activeChannel = input.activeChannel ?? (() => 'intern');
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public isSyncReady(): boolean {
     return this.#jobIntakePolicy.isReady();
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public requireSyncReady(): void {
     if (!this.isSyncReady()) throw new SourceSyncTargetRequiredError();
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public activeChannel(): SourceSyncChannel {
     return this.#activeChannel();
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public list(): readonly SourceOverview[] {
     return this.#sources.list();
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public get(id: JobSourceId): SourceOverview | null {
     return this.#sources.get(id);
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public listChannels(): readonly SourceChannelOverview[] {
     return this.#sources.listChannels();
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public getChannel(id: SourceChannelId): SourceChannelOverview | null {
     return this.#sources.getChannel(id);
   }
 
+  /** 投递渠道下所有启用来源的同步任务。 */
   public enqueueChannelSync(input: {
     readonly channelIds: readonly SourceChannelId[] | 'all';
     readonly idempotencyToken?: string;
@@ -96,6 +107,7 @@ export class SourceManagementService {
     return this.#enqueue(sourceIds, input.idempotencyToken);
   }
 
+  /** 投递单个来源同步任务。 */
   public enqueueSync(input: {
     readonly sourceIds: readonly JobSourceId[] | 'all';
     readonly idempotencyToken?: string;
@@ -119,6 +131,7 @@ export class SourceManagementService {
     );
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #enqueue(
     sourceIds: readonly JobSourceId[],
     idempotencyToken: string | undefined,
@@ -135,10 +148,12 @@ export class SourceManagementService {
   }
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskWaitDelay {
   wait(milliseconds: number, signal: AbortSignal): Promise<void>;
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 export class TaskWaitService {
   readonly #tasks: Pick<TaskService, 'get'>;
   readonly #delay: TaskWaitDelay;
@@ -148,6 +163,7 @@ export class TaskWaitService {
     this.#delay = delay;
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public async wait(taskId: TaskRecord['id'], signal: AbortSignal): Promise<TaskRecord | null> {
     let interval = 250;
     for (;;) {

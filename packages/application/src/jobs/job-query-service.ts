@@ -10,6 +10,7 @@ import type {
   JobQuerySort,
 } from '../ports/job-query.js';
 
+/** 查询的职位不存在。 */
 export class JobNotFoundError extends Error {
   public constructor(id: string) {
     super(`Job not found: ${id}`);
@@ -17,6 +18,7 @@ export class JobNotFoundError extends Error {
   }
 }
 
+/** 查询的公司不存在。 */
 export class CompanyNotFoundError extends Error {
   public constructor(selector: string) {
     super(`Company not found: ${selector}`);
@@ -24,6 +26,7 @@ export class CompanyNotFoundError extends Error {
   }
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface JobSearchInput {
   readonly search?: string;
   readonly companies?: readonly string[];
@@ -41,6 +44,7 @@ export interface JobSearchInput {
   readonly limit?: number;
 }
 
+/** 编排职位列表、详情、筛选条件和导出。 */
 export class JobQueryService {
   readonly #jobs: JobQueryRepository;
   readonly #companies: CompanyLookupRepository;
@@ -53,10 +57,12 @@ export class JobQueryService {
     this.#companies = input.companies;
   }
 
+  /** 查询职位列表页。 */
   public list(input: JobSearchInput): JobQueryPage {
     return this.#jobs.query(this.#filter(input));
   }
 
+  /** 查询单个职位及可选匹配信息。 */
   public show(id: string, profileVersionId?: string): JobDetail {
     const jobId = parseId(id, 'Job');
     const profile = profileVersionId ? parseId(profileVersionId, 'ProfileVersion') : undefined;
@@ -65,6 +71,7 @@ export class JobQueryService {
     return job;
   }
 
+  /** 将外部筛选参数规范化为仓储查询条件。 */
   public filter(input: JobSearchInput): JobQueryFilter {
     return this.#filter(input);
   }
@@ -97,8 +104,10 @@ export class JobQueryService {
   }
 }
 
+/** 应用层使用的类型约束。 */
 export type JobExportFormat = 'json' | 'csv';
 
+/** 将职位查询结果导出为 JSON 或 CSV 文件。 */
 export class JobExportService {
   readonly #jobs: JobQueryRepository;
   readonly #query: JobQueryService;
@@ -114,7 +123,9 @@ export class JobExportService {
     this.#files = input.files;
   }
 
+  /** 查询、序列化并写入导出文件。 */
   public async export(input: {
+    // 1、解析格式和筛选条件；2、读取职位分页；3、序列化内容；4、写入文件并返回摘要。
     readonly path: string;
     readonly format: JobExportFormat;
     readonly bom?: boolean;
@@ -137,11 +148,13 @@ export class JobExportService {
   }
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function csvCell(value: string | number | null): string {
   const text = value === null ? '' : String(value);
   return `"${text.replaceAll('"', '""')}"`;
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function csv(items: readonly JobListItem[]): string {
   const header = [
     'id',

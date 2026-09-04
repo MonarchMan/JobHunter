@@ -3,6 +3,7 @@ import { parseContentHash } from '@jobhunter/domain';
 import type { ResumeMediaType, ResumeParseStatus } from '@jobhunter/resume';
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 interface ResumeDocumentRow {
   readonly id: string;
   readonly artifact_id: string;
@@ -32,6 +33,7 @@ const selection = `SELECT id, artifact_id, content_hash, media_type, extracted_t
                        )
                    )`;
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function toRecord(row: ResumeDocumentRow): ResumeDocumentRecord {
   return {
     id: row.id,
@@ -46,6 +48,7 @@ function toRecord(row: ResumeDocumentRow): ResumeDocumentRecord {
   };
 }
 
+/** 持久化简历导入文档和实体文件版本映射。 */
 export class SqliteResumeDocumentRepository implements ResumeDocumentRepository {
   readonly #client: Database.Database;
 
@@ -53,12 +56,14 @@ export class SqliteResumeDocumentRepository implements ResumeDocumentRepository 
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getById(id: string): ResumeDocumentRecord | null {
     const row = this.#client.prepare(`${selection} WHERE id = ?`).get(id) as
       ResumeDocumentRow | undefined;
     return row ? toRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public findByContentHash(
     contentHash: ResumeDocumentRecord['contentHash'],
   ): ResumeDocumentRecord | null {
@@ -67,6 +72,7 @@ export class SqliteResumeDocumentRepository implements ResumeDocumentRepository 
     return row ? toRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createOrGet(input: ResumeDocumentRecord): ResumeDocumentRecord {
     const existing = this.findByContentHash(input.contentHash);
     if (existing) return existing;
@@ -101,6 +107,7 @@ export class SqliteResumeDocumentRepository implements ResumeDocumentRepository 
     return stored;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public completeOcr(input: {
     readonly id: string;
     readonly extractedText: string;

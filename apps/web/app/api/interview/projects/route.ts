@@ -6,6 +6,7 @@ import { interviewErrorResponse } from '../../../../src/server/interview-http.js
 
 export const dynamic = 'force-dynamic';
 
+/** 处理 Web API 的 GET 请求，读取并返回对应资源。 */
 export async function GET(): Promise<Response> {
   try {
     const container = await getWebContainer();
@@ -18,6 +19,7 @@ export async function GET(): Promise<Response> {
   }
 }
 
+/** 处理 Web API 的 POST 请求，校验输入并提交业务操作。 */
 export async function POST(request: Request): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {

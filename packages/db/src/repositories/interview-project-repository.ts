@@ -39,6 +39,7 @@ import {
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
+/** 数据库查询结果对应的行结构。 */
 interface SnapshotRow {
   readonly id: string;
   readonly source_profile_id: string;
@@ -49,6 +50,7 @@ interface SnapshotRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface DossierRow {
   readonly id: string;
   readonly snapshot_id: string;
@@ -59,6 +61,7 @@ interface DossierRow {
   readonly updated_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface SessionRow {
   readonly id: string;
   readonly dossier_id: string;
@@ -74,6 +77,7 @@ interface SessionRow {
   readonly completed_at: number | null;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface MaterialRow {
   readonly file_id: string;
   readonly entity_id: string;
@@ -92,6 +96,7 @@ interface MaterialRow {
   readonly file_created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface TurnRow {
   readonly id: string;
   readonly session_id: string;
@@ -111,6 +116,7 @@ interface TurnRow {
   readonly updated_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface AnswerRow {
   readonly id: string;
   readonly turn_id: string;
@@ -121,6 +127,7 @@ interface AnswerRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface KnowledgeRow {
   readonly id: string;
   readonly dossier_id: string;
@@ -134,6 +141,7 @@ interface KnowledgeRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface CoverageRow {
   readonly session_id: string;
   readonly dimension: string;
@@ -205,14 +213,17 @@ const materialPropertiesSchema = z
   .object({ dossierId: z.uuid(), fileName: materialFileNameSchema })
   .strict();
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function parseJson<T>(schema: z.ZodType<T>, value: string): T {
   return schema.parse(JSON.parse(value) as unknown);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function materialBinding(value: z.infer<typeof materialBindingJsonSchema>): ProjectMaterialBinding {
   return { ...value, contentHash: parseContentHash(value.contentHash) };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function parseMaterialBindings(value: string): readonly ProjectMaterialBinding[] {
   const parsed = parseJson(materialBindingsJsonSchema, value);
   const fileIds = new Set(parsed.map((binding) => binding.fileId));
@@ -222,6 +233,7 @@ function parseMaterialBindings(value: string): readonly ProjectMaterialBinding[]
   return parsed.map(materialBinding);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function parseCapabilitySummary(
   profileKey: DrillSessionRecord['profileKey'],
   value: string,
@@ -232,6 +244,7 @@ function parseCapabilitySummary(
   return parseJson(resumeOnlyCapabilitySummarySchema, value);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function materialChunks(
   metadataJson: string,
   normalizedText: string,
@@ -265,6 +278,7 @@ function materialChunks(
   });
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function materialRecord(row: MaterialRow): ProjectMaterialContext {
   const properties = parseJson(materialPropertiesSchema, row.file_properties_json);
   if (
@@ -296,6 +310,7 @@ function materialRecord(row: MaterialRow): ProjectMaterialContext {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function publicMaterialRecord(row: MaterialRow): ProjectMaterialRecord {
   const record = materialRecord(row);
   return {
@@ -310,6 +325,7 @@ function publicMaterialRecord(row: MaterialRow): ProjectMaterialRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function bindingFromMaterial(material: ProjectMaterialRecord): ProjectMaterialBinding {
   return {
     fileId: material.fileId,
@@ -320,6 +336,7 @@ function bindingFromMaterial(material: ProjectMaterialRecord): ProjectMaterialBi
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function snapshotRecord(row: SnapshotRow): ResumeProjectSnapshotRecord {
   return {
     id: parseId(row.id, 'ResumeProjectSnapshot'),
@@ -332,6 +349,7 @@ function snapshotRecord(row: SnapshotRow): ResumeProjectSnapshotRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function dossierRecord(row: DossierRow): ProjectDossierRecord {
   return {
     id: parseId(row.id, 'ProjectDossier'),
@@ -345,6 +363,7 @@ function dossierRecord(row: DossierRow): ProjectDossierRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function sessionRecord(row: SessionRow): DrillSessionRecord {
   if (
     (row.profile_key !== 'resume-only' && row.profile_key !== 'docs-grounded') ||
@@ -375,6 +394,7 @@ function sessionRecord(row: SessionRow): DrillSessionRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function turnRecord(row: TurnRow): DrillTurnRecord {
   return {
     id: parseId(row.id, 'DrillTurn'),
@@ -401,6 +421,7 @@ function turnRecord(row: TurnRow): DrillTurnRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function answerRecord(row: AnswerRow): DrillAnswerRevisionRecord {
   return {
     id: parseId(row.id, 'DrillAnswerRevision'),
@@ -413,6 +434,7 @@ function answerRecord(row: AnswerRow): DrillAnswerRevisionRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function knowledgeRecord(row: KnowledgeRow): ProjectKnowledgeItemRecord {
   if (row.status !== 'active' && row.status !== 'superseded') {
     throw new TypeError('Stored project knowledge status is invalid.');
@@ -431,6 +453,7 @@ function knowledgeRecord(row: KnowledgeRow): ProjectKnowledgeItemRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function coverageRecord(row: CoverageRow): DrillCoverageRecord {
   return {
     sessionId: parseId(row.session_id, 'DrillSession'),
@@ -474,6 +497,7 @@ const knowledgeColumns = `id, dossier_id, source_answer_revision_id, kind, state
                           source_start, source_end, status, created_at`;
 const coverageColumns = `session_id, dimension, status, evidence_item_ids_json, updated_at`;
 
+/** 持久化项目快照、拷打会话、回答知识项和资料映射。 */
 export class SqliteInterviewProjectRepository implements InterviewProjectRepository {
   readonly #client: Database.Database;
 
@@ -481,6 +505,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createDossier(input: {
     readonly dossier: ProjectDossierRecord;
     readonly snapshot: ResumeProjectSnapshotRecord;
@@ -539,6 +564,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listDossiers(): readonly ProjectDossierSummary[] {
     const rows = this.#client
       .prepare(`SELECT ${dossierColumns} FROM project_dossiers ORDER BY updated_at DESC, id`)
@@ -574,6 +600,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     });
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getDossier(id: ProjectDossierId): ProjectDossierDetail | null {
     const dossier = this.#client
       .prepare(`SELECT ${dossierColumns} FROM project_dossiers WHERE id = ?`)
@@ -646,6 +673,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public findMaterialByName(
     dossierId: ProjectDossierId,
     fileName: string,
@@ -675,6 +703,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     return row ? publicMaterialRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public claimMaterialFile(input: {
     readonly dossierId: ProjectDossierId;
     readonly fileName: string;
@@ -723,6 +752,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     return claim.immediate();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public registerMaterial(input: {
     readonly dossierId: ProjectDossierId;
     readonly fileId: string;
@@ -817,6 +847,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public resolveMaterialBindings(
     dossierId: ProjectDossierId,
     fileIds: readonly string[],
@@ -842,6 +873,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     });
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createSession(input: {
     readonly session: DrillSessionRecord;
     readonly coverage: readonly DrillCoverageRecord[];
@@ -902,6 +934,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getSession(id: DrillSessionId): DrillSessionRecord | null {
     const row = this.#client
       .prepare(`SELECT ${sessionColumns} FROM drill_sessions WHERE id = ?`)
@@ -909,6 +942,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     return row ? sessionRecord(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public updateSessionStatus(input: {
     readonly id: DrillSessionId;
     readonly expectedStatus: DrillSessionRecord['status'];
@@ -932,6 +966,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createQuestionTurn(input: {
     readonly turn: DrillTurnRecord;
     readonly expectedSessionRevision: number;
@@ -977,6 +1012,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public attachQuestionTask(input: {
     readonly turnId: DrillTurnId;
     readonly taskId: DrillTurnRecord['questionTaskId'] & string;
@@ -999,6 +1035,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     if (current !== input.taskId) throw new TypeError('Question turn cannot attach this task.');
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public removeUnqueuedQuestionTurn(turnId: DrillTurnId): void {
     this.#client
       .prepare(
@@ -1008,6 +1045,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
       .run(turnId);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getQuestionContext(turnId: DrillTurnId): ProjectQuestionContext | null {
     const row = this.#client
       .prepare(`SELECT ${turnColumns} FROM drill_turns WHERE id = ?`)
@@ -1054,6 +1092,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public completeQuestion(input: {
     readonly turnId: DrillTurnId;
     readonly expectedTaskId?: TaskId;
@@ -1126,6 +1165,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public appendAnswer(input: {
     readonly sessionId: DrillSessionId;
     readonly turnId: DrillTurnId;
@@ -1199,6 +1239,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public attachDigestTask(input: {
     readonly turnId: DrillTurnId;
     readonly taskId: DrillTurnRecord['digestTaskId'] & string;
@@ -1221,6 +1262,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     if (current !== input.taskId) throw new TypeError('Answer turn cannot attach this task.');
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getAnswerContext(
     turnId: DrillTurnId,
     answerRevisionId: DrillAnswerRevisionId,
@@ -1246,6 +1288,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public completeAnswerDigest(input: {
     readonly turnId: DrillTurnId;
     readonly expectedTaskId?: TaskId;
@@ -1339,6 +1382,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public skipTurn(input: {
     readonly turnId: DrillTurnId;
     readonly now: UtcInstant;
@@ -1368,6 +1412,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public cancelPendingTurn(input: {
     readonly turnId: DrillTurnId;
     readonly now: UtcInstant;
@@ -1397,6 +1442,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public updateNotebook(input: {
     readonly dossierId: ProjectDossierId;
     readonly expectedRevision: number;
@@ -1448,6 +1494,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public discardNotebookArtifact(artifactId: string): void {
     this.#client
       .transaction(() => {
@@ -1456,6 +1503,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
       .immediate();
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #deleteUnreferencedNotebookFile(fileId: string): void {
     const entityIds = this.#client
       .prepare('SELECT entity_id FROM file_entity_mappings WHERE file_id = ?')
@@ -1478,6 +1526,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     }
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public previewDeletion(dossierId: ProjectDossierId): DossierDeletionSnapshot | null {
     const dossier = this.#client
       .prepare(
@@ -1600,6 +1649,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public deleteDossier(input: {
     readonly expected: DossierDeletionSnapshot;
     readonly quarantinedArtifacts: readonly QuarantinedArtifact[];
@@ -1679,6 +1729,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public removePurgedArtifact(artifactId: string): void {
     this.#client
       .prepare(
@@ -1688,6 +1739,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
       .run(artifactId, artifactId);
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #materialForBinding(
     dossierId: ProjectDossierId,
     binding: ProjectMaterialBinding,
@@ -1718,6 +1770,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     return material.dossierId === dossierId ? material : null;
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #bumpDossier(id: ProjectDossierId, now: UtcInstant): void {
     this.#client
       .prepare('UPDATE project_dossiers SET revision = revision + 1, updated_at = ? WHERE id = ?')

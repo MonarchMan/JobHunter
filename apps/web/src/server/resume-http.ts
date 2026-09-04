@@ -2,6 +2,7 @@ import { ResumeDraftConflictError, ResumeTemplateNotFoundError } from '@jobhunte
 import { ZodError } from 'zod';
 import { badRequestResponse, conflictResponse, errorResponse, notFoundResponse } from './http.js';
 
+/** 将简历导入与编辑领域错误转换为 HTTP 响应。 */
 export function resumeErrorResponse(error: unknown): Response {
   if (error instanceof ResumeDraftConflictError) {
     return conflictResponse('RESUME_DRAFT_CONFLICT', error.message, {

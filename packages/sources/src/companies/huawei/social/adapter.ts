@@ -11,6 +11,7 @@ import {
 const hosts = ['career.huawei.com'] as const;
 const entryUrl = 'https://career.huawei.com/reccampportal/portal5/social-recruitment.html';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createHuaweiSocialAdapter(): JobSourceAdapter<HuaweiSocialConfig, never> {
   return createInlinePagedJsonAdapter({
     metadata: {

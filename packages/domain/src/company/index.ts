@@ -1,5 +1,6 @@
 import type { CompanyId, UtcInstant } from '../shared/index.js';
 
+/** 模块数据结构或契约。 */
 export interface Company {
   readonly id: CompanyId;
   readonly canonicalName: string;

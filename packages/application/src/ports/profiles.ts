@@ -6,6 +6,7 @@ import type {
   UtcInstant,
 } from '@jobhunter/domain';
 
+/** 应用层数据结构或端口契约。 */
 export interface CandidateProfileRecord {
   readonly id: CandidateProfileId;
   readonly name: string;
@@ -13,6 +14,7 @@ export interface CandidateProfileRecord {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProfileVersionRecord {
   readonly id: ProfileVersionId;
   readonly profileId: CandidateProfileId;
@@ -27,10 +29,12 @@ export interface ProfileVersionRecord {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层使用的类型约束。 */
 export type AppendProfileVersionResult =
   | { readonly kind: 'created'; readonly version: ProfileVersionRecord }
   | { readonly kind: 'conflict'; readonly currentVersionId: ProfileVersionId | null };
 
+/** 应用层数据结构或端口契约。 */
 export interface CandidateProfileRepository {
   createProfile(profile: CandidateProfileRecord): CandidateProfileRecord;
   listProfiles(): readonly CandidateProfileRecord[];

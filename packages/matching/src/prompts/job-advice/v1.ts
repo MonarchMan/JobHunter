@@ -1,3 +1,4 @@
+/** 职位准备建议 Agent 的冻结 Prompt 定义。 */
 export const jobAdvicePromptV1 = {
   agentKey: 'job-advice',
   promptVersion: '1.0.0',

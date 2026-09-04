@@ -81,10 +81,12 @@ const unusedHttp: SourceHttpClient = {
   request: () => Promise.reject(new Error('HTTP is not expected in this fixture.')),
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface FixtureConfig {
   readonly partial: boolean;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function fixtureAdapter(): JobSourceAdapter<FixtureConfig, never> {
   return {
     metadata: {
@@ -160,6 +162,7 @@ function fixtureAdapter(): JobSourceAdapter<FixtureConfig, never> {
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function context(config: FixtureConfig = { partial: false }): DiscoverContext<FixtureConfig> {
   return {
     sourceId,
@@ -276,6 +279,7 @@ describe('source identity, URL and registry policy', () => {
   });
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function request(
   client: FetchSourceHttpClient,
   overrides: Partial<{ signal: AbortSignal }> = {},
@@ -292,6 +296,7 @@ function request(
   });
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function fetchReturning(response: Response): typeof fetch {
   return () => Promise.resolve(response);
 }

@@ -14,6 +14,7 @@ import {
 } from '../contracts/web.js';
 import type { TaskService } from '../tasks/task-service.js';
 
+/** 润色请求不满足当前画像或幂等约束时抛出的应用错误。 */
 export class ResumePolishValidationError extends Error {
   public constructor(message: string) {
     super(message);
@@ -21,6 +22,7 @@ export class ResumePolishValidationError extends Error {
   }
 }
 
+/** 将任务错误分类转换为不泄露内部细节的用户提示。 */
 function presentTaskError(category: string | null): string {
   switch (category) {
     case 'invalid_config':
@@ -39,12 +41,14 @@ function presentTaskError(category: string | null): string {
   }
 }
 
+/** 创建润色任务并从 Agent 运行记录恢复只读建议。 */
 export class ResumePolishService {
   readonly #profiles: CandidateProfileRepository;
   readonly #agentRuns: AgentRunReader;
   readonly #tasks: TaskService;
   readonly #ids: IdGenerator;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly profiles: CandidateProfileRepository;
     readonly agentRuns: AgentRunReader;
@@ -57,12 +61,14 @@ export class ResumePolishService {
     this.#ids = input.ids;
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public enqueue(input: {
     readonly profileId: string;
     readonly sourceVersionId: string;
     readonly sections: readonly ResumePolishSection[];
     readonly idempotencyToken: string;
   }): WebResumePolishAccepted {
+    // 1、校验画像版本仍是当前版本，并确认目标岗位和选中章节可润色。
     const profileId = parseId(input.profileId, 'CandidateProfile');
     const sourceVersionId = parseId(input.sourceVersionId, 'ProfileVersion');
     const version = this.#profiles.getVersion(sourceVersionId);
@@ -90,6 +96,7 @@ export class ResumePolishService {
     if (idempotencyToken.length < 8) {
       throw new ResumePolishValidationError('润色请求标识无效，请重新提交。');
     }
+    // 2、生成建议标识并以稳定幂等键入队，实际模型调用由 Worker 执行。
     const suggestionId = this.#ids.generate();
     const result = this.#tasks.enqueue({
       taskType: 'resume.polish',
@@ -109,6 +116,7 @@ export class ResumePolishService {
     });
   }
 
+  /** 查询润色任务状态，并在成功时恢复经过 Schema 校验的 Agent 输出。 */
   public status(taskIdValue: string, suggestionId: string): WebResumePolishStatus | null {
     const task = this.#tasks.get(parseId(taskIdValue, 'Task'));
     if (task?.taskType !== 'resume.polish') return null;
@@ -146,6 +154,7 @@ export class ResumePolishService {
   }
 }
 
+/** 从通用任务结果中提取润色 Agent 运行 ID。 */
 function resumePolishTaskResult(value: unknown): { readonly agentRunId: string } | null {
   if (!value || typeof value !== 'object' || !('agentRunId' in value)) return null;
   const agentRunId = value.agentRunId;

@@ -39,8 +39,10 @@ const manifestSchema = z
   })
   .strict();
 
+/** 数据库模块使用的类型约束。 */
 export type BackupManifest = z.infer<typeof manifestSchema>;
 
+/** 数据库查询结果对应的行结构。 */
 interface ArtifactReferenceRow {
   readonly id: string;
   readonly relative_path: string;
@@ -48,6 +50,7 @@ interface ArtifactReferenceRow {
   readonly byte_size: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 async function fileHash(file: string): Promise<string> {
   const hash = createHash('sha256');
   const handle = await open(file, 'r');
@@ -64,6 +67,7 @@ async function fileHash(file: string): Promise<string> {
   }
 }
 
+/** 数据库查询结果对应的行结构。 */
 function resolveContained(root: string, relativePath: string): string {
   if (!relativePath || path.isAbsolute(relativePath)) {
     throw new PersistenceError('ARTIFACT_PATH_INVALID', 'Backup artifact path must be relative.');
@@ -76,6 +80,7 @@ function resolveContained(root: string, relativePath: string): string {
   return target;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 async function pathExists(target: string): Promise<boolean> {
   try {
     await access(target);
@@ -85,6 +90,7 @@ async function pathExists(target: string): Promise<boolean> {
   }
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export async function createBackup(
   source: SqliteDatabaseHandle,
   destinationDirectory: string,
@@ -163,6 +169,7 @@ export async function createBackup(
   }
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 async function readAndVerifyBackup(backupRoot: string): Promise<BackupManifest> {
   const manifestValue: unknown = JSON.parse(
     await readFile(path.join(backupRoot, 'manifest.json'), 'utf8'),
@@ -191,10 +198,12 @@ async function readAndVerifyBackup(backupRoot: string): Promise<BackupManifest> 
   return manifest;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export async function verifyBackup(backupDirectory: string): Promise<BackupManifest> {
   return readAndVerifyBackup(path.resolve(backupDirectory));
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export interface BackupListItem {
   readonly directory: string;
   readonly createdAt: string | null;
@@ -203,6 +212,7 @@ export interface BackupListItem {
   readonly manifestValid: boolean;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export async function listBackups(backupRoot: string): Promise<readonly BackupListItem[]> {
   const root = path.resolve(backupRoot);
   if (!(await pathExists(root))) return [];
@@ -243,6 +253,7 @@ export async function listBackups(backupRoot: string): Promise<readonly BackupLi
   );
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function assertSafeRestoreTarget(target: string, backupRoot: string): void {
   const root = path.parse(target).root;
   const protectedRoots = [root, path.resolve(process.cwd()), path.resolve(homedir())];
@@ -258,6 +269,7 @@ function assertSafeRestoreTarget(target: string, backupRoot: string): void {
   }
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function assertExternalExclusiveAccess(databasePath: string): void {
   if (!requireFileExists(databasePath)) return;
   const probe = new Database(databasePath, { fileMustExist: true });
@@ -277,6 +289,7 @@ function assertExternalExclusiveAccess(databasePath: string): void {
   }
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function requireFileExists(target: string): boolean {
   try {
     return statSync(target).isFile();
@@ -285,11 +298,13 @@ function requireFileExists(target: string): boolean {
   }
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export interface RestoreResult {
   readonly restoredDataRoot: string;
   readonly previousDataRoot: string | null;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export interface RestoreOperationPlan {
   readonly kind: 'restore';
   readonly backupDirectory: string;
@@ -302,6 +317,7 @@ export interface RestoreOperationPlan {
   readonly confirmationToken: string;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 async function directoryFingerprint(target: string): Promise<string> {
   if (!(await pathExists(target))) return 'absent';
   const entries: string[] = [];
@@ -328,6 +344,7 @@ async function directoryFingerprint(target: string): Promise<string> {
   return createHash('sha256').update(entries.join('\n'), 'utf8').digest('hex');
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function restoreToken(input: {
   readonly backupRoot: string;
   readonly target: string;
@@ -346,6 +363,7 @@ function restoreToken(input: {
   return `${String(input.expiresAt)}.${createHash('sha256').update(material, 'utf8').digest('hex')}`;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export async function planRestoreBackup(
   backupDirectory: string,
   targetDataRoot: string,

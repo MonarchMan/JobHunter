@@ -20,7 +20,9 @@ import type { TaskService } from '../tasks/task-service.js';
 const exportLifetimeMs = 24 * 60 * 60 * 1000;
 const maximumAvatarBytes = 5 * 1024 * 1024;
 
+/** 在线简历草稿、模板或导出请求不存在时抛出的应用错误。 */
 export class ResumeTemplateNotFoundError extends Error {}
+/** 在线简历草稿版本发生并发变化时抛出的乐观并发错误。 */
 export class ResumeDraftConflictError extends Error {
   public readonly currentRevision: number | null;
   public constructor(currentRevision: number | null) {
@@ -29,6 +31,7 @@ export class ResumeDraftConflictError extends Error {
   }
 }
 
+/** 将候选人姓名和模板名限制为安全的导出文件名片段。 */
 function safeName(value: string): string {
   return (
     value
@@ -38,6 +41,7 @@ function safeName(value: string): string {
   );
 }
 
+/** 校验头像内容签名与声明媒体类型一致。 */
 function avatarMedia(bytes: Uint8Array, declared: string): 'image/jpeg' | 'image/png' {
   if (bytes.byteLength === 0 || bytes.byteLength > maximumAvatarBytes) {
     throw new TypeError('头像必须非空且不超过 5 MiB。');
@@ -53,6 +57,7 @@ function avatarMedia(bytes: Uint8Array, declared: string): 'image/jpeg' | 'image
   throw new TypeError('头像文件内容必须是 JPEG 或 PNG，并与声明类型一致。');
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeDraftDetail {
   readonly draft: ResumeTemplateDraftRecord;
   readonly template: (typeof resumeTemplates)[number];
@@ -61,6 +66,7 @@ export interface ResumeDraftDetail {
   readonly avatarDataUrl: string | null;
 }
 
+/** 管理在线简历草稿、模板渲染、头像和短期导出文件。 */
 export class ResumeTemplateService {
   readonly #drafts: ResumeDraftRepository;
   readonly #profiles: CandidateProfileRepository;
@@ -69,6 +75,7 @@ export class ResumeTemplateService {
   readonly #clock: Clock;
   readonly #ids: IdGenerator;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly drafts: ResumeDraftRepository;
     readonly profiles: CandidateProfileRepository;
@@ -85,11 +92,13 @@ export class ResumeTemplateService {
     this.#ids = input.ids;
   }
 
+  /** 返回当前可用的内置简历模板目录。 */
   public listTemplates(): typeof resumeTemplates {
     return resumeTemplates;
   }
 
   public async createOrResume(profileId: string, templateKey: string): Promise<ResumeDraftDetail> {
+    // 1、校验画像和模板；同一画像、模板版本只保留一个可继续编辑的草稿。
     const key = resumeTemplateKeySchema.parse(templateKey);
     const template = getResumeTemplate(key);
     const profile = this.#profiles.getProfile(parseId(profileId, 'CandidateProfile'));
@@ -118,9 +127,11 @@ export class ResumeTemplateService {
       if (!raced) throw error;
       created = raced;
     }
+    // 2、返回包含最新画像版本状态的草稿详情。
     return this.detail(created.id);
   }
 
+  /** 查询草稿并标记其来源画像是否已经过期。 */
   public async detail(id: string): Promise<ResumeDraftDetail> {
     const draft = this.#drafts.get(id);
     if (!draft) throw new ResumeTemplateNotFoundError('简历草稿不存在。');
@@ -135,6 +146,7 @@ export class ResumeTemplateService {
     };
   }
 
+  /** 按乐观并发版本保存用户编辑后的在线简历内容。 */
   public async save(
     id: string,
     expectedRevision: number,
@@ -151,6 +163,7 @@ export class ResumeTemplateService {
     return this.detail(updated.id);
   }
 
+  /** 用最新画像刷新草稿，同时保留用户已有的排版设置。 */
   public async refresh(id: string, expectedRevision: number): Promise<ResumeDraftDetail> {
     const currentDraft = this.#drafts.get(id);
     if (!currentDraft) throw new ResumeTemplateNotFoundError('简历草稿不存在。');
@@ -172,6 +185,7 @@ export class ResumeTemplateService {
     return this.detail(id);
   }
 
+  /** 保存并替换草稿头像；并发失败时清理刚写入的孤立文件。 */
   public async setAvatar(input: {
     readonly id: string;
     readonly expectedRevision: number;
@@ -208,12 +222,14 @@ export class ResumeTemplateService {
     return this.detail(input.id);
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public async export(input: {
     readonly id: string;
     readonly expectedRevision: number;
     readonly format: ResumeExportFormat;
     readonly idempotencyToken: string;
   }): Promise<ResumeExportRequestRecord> {
+    // 1、校验草稿版本并生成不可变 HTML 快照，短期文件不参与画像数据所有权。
     const token = input.idempotencyToken.trim();
     if (input.format === 'pdf' && !token) throw new TypeError('导出幂等标识不能为空。');
     const detail = await this.detail(input.id);
@@ -257,6 +273,7 @@ export class ResumeTemplateService {
       createdAt: now,
       updatedAt: now,
     });
+    // 2、HTML 可立即交付；PDF 只创建任务，交给 Worker 的浏览器渲染器执行。
     if (input.format === 'pdf') {
       const queued = this.#tasks.enqueue({
         taskType: 'resume.export.pdf@v1',
@@ -270,6 +287,7 @@ export class ResumeTemplateService {
     return request;
   }
 
+  /** 查询导出请求，并将关联任务失败映射为可展示状态。 */
   public getExport(draftId: string, requestId: string): ResumeExportRequestRecord {
     const request = this.#drafts.getExport(requestId);
     if (request?.draftId !== draftId) throw new ResumeTemplateNotFoundError('导出请求不存在。');
@@ -288,6 +306,7 @@ export class ResumeTemplateService {
     return request;
   }
 
+  /** 读取已完成的导出文件并在交付后删除短期快照。 */
   public async deliver(
     draftId: string,
     requestId: string,
@@ -309,12 +328,14 @@ export class ResumeTemplateService {
     return { bytes: stored.content, mediaType: stored.mediaType, fileName: request.fileName };
   }
 
+  /** 清理已过期的 HTML/PDF 导出快照。 */
   public async cleanupExpiredExports(): Promise<number> {
     const expired = this.#drafts.listExpired(this.#clock.now());
     for (const request of expired) await this.#removeExport(request);
     return expired.length;
   }
 
+  /** 删除导出记录及其去重后的输入/输出文件实体。 */
   async #removeExport(request: ResumeExportRequestRecord): Promise<void> {
     this.#drafts.deleteExport(request.id);
     const fileIds = new Set(
@@ -323,6 +344,7 @@ export class ResumeTemplateService {
     for (const id of fileIds) await this.#artifacts.remove({ id, kind: 'export' });
   }
 
+  /** 读取头像并转换为仅供 HTML 渲染使用的数据 URL。 */
   async #avatar(draft: ResumeTemplateDraftRecord): Promise<string | null> {
     if (!draft.avatarFileId || !draft.avatarFileVersion) return null;
     const stored = await this.#artifacts.read({

@@ -5,11 +5,13 @@ import type { CliIo } from './io.js';
 import { CliError, cliExitCode, type CliExitCode, type CommandResult } from './model.js';
 import { HumanRenderer, JsonRenderer } from './renderer.js';
 import { cliOutputJsonSchema } from './schema.js';
+/** 模块数据结构或契约。 */
 interface GlobalOptions {
   readonly json?: boolean;
   readonly dataRoot?: string;
   readonly config?: string;
 }
+/** 模块数据结构或契约。 */
 interface JobOptions {
   readonly search?: string;
   readonly company?: string;
@@ -60,6 +62,7 @@ const helpExamples: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
+/** 为命令树配置统一帮助输出和错误处理。 */
 function configureCommandHelp(command: Command, io: CliIo, prefix = ''): void {
   for (const child of command.commands) {
     const path = prefix ? `${prefix} ${child.name()}` : child.name();
@@ -80,6 +83,7 @@ function configureCommandHelp(command: Command, io: CliIo, prefix = ''): void {
   }
 }
 
+/** 将逗号分隔选项解析为去空白数组。 */
 function commaValues(value: string | undefined): string[] | undefined {
   if (!value) return undefined;
   const values = value
@@ -89,6 +93,7 @@ function commaValues(value: string | undefined): string[] | undefined {
   return values.length > 0 ? values : undefined;
 }
 
+/** 将 CLI 职位选项映射为应用层查询筛选条件。 */
 function jobFilter(options: JobOptions): Parameters<NonNullable<CliContainer['job']>['list']>[0] {
   const statuses = commaValues(options.status);
   const companies = commaValues(options.company);
@@ -151,6 +156,7 @@ function jobFilter(options: JobOptions): Parameters<NonNullable<CliContainer['jo
   };
 }
 
+/** 向职位相关命令追加统一筛选和分页参数。 */
 function addJobFilterOptions(command: Command, includePagination = true): Command {
   command
     .option('--search <text>', '标题、部门或描述关键词')
@@ -167,6 +173,7 @@ function addJobFilterOptions(command: Command, includePagination = true): Comman
       .option('--limit <number>', '每页数量 1..100', '50');
   return command;
 }
+/** 将任意异常转换为稳定 CLI 错误。 */
 function errorFrom(value: unknown): CliError {
   if (value instanceof CliError) return value;
   if (typeof value === 'object' && value !== null && 'exitCode' in value && value.exitCode === 0)
@@ -243,6 +250,7 @@ function errorFrom(value: unknown): CliError {
   });
 }
 
+/** 将任务记录压缩为终端可读的一行摘要。 */
 function taskHuman(task: TaskRecord): string {
   return `${task.id}\t${task.status}\t${task.taskType}\t${String(task.attemptCount)}/${String(task.maxAttempts)}`;
 }
@@ -269,7 +277,9 @@ async function waitForTask(input: {
     process.off('SIGTERM', stop);
   }
 }
+/** 创建 CLI 命令树并绑定本地容器与输入输出。 */
 export function createProgram(input: {
+  // 1、注册全局选项；2、注册职位/任务/面试准备命令；3、统一挂载帮助和错误处理。
   readonly container: CliContainer;
   readonly io: CliIo;
   readonly onResult: (result: CommandResult) => void;

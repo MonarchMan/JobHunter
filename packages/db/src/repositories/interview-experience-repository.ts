@@ -20,6 +20,7 @@ import {
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
+/** 数据库查询结果对应的行结构。 */
 interface DocumentRow {
   readonly id: string;
   readonly artifact_id: string;
@@ -39,6 +40,7 @@ interface DocumentRow {
   readonly accepted_at: number | null;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface ExperienceRow {
   readonly id: string;
   readonly document_id: string;
@@ -53,6 +55,7 @@ interface ExperienceRow {
   readonly notes: string | null;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface QuestionRow {
   readonly id: string;
   readonly experience_id: string;
@@ -88,10 +91,12 @@ const experienceColumns = `id, file_id AS document_id, sequence_no, company, rol
 const questionColumns = `id, experience_id, sequence_no, question, answer, reflection,
   question_source_start, question_source_end, answer_source_start, answer_source_end`;
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function json<T>(value: string, schema: z.ZodType<T>): T {
   return schema.parse(JSON.parse(value));
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function documentRecord(row: DocumentRow): ExperienceDocumentRecord {
   return {
     id: parseId(row.id, 'ExperienceDocument'),
@@ -113,6 +118,7 @@ function documentRecord(row: DocumentRow): ExperienceDocumentRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function experienceRecord(row: ExperienceRow): InterviewExperienceRecord {
   return {
     id: parseId(row.id, 'InterviewExperience'),
@@ -130,10 +136,12 @@ function experienceRecord(row: ExperienceRow): InterviewExperienceRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function range(start: number | null, end: number | null): { start: number; end: number } | null {
   return start === null || end === null ? null : { start, end };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function questionRecord(row: QuestionRow): InterviewQuestionEntryRecord {
   return {
     id: parseId(row.id, 'InterviewQuestionEntry'),
@@ -147,6 +155,7 @@ function questionRecord(row: QuestionRow): InterviewQuestionEntryRecord {
   };
 }
 
+/** 持久化个人面经文档、经历、问题和五版本文件映射。 */
 export class SqliteInterviewExperienceRepository implements InterviewExperienceRepository {
   readonly #client: Database.Database;
 
@@ -154,6 +163,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public findByContentHash(
     contentHash: ExperienceDocumentRecord['contentHash'],
     parserVersion: string,
@@ -168,6 +178,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     return id ? this.get(parseId(id, 'ExperienceDocument')) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createDraft(input: {
     readonly document: ExperienceDocumentRecord;
     readonly experiences: readonly InterviewExperienceRecord[];
@@ -187,6 +198,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public list(): readonly ExperienceDocumentSummary[] {
     const rows = this.#client
       .prepare(
@@ -221,6 +233,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     }));
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(id: ExperienceDocumentId): ExperienceDocumentDetail | null {
     const row = this.#client
       .prepare(`SELECT ${documentColumns} ${documentSource} AND d.id = ?`)
@@ -245,6 +258,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public replaceDraft(input: {
     readonly documentId: ExperienceDocumentId;
     readonly expectedRevision: number;
@@ -277,6 +291,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public accept(input: {
     readonly documentId: ExperienceDocumentId;
     readonly expectedRevision: number;
@@ -313,6 +328,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public previewDeletion(documentId: ExperienceDocumentId): ExperienceDeletionSnapshot | null {
     const row = this.#client
       .prepare(
@@ -366,6 +382,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public deleteDocument(input: {
     readonly expected: ExperienceDeletionSnapshot;
     readonly quarantinedArtifact: QuarantinedArtifact | null;
@@ -400,6 +417,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public removePurgedArtifact(artifactId: string): void {
     this.#client
       .prepare(
@@ -409,6 +427,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
       .run(artifactId, artifactId);
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #insertDocument(document: ExperienceDocumentRecord): void {
     this.#client
       .prepare(
@@ -444,6 +463,7 @@ export class SqliteInterviewExperienceRepository implements InterviewExperienceR
       );
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #insertRecords(
     experiences: readonly InterviewExperienceRecord[],
     questions: readonly InterviewQuestionEntryRecord[],

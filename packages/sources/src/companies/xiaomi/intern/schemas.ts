@@ -1,13 +1,16 @@
 import { z } from 'zod';
 
+/** 小米实习招聘接口配置 Schema。 */
 export const xiaomiInternConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(100).default(100),
     keyword: z.string().default(''),
   })
   .strict();
+/** 来源适配器使用的类型约束。 */
 export type XiaomiInternConfig = z.infer<typeof xiaomiInternConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const xiaomiInternJobSchema = z
   .object({
     title: z.string().min(1),
@@ -23,8 +26,10 @@ export const xiaomiInternJobSchema = z
     jobPostId: z.string().min(1),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type XiaomiInternJob = z.infer<typeof xiaomiInternJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const xiaomiInternListSchema = z
   .object({
     code: z.literal(0),

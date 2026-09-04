@@ -8,6 +8,7 @@ import {
 import type { ScriptedConfig } from '../../shared/scripted/schemas.js';
 import { byteDanceJobSchema } from './schemas.js';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function requestFor(key: 'bytedance.social' | 'bytedance.campus', portalType: number) {
   return ({
     config,
@@ -56,6 +57,7 @@ function requestFor(key: 'bytedance.social' | 'bytedance.campus', portalType: nu
   };
 }
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const bytedanceDefinition: ScriptedAdapterDefinition = {
   key: 'bytedance.social',
   company: { slug: 'bytedance', name: '字节跳动' },
@@ -69,6 +71,7 @@ export const bytedanceDefinition: ScriptedAdapterDefinition = {
   request: requestFor('bytedance.social', 2),
 };
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const bytedanceCampusDefinition: ScriptedAdapterDefinition = {
   ...bytedanceDefinition,
   key: 'bytedance.campus',
@@ -77,7 +80,9 @@ export const bytedanceCampusDefinition: ScriptedAdapterDefinition = {
   request: requestFor('bytedance.campus', 3),
 };
 
+/** 招聘来源适配器实例。 */
 export const createByteDanceAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(bytedanceDefinition);
+/** 招聘来源适配器实例。 */
 export const createByteDanceCampusAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(bytedanceCampusDefinition);

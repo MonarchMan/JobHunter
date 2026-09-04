@@ -40,6 +40,7 @@ import {
 import { ProjectMaterialService } from './material.js';
 import { drillProfile, drillProfileDefinitionHash, type DrillProfileKey } from './profile.js';
 
+/** 项目拷打档案不存在。 */
 export class ProjectDossierNotFoundError extends Error {
   public constructor() {
     super('Project dossier does not exist.');
@@ -47,6 +48,7 @@ export class ProjectDossierNotFoundError extends Error {
   }
 }
 
+/** 项目拷打会话不存在。 */
 export class DrillSessionNotFoundError extends Error {
   public constructor() {
     super('Drill session does not exist.');
@@ -54,6 +56,7 @@ export class DrillSessionNotFoundError extends Error {
   }
 }
 
+/** 项目快照、会话版本或删除确认哈希发生冲突。 */
 export class InterviewProjectConflictError extends Error {
   public constructor(message: string) {
     super(message);
@@ -61,6 +64,7 @@ export class InterviewProjectConflictError extends Error {
   }
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface AvailableResumeProject {
   readonly profileId: string;
   readonly profileName: string;
@@ -72,11 +76,13 @@ export interface AvailableResumeProject {
   readonly highlights: readonly string[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface InterviewTaskAccepted {
   readonly task: TaskRecord;
   readonly deduplicated: boolean;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface DossierDeletionImpact {
   readonly impactHash: string;
   readonly snapshot: DossierDeletionSnapshot;
@@ -91,10 +97,12 @@ export interface DossierDeletionImpact {
   };
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function accepted(result: EnqueueTaskResult): InterviewTaskAccepted {
   return { task: result.task, deduplicated: result.kind !== 'enqueued' };
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function impact(snapshot: DossierDeletionSnapshot): DossierDeletionImpact {
   return {
     impactHash: hashCanonical(snapshot),
@@ -111,6 +119,7 @@ function impact(snapshot: DossierDeletionSnapshot): DossierDeletionImpact {
   };
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function exclusiveDeletionArtifacts(
   snapshot: DossierDeletionSnapshot,
 ): readonly { readonly id: string; readonly relativePath: string }[] {
@@ -133,6 +142,7 @@ function exclusiveDeletionArtifacts(
     .toSorted((left, right) => left.id.localeCompare(right.id));
 }
 
+/** 编排项目快照、渐进式拷打会话、回答 digest 和备忘录。 */
 export class InterviewProjectService {
   readonly #profiles: CandidateProfileRepository;
   readonly #repository: InterviewProjectRepository;
@@ -144,6 +154,7 @@ export class InterviewProjectService {
   readonly #notebooks: ProjectNotebookReader | null;
   readonly #materials: ProjectMaterialService | null;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly profiles: CandidateProfileRepository;
     readonly repository: InterviewProjectRepository;
@@ -171,6 +182,7 @@ export class InterviewProjectService {
       : null;
   }
 
+  /** 列出当前简历版本中的可拷打项目。 */
   public listAvailableProjects(): readonly AvailableResumeProject[] {
     return this.#profiles.listProfiles().flatMap((profile) => {
       const version = this.#profiles.getCurrentVersion(profile.id);
@@ -188,17 +200,21 @@ export class InterviewProjectService {
     });
   }
 
+  /** 列出已创建的项目拷打档案。 */
   public listDossiers(): readonly ProjectDossierSummary[] {
     return this.#repository.listDossiers();
   }
 
+  /** 获取项目档案及其会话、题目、回答和资料详情。 */
   public getDossier(id: string): ProjectDossierDetail {
     const dossier = this.#repository.getDossier(parseId(id, 'ProjectDossier'));
     if (!dossier) throw new ProjectDossierNotFoundError();
     return dossier;
   }
 
+  /** 校验简历项目哈希并创建不可变项目快照。 */
   public createDossier(input: {
+    // 1、读取指定简历版本；2、校验项目索引和内容哈希；3、创建快照与档案。
     readonly profileVersionId: string;
     readonly projectIndex: number;
     readonly expectedProjectHash: string;
@@ -243,6 +259,7 @@ export class InterviewProjectService {
     return { dossier: summary, deduplicated: created.deduplicated };
   }
 
+  /** 导入深档项目 Markdown 资料并绑定到档案。 */
   public async importMaterial(input: {
     readonly dossierId: string;
     readonly fileName: string;
@@ -257,7 +274,9 @@ export class InterviewProjectService {
     });
   }
 
+  /** 创建指定档位的拷打会话并冻结资料绑定。 */
   public startSession(
+    // 1、校验档案与档位；2、冻结当前资料和 profile 哈希；3、创建待提问会话。
     dossierIdValue: string,
     input: {
       readonly profileKey?: DrillProfileKey;
@@ -332,6 +351,7 @@ export class InterviewProjectService {
     return { sessionId, deduplicated: false };
   }
 
+  /** 为会话申请下一题，并幂等投递问题生成任务。 */
   public requestQuestion(sessionIdValue: string): InterviewTaskAccepted {
     const sessionId = parseId(sessionIdValue, 'DrillSession');
     const session = this.#repository.getSession(sessionId);
@@ -380,6 +400,7 @@ export class InterviewProjectService {
     }
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #enqueueQuestion(
     session: NonNullable<ReturnType<InterviewProjectRepository['getSession']>>,
     turnId: DrillTurnId,
@@ -412,7 +433,9 @@ export class InterviewProjectService {
     return accepted(result);
   }
 
+  /** 保存用户回答并投递回答 digest 任务。 */
   public submitAnswer(input: {
+    // 1、校验当前题目状态；2、保存回答修订；3、推进会话版本；4、投递 digest 任务。
     readonly sessionId: string;
     readonly turnId: string;
     readonly answer: string;
@@ -481,6 +504,7 @@ export class InterviewProjectService {
     return accepted(queued);
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #enqueueAnswerDigest(input: {
     readonly dossierId: ProjectDossierId;
     readonly sessionId: DrillSessionId;
@@ -510,6 +534,7 @@ export class InterviewProjectService {
     }
   }
 
+  /** 跳过当前题目并记录会话状态变化。 */
   public skipTurn(turnIdValue: string): void {
     const turn = this.#repository.skipTurn({
       turnId: parseId(turnIdValue, 'DrillTurn'),
@@ -519,6 +544,7 @@ export class InterviewProjectService {
     if (session) this.enqueueNotebook(session.dossierId);
   }
 
+  /** 取消尚未生成题目的任务，避免陈旧结果落库。 */
   public cancelPendingTurn(turnIdValue: string): void {
     const turnId = parseId(turnIdValue, 'DrillTurn');
     const detail = this.#repository
@@ -533,6 +559,7 @@ export class InterviewProjectService {
     this.enqueueNotebook(detail.dossier.id);
   }
 
+  /** 按领域状态机推进拷打会话。 */
   public transitionSession(input: {
     readonly sessionId: string;
     readonly action: 'pause' | 'resume' | 'complete';
@@ -562,6 +589,7 @@ export class InterviewProjectService {
     this.enqueueNotebook(session.dossierId);
   }
 
+  /** 投递项目拷打备忘录生成任务。 */
   public enqueueNotebook(dossierIdValue: string | ProjectDossierId): InterviewTaskAccepted {
     const dossierId = parseId(dossierIdValue, 'ProjectDossier');
     const detail = this.#repository.getDossier(dossierId);
@@ -575,6 +603,7 @@ export class InterviewProjectService {
     );
   }
 
+  /** 读取最新备忘录或返回尚未生成的状态。 */
   public async readNotebook(
     dossierIdValue: string,
     signal: AbortSignal,
@@ -600,13 +629,16 @@ export class InterviewProjectService {
     };
   }
 
+  /** 预览项目档案删除影响并生成确认哈希。 */
   public previewDeletion(dossierIdValue: string): DossierDeletionImpact {
     const snapshot = this.#repository.previewDeletion(parseId(dossierIdValue, 'ProjectDossier'));
     if (!snapshot) throw new ProjectDossierNotFoundError();
     return impact(snapshot);
   }
 
+  /** 按确认哈希删除档案、会话记录和独占资料文件。 */
   public async deleteConfirmed(input: {
+    // 1、重新计算影响；2、校验确认哈希；3、事务删除结构化数据；4、清理物理文件。
     readonly dossierId: string;
     readonly expectedImpactHash: string;
   }): Promise<{
@@ -678,6 +710,7 @@ export class InterviewProjectService {
   }
 }
 
+/** 应用服务使用的稳定配置或常量。 */
 export const interviewAgentVersions = {
   question: projectQuestionAgentDefinition.version,
   docsQuestion: docsGroundedProjectQuestionAgentDefinition.version,

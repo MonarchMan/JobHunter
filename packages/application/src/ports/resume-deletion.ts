@@ -1,11 +1,13 @@
 import type { UtcInstant } from '@jobhunter/domain';
 import type { QuarantinedArtifact } from './artifact-store.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeDeletionArtifact {
   readonly id: string;
   readonly relativePath: string;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeDeletionSnapshot {
   readonly requestedResumeDocumentId: string;
   readonly profileIds: readonly string[];
@@ -19,6 +21,7 @@ export interface ResumeDeletionSnapshot {
   readonly artifacts: readonly ResumeDeletionArtifact[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeDeletionRepository {
   preview(resumeDocumentId: string): ResumeDeletionSnapshot | null;
   applyConfirmedDeletion(input: {

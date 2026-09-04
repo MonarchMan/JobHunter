@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 360 社会招聘接口配置 Schema。 */
 export const qihoo360ConfigSchema = z
   .object({ pageSize: z.literal(10_000).default(10_000) })
   .strict();
@@ -15,8 +16,10 @@ export const qihoo360JobSchema = z
     date: z.string().nullable().optional(),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type Qihoo360Job = z.infer<typeof qihoo360JobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const qihoo360DetailSchema = qihoo360JobSchema
   .extend({
     description: z.string().min(1),
@@ -24,8 +27,10 @@ export const qihoo360DetailSchema = qihoo360JobSchema
     year: z.string().nullable().optional(),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type Qihoo360Detail = z.infer<typeof qihoo360DetailSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const qihoo360DetailResponseSchema = z
   .object({ code: z.literal(0), data: qihoo360DetailSchema })
   .loose();

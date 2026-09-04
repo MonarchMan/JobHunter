@@ -27,6 +27,7 @@ let listPage1: unknown;
 let listPage2: unknown;
 let detailResponse: unknown;
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function fixture(name: string): Promise<unknown> {
   const text = await readFile(new URL(`./fixtures/meituan/${name}`, import.meta.url), 'utf8');
   return JSON.parse(text) as unknown;
@@ -40,10 +41,12 @@ beforeAll(async () => {
   ]);
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function response<T>(body: T, url: string): SourceHttpResponse<T> {
   return { status: 200, url, headers: new Headers({ 'content-type': 'application/json' }), body };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function fixtureHttp(overrides: { readonly secondPage?: unknown } = {}): SourceHttpClient {
   return {
     request<TBody>(request: SourceHttpRequest): Promise<SourceHttpResponse<TBody>> {
@@ -62,6 +65,7 @@ function fixtureHttp(overrides: { readonly secondPage?: unknown } = {}): SourceH
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function context(http: SourceHttpClient = fixtureHttp()): DiscoverContext<MeituanConfig> {
   return {
     sourceId,

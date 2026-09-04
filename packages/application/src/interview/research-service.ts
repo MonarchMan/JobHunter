@@ -35,6 +35,7 @@ const maximumBundleBytes = 2 * 1024 * 1024;
 const maximumPromptBytes = 512 * 1024;
 const maximumSchemaBytes = 512 * 1024;
 
+/** 校验审核后面经列表的筛选条件，避免宽泛或空值查询。 */
 function normalizeAcceptedFilter(filter: CommunityExperienceFilter): CommunityExperienceFilter {
   const normalized: { company?: string; role?: string; stage?: string } = {};
   for (const key of ['company', 'role', 'stage'] as const) {
@@ -50,18 +51,22 @@ function normalizeAcceptedFilter(filter: CommunityExperienceFilter): CommunityEx
 }
 const bundleImportLeaseMilliseconds = 5 * 60 * 1_000;
 
+/** 生成同一研究请求下 Prompt/Schema 的稳定逻辑文件 ID。 */
 function researchFileId(kind: 'prompt' | 'schema', fingerprint: string): string {
   return contentHash({ fingerprint, kind, scope: 'experience-research-file' });
 }
 
+/** 生成研究结果包的稳定逻辑文件 ID。 */
 function bundleFileId(requestId: string): string {
   return contentHash({ kind: 'bundle', requestId, scope: 'experience-research-file' });
 }
 
+/** 生成导入期间使用的临时结果文件 ID。 */
 function stagingBundleFileId(requestId: string, claimToken: string): string {
   return contentHash({ claimToken, kind: 'bundle-staging', requestId });
 }
 
+/** 研究请求不存在。 */
 export class ExperienceResearchNotFoundError extends Error {
   public constructor() {
     super('Experience research request does not exist.');
@@ -69,6 +74,7 @@ export class ExperienceResearchNotFoundError extends Error {
   }
 }
 
+/** 研究请求版本已变化，拒绝旧任务写入。 */
 export class ExperienceResearchConflictError extends Error {
   public constructor(message = 'Experience research request changed.') {
     super(message);
@@ -76,6 +82,7 @@ export class ExperienceResearchConflictError extends Error {
   }
 }
 
+/** 外部研究包无法解析或不满足证据约束。 */
 export class ExperienceResearchBundleError extends Error {
   public constructor(message: string) {
     super(message);
@@ -83,6 +90,7 @@ export class ExperienceResearchBundleError extends Error {
   }
 }
 
+/** 研究 Prompt、Schema 或结果文件存储失败。 */
 export class ExperienceResearchArtifactError extends Error {
   public constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -90,6 +98,7 @@ export class ExperienceResearchArtifactError extends Error {
   }
 }
 
+/** 编排网友面经研究请求、外部执行、结果导入和审核。 */
 export class ExperienceResearchService {
   readonly #repository: InterviewResearchRepository;
   readonly #artifacts: ArtifactStore;
@@ -98,6 +107,7 @@ export class ExperienceResearchService {
   readonly #clock: Clock;
   readonly #ids: IdGenerator;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly repository: InterviewResearchRepository;
     readonly artifacts: ArtifactStore;
@@ -114,6 +124,7 @@ export class ExperienceResearchService {
     this.#ids = input.ids;
   }
 
+  /** 列出研究请求摘要。 */
   public listRequests(): readonly ExperienceResearchRequestSummary[] {
     return this.#repository.listRequests().map((request) => {
       const task = request.currentTaskId ? this.#tasks?.get(request.currentTaskId) : null;
@@ -126,12 +137,14 @@ export class ExperienceResearchService {
     });
   }
 
+  /** 列出已审核通过、可进入历史面经的网友面经。 */
   public listAccepted(
     filter: CommunityExperienceFilter = {},
   ): ReturnType<InterviewResearchRepository['listAccepted']> {
     return this.#repository.listAccepted(normalizeAcceptedFilter(filter));
   }
 
+  /** 获取研究请求及其当前候选结果。 */
   public get(requestIdValue: string): ExperienceResearchDetail {
     const detail = this.#repository.getRequest(
       parseId(requestIdValue, 'ExperienceResearchRequest'),
@@ -140,7 +153,9 @@ export class ExperienceResearchService {
     return detail;
   }
 
+  /** 创建冻结研究简报，并持久化对应 Prompt 与输出 Schema。 */
   public async create(briefValue: ExperienceResearchBrief): Promise<{
+    // 1、校验简报并计算指纹；2、保存 Prompt/Schema 文件；3、创建 ready 请求记录。
     readonly detail: ExperienceResearchDetail;
     readonly deduplicated: boolean;
   }> {
@@ -210,6 +225,7 @@ export class ExperienceResearchService {
     return { detail, deduplicated: detail.request.id !== requestId };
   }
 
+  /** 读取指定请求的冻结 Prompt 文本。 */
   public async prompt(requestIdValue: string, signal?: AbortSignal): Promise<string> {
     const detail = this.get(requestIdValue);
     let bytes: Uint8Array;
@@ -240,6 +256,7 @@ export class ExperienceResearchService {
     }
   }
 
+  /** 读取指定请求的冻结输出 Schema。 */
   public async schema(
     requestIdValue: string,
     signal?: AbortSignal,
@@ -275,7 +292,9 @@ export class ExperienceResearchService {
     }
   }
 
+  /** 将 ready 研究请求投递给外部研究执行器。 */
   public enqueueExecution(input: {
+    // 1、校验请求状态和执行器；2、写入任务并绑定请求版本；3、返回去重后的任务。
     readonly requestId: string;
     readonly executorKey: ExternalResearchExecutorKey;
     readonly idempotencyToken: string;
@@ -323,7 +342,9 @@ export class ExperienceResearchService {
     return { task: result.task, deduplicated: result.kind !== 'enqueued' };
   }
 
+  /** 导入外部研究 JSON 包，校验来源、问题去重与版本后保存候选。 */
   public async importBundle(input: {
+    // 1、读取并限制结果文件；2、规范化研究包；3、写入候选与来源；4、推进请求 revision。
     readonly requestId: string;
     readonly expectedRevision: number;
     readonly bytes: Uint8Array;
@@ -466,6 +487,7 @@ export class ExperienceResearchService {
     }
   }
 
+  /** 审核候选面经，接受后才会出现在网友面经历史中。 */
   public review(input: {
     readonly requestId: string;
     readonly experienceId: string;

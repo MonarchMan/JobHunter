@@ -12,6 +12,7 @@ import type {
   UtcInstant,
 } from '@jobhunter/domain';
 
+/** 应用层数据结构或端口契约。 */
 export interface PersistJobMutation {
   readonly decision: Exclude<JobMergeDecision, { readonly type: 'unchanged' }>;
   readonly jobId: JobId;
@@ -24,6 +25,7 @@ export interface PersistJobMutation {
   readonly observedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface PersistJobStatus {
   readonly jobId: JobId;
   readonly lifecycle: JobLifecycleSnapshot;
@@ -35,6 +37,7 @@ export interface PersistJobStatus {
   readonly evidence?: unknown;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CurrentJobRecord {
   readonly jobId: JobId;
   readonly revisionId: JobRevisionId;
@@ -45,6 +48,7 @@ export interface CurrentJobRecord {
   readonly lifecycle: JobLifecycleSnapshot;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface JobRepository {
   findCurrent(identity: SourceJobIdentity): CurrentJobRecord | null;
   persistMutation(input: PersistJobMutation): void;

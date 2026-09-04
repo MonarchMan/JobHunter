@@ -1,12 +1,15 @@
 import { experienceResearchBriefSchema, type ExperienceResearchBrief } from '@jobhunter/domain';
 import type { ExternalResearchCollectionPlan } from '../ports/external-research.js';
 
+/** 应用服务使用的稳定配置或常量。 */
 export const communityBrowserCollectionPlanVersion = 'community-browser-collection@v2' as const;
 
+/** 规范化查询文本，避免不同空白造成重复搜索。 */
 function searchText(value: string): string {
   return value.normalize('NFKC').replaceAll(/\s+/gu, ' ').trim();
 }
 
+/** 对搜索词去重并排序，保证计划可复现。 */
 function stableSearchTerms(values: readonly string[]): readonly string[] {
   return [...new Set(values.map(searchText))].sort((left, right) =>
     left < right ? -1 : left > right ? 1 : 0,
@@ -29,6 +32,7 @@ const englishGenericRoleWords = new Set([
   'specialist',
 ]);
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function roleRelevanceTerms(role: string): readonly string[] {
   const terms = [role];
   let core = role;
@@ -45,10 +49,12 @@ function roleRelevanceTerms(role: string): readonly string[] {
   return terms;
 }
 
+/** 从岗位、公司和允许域名生成受限的外部研究搜索计划。 */
 export function createCommunityResearchCollectionPlan(
   briefValue: ExperienceResearchBrief,
   maximumSearches: number,
 ): ExternalResearchCollectionPlan {
+  // 1、校验简报和搜索上限；2、优先生成站内查询；3、补充通用查询并截断；4、生成相关性词表。
   const brief = experienceResearchBriefSchema.parse(briefValue);
   if (!Number.isSafeInteger(maximumSearches) || maximumSearches < 1 || maximumSearches > 20) {
     throw new TypeError('Research collection search limit is invalid.');

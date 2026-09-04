@@ -21,6 +21,7 @@ const selected = new Set(
     .filter(Boolean),
 );
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function verifyChannel<TConfig>(
   adapter: JobSourceAdapter<TConfig, never>,
   config: TConfig,

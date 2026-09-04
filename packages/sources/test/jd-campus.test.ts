@@ -27,10 +27,12 @@ beforeAll(async () => {
   ) as JdCampusListResponse;
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function response<T>(body: T, url: string): SourceHttpResponse<T> {
   return { status: 200, url, headers: new Headers({ 'content-type': 'application/json' }), body };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function context(http: SourceHttpClient = fixtureHttp()): DiscoverContext<JdCampusConfig> {
   return {
     sourceId,
@@ -44,6 +46,7 @@ function context(http: SourceHttpClient = fixtureHttp()): DiscoverContext<JdCamp
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function fixtureHttp(): SourceHttpClient {
   return {
     request<TBody>(request: SourceHttpRequest): Promise<SourceHttpResponse<TBody>> {

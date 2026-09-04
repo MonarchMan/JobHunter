@@ -15,6 +15,7 @@ import {
   type ResearchBrowserSearchResult,
 } from '../src/research-browser-gateway.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 interface RpcResponse {
   readonly result?: {
     readonly tools?: readonly { readonly name: string }[];
@@ -24,6 +25,7 @@ interface RpcResponse {
   readonly error?: { readonly code: number; readonly message: string };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FakeResearchBrowserDriver implements ResearchBrowserDriver {
   public searchResults: readonly ResearchBrowserSearchResult[] = [
     { title: '公开面经', url: 'https://8.8.8.8/interviews/llm' },
@@ -44,26 +46,31 @@ class FakeResearchBrowserDriver implements ResearchBrowserDriver {
   public closeCalls = 0;
   #searchCalls = 0;
 
+  /** 执行测试替身或时钟的操作。 */
   public search(): Promise<readonly ResearchBrowserSearchResult[]> {
     const result = this.searchResultBatches?.[this.#searchCalls] ?? this.searchResults;
     this.#searchCalls += 1;
     return Promise.resolve(result);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public open(url: string): Promise<ResearchBrowserOpenedPage> {
     this.openedUrls.push(url);
     return Promise.resolve(this.openedPage);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public readPage(): Promise<ResearchBrowserPageContent> {
     return Promise.resolve(this.pageContent);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public closePage(driverPageId: string): Promise<void> {
     this.closedPageIds.push(driverPageId);
     return Promise.resolve();
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public close(): Promise<void> {
     this.closeCalls += 1;
     return Promise.resolve();
@@ -118,6 +125,7 @@ afterEach(async () => {
   await Promise.all(gateways.splice(0).map((gateway) => gateway.close().catch(() => undefined)));
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function gateway(
   input: {
     readonly driver?: FakeResearchBrowserDriver;
@@ -144,6 +152,7 @@ async function gateway(
   return { gateway: started, driver };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function rpc(
   target: ResearchBrowserGateway,
   method: string,
@@ -164,6 +173,7 @@ async function rpc(
   return JSON.parse(dataLine ? dataLine.slice('data: '.length) : text) as RpcResponse;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function rawStatus(
   target: ResearchBrowserGateway,
   headers: Readonly<Record<string, string>>,
@@ -191,6 +201,7 @@ function rawStatus(
   });
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function rawRequestStatus(target: ResearchBrowserGateway, requestTarget: string): Promise<number> {
   const url = new URL(target.url);
   return new Promise((resolve, reject) => {
@@ -215,6 +226,7 @@ function rawRequestStatus(target: ResearchBrowserGateway, requestTarget: string)
   });
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function callTool(
   target: ResearchBrowserGateway,
   name: string,

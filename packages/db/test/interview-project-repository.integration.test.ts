@@ -53,6 +53,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => root.cleanup()));
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function fixture(): Promise<{
   handle: SqliteDatabaseHandle;
   repository: SqliteInterviewProjectRepository;
@@ -115,6 +116,7 @@ async function fixture(): Promise<{
   return { handle, repository: new SqliteInterviewProjectRepository(handle.client), project };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function insertTask(handle: SqliteDatabaseHandle, id: string): void {
   handle.client
     .prepare(
@@ -125,6 +127,7 @@ function insertTask(handle: SqliteDatabaseHandle, id: string): void {
     .run(id, id);
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function insertAgentRun(handle: SqliteDatabaseHandle, id: string): void {
   handle.client
     .prepare(

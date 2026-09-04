@@ -4,6 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 /** Writes an export through a same-directory temporary file and atomic rename. */
+/** 将职位导出文件安全写入本地数据目录并提供读取。 */
 export class NodeJobExportFileStore implements JobExportFileStore {
   public async writeAtomic(
     targetPath: string,

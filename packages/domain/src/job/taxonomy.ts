@@ -1,5 +1,6 @@
 import type { NormalizedJob } from './normalized-job.js';
 
+/** 职位一级分类枚举。 */
 export const canonicalJobFamilies = [
   '研发',
   '产品',
@@ -15,6 +16,7 @@ export const canonicalJobFamilies = [
 
 export type CanonicalJobFamily = (typeof canonicalJobFamilies)[number];
 
+/** 职位二级分类枚举。 */
 export const canonicalJobSubfamilies = [
   '后端',
   '前端',
@@ -29,6 +31,7 @@ export const canonicalJobSubfamilies = [
 
 export type CanonicalJobSubfamily = (typeof canonicalJobSubfamilies)[number];
 
+/** 模块数据结构或契约。 */
 export interface JobTaxonomy {
   readonly jobFamily: CanonicalJobFamily;
   readonly jobSubfamily: CanonicalJobSubfamily | null;
@@ -79,6 +82,7 @@ const subfamilyRules: readonly [CanonicalJobSubfamily, readonly string[]][] = [
   ['视觉设计', ['视觉设计', '视觉实习生', 'ui', '用户界面']],
 ];
 
+/** 根据标题或部门关键词归一化职位分类。 */
 export function normalizeJobTaxonomy(value: string | null | undefined): JobTaxonomy {
   const text = value?.trim();
   if (!text) return { jobFamily: '其他', jobSubfamily: null };
@@ -94,6 +98,7 @@ export function normalizeJobTaxonomy(value: string | null | undefined): JobTaxon
   return { jobFamily: family, jobSubfamily };
 }
 
+/** 合并职位多个分类字段后计算最终分类。 */
 export function canonicalizeJobTaxonomy(
   job: Pick<NormalizedJob, 'title' | 'department' | 'jobFamily' | 'jobSubfamily'>,
 ): JobTaxonomy {

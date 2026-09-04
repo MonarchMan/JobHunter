@@ -4,6 +4,7 @@ import { candidatePreferencesSchema, candidateProfileSchema } from '@jobhunter/d
 import { resumePolishAgentOutputSchema, resumePolishSectionSchema } from '@jobhunter/resume';
 
 /** Stable error body shared by Web route handlers and React clients. */
+/** Web API 的统一错误对象。 */
 export const webErrorSchema = z
   .object({
     code: z.string().min(1),
@@ -13,13 +14,16 @@ export const webErrorSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebError = z.infer<typeof webErrorSchema>;
 
+/** 应用层使用的类型约束。 */
 export type WebSuccessEnvelopeSchema<TSchema extends z.ZodType> = z.ZodObject<{
   data: TSchema;
   meta: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
 }>;
 
+/** 为任意数据 Schema 包装统一成功响应。 */
 export function webSuccessEnvelopeSchema<TSchema extends z.ZodType>(
   schema: TSchema,
 ): WebSuccessEnvelopeSchema<TSchema> {
@@ -31,21 +35,25 @@ export function webSuccessEnvelopeSchema<TSchema extends z.ZodType>(
     .strict();
 }
 
+/** Web API 的统一错误响应包。 */
 export const webErrorEnvelopeSchema = z
   .object({
     error: webErrorSchema,
   })
   .strict();
 
+/** 应用层数据结构或端口契约。 */
 export interface WebSuccessEnvelope<TData> {
   readonly data: TData;
   readonly meta?: Readonly<Record<string, unknown>>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface WebErrorEnvelope {
   readonly error: WebError;
 }
 
+/** 异步任务已接受响应。 */
 export const webTaskAcceptedSchema = z
   .object({
     taskId: z.uuid(),
@@ -55,8 +63,10 @@ export const webTaskAcceptedSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebTaskAccepted = z.infer<typeof webTaskAcceptedSchema>;
 
+/** 简历导入响应。 */
 export const webResumeImportResultSchema = z
   .object({
     document: z
@@ -75,8 +85,10 @@ export const webResumeImportResultSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebResumeImportResult = z.infer<typeof webResumeImportResultSchema>;
 
+/** 首页下一步行动卡片的联合结构。 */
 export const webDashboardNextActionSchema = z.discriminatedUnion('type', [
   z
     .object({
@@ -125,8 +137,10 @@ export const webDashboardNextActionSchema = z.discriminatedUnion('type', [
     .strict(),
 ]);
 
+/** 应用层使用的类型约束。 */
 export type WebDashboardNextAction = z.infer<typeof webDashboardNextActionSchema>;
 
+/** 首页高亮职位摘要 Schema。 */
 export const webDashboardHighlightJobSchema = z
   .object({
     id: z.uuid(),
@@ -141,8 +155,10 @@ export const webDashboardHighlightJobSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebDashboardHighlightJob = z.infer<typeof webDashboardHighlightJobSchema>;
 
+/** 首页仪表盘聚合数据 Schema。 */
 export const webDashboardSchema = z
   .object({
     activeJobs: z.number().int().nonnegative(),
@@ -163,8 +179,10 @@ export const webDashboardSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebDashboard = z.infer<typeof webDashboardSchema>;
 
+/** 列表接口通用分页元数据 Schema。 */
 export const webPaginationSchema = z
   .object({
     current: z.number().int().positive(),
@@ -174,8 +192,10 @@ export const webPaginationSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebPagination = z.infer<typeof webPaginationSchema>;
 
+/** 计算 Web 列表分页元数据。 */
 export function webPagination(total: number, current: number, pageSize: number): WebPagination {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   return webPaginationSchema.parse({
@@ -186,6 +206,7 @@ export function webPagination(total: number, current: number, pageSize: number):
   });
 }
 
+/** 职位列表查询参数 Schema。 */
 export const webJobQuerySchema = z
   .object({
     search: z.string().trim().min(1).max(200).optional(),
@@ -207,8 +228,10 @@ export const webJobQuerySchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebJobQuery = z.infer<typeof webJobQuerySchema>;
 
+/** 单个职位匹配请求参数 Schema。 */
 export const webJobMatchMutationSchema = z
   .object({
     profileVersionId: z.uuid().optional(),
@@ -217,12 +240,15 @@ export const webJobMatchMutationSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebJobMatchMutation = z.infer<typeof webJobMatchMutationSchema>;
 
+/** 批量职位匹配请求参数 Schema。 */
 export const webJobBulkMatchMutationSchema = webJobMatchMutationSchema
   .extend({ jobIds: z.array(z.uuid()).min(1).max(100) })
   .strict();
 
+/** 职位列表行数据 Schema。 */
 export const webJobListItemSchema = z
   .object({
     id: z.uuid(),
@@ -243,8 +269,10 @@ export const webJobListItemSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebJobListItem = z.infer<typeof webJobListItemSchema>;
 
+/** 职位分页结果 Schema。 */
 export const webJobPageSchema = z
   .object({
     items: z.array(webJobListItemSchema),
@@ -255,8 +283,11 @@ export const webJobPageSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebJobPage = z.infer<typeof webJobPageSchema>;
 
+/** 职位修订记录 Schema。 */
+/** 职位历史修订记录 Schema。 */
 export const webJobRevisionSchema = z
   .object({
     id: z.uuid(),
@@ -266,6 +297,8 @@ export const webJobRevisionSchema = z
   })
   .strict();
 
+/** 职位匹配结果及建议状态 Schema。 */
+/** 职位匹配结果及建议状态 Schema。 */
 export const webJobMatchSchema = z
   .object({
     id: z.uuid(),
@@ -283,6 +316,7 @@ export const webJobMatchSchema = z
   })
   .strict();
 
+/** 职位详情及历史修订、匹配结果 Schema。 */
 export const webJobDetailSchema = webJobListItemSchema
   .extend({
     sourceId: z.uuid(),
@@ -300,8 +334,11 @@ export const webJobDetailSchema = webJobListItemSchema
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebJobDetail = z.infer<typeof webJobDetailSchema>;
 
+/** 候选人画像摘要 Schema。 */
+/** 候选人画像摘要 Schema。 */
 export const webProfileSummarySchema = z
   .object({
     id: z.uuid(),
@@ -311,6 +348,8 @@ export const webProfileSummarySchema = z
   })
   .strict();
 
+/** 候选人画像版本 Schema。 */
+/** 候选人画像版本 Schema。 */
 export const webProfileVersionSchema = z
   .object({
     id: z.uuid(),
@@ -333,6 +372,7 @@ export const webProfileVersionSchema = z
   })
   .strict();
 
+/** 候选人画像详情及版本列表 Schema。 */
 export const webProfileDetailSchema = z
   .object({
     profile: webProfileSummarySchema,
@@ -341,8 +381,10 @@ export const webProfileDetailSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebProfileDetail = z.infer<typeof webProfileDetailSchema>;
 
+/** 候选人画像编辑操作 Schema。 */
 export const webProfileMutationSchema = z.discriminatedUnion('kind', [
   z
     .object({
@@ -379,8 +421,11 @@ export const webProfileMutationSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
+/** 应用层使用的类型约束。 */
 export type WebProfileMutation = z.infer<typeof webProfileMutationSchema>;
 
+/** 简历润色请求 Schema。 */
+/** 简历润色请求 Schema。 */
 export const webResumePolishRequestSchema = z
   .object({
     profileId: z.uuid(),
@@ -390,6 +435,7 @@ export const webResumePolishRequestSchema = z
   })
   .strict();
 
+/** 简历润色任务受理响应 Schema。 */
 export const webResumePolishAcceptedSchema = z
   .object({
     suggestionId: z.uuid(),
@@ -404,8 +450,10 @@ export const webResumePolishAcceptedSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebResumePolishAccepted = z.infer<typeof webResumePolishAcceptedSchema>;
 
+/** 简历润色任务状态响应 Schema。 */
 export const webResumePolishStatusSchema = z
   .object({
     suggestionId: z.uuid(),
@@ -422,8 +470,11 @@ export const webResumePolishStatusSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
+/** 简历润色任务状态响应类型。 */
 export type WebResumePolishStatus = z.infer<typeof webResumePolishStatusSchema>;
 
+/** 招聘来源运行摘要 Schema。 */
 const webSourceRunSchema = z
   .object({
     id: z.string(),
@@ -437,6 +488,7 @@ const webSourceRunSchema = z
   })
   .strict();
 
+/** 招聘来源配置与健康状态 Schema。 */
 export const webSourceSchema = z
   .object({
     id: z.uuid(),
@@ -472,8 +524,10 @@ export const webSourceSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebSource = z.infer<typeof webSourceSchema>;
 
+/** 招聘来源渠道及其适配器列表 Schema。 */
 export const webSourceChannelSchema = z
   .object({
     id: z.uuid(),
@@ -490,8 +544,10 @@ export const webSourceChannelSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebSourceChannel = z.infer<typeof webSourceChannelSchema>;
 
+/** 来源渠道操作请求 Schema。 */
 export const webSourceChannelMutationSchema = z.discriminatedUnion('kind', [
   z
     .object({
@@ -503,8 +559,10 @@ export const webSourceChannelMutationSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('enable'), channelId: z.uuid(), enabled: z.boolean() }).strict(),
 ]);
 
+/** 应用层使用的类型约束。 */
 export type WebSourceChannelMutation = z.infer<typeof webSourceChannelMutationSchema>;
 
+/** 单个招聘来源操作请求 Schema。 */
 export const webSourceMutationSchema = z.discriminatedUnion('kind', [
   z
     .object({
@@ -525,8 +583,10 @@ export const webSourceMutationSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
+/** 应用层使用的类型约束。 */
 export type WebSourceMutation = z.infer<typeof webSourceMutationSchema>;
 
+/** 系统设置展示 Schema。 */
 export const webSettingsSchema = z
   .object({
     jobUnderstanding: z
@@ -542,8 +602,10 @@ export const webSettingsSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebSettings = z.infer<typeof webSettingsSchema>;
 
+/** 系统设置修改请求 Schema。 */
 export const webSettingsMutationSchema = z
   .object({
     jobUnderstandingEnabled: z.boolean(),
@@ -551,10 +613,13 @@ export const webSettingsMutationSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebSettingsMutation = z.infer<typeof webSettingsMutationSchema>;
 
+/** Web 任务状态枚举 Schema。 */
 const webTaskStatusSchema = z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled']);
 
+/** 来源同步任务详情 Schema。 */
 export const webSourceSyncTaskDetailSchema = z
   .object({
     companyName: z.string().trim().min(1),
@@ -591,8 +656,10 @@ export const webSourceSyncTaskDetailSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebSourceSyncTaskDetail = z.infer<typeof webSourceSyncTaskDetailSchema>;
 
+/** 职位详情批处理任务摘要 Schema。 */
 export const webJobDetailBatchSchema = z
   .object({
     runId: z.string().trim().min(1),
@@ -612,8 +679,10 @@ export const webJobDetailBatchSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebJobDetailBatch = z.infer<typeof webJobDetailBatchSchema>;
 
+/** 通用任务详情 Schema。 */
 export const webTaskSchema = z
   .object({
     kind: z.enum(['task', 'source_job_detail_batch']),
@@ -634,8 +703,10 @@ export const webTaskSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebTask = z.infer<typeof webTaskSchema>;
 
+/** Agent 运行摘要 Schema。 */
 export const webAgentRunSummarySchema = z
   .object({
     id: z.uuid(),
@@ -656,6 +727,7 @@ export const webAgentRunSummarySchema = z
   })
   .strict();
 
+/** Agent 运行详情及工具调用 Schema。 */
 export const webAgentRunDetailSchema = webAgentRunSummarySchema
   .extend({
     toolCalls: z.array(
@@ -672,9 +744,12 @@ export const webAgentRunDetailSchema = webAgentRunSummarySchema
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebAgentRunSummary = z.infer<typeof webAgentRunSummarySchema>;
+/** 应用层使用的类型约束。 */
 export type WebAgentRunDetail = z.infer<typeof webAgentRunDetailSchema>;
 
+/** 任务与 Agent 诊断数据 Schema。 */
 export const webDiagnosticsSchema = z
   .object({
     tasks: z.array(webTaskSchema),
@@ -684,8 +759,10 @@ export const webDiagnosticsSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebDiagnostics = z.infer<typeof webDiagnosticsSchema>;
 
+/** 任务取消或重试请求 Schema。 */
 export const webTaskMutationSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('cancel'), taskId: z.uuid() }).strict(),
   z
@@ -697,8 +774,10 @@ export const webTaskMutationSchema = z.discriminatedUnion('kind', [
     .strict(),
 ]);
 
+/** 应用层使用的类型约束。 */
 export type WebTaskMutation = z.infer<typeof webTaskMutationSchema>;
 
+/** 简历删除影响预览 Schema。 */
 export const webResumeDeletionImpactSchema = z
   .object({
     resumeDocumentId: z.uuid(),
@@ -719,8 +798,10 @@ export const webResumeDeletionImpactSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebResumeDeletionImpact = z.infer<typeof webResumeDeletionImpactSchema>;
 
+/** 简历删除确认请求 Schema。 */
 export const webResumeDeletionConfirmSchema = z
   .object({
     resumeDocumentId: z.uuid(),
@@ -730,4 +811,5 @@ export const webResumeDeletionConfirmSchema = z
   })
   .strict();
 
+/** 应用层使用的类型约束。 */
 export type WebResumeDeletionConfirm = z.infer<typeof webResumeDeletionConfirmSchema>;

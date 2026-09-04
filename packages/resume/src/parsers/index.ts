@@ -1,8 +1,10 @@
 import mammoth from 'mammoth';
 import type { ResumeMediaType } from '../import/media.js';
 
+/** 模块使用的类型约束。 */
 export type ResumeParseStatus = 'parsed' | 'needs_ocr' | 'failed';
 
+/** 模块数据结构或契约。 */
 export interface ResumeParseResult {
   readonly status: ResumeParseStatus;
   readonly parser: 'pdfjs' | 'mammoth' | 'utf8' | 'image';
@@ -12,6 +14,7 @@ export interface ResumeParseResult {
   readonly errorSummary: string | null;
 }
 
+/** 模块数据结构或契约。 */
 export interface ResumeParseOptions {
   readonly minimumNonWhitespaceCharacters?: number;
   readonly maximumExtractedCharacters?: number;
@@ -25,6 +28,7 @@ const parserVersions = {
   image: 'image-needs-ocr@1',
 } as const;
 
+/** 统一不同文件解析器的文本格式，并保持字符偏移可预测。 */
 export function normalizeResumeText(value: string): string {
   return value
     .replaceAll('\u0000', '')
@@ -42,6 +46,7 @@ export function normalizeResumeText(value: string): string {
     .trim();
 }
 
+/** 将规范媒体类型映射到具体文本解析器。 */
 function parserFor(mediaType: ResumeMediaType): ResumeParseResult['parser'] {
   if (mediaType === 'application/pdf') return 'pdfjs';
   if (mediaType === 'text/plain') return 'utf8';
@@ -49,10 +54,12 @@ function parserFor(mediaType: ResumeMediaType): ResumeParseResult['parser'] {
   return 'mammoth';
 }
 
+/** 在耗时解析的边界检查取消请求，避免继续消耗 CPU。 */
 function ensureNotAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw new DOMException('Resume parsing was aborted.', 'AbortError');
 }
 
+/** 逐页提取 PDF 文本，并在页之间检查取消信号。 */
 async function parsePdf(bytes: Uint8Array, signal: AbortSignal | undefined): Promise<string> {
   const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
   ensureNotAborted(signal);
@@ -78,6 +85,7 @@ async function parsePdf(bytes: Uint8Array, signal: AbortSignal | undefined): Pro
   }
 }
 
+/** 按媒体类型读取原始文本；图片交由 OCR 任务处理。 */
 async function extract(
   bytes: Uint8Array,
   mediaType: ResumeMediaType,
@@ -94,11 +102,13 @@ async function extract(
   return result.value;
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 export async function parseResumeText(
   bytes: Uint8Array,
   mediaType: ResumeMediaType,
   options: ResumeParseOptions = {},
 ): Promise<ResumeParseResult> {
+  // 1、选择解析器并校验质量阈值。
   const parser = parserFor(mediaType);
   const minimum = options.minimumNonWhitespaceCharacters ?? 80;
   const maximum = options.maximumExtractedCharacters ?? 250_000;
@@ -110,6 +120,7 @@ export async function parseResumeText(
   }
 
   try {
+    // 2、图片不在此处读取二进制内容，统一返回待 OCR 状态。
     if (parser === 'image') {
       return {
         status: 'needs_ocr',
@@ -120,6 +131,7 @@ export async function parseResumeText(
         errorSummary: 'Resume image requires background OCR.',
       };
     }
+    // 3、提取并清洗文本，再执行长度和可读字符数门禁。
     const text = normalizeResumeText(await extract(bytes, mediaType, options.signal));
     const nonWhitespace = text.replaceAll(/\s/g, '').length;
     if (text.length > maximum) {
@@ -145,6 +157,7 @@ export async function parseResumeText(
             : 'Resume contains too little readable text.',
       };
     }
+    // 4、通过全部门禁后才允许下游创建画像提取任务。
     return {
       status: 'parsed',
       parser,
@@ -154,6 +167,7 @@ export async function parseResumeText(
       errorSummary: null,
     };
   } catch (error) {
+    // 5、取消错误继续向上抛出，其余解析异常转换为稳定的失败结果。
     if (error instanceof DOMException && error.name === 'AbortError') throw error;
     return {
       status: 'failed',

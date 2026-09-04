@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { IdGenerator } from './id.js';
 
-/** Generates RFC 9562 UUIDv7 identifiers using millisecond Unix time and secure randomness. */
+/** 使用毫秒时间和安全随机数生成 RFC 9562 UUIDv7 标识符。 */
 export class SystemIdGenerator implements IdGenerator {
   readonly #now: () => number;
   readonly #random: (bytes: number) => Uint8Array;
@@ -13,7 +13,9 @@ export class SystemIdGenerator implements IdGenerator {
     this.#random = input.random ?? randomBytes;
   }
 
+  /** 执行模块组件对外暴露的操作。 */
   public generate(): string {
+    // 1、校验时间和随机源，再按 UUIDv7 布局写入 16 字节缓冲区。
     const timestamp = this.#now();
     if (!Number.isSafeInteger(timestamp) || timestamp < 0 || timestamp > 0xffffffffffff) {
       throw new TypeError('UUIDv7 timestamp is outside the supported range.');

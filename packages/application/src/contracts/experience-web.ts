@@ -1,6 +1,7 @@
 import { interviewExperienceDraftSchema } from '@jobhunter/domain';
 import { z } from 'zod';
 
+/** 在线填写的单个面试问题及回答字段。 */
 const onlineQuestionSchema = z
   .object({
     question: z.string().trim().min(1).max(5_000),
@@ -9,6 +10,7 @@ const onlineQuestionSchema = z
   })
   .strict();
 
+/** 在线创建个人面经请求。 */
 export const webCreateOnlineExperienceSchema = z
   .object({
     company: z.string().trim().max(200).nullable(),
@@ -36,6 +38,7 @@ export const webCreateOnlineExperienceSchema = z
     }),
   );
 
+/** 替换个人面经草稿请求。 */
 export const webReplaceExperienceDraftSchema = z
   .object({
     expectedRevision: z.number().int().nonnegative(),
@@ -43,10 +46,12 @@ export const webReplaceExperienceDraftSchema = z
   })
   .strict();
 
+/** 确认个人面经草稿请求。 */
 export const webAcceptExperienceSchema = z
   .object({ expectedRevision: z.number().int().nonnegative() })
   .strict();
 
+/** 删除个人面经请求。 */
 export const webDeleteExperienceSchema = z
   .object({ expectedImpactHash: z.string().length(64), confirmation: z.literal('DELETE') })
   .strict();

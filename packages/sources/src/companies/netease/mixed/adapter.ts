@@ -11,6 +11,7 @@ import {
 const hosts = ['hr.163.com'] as const;
 const entryUrl = 'https://hr.163.com/job-list.html';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function category(job: NeteaseJob): 'internship' | 'social' {
   return job.workType === '1' || /实习|intern/i.test(job.name) ? 'internship' : 'social';
 }

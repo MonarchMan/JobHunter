@@ -1,18 +1,23 @@
 import { SourceError, type DiscoveryEvent, type JobSourceAdapter } from '@jobhunter/source-core';
 
+/** 来源适配器使用的类型约束。 */
 export type CanonicalSourceChannel = 'intern' | 'campus' | 'social';
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface ChannelViewDefinition<TConfig> {
   readonly key: string;
   readonly channel: CanonicalSourceChannel;
   readonly base: () => JobSourceAdapter<TConfig, never>;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function category(channel: CanonicalSourceChannel): 'internship' | 'campus' | 'social' {
   return channel === 'intern' ? 'internship' : channel;
 }
 
+/** 创建按招聘类别筛选基础适配器结果的渠道视图。 */
 export function createInlineChannelViewAdapter<TConfig>(
+  // 1、校验基础适配器为 inline；2、包装发现事件并筛选类别；3、复用规范化和探活逻辑。
   definition: ChannelViewDefinition<TConfig>,
 ): JobSourceAdapter<TConfig, never> {
   const base = definition.base();
@@ -27,6 +32,7 @@ export function createInlineChannelViewAdapter<TConfig>(
       recruitmentType: definition.channel === 'social' ? 'social' : 'campus',
     },
     configSchema: base.configSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       let discoveredCount = 0;
       for await (const event of base.discover(context)) {
@@ -59,6 +65,7 @@ export function createInlineChannelViewAdapter<TConfig>(
         };
       }
     },
+    /** 执行来源适配器的该项操作。 */
     async normalize(input, context) {
       const normalized = await base.normalize(input, context);
       if (normalized.job.recruitmentCategory !== expectedCategory) {

@@ -26,11 +26,13 @@ const noHttp: SourceHttpClient = {
   request: () => Promise.reject(new Error('HTTP is not used by browser transport.')),
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function fixture(path: string): Promise<{ readonly text: string; readonly value: unknown }> {
   const text = await readFile(new URL(`./fixtures/${path}`, import.meta.url), 'utf8');
   return { text, value: JSON.parse(text) as unknown };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function context(http: SourceHttpClient, page?: SourcePageClient): DiscoverContext<ScriptedConfig> {
   return {
     companyId,
@@ -45,6 +47,7 @@ function context(http: SourceHttpClient, page?: SourcePageClient): DiscoverConte
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function runBrowserContract(
   factory: () => JobSourceAdapter<ScriptedConfig, never>,
   fixturePath: string,

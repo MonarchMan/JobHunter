@@ -1,3 +1,4 @@
+/** 一方来源适配器的公开导出入口。 */
 export * from './catalog/index.js';
 export * from './companies/alibaba/campus/index.js';
 export * from './companies/baidu/campus/index.js';
@@ -31,4 +32,5 @@ export * from './shared/normalization/job-taxonomy.js';
 export * from './shared/normalization/recruitment-category.js';
 
 /** Public package identifier used by composition smoke tests. */
+/** 来源适配器使用的稳定配置或常量。 */
 export const packageId = '@jobhunter/sources' as const;

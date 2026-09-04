@@ -21,6 +21,7 @@ import {
   type ToolCallRecord,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class MemoryStore implements AgentRunStore {
   public readonly runs = new Map<string, AgentRunRecord>();
   public readonly toolCalls: ToolCallRecord[] = [];
@@ -33,14 +34,17 @@ class MemoryStore implements AgentRunStore {
     );
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public get(id: string): AgentRunRecord | null {
     return this.runs.get(id) ?? null;
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public createRunning(record: AgentRunRecord): void {
     this.runs.set(record.id, record);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public completeSucceeded(
     input: Parameters<AgentRunStore['completeSucceeded']>[0],
   ): ReturnType<AgentRunStore['completeSucceeded']> {
@@ -60,6 +64,7 @@ class MemoryStore implements AgentRunStore {
     return { kind: 'stored', record };
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public completeFailed(input: Parameters<AgentRunStore['completeFailed']>[0]): AgentRunRecord {
     const current = this.required(input.id);
     const record: AgentRunRecord = {
@@ -74,10 +79,12 @@ class MemoryStore implements AgentRunStore {
     return record;
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public saveToolCall(record: ToolCallRecord): void {
     this.toolCalls.push(record);
   }
 
+  /** 测试辅助类的内部实现。 */
   private required(id: string): AgentRunRecord {
     const run = this.runs.get(id);
     if (!run) throw new TypeError('Run not found.');
@@ -85,11 +92,13 @@ class MemoryStore implements AgentRunStore {
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 type QueuedStep =
   | ModelResponse
   | ModelClientError
   | ((request: ModelRequest, signal: AbortSignal) => Promise<ModelResponse> | ModelResponse);
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class QueueModel implements ModelClient {
   public readonly metadata = {
     provider: 'test',
@@ -101,6 +110,7 @@ class QueueModel implements ModelClient {
   public readonly requests: ModelRequest[] = [];
   readonly #steps: QueuedStep[];
 
+  /** 执行测试替身或时钟的操作。 */
   public constructor(steps: readonly QueuedStep[]) {
     this.#steps = [...steps];
   }
@@ -121,6 +131,7 @@ const output = (answer: unknown): ModelResponse => ({
   usage,
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function definition(
   overrides: Partial<AgentDefinition<{ text: string }, { answer: string }>> = {},
 ): AgentDefinition<{ text: string }, { answer: string }> {
@@ -147,6 +158,7 @@ function definition(
 
 let nextId = 0;
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function runner(store: MemoryStore, model: ModelClient): AgentRunner {
   let now = 1_000;
   return new AgentRunner({

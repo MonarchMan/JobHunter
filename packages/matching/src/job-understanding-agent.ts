@@ -5,6 +5,7 @@ import { jobUnderstandingPromptV1 } from './prompts/job-understanding/v1.js';
 
 const nullableText = z.string().trim().min(1).nullable();
 
+/** 职位理解 Agent 输入 Schema。 */
 export const jobUnderstandingInputSchema = z
   .object({
     title: z.string().trim().min(1),
@@ -14,8 +15,10 @@ export const jobUnderstandingInputSchema = z
   })
   .strict();
 
+/** 模块使用的类型约束。 */
 export type JobUnderstandingInput = z.infer<typeof jobUnderstandingInputSchema>;
 
+/** 职位理解 Agent 定义。 */
 export const jobUnderstandingAgentDefinition = defineAgent({
   key: jobUnderstandingPromptV1.agentKey,
   version: '1.0.0',
@@ -35,6 +38,7 @@ export const jobUnderstandingAgentDefinition = defineAgent({
   },
 });
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function allEvidence(
   value: unknown,
 ): readonly { field: keyof JobUnderstandingInput; quote: string }[] {
@@ -55,6 +59,7 @@ function allEvidence(
   return evidence;
 }
 
+/** 校验 Agent 输出并限制证据只能来自输入正文。 */
 export function parseJobUnderstandingAgentOutput(
   output: unknown,
   input: JobUnderstandingInput,

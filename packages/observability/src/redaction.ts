@@ -5,10 +5,12 @@ const phone = /(?<!\d)(?:\+?86[- ]?)?1[3-9]\d{9}(?!\d)/g;
 const bearer = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const credentialAssignment = /\b(api[-_ ]?key|token|password|cookie)\s*[:=]\s*[^\s,;]+/gi;
 
+/** 规范化日志字段名以便敏感键匹配。 */
 function normalizedKey(key: string): string {
   return key.replaceAll(/[-_]/g, '').toLowerCase();
 }
 
+/** 判断字段名是否属于密钥、令牌或个人信息。 */
 function isSensitiveKey(key: string): boolean {
   const normalized = normalizedKey(key);
   return (
@@ -30,6 +32,7 @@ function isSensitiveKey(key: string): boolean {
   );
 }
 
+/** 将响应对象压缩为安全的类型/长度摘要。 */
 function summarizeUnknownResponse(value: unknown): unknown {
   let serialized: string;
   try {
@@ -46,6 +49,7 @@ function summarizeUnknownResponse(value: unknown): unknown {
   };
 }
 
+/** 脱敏字符串中的邮箱、手机号、Bearer 和凭据赋值。 */
 function redactString(value: string): string {
   if (value.length > 2_000) {
     const hash = createHash('sha256').update(value, 'utf8').digest('hex');
@@ -58,6 +62,7 @@ function redactString(value: string): string {
     .replaceAll(phone, '[REDACTED_PHONE]');
 }
 
+/** 递归脱敏日志载荷并处理循环引用。 */
 export function redactLogValue(value: unknown, seen = new WeakSet<object>()): unknown {
   if (typeof value === 'string') return redactString(value);
   if (value === null || typeof value !== 'object') return value;

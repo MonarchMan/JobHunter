@@ -19,11 +19,13 @@ const request = {
   toolResults: [],
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function requestUrl(input: string | URL | Request): string {
   if (typeof input === 'string') return input;
   return input instanceof URL ? input.href : input.url;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function requestBody(init: RequestInit | undefined): Record<string, unknown> {
   if (typeof init?.body !== 'string') throw new TypeError('Expected a JSON request body.');
   return JSON.parse(init.body) as Record<string, unknown>;

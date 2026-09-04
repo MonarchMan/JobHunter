@@ -9,6 +9,7 @@ const companyId = '018f0000-0000-7000-8f00-00000000f901';
 const channelId = '018f0000-0000-7000-8f00-00000000f902';
 const sourceId = '018f0000-0000-7000-8f00-00000000f903';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedSource(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
   try {

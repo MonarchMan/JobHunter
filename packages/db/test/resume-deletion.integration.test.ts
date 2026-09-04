@@ -19,12 +19,14 @@ import {
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FixedClock implements Clock {
   public now(): UtcInstant {
     return utcInstant(1_800_000_000_000);
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FailOncePurgeStore implements ArtifactStore {
   readonly #delegate: ArtifactStore;
   #shouldFail = true;
@@ -33,26 +35,32 @@ class FailOncePurgeStore implements ArtifactStore {
     this.#delegate = delegate;
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public put(input: Parameters<ArtifactStore['put']>[0]): Promise<StoredArtifact> {
     return this.#delegate.put(input);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public read(input: Parameters<ArtifactStore['read']>[0]): Promise<StoredArtifactContent> {
     return this.#delegate.read(input);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public resolve(relativePath: string): string {
     return this.#delegate.resolve(relativePath);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public quarantine(artifactId: string, relativePath: string): Promise<QuarantinedArtifact> {
     return this.#delegate.quarantine(artifactId, relativePath);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public restoreQuarantined(artifact: QuarantinedArtifact): Promise<void> {
     return this.#delegate.restoreQuarantined(artifact);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public purgeQuarantined(artifact: QuarantinedArtifact): Promise<void> {
     if (this.#shouldFail) {
       this.#shouldFail = false;
@@ -62,6 +70,7 @@ class FailOncePurgeStore implements ArtifactStore {
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class ImpactChangingRepository implements ResumeDeletionRepository {
   readonly #delegate: ResumeDeletionRepository;
   readonly #client: SqliteDatabaseHandle['client'];
@@ -71,10 +80,12 @@ class ImpactChangingRepository implements ResumeDeletionRepository {
     this.#client = client;
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public preview(resumeDocumentId: string): ResumeDeletionSnapshot | null {
     return this.#delegate.preview(resumeDocumentId);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public applyConfirmedDeletion(
     input: Parameters<ResumeDeletionRepository['applyConfirmedDeletion']>[0],
   ): void {
@@ -96,12 +107,14 @@ class ImpactChangingRepository implements ResumeDeletionRepository {
     this.#delegate.applyConfirmedDeletion(input);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public getDeletedArtifact(
     artifactId: string,
   ): ResumeDeletionSnapshot['artifacts'][number] | null {
     return this.#delegate.getDeletedArtifact(artifactId);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public removePurgedArtifact(artifactId: string): void {
     this.#delegate.removePurgedArtifact(artifactId);
   }
@@ -119,6 +132,7 @@ afterEach(async () => {
   }
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promise<{
   readonly handle: SqliteDatabaseHandle;
   readonly artifacts: ArtifactStore;

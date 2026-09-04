@@ -1,6 +1,8 @@
+/** 应用层使用的类型约束。 */
 export type DoctorSeverity = 'required' | 'optional' | 'informational';
 export type DoctorCheckStatus = 'healthy' | 'degraded' | 'failed';
 
+/** 应用层数据结构或端口契约。 */
 export interface DoctorCheckResult {
   readonly key: string;
   readonly status: DoctorCheckStatus;
@@ -10,6 +12,7 @@ export interface DoctorCheckResult {
   readonly details: Readonly<Record<string, unknown>>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface OfflineDoctorCheck {
   readonly key: string;
   readonly severity: DoctorSeverity;
@@ -18,6 +21,7 @@ export interface OfflineDoctorCheck {
     | Omit<DoctorCheckResult, 'key' | 'severity'>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface DoctorReport {
   readonly status: DoctorCheckStatus;
   readonly checkedAt: number;
@@ -25,6 +29,7 @@ export interface DoctorReport {
   readonly versions: Readonly<Record<string, string>>;
 }
 
+/** 执行不依赖网络的本地环境诊断。 */
 export class OfflineDoctorService {
   readonly #checks: readonly OfflineDoctorCheck[];
   readonly #versions: Readonly<Record<string, string>>;
@@ -43,7 +48,9 @@ export class OfflineDoctorService {
     this.#now = input.now ?? Date.now;
   }
 
+  /** 依次执行检查并汇总状态。 */
   public async run(): Promise<DoctorReport> {
+    // 1、运行所有检查；2、聚合 required/optional 结果；3、生成最终报告。
     const checks: DoctorCheckResult[] = [];
     for (const check of this.#checks) {
       try {
@@ -71,6 +78,7 @@ export class OfflineDoctorService {
   }
 }
 
+/** 创建模型配置诊断项。 */
 export function modelConfigurationCheck(configured: boolean): OfflineDoctorCheck {
   return {
     key: 'model.configuration',

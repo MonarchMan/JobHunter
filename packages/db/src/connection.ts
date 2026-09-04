@@ -8,20 +8,24 @@ import { assertDatabaseIntegrity, assertSqliteCapabilities } from './health.js';
 
 const activeConnections = new Map<string, number>();
 
+/** 注册一个已打开的数据库路径，供并发打开保护和诊断使用。 */
 function registerConnection(databasePath: string): void {
   activeConnections.set(databasePath, (activeConnections.get(databasePath) ?? 0) + 1);
 }
 
+/** 释放数据库路径的活动连接计数。 */
 function unregisterConnection(databasePath: string): void {
   const count = activeConnections.get(databasePath) ?? 0;
   if (count <= 1) activeConnections.delete(databasePath);
   else activeConnections.set(databasePath, count - 1);
 }
 
+/** 判断指定数据库是否仍有活动连接。 */
 export function hasActiveDatabaseConnection(databasePath: string): boolean {
   return (activeConnections.get(path.resolve(databasePath)) ?? 0) > 0;
 }
 
+/** 数据库查询结果对应的行结构。 */
 export interface OpenDatabaseOptions {
   readonly dataRoot: string;
   readonly databaseFileName?: string;
@@ -30,6 +34,7 @@ export interface OpenDatabaseOptions {
   readonly migrationsFolder?: string;
 }
 
+/** 数据库查询结果对应的行结构。 */
 export interface SqliteDatabaseHandle {
   readonly client: Database.Database;
   readonly db: BetterSQLite3Database;
@@ -38,6 +43,7 @@ export interface SqliteDatabaseHandle {
   close(): void;
 }
 
+/** 校验并解析数据库路径、迁移目录与锁等待配置。 */
 function validateOptions(options: OpenDatabaseOptions): Required<OpenDatabaseOptions> {
   const databaseFileName = options.databaseFileName ?? 'jobhunter.sqlite';
   if (
@@ -71,7 +77,9 @@ function validateOptions(options: OpenDatabaseOptions): Required<OpenDatabaseOpt
   };
 }
 
+/** 打开数据库、执行迁移、检查完整性并注册连接。 */
 export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabaseHandle {
+  // 1、解析配置并创建数据目录；2、打开 SQLite 并设置 WAL/外键；3、执行迁移；4、完整性检查后返回句柄。
   const resolved = validateOptions(options);
   mkdirSync(resolved.dataRoot, { recursive: true });
   const databasePath = path.join(resolved.dataRoot, resolved.databaseFileName);

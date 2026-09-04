@@ -1,3 +1,4 @@
+/** 应用层对 Web、CLI 和 Worker 暴露的公开装配入口。 */
 export * from './config/index.js';
 export * from './contracts/index.js';
 export * from './dashboard/index.js';
@@ -5,11 +6,14 @@ export * from './jobs/job-query-service.js';
 export * from './jobs/web-job-query-service.js';
 export * from './jobs/web-job-detail-service.js';
 export * from './interview/index.js';
+/** 应用层使用的类型约束。 */
 export type { ProjectDossierDetail, ProjectDossierSummary } from './ports/interview-projects.js';
+/** 应用层使用的类型约束。 */
 export type {
   ExperienceDocumentDetail,
   ExperienceDocumentSummary,
 } from './ports/interview-experiences.js';
+/** 应用层使用的类型约束。 */
 export type {
   CommunityExperienceFilter,
   CommunityExperienceSummary,

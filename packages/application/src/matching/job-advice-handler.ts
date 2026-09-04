@@ -8,6 +8,7 @@ import type { CandidateProfileRepository } from '../ports/profiles.js';
 import type { TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
 
+/** 职位准备建议任务输入。 */
 export const jobAdviceTaskPayloadSchema = z
   .object({
     matchResultId: z.string().trim().min(1),
@@ -15,6 +16,7 @@ export const jobAdviceTaskPayloadSchema = z
   })
   .strict();
 
+/** 职位准备建议任务输出。 */
 export const jobAdviceTaskOutputSchema = z
   .object({
     matchAdviceId: z.string().trim().min(1),
@@ -23,6 +25,7 @@ export const jobAdviceTaskOutputSchema = z
   })
   .strict();
 
+/** 创建职位准备建议 Agent 任务处理器。 */
 export function createJobAdviceTaskHandler(
   input:
     | {
@@ -44,6 +47,7 @@ export function createJobAdviceTaskHandler(
     defaultMaxAttempts: 3,
     leaseDurationMs: 120_000,
     concurrencyKey: (payload) => `match-advice:${payload.matchResultId}:${payload.adviceVersion}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       if ('unavailable' in input) {
         throw new TaskExecutionError('invalid_config', 'Job advice model is not configured.');

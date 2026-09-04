@@ -9,6 +9,7 @@ import {
 } from '../../../src/server/http.js';
 import { verifyMutationRequest } from '../../../src/server/csrf.js';
 
+/** 处理 Web API 的 GET 请求，读取并返回对应资源。 */
 export async function GET(): Promise<Response> {
   try {
     const container = await getWebContainer();
@@ -18,6 +19,7 @@ export async function GET(): Promise<Response> {
   }
 }
 
+/** 处理 Web API 的 PATCH 请求，校验输入并更新资源。 */
 export async function PATCH(request: Request): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {

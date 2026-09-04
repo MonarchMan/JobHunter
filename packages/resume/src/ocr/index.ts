@@ -6,18 +6,21 @@ import { createWorker, OEM } from 'tesseract.js';
 import type { ResumeMediaType } from '../import/media.js';
 import { normalizeResumeText } from '../parsers/index.js';
 
+/** 模块数据结构或契约。 */
 export interface ResumeOcrResult {
   readonly text: string;
   readonly characterCount: number;
   readonly engineVersion: string;
 }
 
+/** 模块数据结构或契约。 */
 export interface ResumeOcrOptions {
   readonly minimumNonWhitespaceCharacters?: number;
   readonly maximumExtractedCharacters?: number;
   readonly signal?: AbortSignal;
 }
 
+/** 模块数据结构或契约。 */
 export interface ResumeOcrEngine {
   recognize(
     bytes: Uint8Array,
@@ -26,6 +29,7 @@ export interface ResumeOcrEngine {
   ): Promise<ResumeOcrResult>;
 }
 
+/** OCR 质量不足、文本超限或引擎异常时抛出的稳定错误。 */
 export class ResumeOcrError extends Error {
   public readonly code: 'low_quality' | 'text_too_large' | 'engine_failed';
 
@@ -38,10 +42,12 @@ export class ResumeOcrError extends Error {
 
 const languages = [chiSimData, engData];
 
+/** 在准备语言包、启动引擎和识别前检查取消状态。 */
 function ensureNotAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw new DOMException('Resume OCR was aborted.', 'AbortError');
 }
 
+/** 将内置中英文语言包复制到本地数据目录，并允许并发初始化竞态。 */
 async function stageLanguageData(target: string): Promise<void> {
   await mkdir(target, { recursive: true });
   await Promise.all(
@@ -56,6 +62,7 @@ async function stageLanguageData(target: string): Promise<void> {
   );
 }
 
+/** 基于 Tesseract.js 的本地中英文简历 OCR 实现。 */
 export class TesseractResumeOcrEngine implements ResumeOcrEngine {
   readonly #dataRoot: string;
 
@@ -63,11 +70,13 @@ export class TesseractResumeOcrEngine implements ResumeOcrEngine {
     this.#dataRoot = path.resolve(input.dataRoot);
   }
 
+  /** 执行模块组件对外暴露的操作。 */
   public async recognize(
     bytes: Uint8Array,
     mediaType: Extract<ResumeMediaType, 'image/jpeg' | 'image/png'>,
     options: ResumeOcrOptions = {},
   ): Promise<ResumeOcrResult> {
+    // 1、校验质量阈值和取消状态，避免启动 OCR 后才发现请求不可执行。
     void mediaType;
     const minimum = options.minimumNonWhitespaceCharacters ?? 80;
     const maximum = options.maximumExtractedCharacters ?? 250_000;
@@ -79,6 +88,7 @@ export class TesseractResumeOcrEngine implements ResumeOcrEngine {
     }
     ensureNotAborted(options.signal);
 
+    // 2、准备语言数据并创建可被取消的 Tesseract Worker。
     const languageRoot = path.join(this.#dataRoot, 'ocr', 'languages');
     let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
     const abort = (): void => {
@@ -98,6 +108,7 @@ export class TesseractResumeOcrEngine implements ResumeOcrEngine {
         },
       );
       ensureNotAborted(options.signal);
+      // 3、执行识别、统一文本格式，并在返回前执行大小和可读性门禁。
       const result = await worker.recognize(Buffer.from(bytes));
       ensureNotAborted(options.signal);
       const text = normalizeResumeText(result.data.text);
@@ -110,6 +121,7 @@ export class TesseractResumeOcrEngine implements ResumeOcrEngine {
       }
       return { text, characterCount, engineVersion: 'tesseract.js@7-chi_sim+eng' };
     } catch (error) {
+      // 4、保留取消和业务质量错误，其余底层异常统一映射为引擎失败。
       if (error instanceof DOMException && error.name === 'AbortError') throw error;
       if (options.signal?.aborted) throw new DOMException('Resume OCR was aborted.', 'AbortError');
       if (error instanceof ResumeOcrError) throw error;

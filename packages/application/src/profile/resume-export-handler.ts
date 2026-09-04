@@ -4,6 +4,7 @@ import type { ArtifactStore } from '../ports/artifact-store.js';
 import type { ResumeDraftRepository } from '../ports/resume-drafts.js';
 import type { TaskHandler } from '../tasks/model.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumePdfRenderer {
   render(html: string, signal: AbortSignal): Promise<Uint8Array>;
 }
@@ -11,6 +12,7 @@ export interface ResumePdfRenderer {
 const payloadSchema = z.object({ requestId: z.string().min(1) });
 const outputSchema = z.object({ requestId: z.string().min(1), fileId: z.string().min(1) });
 
+/** 创建简历 PDF 导出任务处理器。 */
 export function createResumePdfExportTaskHandler(
   input: {
     readonly repository?: ResumeDraftRepository;
@@ -26,6 +28,7 @@ export function createResumePdfExportTaskHandler(
     defaultMaxAttempts: 3,
     leaseDurationMs: 120_000,
     concurrencyKey: (payload) => `resume.export.pdf:${payload.requestId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       const { repository, artifacts, renderer, ids } = input;
       if (!repository || !artifacts || !renderer || !ids)
@@ -65,6 +68,7 @@ export function createResumePdfExportTaskHandler(
 
 const cleanupOutputSchema = z.object({ deleted: z.number().int().nonnegative() });
 
+/** 创建过期简历导出文件清理任务处理器。 */
 export function createResumeExportCleanupTaskHandler(
   input: {
     readonly repository?: ResumeDraftRepository;
@@ -78,6 +82,7 @@ export function createResumeExportCleanupTaskHandler(
     defaultMaxAttempts: 3,
     leaseDurationMs: 120_000,
     concurrencyKey: () => 'resume.export.cleanup',
+    /** 执行应用适配器的该项操作。 */
     async execute(context) {
       const { repository, artifacts } = input;
       if (!repository || !artifacts) throw new TypeError('简历导出清理器在当前进程不可用。');

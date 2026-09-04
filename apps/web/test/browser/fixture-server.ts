@@ -97,6 +97,7 @@ const campusJobs = [
 ] as const;
 
 /** A deterministic adapter-like fixture keeps browser tests independent of public websites. */
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FakeAdapter {
   public readonly jobs = campusJobs;
 
@@ -105,6 +106,7 @@ class FakeAdapter {
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function loadProfileFromFakeModel(): Promise<CandidateProfileData> {
   const model = new FakeModel<{ readonly resume: string }, CandidateProfileData>();
   const profile = makeCandidateProfile({
@@ -202,6 +204,7 @@ function insertJob(
     );
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function seedFixture(dataRoot: string): Promise<void> {
   const database = openSqliteDatabase({ dataRoot });
   const adapter = new FakeAdapter();

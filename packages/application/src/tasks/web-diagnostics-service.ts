@@ -19,6 +19,7 @@ import {
 import type { TaskRecord } from './model.js';
 import type { TaskService } from './task-service.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface WebDiagnosticsRepository {
   listTaskEntries(input: {
     readonly status?: TaskRecord['status'];
@@ -42,6 +43,7 @@ export interface WebDiagnosticsRepository {
   }): WebSourceSyncTaskDetail | null;
 }
 
+/** 应用层使用的类型约束。 */
 export type WebTaskListEntry =
   | { readonly kind: 'task'; readonly taskId: string }
   | {
@@ -55,15 +57,18 @@ export type WebTaskListEntry =
       readonly batch: WebJobDetailBatch;
     };
 
+/** 应用层使用的类型约束。 */
 export type WebTaskMutationResult =
   | { readonly kind: 'task'; readonly task: WebTask }
   | { readonly kind: 'accepted'; readonly task: WebTaskAccepted }
   | { readonly kind: 'not_found' };
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function instant(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): WebTask {
   const sourceSyncPayload =
     task.taskType === 'source.sync'
@@ -102,6 +107,7 @@ function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): We
   });
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function presentTaskEntry(
   entry: WebTaskListEntry,
   tasks: Pick<TaskService, 'get'>,
@@ -134,6 +140,7 @@ function presentTaskEntry(
 }
 
 /** Exposes operational metadata only; task payloads and Agent inputs/outputs stay private. */
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 export class WebDiagnosticsService {
   readonly #tasks: TaskService;
   readonly #repository: WebDiagnosticsRepository;
@@ -146,6 +153,7 @@ export class WebDiagnosticsService {
     this.#repository = input.repository;
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public list(
     input: {
       readonly status?: TaskRecord['status'];
@@ -190,16 +198,19 @@ export class WebDiagnosticsService {
     });
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public getTask(id: string): WebTask | null {
     const task = this.#tasks.get(parseId(id, 'Task'));
     return task ? presentTask(task, this.#repository) : null;
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public getAgentRun(id: string): WebAgentRunDetail | null {
     const run = this.#repository.getAgentRun(id);
     return run ? webAgentRunDetailSchema.parse(run) : null;
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public mutate(input: WebTaskMutation): WebTaskMutationResult {
     const mutation = webTaskMutationSchema.parse(input);
     const taskId = parseId(mutation.taskId, 'Task');

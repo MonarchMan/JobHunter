@@ -1,5 +1,6 @@
 import type { ContentHash, UtcInstant } from '@jobhunter/domain';
 
+/** 应用层使用的类型约束。 */
 export type ArtifactKind =
   | 'resume'
   | 'interview_experience'
@@ -10,6 +11,7 @@ export type ArtifactKind =
   | 'resume_avatar'
   | 'fixture_candidate';
 
+/** 应用层数据结构或端口契约。 */
 export interface StoredArtifact {
   readonly id: string;
   readonly entityId: string;
@@ -22,6 +24,7 @@ export interface StoredArtifact {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface QuarantinedArtifact {
   readonly artifactId: string;
   readonly originalRelativePath: string;
@@ -29,12 +32,14 @@ export interface QuarantinedArtifact {
   readonly fileExisted: boolean;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface StoredArtifactContent {
   readonly content: Uint8Array;
   readonly mediaType: string;
   readonly sha256: ContentHash;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ArtifactStore {
   put(input: {
     readonly id: string;

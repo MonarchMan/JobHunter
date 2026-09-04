@@ -63,6 +63,7 @@ const version: ProfileVersionRecord = {
   createdAt: utcInstant(1),
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function repository(withProfile: boolean): CandidateProfileRepository {
   return {
     createProfile: () => profileRecord,

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 阿里巴巴校园招聘职位响应 Schema。 */
 export const alibabaCampusJobSchema = z
   .object({
     id: z.union([z.string().min(1), z.number().int().positive()]),
@@ -26,4 +27,5 @@ export const alibabaCampusJobSchema = z
     },
   );
 
+/** 来源适配器使用的类型约束。 */
 export type AlibabaCampusJob = z.infer<typeof alibabaCampusJobSchema>;

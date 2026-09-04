@@ -13,6 +13,7 @@ import { calculateDeterministicMatch, matchRulesetV1 } from '@jobhunter/matching
 import type { MatchingRepository, MatchResultRecord } from '../ports/matching.js';
 import type { CandidateProfileRepository } from '../ports/profiles.js';
 
+/** 匹配输入或规则集不满足约束。 */
 export class MatchingInputError extends Error {
   public constructor(message: string) {
     super(message);
@@ -20,12 +21,14 @@ export class MatchingInputError extends Error {
   }
 }
 
+/** 使用冻结规则集执行可复现的确定性职位匹配。 */
 export class DeterministicMatchingService {
   readonly #matching: MatchingRepository;
   readonly #profiles: CandidateProfileRepository;
   readonly #clock: Clock;
   readonly #ids: IdGenerator;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly matching: MatchingRepository;
     readonly profiles: CandidateProfileRepository;
@@ -38,6 +41,7 @@ export class DeterministicMatchingService {
     this.#ids = input.ids;
   }
 
+  /** 确保默认规则集存在且定义哈希一致。 */
   public ensureRulesetV1(input: {
     readonly id: MatchRulesetId;
     readonly activate?: boolean;
@@ -52,7 +56,9 @@ export class DeterministicMatchingService {
     });
   }
 
+  /** 计算简历版本与职位之间的匹配结果。 */
   public compute(input: {
+    // 1、读取并校验规则集；2、规范化简历/职位输入；3、计算分项得分；4、汇总并持久化结果。
     readonly profileVersionId: ProfileVersionId;
     readonly jobRevisionId: JobRevisionId;
     readonly jobEnrichmentId: JobEnrichmentId | null;

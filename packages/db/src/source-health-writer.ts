@@ -3,6 +3,7 @@ import { canonicalJson, type JobSourceId } from '@jobhunter/domain';
 import type { SourceHealth } from '@jobhunter/source-core';
 import type Database from 'better-sqlite3';
 
+/** 写入来源探活结果并维护连续失败与健康状态。 */
 export class SqliteSourceHealthWriter implements SourceHealthWriter {
   readonly #client: Database.Database;
 
@@ -10,6 +11,7 @@ export class SqliteSourceHealthWriter implements SourceHealthWriter {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public record(sourceId: JobSourceId, health: SourceHealth): void {
     const changed = this.#client
       .prepare(

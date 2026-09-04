@@ -1,5 +1,6 @@
 import type { PromptDescriptor } from '@jobhunter/agent-core';
 
+/** 模块使用的稳定配置或常量。 */
 export const resumePolishPromptV1: PromptDescriptor = {
   agentKey: 'resume-polish',
   promptVersion: '2026-08-27.v1',

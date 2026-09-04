@@ -12,6 +12,7 @@ import { TaskExecutionError } from '../tasks/retry-policy.js';
 import type { ExperienceResearchService } from './research-service.js';
 import { createCommunityResearchCollectionPlan } from './research-collection-plan.js';
 
+/** 外部研究任务的持久化输入，绑定请求版本和执行器。 */
 export const experienceResearchTaskPayloadSchema = z
   .object({
     requestId: z.uuid(),
@@ -21,6 +22,7 @@ export const experienceResearchTaskPayloadSchema = z
   })
   .strict();
 
+/** 外部研究任务的输出，记录导入包和外部会话结果。 */
 export const experienceResearchTaskOutputSchema = z
   .object({
     requestId: z.uuid(),
@@ -31,6 +33,7 @@ export const experienceResearchTaskOutputSchema = z
   })
   .strict();
 
+/** 创建联网研究任务处理器，执行外部 Agent 并导入规范化结果。 */
 export function createExperienceResearchTaskHandler(
   input:
     | {
@@ -43,6 +46,7 @@ export function createExperienceResearchTaskHandler(
   z.infer<typeof experienceResearchTaskPayloadSchema>,
   z.infer<typeof experienceResearchTaskOutputSchema>
 > {
+  // 1、建立执行器索引；2、校验请求快照；3、生成 Prompt 与采集计划；4、执行并导入结果。
   const executors = new Map<ExternalResearchExecutorKey, ExternalResearchExecutor>();
   if (!('unavailable' in input)) {
     for (const executor of input.executors) {
@@ -60,6 +64,7 @@ export function createExperienceResearchTaskHandler(
     leaseDurationMs: 20 * 60_000,
     lateCancellationPolicy: 'complete',
     concurrencyKey: (payload) => `experience-research:${payload.requestId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       if ('unavailable' in input) {
         throw new TaskExecutionError('invalid_config', 'Local research executor is unavailable.');

@@ -3,12 +3,14 @@ import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { PersistenceError } from './errors.js';
 
+/** 数据库查询结果对应的行结构。 */
 export interface SettingDefinition<TValue> {
   readonly key: string;
   readonly schemaVersion: string;
   readonly schema: z.ZodType<TValue>;
 }
 
+/** 注册并解析所有应用设置定义。 */
 export class SettingsRegistry {
   readonly #definitions: ReadonlyMap<string, SettingDefinition<unknown>>;
 
@@ -23,6 +25,7 @@ export class SettingsRegistry {
     this.#definitions = new Map(entries);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public parse(
     key: string,
     value: unknown,
@@ -34,11 +37,13 @@ export class SettingsRegistry {
     return { schemaVersion: definition.schemaVersion, value: definition.schema.parse(value) };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public definition(key: string): SettingDefinition<unknown> | undefined {
     return this.#definitions.get(key);
   }
 }
 
+/** 系统默认设置注册表。 */
 export const defaultSettingsRegistry = new SettingsRegistry([
   {
     key: 'ui.jobList',
@@ -72,11 +77,13 @@ export const defaultSettingsRegistry = new SettingsRegistry([
   },
 ]);
 
+/** 数据库查询结果对应的行结构。 */
 interface SettingRow {
   readonly value_json: string;
   readonly schema_version: string;
 }
 
+/** 使用 application_settings 表读写强类型设置。 */
 export class SqliteSettingsStore {
   readonly #client: Database.Database;
   readonly #registry: SettingsRegistry;
@@ -86,6 +93,7 @@ export class SqliteSettingsStore {
     this.#registry = registry;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public set(key: string, value: unknown, updatedAt: UtcInstant): void {
     const parsed = this.#registry.parse(key, value);
     this.#client
@@ -100,6 +108,7 @@ export class SqliteSettingsStore {
       .run(key, canonicalJson(parsed.value), parsed.schemaVersion, updatedAt);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(key: string): unknown {
     const definition = this.#registry.definition(key);
     if (!definition) {
@@ -118,6 +127,7 @@ export class SqliteSettingsStore {
     return definition.schema.parse(JSON.parse(row.value_json) as unknown);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public setSourceSyncChannel(
     channel: 'intern' | 'campus' | 'social',
     updatedAt: UtcInstant,

@@ -7,6 +7,7 @@ import {
   type BrowserSessionFactory,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve!: () => void;
   const promise = new Promise<void>((next) => {
@@ -15,6 +16,7 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
   return { promise, resolve };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function factoryFor(
   onCreate: (sourceKey: string) => void,
   onClose: () => void,

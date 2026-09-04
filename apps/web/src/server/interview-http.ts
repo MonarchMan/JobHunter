@@ -15,6 +15,7 @@ import { DomainError } from '@jobhunter/domain';
 import { ZodError } from 'zod';
 import { badRequestResponse, conflictResponse, errorResponse, notFoundResponse } from './http.js';
 
+/** 将应用层任务入队结果转换为 HTTP 响应载荷。 */
 export function presentInterviewTask(result: InterviewTaskAccepted): {
   readonly taskId: string;
   readonly status: string;
@@ -29,6 +30,7 @@ export function presentInterviewTask(result: InterviewTaskAccepted): {
   };
 }
 
+/** 将面试准备领域错误映射为稳定的 HTTP 状态和消息。 */
 export function interviewErrorResponse(error: unknown): Response {
   if (error instanceof ProjectDossierNotFoundError) {
     return notFoundResponse('项目拷打档案不存在。');

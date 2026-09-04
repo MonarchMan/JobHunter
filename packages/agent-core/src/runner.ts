@@ -6,24 +6,28 @@ import type { ModelClient, ModelResponse, ModelToolResult, ModelUsage } from './
 import type { AgentRunRecord, AgentRunStore, AgentRunUsage } from './store.js';
 import { ToolRegistry } from './tools.js';
 
+/** 模块数据结构或契约。 */
 export interface AgentRunnerResult<TOutput> {
   readonly run: AgentRunRecord;
   readonly output: TOutput;
   readonly cacheHit: boolean;
 }
 
+/** 模块数据结构或契约。 */
 interface Totals {
   inputTokens: number;
   outputTokens: number;
   estimatedCostMicros: number;
 }
 
+/** 将单次模型响应的用量累加到运行总量。 */
 function addUsage(totals: Totals, usage: ModelUsage): void {
   totals.inputTokens += usage.inputTokens;
   totals.outputTokens += usage.outputTokens;
   totals.estimatedCostMicros += usage.estimatedCostMicros;
 }
 
+/** 将 Schema 错误压缩成可供模型修复提示使用的摘要。 */
 function validationSummary(error: z.ZodError): string {
   return error.issues
     .slice(0, 8)
@@ -31,12 +35,14 @@ function validationSummary(error: z.ZodError): string {
     .join('; ');
 }
 
+/** 执行版本化 Agent，负责校验、缓存、工具循环、用量限制和结果持久化。 */
 export class AgentRunner {
   readonly #store: AgentRunStore;
   readonly #model: ModelClient;
   readonly #createId: () => string;
   readonly #now: () => number;
 
+  /** 执行模块组件对外暴露的操作。 */
   public constructor(input: {
     readonly store: AgentRunStore;
     readonly model: ModelClient;
@@ -54,6 +60,7 @@ export class AgentRunner {
     readonly value: unknown;
     readonly signal: AbortSignal;
   }): Promise<AgentRunnerResult<TOutput>> {
+    // 1、校验输入并计算包含模型配置的缓存键；命中成功缓存时不重复调用模型。
     const definition = input.definition;
     const parsedInput = definition.inputSchema.parse(input.value);
     const canonicalInput = canonicalJson(parsedInput);
@@ -80,6 +87,7 @@ export class AgentRunner {
       return { run: cached, output: definition.outputSchema.parse(cached.output), cacheHit: true };
     }
 
+    // 2、先登记 running 记录，再在事务外执行模型调用。
     const startedAt = this.#now();
     const runId = this.#createId();
     this.#store.createRunning({
@@ -106,6 +114,7 @@ export class AgentRunner {
     const timeout = AbortSignal.timeout(definition.limits.timeoutMs);
     const signal = AbortSignal.any([input.signal, timeout]);
     const totals: Totals = { inputTokens: 0, outputTokens: 0, estimatedCostMicros: 0 };
+    // 3、执行 Agent 并将最终输出原子写入运行记录；并发竞争时使用胜者结果。
     try {
       const output = await this.#execute(definition, parsedInput, runId, signal, totals);
       const completion = this.#store.completeSucceeded({
@@ -118,6 +127,7 @@ export class AgentRunner {
       const winnerOutput = definition.outputSchema.parse(completion.record.output);
       return { run: completion.record, output: winnerOutput, cacheHit: completion.kind === 'race' };
     } catch (error) {
+      // 4、将异常分类、脱敏并持久化，再把稳定错误交给上层重试策略。
       let classified = classifyAgentError(error);
       if (timeout.aborted && !input.signal.aborted) {
         classified = new AgentRuntimeError('timeout', 'Agent run exceeded its timeout.', true);
@@ -142,6 +152,7 @@ export class AgentRunner {
     signal: AbortSignal,
     totals: Totals,
   ): Promise<TOutput> {
+    // 1、初始化工具注册表和输出 Schema，随后按步数上限进入模型循环。
     const tools = new ToolRegistry(definition.tools);
     const outputJsonSchema = z.toJSONSchema(definition.outputSchema, { unrepresentable: 'any' });
     const toolResults: ModelToolResult[] = [];
@@ -153,6 +164,7 @@ export class AgentRunner {
       if (steps > definition.limits.maxSteps) {
         throw new AgentRuntimeError('budget_exceeded', 'Agent exceeded maximum steps.');
       }
+      // 1、a 每轮模型调用都累计用量并立即执行预算检查。
       response = await this.#model.complete(
         {
           systemPrompt: definition.systemPrompt,
@@ -168,6 +180,7 @@ export class AgentRunner {
       addUsage(totals, response.usage);
       this.#checkUsage(definition, totals);
       if (response.kind === 'output') break;
+      // 1、b 工具输入输出均在边界校验，成功调用才会加入下一轮上下文。
       for (const call of response.calls) {
         if (toolResults.length >= definition.limits.maxSteps) {
           throw new AgentRuntimeError('budget_exceeded', 'Agent exceeded maximum tool calls.');
@@ -211,6 +224,7 @@ export class AgentRunner {
       }
     }
 
+    // 2、模型直接输出若不符合 Schema，只允许额外消耗一个步骤进行修复。
     const initial = definition.outputSchema.safeParse(response.output);
     if (initial.success) return initial.data;
     steps += 1;
@@ -254,6 +268,7 @@ export class AgentRunner {
     }
   }
 
+  /** 处理模块类内部的辅助逻辑。 */
   #usage(totals: Totals): AgentRunUsage {
     return {
       ...totals,

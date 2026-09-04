@@ -5,11 +5,13 @@ import {
   type SourcePageCollectionRequest,
 } from '@jobhunter/source-core';
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface BrowserSession<TPage> {
   readonly page: TPage;
   close(): Promise<void>;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface BrowserSessionFactory<TPage> {
   create(input: {
     readonly sourceKey: string;
@@ -18,6 +20,7 @@ export interface BrowserSessionFactory<TPage> {
   }): Promise<BrowserSession<TPage>>;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface BrowserPoolOptions {
   readonly maxConcurrency?: number;
   readonly failureThreshold?: number;
@@ -26,6 +29,7 @@ export interface BrowserPoolOptions {
   readonly now?: () => number;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface BrowserPoolRequest<TPage, TResult> {
   readonly sourceKey: string;
   readonly requestId: string;
@@ -34,11 +38,13 @@ export interface BrowserPoolRequest<TPage, TResult> {
   readonly execute: (page: TPage, signal: AbortSignal) => Promise<TResult>;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 interface CircuitState {
   failures: number;
   openedAt: number | null;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 interface QueueItem<TPage, TResult> {
   readonly request: BrowserPoolRequest<TPage, TResult>;
   readonly resolve: (value: TResult | PromiseLike<TResult>) => void;
@@ -47,6 +53,7 @@ interface QueueItem<TPage, TResult> {
   state: 'queued' | 'started' | 'settled';
 }
 
+/** 校验浏览器池正整数配置并应用默认值。 */
 const positiveInteger = (value: number | undefined, fallback: number): number => {
   const resolved = value ?? fallback;
   if (!Number.isSafeInteger(resolved) || resolved < 1) {
@@ -59,6 +66,7 @@ const positiveInteger = (value: number | undefined, fallback: number): number =>
  * Limits optional browser-backed source work without depending on a browser SDK.
  * The process entry point supplies a factory that creates an isolated anonymous session.
  */
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export class BrowserPool<TPage> {
   readonly #factory: BrowserSessionFactory<TPage>;
   readonly #maxConcurrency: number;
@@ -70,6 +78,7 @@ export class BrowserPool<TPage> {
   readonly #circuits = new Map<string, CircuitState>();
   #active = 0;
 
+  /** 执行来源组件对外暴露的操作。 */
   public constructor(factory: BrowserSessionFactory<TPage>, options: BrowserPoolOptions = {}) {
     this.#factory = factory;
     this.#maxConcurrency = positiveInteger(options.maxConcurrency, 1);
@@ -79,6 +88,7 @@ export class BrowserPool<TPage> {
     this.#now = options.now ?? Date.now;
   }
 
+  /** 将浏览器操作排队，在会话完成后返回结果。 */
   public execute<TResult>(request: BrowserPoolRequest<TPage, TResult>): Promise<TResult> {
     try {
       this.#validateRequest(request);
@@ -129,6 +139,7 @@ export class BrowserPool<TPage> {
     positiveInteger(request.timeoutMs, this.#defaultTimeoutMs);
   }
 
+  /** 处理来源类内部的辅助逻辑。 */
   #drain(): void {
     while (this.#active < this.#maxConcurrency) {
       const item = this.#queue.shift();
@@ -141,6 +152,7 @@ export class BrowserPool<TPage> {
     }
   }
 
+  /** 执行单项浏览器操作并维护熔断、超时和资源释放。 */
   async #start<TResult>(item: QueueItem<TPage, TResult>): Promise<void> {
     const request = item.request;
     const timeoutMs = request.timeoutMs ?? this.#defaultTimeoutMs;
@@ -202,6 +214,7 @@ export class BrowserPool<TPage> {
     else item.resolve(result as TResult);
   }
 
+  /** 处理来源类内部的辅助逻辑。 */
   #normalizeError(error: unknown, requestSignal: AbortSignal, timeoutSignal: AbortSignal): unknown {
     if (requestSignal.aborted) {
       return new SourceError('temporary', 'Browser operation was cancelled.', { cause: error });
@@ -213,6 +226,7 @@ export class BrowserPool<TPage> {
     return new SourceError('temporary', 'Browser operation failed.', { cause: error });
   }
 
+  /** 处理来源类内部的辅助逻辑。 */
   #assertCircuitClosed(sourceKey: string): void {
     const state = this.#circuits.get(sourceKey);
     if (state?.openedAt == null) return;
@@ -223,6 +237,7 @@ export class BrowserPool<TPage> {
     state.openedAt = null;
   }
 
+  /** 处理来源类内部的辅助逻辑。 */
   #recordFailure(sourceKey: string): void {
     const state = this.#circuits.get(sourceKey) ?? { failures: 0, openedAt: null };
     state.failures += 1;
@@ -230,12 +245,14 @@ export class BrowserPool<TPage> {
     this.#circuits.set(sourceKey, state);
   }
 
+  /** 处理来源类内部的辅助逻辑。 */
   #recordSuccess(sourceKey: string): void {
     this.#circuits.delete(sourceKey);
   }
 }
 
 /** Adapts the pool to the neutral source contract without exposing browser objects. */
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createPooledSourcePageClient(
   pool: BrowserPool<SourcePageClient>,
 ): SourcePageClient {

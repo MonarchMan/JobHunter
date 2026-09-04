@@ -24,6 +24,7 @@ const entryUrl = 'https://careers.tencent.com/search.html';
 const listEndpoint = 'https://careers.tencent.com/tencentcareer/api/post/Query';
 const detailEndpoint = 'https://careers.tencent.com/tencentcareer/api/post/ByPostId';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function parseSource<T>(parse: () => T, diagnostic: string): T {
   try {
     return parse();
@@ -33,6 +34,7 @@ function parseSource<T>(parse: () => T, diagnostic: string): T {
   }
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function listUrl(config: TencentConfig, page: number): string {
   const url = new URL(listEndpoint);
   for (const [key, value] of Object.entries({
@@ -54,6 +56,7 @@ function listUrl(config: TencentConfig, page: number): string {
   return url.toString();
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function detailUrl(externalJobId: string, language: TencentConfig['language']): string {
   const url = new URL(detailEndpoint);
   url.searchParams.set('postId', externalJobId);
@@ -61,6 +64,7 @@ function detailUrl(externalJobId: string, language: TencentConfig['language']): 
   return url.toString();
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function canonicalDetailUrl(externalJobId: string): string {
   return canonicalizeOfficialUrl(
     `https://careers.tencent.com/jobdesc.html?postId=${encodeURIComponent(externalJobId)}`,
@@ -68,6 +72,7 @@ function canonicalDetailUrl(externalJobId: string): string {
   );
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function publishedAt(value: string | null | undefined): ReturnType<typeof utcInstant> | null {
   if (!value) return null;
   const match = /^(\d{4})年(\d{2})月(\d{2})日$/.exec(value.trim());
@@ -79,6 +84,7 @@ function publishedAt(value: string | null | undefined): ReturnType<typeof utcIns
   return Number.isSafeInteger(milliseconds) && milliseconds >= 0 ? utcInstant(milliseconds) : null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function applyUrl(detail: Pick<TencentDetail, 'PostId' | 'RecruitPostName'>): string {
   const url = new URL('https://careers.tencent.com/resume.html');
   url.searchParams.set('operType', '3');
@@ -87,6 +93,7 @@ function applyUrl(detail: Pick<TencentDetail, 'PostId' | 'RecruitPostName'>): st
   return canonicalizeOfficialUrl(url.toString(), hosts);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function optionalText(...values: readonly (string | null | undefined)[]): string | null {
   for (const value of values) {
     if (value?.trim()) return value;
@@ -94,6 +101,7 @@ function optionalText(...values: readonly (string | null | undefined)[]): string
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentDetail> {
   return {
     metadata: {
@@ -108,6 +116,7 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
       externalIdFingerprintVersion: null,
     },
     configSchema: tencentConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       let page = 1;
       let discoveredCount = 0;
@@ -217,6 +226,7 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
       }
       return parsed.Data;
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       return Promise.resolve().then(() => {
         const list = parseSource(

@@ -76,12 +76,14 @@ import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { CliError, cliExitCode } from './model.js';
 
+/** 模块数据结构或契约。 */
 export interface CliContainer {
   readonly version: { get(): Readonly<Record<string, string>> };
   readonly initialize?: { run(): Promise<InitializationResult> };
   readonly doctor?: { run(): Promise<DoctorReport> };
   readonly source?: {
     list(): readonly SourceChannelOverview[];
+    /** 执行模块适配器的该项操作。 */
     sync(selector: string): readonly EnqueueTaskResult[];
     wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
   };
@@ -123,6 +125,7 @@ export interface CliContainer {
     wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
   };
   readonly backup?: {
+    /** 执行模块适配器的该项操作。 */
     create(destination: string): ReturnType<BackupService['create']>;
     list(root: string): ReturnType<BackupService['list']>;
     verify(directory: string): ReturnType<BackupService['verify']>;
@@ -135,6 +138,7 @@ export interface CliContainer {
   close(): Promise<void>;
 }
 
+/** 打开本地数据库并装配完整 CLI 应用服务。 */
 export function createLocalCliContainer(
   config: AppConfig,
   options: { readonly workspaceRoot?: string } = {},
@@ -496,6 +500,7 @@ export function createLocalCliContainer(
     },
   };
 }
+/** 创建无需数据库的最小容器，供帮助或纯解析命令使用。 */
 export function createMinimalCliContainer(): CliContainer {
   return {
     version: { get: () => ({ app: '0.1.0', node: process.versions.node }) },

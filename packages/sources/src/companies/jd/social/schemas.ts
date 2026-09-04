@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 京东社会招聘接口配置 Schema。 */
 export const jdConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(100).default(100),
@@ -7,8 +8,10 @@ export const jdConfigSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type JdConfig = z.infer<typeof jdConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const jdJobSchema = z
   .object({
     requirementId: z.number().int().positive(),
@@ -28,8 +31,11 @@ export const jdJobSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type JdJob = z.infer<typeof jdJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const jdListResponseSchema = z.array(jdJobSchema);
 
+/** 来源适配器使用的类型约束。 */
 export type JdListResponse = z.infer<typeof jdListResponseSchema>;

@@ -25,16 +25,19 @@ const detailEndpoint = 'https://join.qq.com/api/v1/jobDetails/getJobDetailsByPos
 const internshipProjectMappingIds = [2, 104, 20] as const;
 const campusProjectMappingIds = [1] as const;
 
+/** 来源适配器使用的数据结构或契约。 */
 interface TencentCampusVariant {
   readonly key: 'tencent.intern' | 'tencent.campus';
   readonly projectMappingIds: readonly number[];
   readonly category: 'internship' | 'campus';
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function headers(referer = entryUrl): Readonly<Record<string, string>> {
   return { 'content-type': 'application/json', accept: 'application/json', referer };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function listBody(page: number, pageSize: number, projectMappingIds: readonly number[]): string {
   return JSON.stringify({
     projectIdList: [],
@@ -50,6 +53,7 @@ function listBody(page: number, pageSize: number, projectMappingIds: readonly nu
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function jobUrl(postId: string): string {
   return canonicalizeOfficialUrl(
     `https://join.qq.com/post_detail.html?postid=${encodeURIComponent(postId)}`,
@@ -57,6 +61,7 @@ function jobUrl(postId: string): string {
   );
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function firstNonEmpty(
   primary: string | null | undefined,
   fallback: string | null | undefined,
@@ -66,6 +71,7 @@ function firstNonEmpty(
   );
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createTencentCampusVariant(
   variant: TencentCampusVariant,
 ): JobSourceAdapter<TencentCampusConfig, TencentCampusDetail> {
@@ -82,6 +88,7 @@ function createTencentCampusVariant(
       externalIdFingerprintVersion: null,
     },
     configSchema: tencentCampusConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       let page = 1;
       let count: number | null = null;
@@ -181,6 +188,7 @@ function createTencentCampusVariant(
         throw new SourceError('parse_changed', 'Tencent campus detail returned another job ID.');
       return detail;
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       const list = tencentCampusListJobSchema.parse(input.discovered.raw);
       const detail = input.detail ? tencentCampusDetailSchema.parse(input.detail) : null;
@@ -294,6 +302,7 @@ function createTencentCampusVariant(
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createTencentInternAdapter(): JobSourceAdapter<
   TencentCampusConfig,
   TencentCampusDetail
@@ -305,6 +314,7 @@ export function createTencentInternAdapter(): JobSourceAdapter<
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createTencentCampusAdapter(): JobSourceAdapter<
   TencentCampusConfig,
   TencentCampusDetail

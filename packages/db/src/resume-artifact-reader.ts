@@ -4,11 +4,13 @@ import { open } from 'node:fs/promises';
 import path from 'node:path';
 import { PersistenceError } from './errors.js';
 
+/** 数据库查询结果对应的行结构。 */
 interface ArtifactRow {
   readonly relative_path: string;
   readonly byte_size: number;
 }
 
+/** 根据简历文件实体映射读取当前或指定版本内容。 */
 export class SqliteResumeArtifactReader implements ResumeArtifactReader {
   readonly #client: Database.Database;
   readonly #dataRoot: string;
@@ -18,6 +20,7 @@ export class SqliteResumeArtifactReader implements ResumeArtifactReader {
     this.#dataRoot = path.resolve(dataRoot);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async read(
     artifactId: string,
     maximumBytes: number,

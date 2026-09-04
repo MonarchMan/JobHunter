@@ -1,3 +1,4 @@
+/** 应用层数据结构或端口契约。 */
 export interface BackupManifestView {
   readonly formatVersion: number;
   readonly createdAt: string;
@@ -10,6 +11,7 @@ export interface BackupManifestView {
   }[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface BackupListView {
   readonly directory: string;
   readonly createdAt: string | null;
@@ -18,6 +20,7 @@ export interface BackupListView {
   readonly manifestValid: boolean;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface RestorePlanView {
   readonly kind: 'restore';
   readonly backupDirectory: string;
@@ -30,11 +33,13 @@ export interface RestorePlanView {
   readonly confirmationToken: string;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface RestoreResultView {
   readonly restoredDataRoot: string;
   readonly previousDataRoot: string | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface BackupOperationsPort {
   create(destination: string): Promise<BackupManifestView>;
   list(root: string): Promise<readonly BackupListView[]>;
@@ -48,6 +53,7 @@ export interface BackupOperationsPort {
 }
 
 /** Application-level facade keeps CLI commands independent from SQLite backup primitives. */
+/** 编排本地数据库备份、验证、列表和恢复。 */
 export class BackupService {
   readonly #operations: BackupOperationsPort;
 
@@ -55,6 +61,7 @@ export class BackupService {
     this.#operations = operations;
   }
 
+  /** 创建并验证一个备份。 */
   public create(destination: string): Promise<BackupManifestView> {
     return this.#operations.create(destination);
   }
@@ -63,11 +70,14 @@ export class BackupService {
     return this.#operations.list(root);
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public verify(directory: string): Promise<BackupManifestView> {
     return this.#operations.verify(directory);
   }
 
+  /** 校验恢复计划并执行恢复。 */
   public restore(input: {
+    // 1、生成恢复计划；2、校验用户确认；3、执行恢复；4、返回结果。
     readonly backupDirectory: string;
     readonly targetDataRoot: string;
     readonly confirmationToken?: string;

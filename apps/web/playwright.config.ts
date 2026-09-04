@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
+/** 浏览器端端到端测试的运行环境配置。 */
 export default defineConfig({
   testDir: './test/browser',
   fullyParallel: false,

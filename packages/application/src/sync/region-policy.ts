@@ -1,3 +1,4 @@
+/** 应用层使用的类型约束。 */
 export type JobRegionDecision = 'domestic' | 'non_domestic' | 'unknown';
 
 const domesticTerms = [
@@ -89,6 +90,7 @@ const foreignTerms = [
   '卡塔尔',
 ];
 
+/** 根据职位地点文本判断国内、非国内或未知区域。 */
 export function classifyJobRegion(locations: readonly string[]): JobRegionDecision {
   const text = locations.join(' ').trim().toLocaleLowerCase();
   if (!text) return 'unknown';

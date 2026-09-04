@@ -9,8 +9,10 @@ import { contentHash } from '@jobhunter/domain';
 import type { z } from 'zod';
 import type { projectQuestionAgentInputSchema } from './agents.js';
 
+/** 应用层使用的类型约束。 */
 export type ProjectQuestionAgentInput = z.infer<typeof projectQuestionAgentInputSchema>;
 
+/** 将领域项目快照转换为模型可读的最小项目对象。 */
 function project(
   snapshot: ProjectQuestionContext['snapshot'],
 ): ProjectQuestionAgentInput['project'] {
@@ -23,6 +25,7 @@ function project(
   };
 }
 
+/** 计算题目上下文哈希，防止旧任务覆盖新会话状态。 */
 export function questionContextHash(
   session: DrillSessionRecord,
   turnNo: number,
@@ -67,6 +70,7 @@ function searchTerms(context: ProjectQuestionContext): readonly string[] {
   return [...terms].slice(0, 80);
 }
 
+/** 按问题相关性和数量上限选择冻结资料片段。 */
 function selectedMaterials(
   context: ProjectQuestionContext,
 ): ProjectQuestionAgentInput['materials'] {
@@ -122,9 +126,11 @@ function selectedMaterials(
   return selected;
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 export function buildQuestionAgentInput(
   context: ProjectQuestionContext,
 ): ProjectQuestionAgentInput {
+  // 1、截取历史和知识项；2、选择资料片段；3、合并允许引用的证据。
   const history = context.history.slice(-30);
   const knowledgeItems = context.knowledgeItems.slice(-100);
   const materials = selectedMaterials(context);
@@ -158,6 +164,7 @@ export function buildQuestionAgentInput(
   };
 }
 
+/** 返回会话中最新一题，供服务层判断当前交互状态。 */
 export function latestTurn(
   detail: ProjectDossierDetail,
   sessionId: DrillSessionRecord['id'],
@@ -169,6 +176,7 @@ export function latestTurn(
   );
 }
 
+/** 统计指定会话的维度覆盖记录。 */
 export function sessionCoverage(
   detail: ProjectDossierDetail,
   sessionId: DrillSessionRecord['id'],

@@ -5,6 +5,7 @@ import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { PersistenceError } from './errors.js';
 
+/** 数据库查询结果对应的行结构。 */
 interface CandidateRow {
   readonly id: string;
   readonly relative_path: string | null;
@@ -12,6 +13,7 @@ interface CandidateRow {
   readonly created_at: number;
 }
 
+/** 查询可清理的临时文件、任务和过期运行记录。 */
 export class SqliteCleanupRepository implements CleanupRepository {
   readonly #client: Database.Database;
 
@@ -19,6 +21,7 @@ export class SqliteCleanupRepository implements CleanupRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listCandidates(
     cutoffs: Parameters<CleanupRepository['listCandidates']>[0],
   ): readonly CleanupCandidate[] {
@@ -57,6 +60,7 @@ export class SqliteCleanupRepository implements CleanupRepository {
     ];
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listRegisteredArtifactPaths(): readonly string[] {
     return (
       this.#client.prepare('SELECT relative_path FROM entities WHERE deleted_at IS NULL').all() as {
@@ -65,6 +69,7 @@ export class SqliteCleanupRepository implements CleanupRepository {
     ).map((row) => row.relative_path);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public deleteCandidates(candidates: readonly CleanupCandidate[]): void {
     this.#client.transaction(() => {
       for (const candidate of candidates) {
@@ -98,6 +103,7 @@ export class SqliteCleanupRepository implements CleanupRepository {
     })();
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #candidate(kind: CleanupCandidate['kind'], row: CandidateRow): CleanupCandidate {
     return {
       kind,
@@ -109,6 +115,7 @@ export class SqliteCleanupRepository implements CleanupRepository {
   }
 }
 
+/** 在数据根目录内执行受限的临时文件删除。 */
 export class DataRootCleanupFileStore implements CleanupFileStore {
   readonly #dataRoot: string;
   readonly #artifactRoot: string;
@@ -118,6 +125,7 @@ export class DataRootCleanupFileStore implements CleanupFileStore {
     this.#artifactRoot = path.join(this.#dataRoot, 'artifacts');
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async listArtifactFiles(): ReturnType<CleanupFileStore['listArtifactFiles']> {
     const files: { relativePath: string; bytes: number; modifiedAt: number }[] = [];
     const visit = async (directory: string): Promise<void> => {
@@ -146,6 +154,7 @@ export class DataRootCleanupFileStore implements CleanupFileStore {
     return files;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async remove(relativePaths: readonly string[]): Promise<void> {
     for (const relativePath of relativePaths) {
       const target = this.#resolveArtifact(relativePath);
@@ -153,6 +162,7 @@ export class DataRootCleanupFileStore implements CleanupFileStore {
     }
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #resolveArtifact(relativePath: string): string {
     if (!relativePath || path.isAbsolute(relativePath)) {
       throw new PersistenceError('ARTIFACT_PATH_INVALID', 'Cleanup path must be relative.');

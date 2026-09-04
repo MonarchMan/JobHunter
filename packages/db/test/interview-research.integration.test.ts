@@ -33,6 +33,7 @@ import {
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class TestClock implements Clock {
   #value = 1_800_000_000_000;
 
@@ -40,11 +41,13 @@ class TestClock implements Clock {
     return utcInstant(this.#value++);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public advance(milliseconds: number): void {
     this.#value += milliseconds;
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds {
   #counter: number;
 
@@ -52,6 +55,7 @@ class SequentialIds {
     this.#counter = start;
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public generate(): string {
     const suffix = this.#counter.toString(16).padStart(12, '0');
     this.#counter += 1;
@@ -59,6 +63,7 @@ class SequentialIds {
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FailFinalizeOnceResearchRepository extends SqliteInterviewResearchRepository {
   #shouldFail = true;
 
@@ -100,6 +105,7 @@ const brief: ExperienceResearchBrief = {
   blockedDomains: [],
 };
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(options: { readonly failFinalizeOnce?: boolean } = {}): Promise<{
   readonly root: Awaited<ReturnType<typeof createTemporaryDataRoot>>;
   readonly handle: SqliteDatabaseHandle;
@@ -153,6 +159,7 @@ async function setup(options: { readonly failFinalizeOnce?: boolean } = {}): Pro
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function researchBundle(generatedAt = '2026-08-30T08:00:00.000Z'): CommunityResearchBundle {
   const question = '如何定位一次线上慢查询？';
   return {

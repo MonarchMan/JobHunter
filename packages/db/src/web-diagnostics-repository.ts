@@ -10,6 +10,7 @@ import {
 } from '@jobhunter/application/web';
 import type Database from 'better-sqlite3';
 
+/** 数据库查询结果对应的行结构。 */
 interface AgentRunRow {
   readonly id: string;
   readonly agent_key: string;
@@ -28,6 +29,7 @@ interface AgentRunRow {
   readonly finished_at: number | null;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface ToolCallRow {
   readonly sequence_no: number;
   readonly tool_key: string;
@@ -40,6 +42,7 @@ const columns = `id, agent_key, agent_version, prompt_version, model_config_hash
   error_category, error_summary, input_tokens, output_tokens, estimated_cost_micros,
   cost_currency, pricing_version, started_at, finished_at`;
 
+/** 数据库查询结果对应的行结构。 */
 interface TaskEntryRow {
   readonly kind: 'task' | 'source_job_detail_batch';
   readonly id: string;
@@ -131,6 +134,7 @@ const taskEntriesCte = `
     SELECT * FROM batch_entries
   )`;
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function summary(row: AgentRunRow): WebAgentRunSummary {
   return webAgentRunSummarySchema.parse({
     id: row.id,
@@ -151,6 +155,7 @@ function summary(row: AgentRunRow): WebAgentRunSummary {
   });
 }
 
+/** 为 Web 诊断页提供任务、Agent 运行和工具调用只读详情。 */
 export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository {
   readonly #client: Database.Database;
 
@@ -158,6 +163,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listTaskEntries(input: {
     readonly status?: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
     readonly taskType?: string;
@@ -232,6 +238,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listAgentRuns(input: { readonly limit: number; readonly offset: number }): {
     readonly items: readonly WebAgentRunSummary[];
     readonly total: number;
@@ -250,6 +257,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     return { items: rows.map(summary), total: count.total };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getAgentRun(id: string): WebAgentRunDetail | null {
     const row = this.#client.prepare(`SELECT ${columns} FROM agent_runs WHERE id = ?`).get(id) as
       AgentRunRow | undefined;
@@ -279,6 +287,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     });
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getSourceSyncTaskDetail(input: {
     readonly sourceId: string;
     readonly trigger: 'manual' | 'schedule' | 'retry';

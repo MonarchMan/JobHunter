@@ -10,6 +10,7 @@ import type { TaskService } from '../tasks/task-service.js';
 import type { ResumeDeletionService } from './resume-deletion-service.js';
 
 /** Keeps destructive execution in Worker while exposing a stable preview/confirm protocol. */
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 export class WebResumeDeletionService {
   readonly #deletion: ResumeDeletionService;
   readonly #tasks: TaskService;
@@ -22,6 +23,7 @@ export class WebResumeDeletionService {
     this.#tasks = input.tasks;
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public preview(resumeDocumentId: string): WebResumeDeletionImpact {
     const result = this.#deletion.preview(resumeDocumentId);
     return webResumeDeletionImpactSchema.parse({

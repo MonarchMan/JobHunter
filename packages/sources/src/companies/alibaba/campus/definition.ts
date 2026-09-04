@@ -8,6 +8,7 @@ import {
 import type { ScriptedConfig } from '../../../shared/scripted/schemas.js';
 import { alibabaCampusJobSchema } from './schemas.js';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function definition(options: {
   readonly key: 'alibaba.campus' | 'alibaba.social';
   readonly recruitmentType: 'campus' | 'social';
@@ -67,6 +68,7 @@ function definition(options: {
   };
 }
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const alibabaDefinition = definition({
   key: 'alibaba.campus',
   recruitmentType: 'campus',
@@ -74,6 +76,7 @@ export const alibabaDefinition = definition({
   host: 'campus-talent.alibaba.com',
 });
 
+/** 来源适配器使用的稳定配置或常量。 */
 export const alibabaSocialDefinition = definition({
   key: 'alibaba.social',
   recruitmentType: 'social',
@@ -81,8 +84,10 @@ export const alibabaSocialDefinition = definition({
   host: 'talent-holding.alibaba.com',
 });
 
+/** 招聘来源适配器实例。 */
 export const createAlibabaAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(alibabaDefinition);
 
+/** 招聘来源适配器实例。 */
 export const createAlibabaSocialAdapter = (): JobSourceAdapter<ScriptedConfig, never> =>
   createScriptedAdapter(alibabaSocialDefinition);

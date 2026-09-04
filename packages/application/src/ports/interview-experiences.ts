@@ -11,6 +11,7 @@ import type {
 } from '@jobhunter/domain';
 import type { QuarantinedArtifact } from './artifact-store.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceDocumentRecord {
   readonly id: ExperienceDocumentId;
   readonly artifactId: string;
@@ -30,11 +31,13 @@ export interface ExperienceDocumentRecord {
   readonly acceptedAt: UtcInstant | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface InterviewExperienceRecord extends InterviewExperienceDraft {
   readonly id: InterviewExperienceId;
   readonly documentId: ExperienceDocumentId;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface InterviewQuestionEntryRecord {
   readonly id: InterviewQuestionEntryId;
   readonly experienceId: InterviewExperienceId;
@@ -46,12 +49,14 @@ export interface InterviewQuestionEntryRecord {
   readonly answerEvidence: { readonly start: number; readonly end: number } | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceDocumentDetail {
   readonly document: ExperienceDocumentRecord;
   readonly experiences: readonly InterviewExperienceRecord[];
   readonly questions: readonly InterviewQuestionEntryRecord[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceDocumentSummary {
   readonly document: ExperienceDocumentRecord;
   readonly company: string | null;
@@ -63,6 +68,7 @@ export interface ExperienceDocumentSummary {
   readonly unansweredCount: number;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceDeletionSnapshot {
   readonly documentId: ExperienceDocumentId;
   readonly documentRevision: number;
@@ -73,6 +79,7 @@ export interface ExperienceDeletionSnapshot {
   readonly artifactShared: boolean;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface InterviewExperienceRepository {
   findByContentHash(
     contentHash: ContentHash,

@@ -1,13 +1,16 @@
 import { z } from 'zod';
 
+/** 网易混合招聘接口配置 Schema。 */
 export const neteaseConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(100).default(100),
     keyword: z.string().default(''),
   })
   .strict();
+/** 来源适配器使用的类型约束。 */
 export type NeteaseConfig = z.infer<typeof neteaseConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const neteaseJobSchema = z
   .object({
     id: z.union([z.number().int().positive(), z.string().regex(/^\d+$/)]),
@@ -25,8 +28,10 @@ export const neteaseJobSchema = z
     beeUrl: z.string().nullable().optional(),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type NeteaseJob = z.infer<typeof neteaseJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const neteaseListSchema = z
   .object({
     code: z.literal(200),

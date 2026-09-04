@@ -6,14 +6,17 @@ import type {
 import { canonicalJson, type UtcInstant } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function placeholders(count: number): string {
   return Array.from({ length: count }, () => '?').join(', ');
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function sortedStrings(values: Iterable<string>): readonly string[] {
   return [...new Set(values)].sort((left, right) => left.localeCompare(right));
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function selectStrings(
   client: Database.Database,
   sql: string,
@@ -24,10 +27,12 @@ function selectStrings(
   );
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function sameSnapshot(left: ResumeDeletionSnapshot, right: ResumeDeletionSnapshot): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 export class ResumeDeletionImpactChangedError extends Error {
   public constructor() {
     super('Resume deletion impact changed after confirmation.');
@@ -35,6 +40,7 @@ export class ResumeDeletionImpactChangedError extends Error {
   }
 }
 
+/** 计算并按确认哈希删除简历及其独占文件。 */
 export class SqliteResumeDeletionRepository implements ResumeDeletionRepository {
   readonly #client: Database.Database;
 
@@ -42,6 +48,7 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public preview(resumeDocumentId: string): ResumeDeletionSnapshot | null {
     const document = this.#client
       .prepare("SELECT id FROM files WHERE id = ? AND kind = 'resume'")
@@ -201,6 +208,7 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public applyConfirmedDeletion(input: {
     readonly expected: ResumeDeletionSnapshot;
     readonly quarantinedArtifacts: readonly QuarantinedArtifact[];
@@ -293,6 +301,7 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public removePurgedArtifact(artifactId: string): void {
     this.#client
       .prepare(
@@ -303,6 +312,7 @@ export class SqliteResumeDeletionRepository implements ResumeDeletionRepository 
       .run(artifactId, artifactId);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getDeletedArtifact(
     artifactId: string,
   ): ResumeDeletionSnapshot['artifacts'][number] | null {

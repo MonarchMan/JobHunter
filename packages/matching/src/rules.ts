@@ -1,9 +1,11 @@
 import type { DeterministicMatchInput, MatchingEvidence, RuleOutcome } from './model.js';
 
+/** 统一规则比较文本的大小写与空白。 */
 function normalized(value: string): string {
   return value.toLocaleLowerCase().replaceAll(/[\s\p{P}\p{S}]+/gu, '');
 }
 
+/** 为规则结果生成可追溯证据对象。 */
 function evidence(
   source: MatchingEvidence['source'],
   path: string,
@@ -12,6 +14,7 @@ function evidence(
   return { source, path, summary };
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function excludedTerms(input: DeterministicMatchInput): RuleOutcome {
   const haystack = normalized(`${input.job.title}\n${input.job.description}`);
   const matched = input.profile.preferences.excludedTerms.filter((term) =>
@@ -165,7 +168,9 @@ function experience(input: DeterministicMatchInput): RuleOutcome {
   };
 }
 
+/** 按规则集顺序评估职位是否满足硬性资格条件。 */
 export function evaluateEligibility(input: DeterministicMatchInput): readonly RuleOutcome[] {
+  // 1、评估排除词；2、评估地点/公司/雇佣类型；3、评估经验；4、返回稳定规则结果。
   return [
     excludedTerms(input),
     location(input),

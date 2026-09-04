@@ -10,6 +10,7 @@ import {
   runWorkerProcess,
 } from './index.js';
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function readOptionalJson(filePath: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(filePath, 'utf8')) as unknown;
@@ -19,6 +20,7 @@ async function readOptionalJson(filePath: string): Promise<unknown> {
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function loadConfig(): Promise<AppConfig> {
   const bootstrap = resolveBootstrapConfig({ environment: process.env });
   return resolveAppConfig({
@@ -34,6 +36,7 @@ try {
   if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
 }
 
+// 1、加载配置；2、创建生产 Worker；3、注册退出处理；4、启动主循环。
 const config = await loadConfig();
 const logger = createSafeLogger({
   level: config.logLevel.value,

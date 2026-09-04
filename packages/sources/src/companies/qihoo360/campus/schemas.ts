@@ -1,13 +1,16 @@
 import { z } from 'zod';
 
+/** 360 校园招聘接口配置 Schema。 */
 export const qihoo360CampusConfigSchema = z
   .object({
     pageSize: z.number().int().min(1).max(300).default(100),
     keyword: z.string().default(''),
   })
   .strict();
+/** 来源适配器使用的类型约束。 */
 export type Qihoo360CampusConfig = z.infer<typeof qihoo360CampusConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const qihoo360CampusJobSchema = z
   .object({
     Id: z.uuid(),
@@ -21,8 +24,10 @@ export const qihoo360CampusJobSchema = z
     ChangeDate: z.string().nullable().optional(),
   })
   .loose();
+/** 来源适配器使用的类型约束。 */
 export type Qihoo360CampusJob = z.infer<typeof qihoo360CampusJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const qihoo360CampusListSchema = z
   .object({
     Code: z.literal(200),

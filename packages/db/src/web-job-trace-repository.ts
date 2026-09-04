@@ -3,6 +3,7 @@ import { jobAdviceSchema, ruleOutcomeSchema, scoreComponentSchema } from '@jobhu
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
+/** 数据库查询结果对应的行结构。 */
 interface RevisionRow {
   readonly id: string;
   readonly revision_no: number;
@@ -10,6 +11,7 @@ interface RevisionRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface MatchRow {
   readonly id: string;
   readonly profile_version_id: string;
@@ -36,6 +38,7 @@ const storedChangeSetSchema = z.union([
   ),
 ]);
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function parseChanges(source: string): Record<string, unknown> {
   const changeSet = storedChangeSetSchema.parse(JSON.parse(source) as unknown);
   if (!Array.isArray(changeSet)) return changeSet;
@@ -44,6 +47,7 @@ function parseChanges(source: string): Record<string, unknown> {
   );
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function advice(row: MatchRow): WebJobDetail['matches'][number]['advice'] {
   if (row.advice_json) {
     return {
@@ -57,6 +61,7 @@ function advice(row: MatchRow): WebJobDetail['matches'][number]['advice'] {
   return { status: 'not_requested' };
 }
 
+/** 查询职位修订、匹配结果与建议的可追溯链路。 */
 export class SqliteWebJobTraceRepository implements WebJobTraceRepository {
   readonly #client: Database.Database;
 
@@ -64,6 +69,7 @@ export class SqliteWebJobTraceRepository implements WebJobTraceRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(jobId: string): WebJobTrace {
     const revisions = this.#client
       .prepare(

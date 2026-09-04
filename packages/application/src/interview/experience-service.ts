@@ -30,6 +30,7 @@ import {
   renderPersonalExperienceMarkdown,
 } from './experience-template.js';
 
+/** 请求的个人面经文档不存在。 */
 export class ExperienceDocumentNotFoundError extends Error {
   public constructor() {
     super('Interview experience document does not exist.');
@@ -37,6 +38,7 @@ export class ExperienceDocumentNotFoundError extends Error {
   }
 }
 
+/** 文档版本或状态已变化，拒绝覆盖其他操作的结果。 */
 export class ExperienceDocumentConflictError extends Error {
   public constructor(message = 'Interview experience document changed.') {
     super(message);
@@ -44,6 +46,7 @@ export class ExperienceDocumentConflictError extends Error {
   }
 }
 
+/** 上传文件无法解码、解析或不符合模板边界。 */
 export class ExperienceDocumentParseError extends Error {
   public constructor(message: string) {
     super(message);
@@ -51,6 +54,7 @@ export class ExperienceDocumentParseError extends Error {
   }
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ExperienceDeletionImpact {
   readonly impactHash: string;
   readonly snapshot: ExperienceDeletionSnapshot;
@@ -61,18 +65,21 @@ export interface ExperienceDeletionImpact {
   };
 }
 
+/** 规范化上传文件名并拒绝空名或过长名称。 */
 function safeFileName(value: string): string {
   const fileName = value.replaceAll('\\', '/').split('/').at(-1)?.trim() ?? '';
   if (!fileName || fileName.length > 255) throw new TypeError('Experience file name is invalid.');
   return fileName;
 }
 
+/** 根据模板标记识别文档版本，未知格式仍允许进入草稿解析。 */
 function detectTemplate(text: string): typeof personalExperienceTemplateVersion | null {
   return text.includes(`模板版本：${personalExperienceTemplateVersion}`)
     ? personalExperienceTemplateVersion
     : null;
 }
 
+/** 为经历和问题补齐稳定序号并运行领域 Schema 校验。 */
 function normalizeDrafts(
   drafts: readonly InterviewExperienceDraft[],
 ): readonly InterviewExperienceDraft[] {
@@ -88,6 +95,7 @@ function normalizeDrafts(
   );
 }
 
+/** 校验证据字符范围，防止引用越界。 */
 function validateRange(
   text: string,
   range: { readonly start: number; readonly end: number } | null,
@@ -98,6 +106,7 @@ function validateRange(
   }
 }
 
+/** 校验所有问答证据范围都落在原始提取文本内。 */
 function validateEvidence(text: string, drafts: readonly InterviewExperienceDraft[]): void {
   drafts.forEach((draft) => {
     draft.questions.forEach((question) => {
@@ -107,6 +116,7 @@ function validateEvidence(text: string, drafts: readonly InterviewExperienceDraf
   });
 }
 
+/** 将删除快照转换为可供确认的影响摘要和哈希。 */
 function deletionImpact(snapshot: ExperienceDeletionSnapshot): ExperienceDeletionImpact {
   return {
     impactHash: hashCanonical(snapshot),
@@ -119,6 +129,7 @@ function deletionImpact(snapshot: ExperienceDeletionSnapshot): ExperienceDeletio
   };
 }
 
+/** 编排个人面经导入、规范化、审核确认和版本删除。 */
 export class InterviewExperienceService {
   readonly #repository: InterviewExperienceRepository;
   readonly #artifacts: ArtifactStore;
@@ -126,6 +137,7 @@ export class InterviewExperienceService {
   readonly #ids: IdGenerator;
   readonly #maximumFileBytes: number;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly repository: InterviewExperienceRepository;
     readonly artifacts: ArtifactStore;
@@ -140,6 +152,7 @@ export class InterviewExperienceService {
     this.#maximumFileBytes = input.maximumFileBytes ?? 10 * 1024 * 1024;
   }
 
+  /** 返回标准模板文本，供下载或在线编辑器初始化。 */
   public template(): {
     readonly version: typeof personalExperienceTemplateVersion;
     readonly fileName: string;
@@ -154,22 +167,26 @@ export class InterviewExperienceService {
     };
   }
 
+  /** 列出个人面经文档摘要。 */
   public list(): readonly ExperienceDocumentSummary[] {
     return this.#repository.list();
   }
 
+  /** 按 ID 获取文档及其结构化问答详情。 */
   public get(idValue: string): ExperienceDocumentDetail {
     const detail = this.#repository.get(parseId(idValue, 'ExperienceDocument'));
     if (!detail) throw new ExperienceDocumentNotFoundError();
     return detail;
   }
 
+  /** 导入个人面经文件并生成草稿；同内容同解析器时直接去重。 */
   public async importFile(input: {
     readonly bytes: Uint8Array;
     readonly fileName: string;
     readonly sourceMode?: 'upload' | 'online';
     readonly signal: AbortSignal;
   }): Promise<{ readonly detail: ExperienceDocumentDetail; readonly deduplicated: boolean }> {
+    // 1、识别媒体类型并提取文字；2、规范化问答；3、保存原文件与解析结果；4、按内容哈希去重。
     if (input.signal.aborted)
       throw new DOMException('Experience import was aborted.', 'AbortError');
     const fileName = safeFileName(input.fileName);
@@ -227,6 +244,7 @@ export class InterviewExperienceService {
     return this.#repository.createDraft({ document, ...records });
   }
 
+  /** 将在线填写的草稿渲染成标准 Markdown，再走统一导入链路。 */
   public async createOnline(
     draft: InterviewExperienceDraft,
     signal: AbortSignal,
@@ -242,6 +260,7 @@ export class InterviewExperienceService {
     });
   }
 
+  /** 在乐观锁校验后替换尚未确认的文档草稿。 */
   public replaceDraft(input: {
     readonly documentId: string;
     readonly expectedRevision: number;
@@ -270,6 +289,7 @@ export class InterviewExperienceService {
     return replaced;
   }
 
+  /** 确认草稿，使其进入历史面经可检索状态。 */
   public accept(input: {
     readonly documentId: string;
     readonly expectedRevision: number;
@@ -286,6 +306,7 @@ export class InterviewExperienceService {
     return accepted;
   }
 
+  /** 预览删除影响，要求调用方随后携带影响哈希确认。 */
   public previewDeletion(documentIdValue: string): ExperienceDeletionImpact {
     const snapshot = this.#repository.previewDeletion(
       parseId(documentIdValue, 'ExperienceDocument'),
@@ -294,7 +315,9 @@ export class InterviewExperienceService {
     return deletionImpact(snapshot);
   }
 
+  /** 按影响哈希删除文档及其不共享的物理文件。 */
   public async deleteConfirmed(input: {
+    // 1、重新计算删除影响；2、校验确认哈希；3、删除结构化记录；4、清理独占物理文件。
     readonly documentId: string;
     readonly expectedImpactHash: string;
   }): Promise<{ readonly impactHash: string; readonly pendingArtifactPurgeId: string | null }> {
@@ -334,6 +357,7 @@ export class InterviewExperienceService {
     return { impactHash: current.impactHash, pendingArtifactPurgeId: null };
   }
 
+  /** 将解析出的草稿转换为仓储可写入的经历和问题记录。 */
   #records(
     documentId: ExperienceDocumentId,
     drafts: readonly InterviewExperienceDraft[],
@@ -357,6 +381,7 @@ export class InterviewExperienceService {
     return { experiences, questions };
   }
 
+  /** 从详情记录还原领域草稿，供替换和确认流程复用。 */
   #drafts(detail: ExperienceDocumentDetail): readonly InterviewExperienceDraft[] {
     return detail.experiences.map((experience) => ({
       ...experience,
@@ -374,4 +399,5 @@ export class InterviewExperienceService {
   }
 }
 
+/** 应用层使用的类型约束。 */
 export type SupportedExperienceMediaType = Exclude<ResumeMediaType, 'image/jpeg' | 'image/png'>;

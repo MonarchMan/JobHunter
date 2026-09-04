@@ -1,3 +1,4 @@
+/** 数据库基础设施对 Web 与应用层公开的统一导出入口。 */
 export * from './connection.js';
 export * from './dashboard-read-model.js';
 export * from './repositories/agent-run-store.js';

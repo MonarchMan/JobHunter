@@ -11,6 +11,7 @@ import {
 const hosts = ['hr-campus.vivo.com'] as const;
 const entryUrl = 'https://hr-campus.vivo.com/jobs';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createVivoCampusChannelAdapter(options: {
   readonly key: 'vivo.intern' | 'vivo.campus';
   readonly categoryId: '2' | '3';
@@ -99,6 +100,7 @@ function createVivoCampusChannelAdapter(options: {
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createVivoInternAdapter(): JobSourceAdapter<VivoCampusConfig, never> {
   return createVivoCampusChannelAdapter({
     key: 'vivo.intern',
@@ -107,6 +109,7 @@ export function createVivoInternAdapter(): JobSourceAdapter<VivoCampusConfig, ne
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createVivoCampusAdapter(): JobSourceAdapter<VivoCampusConfig, never> {
   return createVivoCampusChannelAdapter({
     key: 'vivo.campus',

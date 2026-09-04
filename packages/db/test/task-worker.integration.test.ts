@@ -21,6 +21,7 @@ import {
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class TestClock {
   #now: UtcInstant;
 
@@ -28,15 +29,18 @@ class TestClock {
     this.#now = utcInstant(typeof value === 'string' ? new Date(value) : value);
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public now(): UtcInstant {
     return this.#now;
   }
 
+  /** 执行测试替身或时钟的操作。 */
   public advance(milliseconds: number): void {
     this.#now = utcInstant(this.#now + milliseconds);
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds {
   #counter = 0x100;
 
@@ -55,6 +59,7 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => root.cleanup()));
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(): Promise<{
   readonly handle: SqliteDatabaseHandle;
   readonly queue: SqliteTaskRepository;
@@ -73,6 +78,7 @@ async function setup(): Promise<{
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function registryWith(input: {
   readonly execute: (
     context: { readonly signal: AbortSignal },
@@ -97,6 +103,7 @@ function registryWith(input: {
   return registry;
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function services(
   input: Awaited<ReturnType<typeof setup>>,
   registry: HandlerRegistry,
@@ -111,6 +118,7 @@ function services(
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function enqueueSync(tasks: TaskService, token: string, sourceId = 'source-1'): EnqueueTaskResult {
   return tasks.enqueue({
     taskType: 'source.sync',
@@ -119,6 +127,7 @@ function enqueueSync(tasks: TaskService, token: string, sourceId = 'source-1'): 
   });
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function engine(
   input: Awaited<ReturnType<typeof setup>>,
   registry: HandlerRegistry,

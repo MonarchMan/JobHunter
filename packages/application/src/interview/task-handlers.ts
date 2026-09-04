@@ -21,6 +21,7 @@ import {
 import { buildQuestionAgentInput, questionContextHash } from './context.js';
 import { renderProjectNotebook } from './notebook.js';
 
+/** 项目追问任务的幂等上下文和乐观锁参数。 */
 export const projectQuestionTaskPayloadSchema = z
   .object({
     dossierId: z.uuid(),
@@ -31,10 +32,12 @@ export const projectQuestionTaskPayloadSchema = z
   })
   .strict();
 
+/** 项目追问任务成功输出。 */
 export const projectQuestionTaskOutputSchema = z
   .object({ turnId: z.uuid(), agentRunId: z.uuid(), cacheHit: z.boolean() })
   .strict();
 
+/** 回答 digest 任务的回答修订定位信息。 */
 export const projectAnswerDigestTaskPayloadSchema = z
   .object({
     dossierId: z.uuid(),
@@ -44,6 +47,7 @@ export const projectAnswerDigestTaskPayloadSchema = z
   })
   .strict();
 
+/** 回答 digest 任务成功输出。 */
 export const projectAnswerDigestTaskOutputSchema = z
   .object({
     turnId: z.uuid(),
@@ -54,20 +58,24 @@ export const projectAnswerDigestTaskOutputSchema = z
   })
   .strict();
 
+/** 项目备忘录任务的档案版本参数。 */
 export const projectNotebookTaskPayloadSchema = z
   .object({ dossierId: z.uuid(), sourceRevision: z.number().int().nonnegative() })
   .strict();
 
+/** 项目备忘录任务成功输出。 */
 export const projectNotebookTaskOutputSchema = z
   .object({ dossierId: z.uuid(), rendered: z.boolean(), artifactId: z.uuid().nullable() })
   .strict();
 
 type CommitCallback = (dossierId: string) => void;
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function taskSignalAborted(signal: AbortSignal): boolean {
   return signal.aborted;
 }
 
+/** 创建项目追问处理器，校验快照后调用问题 Agent 并提交结果。 */
 export function createProjectQuestionTaskHandler(
   input:
     | {
@@ -88,7 +96,9 @@ export function createProjectQuestionTaskHandler(
     leaseDurationMs: 120_000,
     lateCancellationPolicy: 'complete',
     concurrencyKey: (payload) => `interview-session:${payload.sessionId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
+      // 1、校验任务上下文仍为最新；2、运行对应档位 Agent；3、校验证据；4、提交题目结果。
       if ('unavailable' in input) {
         throw new TaskExecutionError(
           'invalid_config',
@@ -165,6 +175,7 @@ export function createProjectQuestionTaskHandler(
   };
 }
 
+/** 创建回答 digest 处理器，抽取知识项并更新覆盖状态。 */
 export function createProjectAnswerDigestTaskHandler(
   input:
     | {
@@ -186,7 +197,9 @@ export function createProjectAnswerDigestTaskHandler(
     leaseDurationMs: 120_000,
     lateCancellationPolicy: 'complete',
     concurrencyKey: (payload) => `interview-session:${payload.sessionId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
+      // 1、校验回答修订仍有效；2、运行 digest Agent；3、校验引用范围；4、提交知识项。
       if ('unavailable' in input) {
         throw new TaskExecutionError('invalid_config', 'Interview answer model is not configured.');
       }
@@ -301,6 +314,7 @@ export function createProjectAnswerDigestTaskHandler(
   };
 }
 
+/** 创建项目备忘录处理器，生成只读 Markdown 物化文件。 */
 export function createProjectNotebookTaskHandler(input: {
   readonly repository: InterviewProjectRepository;
   readonly artifacts: ArtifactStore;
@@ -319,7 +333,9 @@ export function createProjectNotebookTaskHandler(input: {
       output.rendered && output.artifactId !== null ? 'complete' : 'cancel',
     concurrencyKey: (payload) =>
       `interview-dossier:${payload.dossierId}:revision:${String(payload.sourceRevision)}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
+      // 1、读取档案并校验 sourceRevision；2、渲染备忘录；3、按源哈希复用或写入文件；4、绑定最新版本。
       const dossierId = parseId(payload.dossierId, 'ProjectDossier');
       const detail = input.repository.getDossier(dossierId);
       if (!detail) throw new TaskExecutionError('validation_failed', 'Project dossier is missing.');

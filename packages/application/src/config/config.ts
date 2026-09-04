@@ -1,14 +1,17 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
+/** 应用层使用的类型约束。 */
 export type ConfigSource = 'cli' | 'environment' | 'file' | 'default';
 
+/** 应用层数据结构或端口契约。 */
 export interface SourcedValue<T> {
   readonly value: T;
   readonly source: ConfigSource;
 }
 
 /** A secret can only be exposed through an explicit call and serializes as redacted text. */
+/** 防止密钥在日志、JSON 和字符串插值中意外泄露。 */
 export class SecretString {
   readonly #value: string;
 
@@ -17,6 +20,7 @@ export class SecretString {
     this.#value = value;
   }
 
+  /** 在确需调用外部客户端时显式取出密钥。 */
   public reveal(): string {
     return this.#value;
   }
@@ -25,16 +29,19 @@ export class SecretString {
     return '[REDACTED]';
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public toJSON(): string {
     return '[REDACTED]';
   }
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface BootstrapConfig {
   readonly dataRoot: SourcedValue<string>;
   readonly configPath: SourcedValue<string>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface AppConfig {
   readonly bootstrap: BootstrapConfig;
   readonly logLevel: SourcedValue<'debug' | 'info' | 'warn' | 'error'>;
@@ -51,6 +58,7 @@ export interface AppConfig {
   };
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ConfigOverrides {
   readonly dataRoot?: string;
   readonly configPath?: string;
@@ -90,12 +98,14 @@ const defaultTaskTypeConcurrency: Readonly<Record<string, number>> = {
   'source.health-check': 2,
 };
 
+/** 将空字符串配置归一化为未设置。 */
 function nonEmpty(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   if (!normalized) return undefined;
   return normalized;
 }
 
+/** 按显式覆盖、环境、文件、默认值顺序选择配置。 */
 function choose<T>(
   cli: T | undefined,
   environment: T | undefined,
@@ -108,6 +118,7 @@ function choose<T>(
   return { value: fallback, source: 'default' };
 }
 
+/** 解析并校验环境变量中的非负整数。 */
 function environmentInteger(value: string | undefined, name: string): number | undefined {
   const text = nonEmpty(value);
   if (text === undefined) return undefined;
@@ -116,6 +127,7 @@ function environmentInteger(value: string | undefined, name: string): number | u
   return parsed;
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function environmentConcurrency(
   value: string | undefined,
 ): Readonly<Record<string, number>> | undefined {
@@ -133,6 +145,7 @@ function environmentConcurrency(
   }
 }
 
+/** 解析启动阶段数据目录、配置文件和迁移目录。 */
 export function resolveBootstrapConfig(input: {
   readonly cli?: Pick<ConfigOverrides, 'dataRoot' | 'configPath'>;
   readonly environment?: Readonly<Record<string, string | undefined>>;
@@ -159,7 +172,9 @@ export function resolveBootstrapConfig(input: {
   };
 }
 
+/** 合并 CLI、环境、文件和默认值，生成最终应用配置。 */
 export function resolveAppConfig(input: {
+  // 1、读取文件配置；2、应用命令行/环境覆盖；3、解析并校验并发和模型参数；4、返回来源标记。
   readonly bootstrap: BootstrapConfig;
   readonly cli?: ConfigOverrides;
   readonly environment?: Readonly<Record<string, string | undefined>>;

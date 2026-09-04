@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+/** 百度招聘类别枚举。 */
 export const baiduRecruitTypeSchema = z.enum(['INTERN', 'GRADUATE', 'SOCIAL']);
 export type BaiduRecruitType = z.infer<typeof baiduRecruitTypeSchema>;
 
@@ -15,8 +16,10 @@ export const baiduConfigSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type BaiduConfig = z.infer<typeof baiduConfigSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const baiduJobSchema = z
   .object({
     postId: z.string().min(1),
@@ -39,14 +42,18 @@ export const baiduJobSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type BaiduJob = z.infer<typeof baiduJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const baiduDiscoveredJobSchema = baiduJobSchema.extend({
   recruitType: baiduRecruitTypeSchema,
 });
 
+/** 来源适配器使用的类型约束。 */
 export type BaiduDiscoveredJob = z.infer<typeof baiduDiscoveredJobSchema>;
 
+/** 来源输入或输出的运行时校验 Schema。 */
 export const baiduListResponseSchema = z
   .object({
     status: z.literal('ok'),
@@ -62,4 +69,5 @@ export const baiduListResponseSchema = z
   })
   .loose();
 
+/** 来源适配器使用的类型约束。 */
 export type BaiduListResponse = z.infer<typeof baiduListResponseSchema>;

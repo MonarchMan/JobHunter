@@ -10,6 +10,7 @@ const REMOVED_QUERY_KEYS = new Set([
   'spm',
 ]);
 
+/** 规范化官方主机白名单。 */
 function normalizedHosts(allowedHosts: readonly string[]): ReadonlySet<string> {
   const hosts = allowedHosts.map((host) => host.trim().toLowerCase()).filter(Boolean);
   if (hosts.length === 0) {
@@ -18,6 +19,7 @@ function normalizedHosts(allowedHosts: readonly string[]): ReadonlySet<string> {
   return new Set(hosts);
 }
 
+/** 校验来源 URL 必须为官方 HTTPS 且不含认证信息。 */
 export function validateOfficialUrl(value: string, allowedHosts: readonly string[]): URL {
   let url: URL;
   try {
@@ -34,6 +36,7 @@ export function validateOfficialUrl(value: string, allowedHosts: readonly string
   return url;
 }
 
+/** 清理会话/跟踪参数并生成稳定官方 URL。 */
 export function canonicalizeOfficialUrl(value: string, allowedHosts: readonly string[]): string {
   const url = validateOfficialUrl(value, allowedHosts);
   const hashRoute = url.hash.startsWith('#/') ? url.hash : '';

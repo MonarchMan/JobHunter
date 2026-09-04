@@ -20,6 +20,7 @@ const hosts = ['campus.jd.com'] as const;
 const entryUrl = 'https://campus.jd.com/home';
 const listEndpoint = 'https://campus.jd.com/api/wx/position/page?type=present';
 
+/** 来源适配器使用的数据结构或契约。 */
 function parseSource<T>(parse: () => T, diagnostic: string): T {
   try {
     return parse();
@@ -29,6 +30,7 @@ function parseSource<T>(parse: () => T, diagnostic: string): T {
   }
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function requestHeaders(): Readonly<Record<string, string>> {
   return {
     'content-type': 'application/json',
@@ -38,6 +40,7 @@ function requestHeaders(): Readonly<Record<string, string>> {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function listBody(config: JdCampusConfig, pageIndex: number): string {
   return JSON.stringify({
     pageSize: config.pageSize,
@@ -52,6 +55,7 @@ function listBody(config: JdCampusConfig, pageIndex: number): string {
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function canonicalJobUrl(publishId: string | number): string {
   return canonicalizeOfficialUrl(
     `https://campus.jd.com/#/details?id=${encodeURIComponent(String(publishId))}&type=present`,
@@ -59,20 +63,23 @@ function canonicalJobUrl(publishId: string | number): string {
   );
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function title(job: JdCampusJob): string {
   const value = job.positionName ?? job.positionNameOpen;
   if (!value?.trim()) throw new SourceError('parse_changed', 'JD campus job has no title.');
   return value;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function locations(job: JdCampusJob): string[] {
   return [job.workCity, ...(job.requirementVoList ?? []).map((item) => item.workCity)]
     .flatMap((value) => (value ?? '').split(/[，,、/]/))
     .map((value) => value.trim())
     .filter((value) => value.length > 0 && value !== '/')
-    .toSorted((left, right) => left.localeCompare(right));
+    .toSorted((left, right) => left.localeCompare(right, 'zh-CN'));
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function description(job: JdCampusJob): string {
   const text = [
     job.workContent ? `岗位职责\n${job.workContent}` : null,
@@ -84,6 +91,7 @@ function description(job: JdCampusJob): string {
   return text;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function healthFailure(error: unknown, startedAt: number): SourceHealth {
   const sourceError =
     error instanceof SourceError
@@ -106,6 +114,7 @@ function healthFailure(error: unknown, startedAt: number): SourceHealth {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 interface JdChannelOptions {
   readonly key: 'jd.campus' | 'jd.intern';
   readonly category: 'campus' | 'internship';
@@ -128,6 +137,7 @@ function createJdChannelAdapter(
       externalIdFingerprintVersion: null,
     },
     configSchema: jdCampusConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       const expectedPages = (total: number): number =>
         total === 0 ? 0 : Math.ceil(total / context.config.pageSize);
@@ -194,6 +204,7 @@ function createJdChannelAdapter(
         discoveredCount,
       };
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       return Promise.resolve().then(() => {
         const job = parseSource(
@@ -280,6 +291,7 @@ function createJdChannelAdapter(
   };
 }
 
+/** 招聘来源适配器实例。 */
 export const createJdCampusAdapter = (): JobSourceAdapter<JdCampusConfig, never> =>
   createJdChannelAdapter({ key: 'jd.campus', category: 'campus', employmentType: '校招' });
 

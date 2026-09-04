@@ -1,6 +1,9 @@
+/** 来源适配器使用的稳定配置或常量。 */
 export const recruitmentCategories = ['internship', 'campus', 'social'] as const;
+/** 来源适配器使用的类型约束。 */
 export type RecruitmentCategory = (typeof recruitmentCategories)[number];
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function normalizeRecruitmentCategory(
   value: string | null | undefined,
 ): RecruitmentCategory | null {

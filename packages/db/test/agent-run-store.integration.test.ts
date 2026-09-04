@@ -19,6 +19,7 @@ afterEach(async () => {
   }
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(): Promise<{
   readonly handle: SqliteDatabaseHandle;
   readonly store: SqliteAgentRunStore;
@@ -29,6 +30,7 @@ async function setup(): Promise<{
   return { handle, store: new SqliteAgentRunStore(handle.client) };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function running(id: string, cacheKey = 'cache-key'): AgentRunRecord {
   return {
     id,

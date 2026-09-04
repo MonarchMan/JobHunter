@@ -3,12 +3,14 @@ import type { SourceSyncChannel } from '../ports/settings.js';
 import type { ScheduleService } from '../tasks/schedule-service.js';
 import type { JobIntakePolicy } from './job-intake-policy.js';
 
+/** 根据来源启用状态对通用 schedules 进行幂等对账。 */
 export class SourceScheduleReconciliationService {
   readonly #sources: SourceManagementRepository;
   readonly #schedules: Pick<ScheduleService, 'upsert'>;
   readonly #jobIntakePolicy: JobIntakePolicy;
   readonly #activeChannel: () => SourceSyncChannel;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly sources: SourceManagementRepository;
     readonly schedules: Pick<ScheduleService, 'upsert'>;
@@ -21,6 +23,7 @@ export class SourceScheduleReconciliationService {
     this.#activeChannel = input.activeChannel;
   }
 
+  /** 创建、更新或停用来源调度，并返回统计。 */
   public reconcile(): { readonly total: number; readonly enabled: number } {
     const ready = this.#jobIntakePolicy.isReady();
     const activeChannel = this.#activeChannel();

@@ -21,6 +21,7 @@ import {
 const hosts = ['hr.360.cn'] as const;
 const entryUrl = 'https://hr.360.cn/hr/list';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function browserRequest(context: {
   readonly requestId: string;
   readonly signal: AbortSignal;
@@ -40,6 +41,7 @@ function browserRequest(context: {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function collect(context: {
   readonly page?: SourcePageClient;
   readonly requestId: string;
@@ -51,6 +53,7 @@ function collect(context: {
   return context.page.collect(browserRequest(context));
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createQihoo360SocialAdapter(): JobSourceAdapter<Qihoo360Config, Qihoo360Detail> {
   return {
     metadata: {
@@ -65,6 +68,7 @@ export function createQihoo360SocialAdapter(): JobSourceAdapter<Qihoo360Config, 
       externalIdFingerprintVersion: null,
     },
     configSchema: qihoo360ConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       const collection = await collect(context);
       let discoveredCount = 0;
@@ -125,6 +129,7 @@ export function createQihoo360SocialAdapter(): JobSourceAdapter<Qihoo360Config, 
       }
       return detail;
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       const job = qihoo360JobSchema.parse(input.discovered.raw);
       const detail = input.detail;

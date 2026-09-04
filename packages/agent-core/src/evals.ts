@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AgentRuntimeError } from './errors.js';
 
+/** 单个 Agent 评测用例的输入引用和断言集合。 */
 export const evaluationCaseSchema = z
   .object({
     id: z.string().trim().min(1),
@@ -17,6 +18,7 @@ export const evaluationCaseSchema = z
   })
   .strict();
 
+/** Agent 评测报告及各类失败计数。 */
 export const evaluationReportSchema = z
   .object({
     agentKey: z.string().trim().min(1),
@@ -48,9 +50,12 @@ export const evaluationReportSchema = z
     'Evaluation totals must include every case exactly once.',
   );
 
+/** 模块使用的类型约束。 */
 export type EvaluationCase = z.infer<typeof evaluationCaseSchema>;
+/** 模块使用的类型约束。 */
 export type EvaluationReport = z.infer<typeof evaluationReportSchema>;
 
+/** 按 JSON Pointer 读取待断言值。 */
 function valueAtPath(value: unknown, path: string): unknown {
   const segments = path
     .split('/')
@@ -64,6 +69,7 @@ function valueAtPath(value: unknown, path: string): unknown {
   return current;
 }
 
+/** 执行 equals、contains 和 exists 断言并返回失败路径。 */
 export function evaluateAssertions(
   output: unknown,
   assertions: EvaluationCase['assertions'],
@@ -85,6 +91,7 @@ export function evaluateAssertions(
   return failures;
 }
 
+/** 顺序执行评测用例并将提供方、Schema 和质量失败分类汇总。 */
 export async function runEvaluation<TInput>(input: {
   readonly agentKey: string;
   readonly agentVersion: string;
@@ -98,6 +105,7 @@ export async function runEvaluation<TInput>(input: {
   const now = input.now ?? Date.now;
   const startedAt = now();
   const results: EvaluationReport['cases'][number][] = [];
+  // 1、逐个加载输入并调用 Agent，单个用例失败不阻断后续用例。
   for (const evaluationCase of input.cases) {
     try {
       const value = await input.loadInput(evaluationCase.inputRef);
@@ -118,6 +126,7 @@ export async function runEvaluation<TInput>(input: {
       });
     }
   }
+  // 2、汇总所有结果并通过报告 Schema 校验计数一致性。
   const report: EvaluationReport = {
     agentKey: input.agentKey,
     agentVersion: input.agentVersion,

@@ -10,6 +10,7 @@ import type { CandidateProfileRepository } from '../ports/profiles.js';
 import type { EnqueueTaskResult } from '../tasks/model.js';
 import type { TaskService } from '../tasks/task-service.js';
 
+/** 匹配所需简历版本不存在。 */
 export class MatchProfileNotFoundError extends Error {
   public constructor(id: string) {
     super(`Candidate profile has no current version: ${id}`);
@@ -17,6 +18,7 @@ export class MatchProfileNotFoundError extends Error {
   }
 }
 
+/** 查询的匹配结果不存在。 */
 export class MatchResultNotFoundError extends Error {
   public constructor(id: string) {
     super(`Match result not found: ${id}`);
@@ -24,6 +26,7 @@ export class MatchResultNotFoundError extends Error {
   }
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface MatchDetail {
   readonly match: MatchResultRecord;
   readonly job: {
@@ -38,12 +41,14 @@ export interface MatchDetail {
   readonly advice: MatchAdviceRecord | null;
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 function nonEmptyToken(value: string | undefined): string | undefined {
   const token = value?.trim();
   if (!token) return undefined;
   return token;
 }
 
+/** 编排单职位或批量职位的匹配执行与查询。 */
 export class MatchWorkflowService {
   readonly #matching: MatchingRepository;
   readonly #profiles: CandidateProfileRepository;
@@ -51,6 +56,7 @@ export class MatchWorkflowService {
   readonly #ids: IdGenerator;
   readonly #adviceSelector: MatchAdviceSelector | null;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly matching: MatchingRepository;
     readonly profiles: CandidateProfileRepository;
@@ -65,6 +71,7 @@ export class MatchWorkflowService {
     this.#adviceSelector = input.adviceSelector ?? null;
   }
 
+  /** 为单个职位运行匹配并返回结果。 */
   public runForJob(input: {
     readonly jobId: string;
     readonly profileVersionId?: string;
@@ -94,6 +101,7 @@ export class MatchWorkflowService {
     });
   }
 
+  /** 为一组职位运行匹配，复用同一简历版本。 */
   public runForJobs(input: {
     readonly jobIds: readonly string[];
     readonly profileVersionId?: string;
@@ -115,6 +123,7 @@ export class MatchWorkflowService {
     );
   }
 
+  /** 分页列出匹配结果。 */
   public list(input: {
     readonly profileId: string;
     readonly includeExcluded?: boolean;
@@ -137,6 +146,7 @@ export class MatchWorkflowService {
     });
   }
 
+  /** 获取单条匹配结果及建议。 */
   public show(id: string): MatchDetail {
     const matchId = parseId(id, 'MatchResult');
     const match = this.#matching.getMatch(matchId);
@@ -161,12 +171,14 @@ export class MatchWorkflowService {
     };
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #profileId(id: string): CandidateProfileId {
     const profileId = parseId(id, 'CandidateProfile');
     if (!this.#profiles.getProfile(profileId)) throw new MatchProfileNotFoundError(id);
     return profileId;
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #currentProfileVersion(): ReturnType<CandidateProfileRepository['getCurrentVersion']> {
     const profile = this.#profiles.listProfiles()[0];
     return profile ? this.#profiles.getCurrentVersion(profile.id) : null;

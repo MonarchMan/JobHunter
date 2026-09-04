@@ -6,6 +6,7 @@ import {
   type CleanupRepository,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FixtureRepository implements CleanupRepository {
   public candidates: CleanupCandidate[] = [];
   public registered: string[] = [];
@@ -14,14 +15,17 @@ class FixtureRepository implements CleanupRepository {
   public listCandidates(): readonly CleanupCandidate[] {
     return this.candidates;
   }
+  /** 执行测试替身或时钟的操作。 */
   public listRegisteredArtifactPaths(): readonly string[] {
     return this.registered;
   }
+  /** 执行测试替身或时钟的操作。 */
   public deleteCandidates(candidates: readonly CleanupCandidate[]): void {
     this.deleted.push(...candidates);
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class FixtureFiles implements CleanupFileStore {
   public files: { relativePath: string; bytes: number; modifiedAt: number }[] = [];
   public readonly removed: string[] = [];
@@ -29,6 +33,7 @@ class FixtureFiles implements CleanupFileStore {
   public listArtifactFiles(): ReturnType<CleanupFileStore['listArtifactFiles']> {
     return Promise.resolve(this.files);
   }
+  /** 执行测试替身或时钟的操作。 */
   public remove(paths: readonly string[]): Promise<void> {
     this.removed.push(...paths);
     return Promise.resolve();

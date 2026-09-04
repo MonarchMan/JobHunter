@@ -22,6 +22,7 @@ import type {
 } from '@jobhunter/domain';
 import type { QuarantinedArtifact } from './artifact-store.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeProjectSnapshotRecord {
   readonly id: ResumeProjectSnapshotId;
   readonly sourceProfileId: CandidateProfileId;
@@ -32,6 +33,7 @@ export interface ResumeProjectSnapshotRecord {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectDossierRecord {
   readonly id: ProjectDossierId;
   readonly snapshotId: ResumeProjectSnapshotId;
@@ -42,6 +44,7 @@ export interface ProjectDossierRecord {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface DrillSessionRecord {
   readonly id: DrillSessionId;
   readonly dossierId: ProjectDossierId;
@@ -62,6 +65,7 @@ export interface DrillSessionRecord {
   readonly completedAt: UtcInstant | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectMaterialChunkRecord {
   readonly id: ProjectMaterialChunkId;
   readonly heading: string | null;
@@ -70,6 +74,7 @@ export interface ProjectMaterialChunkRecord {
   readonly contentHash: ContentHash;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectMaterialBinding {
   readonly fileId: string;
   readonly entityId: string;
@@ -78,6 +83,7 @@ export interface ProjectMaterialBinding {
   readonly contentHash: ContentHash;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectMaterialRecord extends ProjectMaterialBinding {
   readonly dossierId: ProjectDossierId;
   readonly mediaType: 'text/markdown; charset=utf-8';
@@ -87,10 +93,12 @@ export interface ProjectMaterialRecord extends ProjectMaterialBinding {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectMaterialContext extends ProjectMaterialRecord {
   readonly chunks: readonly (ProjectMaterialChunkRecord & { readonly text: string })[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface DrillTurnRecord {
   readonly id: DrillTurnId;
   readonly sessionId: DrillSessionId;
@@ -110,6 +118,7 @@ export interface DrillTurnRecord {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface DrillAnswerRevisionRecord {
   readonly id: DrillAnswerRevisionId;
   readonly turnId: DrillTurnId;
@@ -120,6 +129,7 @@ export interface DrillAnswerRevisionRecord {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectKnowledgeItemRecord {
   readonly id: ProjectKnowledgeItemId;
   readonly dossierId: ProjectDossierId;
@@ -133,6 +143,7 @@ export interface ProjectKnowledgeItemRecord {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface DrillCoverageRecord {
   readonly sessionId: DrillSessionId;
   readonly dimension: DrillCoverageDimension;
@@ -141,6 +152,7 @@ export interface DrillCoverageRecord {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectDossierSummary {
   readonly dossier: ProjectDossierRecord;
   readonly snapshot: ResumeProjectSnapshotRecord;
@@ -149,6 +161,7 @@ export interface ProjectDossierSummary {
   readonly activeSessionId: DrillSessionId | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectDossierDetail extends ProjectDossierSummary {
   readonly sessionRecords: readonly DrillSessionRecord[];
   readonly turns: readonly DrillTurnRecord[];
@@ -158,6 +171,7 @@ export interface ProjectDossierDetail extends ProjectDossierSummary {
   readonly materials: readonly ProjectMaterialRecord[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectQuestionContext {
   readonly dossier: ProjectDossierRecord;
   readonly snapshot: ResumeProjectSnapshotRecord;
@@ -174,6 +188,7 @@ export interface ProjectQuestionContext {
   readonly materials: readonly ProjectMaterialContext[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectAnswerContext {
   readonly dossier: ProjectDossierRecord;
   readonly snapshot: ResumeProjectSnapshotRecord;
@@ -182,12 +197,14 @@ export interface ProjectAnswerContext {
   readonly answerRevision: DrillAnswerRevisionRecord;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface DossierDeletionArtifact {
   readonly id: string;
   readonly relativePath: string;
   readonly shared: boolean;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface DossierDeletionSnapshot {
   readonly dossierId: ProjectDossierId;
   readonly dossierRevision: number;
@@ -203,6 +220,7 @@ export interface DossierDeletionSnapshot {
   readonly materialArtifacts: readonly DossierDeletionArtifact[];
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ProjectNotebookReader {
   read(
     artifactId: string,
@@ -211,6 +229,7 @@ export interface ProjectNotebookReader {
   ): Promise<{ readonly content: Uint8Array; readonly mediaType: string }>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface InterviewProjectRepository {
   createDossier(input: {
     readonly dossier: ProjectDossierRecord;

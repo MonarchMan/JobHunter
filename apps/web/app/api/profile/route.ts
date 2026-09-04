@@ -17,6 +17,7 @@ import { verifyMutationRequest } from '../../../src/server/csrf.js';
 
 export const dynamic = 'force-dynamic';
 
+/** 处理 Web API 的 GET 请求，读取并返回对应资源。 */
 export async function GET(request: Request): Promise<Response> {
   try {
     const container = await getWebContainer();

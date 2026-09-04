@@ -1,7 +1,9 @@
 import type { Clock, IdGenerator, TaskId, UtcInstant } from '@jobhunter/domain';
 
+/** 应用层使用的类型约束。 */
 export type TaskStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
+/** 应用层使用的类型约束。 */
 export type TaskErrorCategory =
   | 'rate_limited'
   | 'network_temporary'
@@ -13,10 +15,12 @@ export type TaskErrorCategory =
   | 'cancelled'
   | 'permanent';
 
+/** 应用层数据结构或端口契约。 */
 export interface RuntimeSchema<TValue> {
   parse(value: unknown): TValue;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskLogFields {
   readonly [key: string]: unknown;
   readonly taskId?: string;
@@ -29,12 +33,14 @@ export interface TaskLogFields {
   readonly error?: unknown;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskLogger {
   info(event: string, fields: TaskLogFields): void;
   warn(event: string, fields: TaskLogFields): void;
   error(event: string, fields: TaskLogFields): void;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskHandlerContext {
   readonly taskId?: TaskId;
   readonly signal: AbortSignal;
@@ -43,6 +49,7 @@ export interface TaskHandlerContext {
   readonly services: Readonly<Record<string, unknown>>;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskHandler<TPayload, TOutput> {
   readonly taskType: string;
   readonly payloadSchema: RuntimeSchema<TPayload>;
@@ -61,8 +68,10 @@ export interface TaskHandler<TPayload, TOutput> {
   execute(context: TaskHandlerContext, payload: TPayload): Promise<TOutput>;
 }
 
+/** 应用层使用的类型约束。 */
 export type RegisteredTaskHandler = TaskHandler<unknown, unknown>;
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskRecord {
   readonly id: TaskId;
   readonly taskType: string;
@@ -88,6 +97,7 @@ export interface TaskRecord {
   readonly finishedAt: UtcInstant | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface PersistedTaskInput {
   readonly id: TaskId;
   readonly taskType: string;
@@ -102,11 +112,13 @@ export interface PersistedTaskInput {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层使用的类型约束。 */
 export type EnqueueTaskResult =
   | { readonly kind: 'enqueued'; readonly task: TaskRecord }
   | { readonly kind: 'idempotent'; readonly task: TaskRecord }
   | { readonly kind: 'concurrency_conflict'; readonly task: TaskRecord };
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskRetryCoordinator {
   enqueueRetry(input: {
     readonly source: TaskRecord;
@@ -114,6 +126,7 @@ export interface TaskRetryCoordinator {
   }): EnqueueTaskResult;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskListFilter {
   readonly statuses?: readonly TaskStatus[];
   readonly taskType?: string;
@@ -121,6 +134,7 @@ export interface TaskListFilter {
   readonly offset?: number;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskQueueSummary {
   readonly pending: number;
   readonly running: number;
@@ -131,6 +145,7 @@ export interface TaskQueueSummary {
   readonly oldestPendingAgeMs: number | null;
 }
 
+/** 应用层使用的类型约束。 */
 export type CancelTaskResult =
   | { readonly kind: 'cancelled'; readonly task: TaskRecord }
   | { readonly kind: 'cancel_requested'; readonly task: TaskRecord }
@@ -138,15 +153,18 @@ export type CancelTaskResult =
   | { readonly kind: 'not_cancellable'; readonly task: TaskRecord }
   | { readonly kind: 'not_found' };
 
+/** 应用层数据结构或端口契约。 */
 export interface HeartbeatResult {
   readonly ownsLease: boolean;
   readonly cancelRequested: boolean;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskCancellationNotifier {
   notifyCancellation(taskId: TaskId): void;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ScheduleRecord {
   readonly id: string;
   readonly scheduleKey: string;
@@ -161,6 +179,7 @@ export interface ScheduleRecord {
   readonly updatedAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface PersistedScheduleInput {
   readonly id: string;
   readonly scheduleKey: string;
@@ -173,6 +192,7 @@ export interface PersistedScheduleInput {
   readonly now: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskQueue {
   enqueue(input: PersistedTaskInput): EnqueueTaskResult;
   get(taskId: TaskId): TaskRecord | null;
@@ -228,12 +248,14 @@ export interface TaskQueue {
   }): EnqueueTaskResult | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface TaskRuntimeDependencies {
   readonly queue: TaskQueue;
   readonly clock: Clock;
   readonly ids: IdGenerator;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface RandomSource {
   next(): number;
 }

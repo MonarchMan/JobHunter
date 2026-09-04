@@ -14,8 +14,10 @@ import {
 import { ZodError } from 'zod';
 import { scriptedConfigSchema, type ScriptedConfig } from './schemas.js';
 
+/** 来源适配器使用的类型约束。 */
 type RecordValue = Record<string, unknown>;
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export interface ScriptedAdapterDefinition {
   readonly key: string;
   readonly company: { readonly slug: string; readonly name: string };
@@ -40,16 +42,19 @@ export interface ScriptedAdapterDefinition {
   }) => SourceHttpRequest;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function isRecord(value: unknown): value is RecordValue {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function text(value: unknown): string | null {
   if (typeof value === 'string' && value.trim()) return value.trim();
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function firstText(record: RecordValue, keys: readonly string[]): string | null {
   for (const key of keys) {
     const value = text(record[key]);
@@ -58,6 +63,7 @@ function firstText(record: RecordValue, keys: readonly string[]): string | null 
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function recruitmentCategoryFor(
   record: RecordValue,
   fallback: ScriptedAdapterDefinition['recruitmentType'],
@@ -77,6 +83,7 @@ function recruitmentCategoryFor(
   return titleCategory ?? normalizeRecruitmentCategory(fallback);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function findArray(value: unknown, depth = 0): RecordValue[] | null {
   if (depth > 4) return null;
   if (Array.isArray(value) && value.every(isRecord)) return value;
@@ -102,6 +109,7 @@ function findArray(value: unknown, depth = 0): RecordValue[] | null {
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function findNumber(value: unknown, keys: readonly string[], depth = 0): number | null {
   if (depth > 4 || !isRecord(value)) return null;
   for (const key of keys) {
@@ -115,6 +123,7 @@ function findNumber(value: unknown, keys: readonly string[], depth = 0): number 
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function parsePage(
   body: unknown,
   pageSize: number,
@@ -134,6 +143,7 @@ function parsePage(
   return { items, total: Math.max(total, items.length > pageSize ? 0 : items.length) };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function externalId(job: RecordValue): string | null {
   return firstText(job, [
     'id',
@@ -148,6 +158,7 @@ function externalId(job: RecordValue): string | null {
   ]);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function title(job: RecordValue): string | null {
   return firstText(job, [
     'title',
@@ -160,6 +171,7 @@ function title(job: RecordValue): string | null {
   ]);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function description(job: RecordValue): string | null {
   const values = [
     'description',
@@ -179,6 +191,7 @@ function description(job: RecordValue): string | null {
   return values.length > 0 ? values.join('\n\n') : null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function locations(job: RecordValue): string[] {
   const values: string[] = [];
   for (const key of [
@@ -207,6 +220,7 @@ function locations(job: RecordValue): string[] {
   return values.map((value) => value.trim()).filter((value) => value && value !== '/');
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function publishedAt(job: RecordValue): number | null {
   for (const key of [
     'publishedAt',
@@ -229,6 +243,7 @@ function publishedAt(job: RecordValue): number | null {
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function browserRequest(
   definition: ScriptedAdapterDefinition,
   context: {
@@ -264,6 +279,7 @@ function browserRequest(
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function requestFailure(error: unknown, message: string): SourceError {
   if (error instanceof SourceError) return error;
   return new SourceError('parse_changed', error instanceof ZodError ? message : message, {
@@ -271,6 +287,7 @@ function requestFailure(error: unknown, message: string): SourceError {
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createScriptedAdapter(
   definition: ScriptedAdapterDefinition,
 ): JobSourceAdapter<ScriptedConfig, never> {
@@ -326,6 +343,7 @@ export function createScriptedAdapter(
       externalIdFingerprintVersion: null,
     },
     configSchema: scriptedConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       if (definition.transport === 'browser') {
         if (!context.page?.collect) {
@@ -436,6 +454,7 @@ export function createScriptedAdapter(
       if (discoveredCount !== total) coverage = 'partial';
       yield { type: 'complete', coverage, cursor: null, pages: page, discoveredCount };
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       return Promise.resolve().then(() => {
         const raw = parseRecord(input.discovered.raw);
@@ -567,6 +586,7 @@ export function createScriptedAdapter(
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function appendQuery(
   url: string,
   entries: Readonly<Record<string, string | number | undefined>>,
@@ -578,6 +598,7 @@ export function appendQuery(
   return target.toString();
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function jsonRequest(input: {
   readonly sourceKey: string;
   readonly requestId: string;

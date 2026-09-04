@@ -11,6 +11,7 @@ import {
 import { dirname, resolve } from 'node:path';
 import { Writable } from 'node:stream';
 
+/** 按字节上限滚动写入日志文件的 Writable。 */
 export class RotatingFileStream extends Writable {
   readonly #path: string;
   readonly #maxBytes: number;
@@ -18,6 +19,7 @@ export class RotatingFileStream extends Writable {
   #descriptor: number;
   #bytes: number;
 
+  /** 执行模块组件对外暴露的操作。 */
   public constructor(input: {
     readonly path: string;
     readonly maxBytes: number;
@@ -36,6 +38,7 @@ export class RotatingFileStream extends Writable {
     this.#bytes = statSync(this.#path).size;
   }
 
+  /** 写入一块日志并在超过上限时滚动文件。 */
   public override _write(
     chunk: Buffer | string,
     encoding: BufferEncoding,
@@ -52,6 +55,7 @@ export class RotatingFileStream extends Writable {
     }
   }
 
+  /** 在流结束时关闭当前文件句柄。 */
   public override _final(callback: (error?: Error | null) => void): void {
     closeSync(this.#descriptor);
     callback();

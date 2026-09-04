@@ -23,6 +23,7 @@ const hosts = ['talent.baidu.com'] as const;
 const entryUrl = 'https://talent.baidu.com/jobs/list?recruitType=INTERN';
 const listEndpoint = 'https://talent.baidu.com/httservice/getPostListNew';
 
+/** 来源适配器使用的数据结构或契约。 */
 interface BaiduAdapterVariant {
   readonly key: 'baidu.campus' | 'baidu.social';
   readonly entryUrl: string;
@@ -30,6 +31,7 @@ interface BaiduAdapterVariant {
   readonly recruitTypes: readonly BaiduRecruitType[] | null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function parseSource<T>(parse: () => T, diagnostic: string): T {
   try {
     return parse();
@@ -39,6 +41,7 @@ function parseSource<T>(parse: () => T, diagnostic: string): T {
   }
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function requestHeaders(recruitType: BaiduRecruitType): Readonly<Record<string, string>> {
   return {
     'content-type': 'application/x-www-form-urlencoded;charset=utf-8',
@@ -47,6 +50,7 @@ function requestHeaders(recruitType: BaiduRecruitType): Readonly<Record<string, 
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function listBody(config: BaiduConfig, recruitType: BaiduRecruitType, page: number): string {
   return new URLSearchParams({
     recruitType,
@@ -57,6 +61,7 @@ function listBody(config: BaiduConfig, recruitType: BaiduRecruitType, page: numb
   }).toString();
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function jobUrl(recruitType: BaiduRecruitType, postId: string): string {
   return canonicalizeOfficialUrl(
     `https://talent.baidu.com/jobs/detail/${recruitType}/${encodeURIComponent(postId)}`,
@@ -64,6 +69,7 @@ function jobUrl(recruitType: BaiduRecruitType, postId: string): string {
   );
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function locations(value: string | null | undefined): string[] {
   return [
     ...new Set(
@@ -75,6 +81,7 @@ function locations(value: string | null | undefined): string[] {
   ];
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function optionalText(...values: readonly (string | null | undefined)[]): string | null {
   for (const value of values) {
     if (value?.trim()) return value.trim();
@@ -82,6 +89,7 @@ function optionalText(...values: readonly (string | null | undefined)[]): string
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function description(job: BaiduDiscoveredJob): string {
   const value = [
     job.workContent?.trim() ? `岗位职责\n${job.workContent.trim()}` : null,
@@ -93,6 +101,7 @@ function description(job: BaiduDiscoveredJob): string {
   return value;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function publishedAt(job: BaiduDiscoveredJob): ReturnType<typeof utcInstant> | null {
   const value = optionalText(job.publishDate, job.updateDate);
   if (!value) return null;
@@ -100,6 +109,7 @@ function publishedAt(job: BaiduDiscoveredJob): ReturnType<typeof utcInstant> | n
   return Number.isFinite(timestamp) ? utcInstant(timestamp) : null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function parseList(body: unknown): BaiduListResponse {
   return parseSource(
     () => baiduListResponseSchema.parse(body),
@@ -107,6 +117,7 @@ function parseList(body: unknown): BaiduListResponse {
   );
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function healthFailure(error: unknown, startedAt: number): SourceHealth {
   const sourceError =
     error instanceof SourceError
@@ -129,6 +140,7 @@ function healthFailure(error: unknown, startedAt: number): SourceHealth {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<BaiduConfig, never> {
   return {
     metadata: {
@@ -143,6 +155,7 @@ function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<Baid
       externalIdFingerprintVersion: null,
     },
     configSchema: baiduConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       const seen = new Set<string>();
       let discoveredCount = 0;
@@ -221,6 +234,7 @@ function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<Baid
         discoveredCount,
       };
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       return Promise.resolve().then(() => {
         const job = parseSource(
@@ -314,6 +328,7 @@ function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<Baid
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createBaiduAdapter(): JobSourceAdapter<BaiduConfig, never> {
   return createBaiduVariant({
     key: 'baidu.campus',
@@ -323,6 +338,7 @@ export function createBaiduAdapter(): JobSourceAdapter<BaiduConfig, never> {
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createBaiduSocialAdapter(): JobSourceAdapter<BaiduConfig, never> {
   return createBaiduVariant({
     key: 'baidu.social',

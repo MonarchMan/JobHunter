@@ -1,4 +1,5 @@
 /** Stable envelope used by every command rendered with --json. */
+/** CLI JSON 输出的公开 Schema，供脚本和其他 Agent 校验。 */
 export const cliOutputJsonSchema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   $id: 'https://jobhunter.local/schemas/cli-output.schema.json',

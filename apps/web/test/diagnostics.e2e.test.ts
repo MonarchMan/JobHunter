@@ -8,6 +8,7 @@ const failedTaskId = '018f0000-0000-7000-8000-000000000701';
 const pendingTaskId = '018f0000-0000-7000-8000-000000000702';
 const agentRunId = '018f0000-0000-7000-8000-000000000703';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedDiagnostics(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
   try {

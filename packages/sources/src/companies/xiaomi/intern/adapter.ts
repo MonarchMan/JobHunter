@@ -9,6 +9,7 @@ import {
 } from './schemas.js';
 
 const hosts = ['hr.xiaomi.com', 'xiaomi.jobs.f.mioffice.cn'] as const;
+/** 来源适配器使用的数据结构或契约。 */
 interface XiaomiChannelOptions {
   readonly key: 'xiaomi.intern' | 'xiaomi.campus' | 'xiaomi.social';
   readonly type: 1 | 2 | 3;
@@ -83,6 +84,7 @@ function createXiaomiChannelAdapter(
   });
 }
 
+/** 招聘来源适配器实例。 */
 export const createXiaomiInternAdapter = (): JobSourceAdapter<XiaomiInternConfig, never> =>
   createXiaomiChannelAdapter({
     key: 'xiaomi.intern',

@@ -22,6 +22,7 @@ const entryUrl = 'https://zhaopin.jd.com/web/job/job_info_list/3';
 const countEndpoint = 'https://zhaopin.jd.com/web/job/job_count';
 const listEndpoint = 'https://zhaopin.jd.com/web/job/job_list';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function parseSource<T>(parse: () => T, diagnostic: string): T {
   try {
     return parse();
@@ -31,6 +32,7 @@ function parseSource<T>(parse: () => T, diagnostic: string): T {
   }
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function requestHeaders(referer: string): Readonly<Record<string, string>> {
   return {
     'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -38,10 +40,12 @@ function requestHeaders(referer: string): Readonly<Record<string, string>> {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function formBody(values: Readonly<Record<string, string>>): string {
   return new URLSearchParams(values).toString();
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function countBody(config: JdConfig): string {
   return formBody({
     workCityJson: '[]',
@@ -51,6 +55,7 @@ function countBody(config: JdConfig): string {
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function listBody(config: JdConfig, page: number): string {
   return formBody({
     pageIndex: String(page),
@@ -62,10 +67,12 @@ function listBody(config: JdConfig, page: number): string {
   });
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function canonicalJobUrl(): string {
   return canonicalizeOfficialUrl(entryUrl, hosts);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function parseCount(value: string): number {
   const count = Number(value.trim());
   if (!Number.isSafeInteger(count) || count < 0) {
@@ -74,10 +81,12 @@ function parseCount(value: string): number {
   return count;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function parseList(value: string): JdJob[] {
   return jdListResponseSchema.parse(JSON.parse(value) as unknown);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function optionalText(...values: readonly (string | null | undefined)[]): string | null {
   for (const value of values) {
     if (value?.trim()) return value;
@@ -85,6 +94,7 @@ function optionalText(...values: readonly (string | null | undefined)[]): string
   return null;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function locations(value: string | null | undefined): string[] {
   return (value ?? '')
     .split(/[，,、/]/)
@@ -92,6 +102,7 @@ function locations(value: string | null | undefined): string[] {
     .filter(Boolean);
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function description(job: JdJob): string {
   return [
     job.workContent ? `岗位职责\n${job.workContent}` : null,
@@ -115,6 +126,7 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
       externalIdFingerprintVersion: null,
     },
     configSchema: jdConfigSchema,
+    /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
       const countResponse = await context.http.request<string>({
         sourceKey: 'jd.social',
@@ -193,6 +205,7 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
         discoveredCount,
       };
     },
+    /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
       return Promise.resolve().then(() => {
         const job = parseSource(

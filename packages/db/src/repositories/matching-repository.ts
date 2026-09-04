@@ -25,6 +25,7 @@ import {
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
+/** 数据库查询结果对应的行结构。 */
 interface RevisionRow {
   readonly id: string;
   readonly job_id: string;
@@ -34,6 +35,7 @@ interface RevisionRow {
   readonly last_seen_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface EnrichmentRow {
   readonly id: string;
   readonly job_revision_id: string;
@@ -44,6 +46,7 @@ interface EnrichmentRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface RulesetRow {
   readonly id: string;
   readonly version: string;
@@ -53,6 +56,7 @@ interface RulesetRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface MatchRow {
   readonly id: string;
   readonly profile_version_id: string;
@@ -67,6 +71,7 @@ interface MatchRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface AdviceRow {
   readonly id: string;
   readonly match_result_id: string;
@@ -77,6 +82,7 @@ interface AdviceRow {
   readonly created_at: number;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface CurrentMatchRow extends MatchRow {
   readonly job_id: string;
   readonly title: string;
@@ -91,6 +97,7 @@ const currentMatchCursorSchema = z
   .object({ score: z.number(), recency: z.number(), jobId: z.uuidv7() })
   .strict();
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function encodeCurrentMatchCursor(row: CurrentMatchRow): string {
   return Buffer.from(
     JSON.stringify({ score: row.total_score, recency: row.recency, jobId: row.job_id }),
@@ -98,6 +105,7 @@ function encodeCurrentMatchCursor(row: CurrentMatchRow): string {
   ).toString('base64url');
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function decodeCurrentMatchCursor(value: string): z.infer<typeof currentMatchCursorSchema> {
   try {
     return currentMatchCursorSchema.parse(
@@ -108,6 +116,7 @@ function decodeCurrentMatchCursor(value: string): z.infer<typeof currentMatchCur
   }
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function enrichment(row: EnrichmentRow): JobEnrichmentRecord {
   return {
     id: parseId(row.id, 'JobEnrichment'),
@@ -120,6 +129,7 @@ function enrichment(row: EnrichmentRow): JobEnrichmentRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function ruleset(row: RulesetRow): MatchRulesetRecord {
   return {
     id: parseId(row.id, 'MatchRuleset'),
@@ -131,6 +141,7 @@ function ruleset(row: RulesetRow): MatchRulesetRecord {
   };
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function match(row: MatchRow): MatchResultRecord {
   const output = parseDeterministicMatchOutput({
     filterStatus: row.filter_status,
@@ -159,6 +170,7 @@ const matchColumns = `id, profile_version_id, job_revision_id, job_enrichment_id
 const adviceColumns =
   'id, match_result_id, agent_run_id, schema_version, content_hash, result_json, created_at';
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function advice(row: AdviceRow): MatchAdviceRecord {
   return {
     id: parseId(row.id, 'MatchAdvice'),
@@ -171,6 +183,7 @@ function advice(row: AdviceRow): MatchAdviceRecord {
   };
 }
 
+/** 持久化匹配规则集、匹配结果和准备建议。 */
 export class SqliteMatchingRepository implements MatchingRepository {
   readonly #client: Database.Database;
 
@@ -178,6 +191,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getRevision(id: MatchingJobRevisionRecord['id']): MatchingJobRevisionRecord | null {
     const row = this.#client
       .prepare(
@@ -197,6 +211,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
       : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getLatestRevisionForJob(jobId: JobId): MatchingJobRevisionRecord | null {
     const row = this.#client
       .prepare(
@@ -217,6 +232,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
       : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getCompanyContext(
     companyId: Parameters<MatchingRepository['getCompanyContext']>[0],
   ): ReturnType<MatchingRepository['getCompanyContext']> {
@@ -232,6 +248,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return { industry: row.industry, sizeCategory };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getEnrichment(id: JobEnrichmentRecord['id']): JobEnrichmentRecord | null {
     const row = this.#client
       .prepare(`SELECT ${enrichmentColumns} FROM job_enrichments WHERE id = ?`)
@@ -239,6 +256,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return row ? enrichment(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getLatestEnrichmentForRevision(
     jobRevisionId: JobEnrichmentRecord['jobRevisionId'],
   ): JobEnrichmentRecord | null {
@@ -251,6 +269,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return row ? enrichment(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public saveEnrichment(record: JobEnrichmentRecord): JobEnrichmentRecord {
     this.#client
       .prepare(
@@ -278,6 +297,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return enrichment(row);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getRuleset(id: MatchRulesetRecord['id']): MatchRulesetRecord | null {
     const row = this.#client
       .prepare(`SELECT ${rulesetColumns} FROM match_rulesets WHERE id = ?`)
@@ -285,6 +305,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return row ? ruleset(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getActiveRuleset(): MatchRulesetRecord | null {
     const row = this.#client
       .prepare(`SELECT ${rulesetColumns} FROM match_rulesets WHERE active = 1`)
@@ -292,6 +313,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return row ? ruleset(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public upsertRuleset(record: MatchRulesetRecord): MatchRulesetRecord {
     return this.#client.transaction(() => {
       if (record.active) this.#client.prepare('UPDATE match_rulesets SET active = 0').run();
@@ -321,6 +343,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     })();
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public createOrGetMatch(record: MatchResultRecord): MatchResultRecord {
     this.#client
       .prepare(
@@ -350,6 +373,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return match(row);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getMatch(id: MatchResultRecord['id']): MatchResultRecord | null {
     const row = this.#client
       .prepare(`SELECT ${matchColumns} FROM match_results WHERE id = ?`)
@@ -357,6 +381,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return row ? match(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public saveAdvice(record: MatchAdviceRecord): MatchAdviceRecord {
     this.#client
       .prepare(
@@ -384,6 +409,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return advice(row);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getAdvice(id: MatchAdviceRecord['id']): MatchAdviceRecord | null {
     const row = this.#client
       .prepare(`SELECT ${adviceColumns} FROM match_advices WHERE id = ?`)
@@ -391,6 +417,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return row ? advice(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getCurrentAdvice(
     matchResultId: Parameters<MatchingRepository['getCurrentAdvice']>[0],
     selector: Parameters<MatchingRepository['getCurrentAdvice']>[1],
@@ -416,6 +443,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return row ? advice(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listCurrentProfileVersionIdsPage(
     input: Parameters<MatchingRepository['listCurrentProfileVersionIdsPage']>[0],
   ): ReturnType<MatchingRepository['listCurrentProfileVersionIdsPage']> {
@@ -432,6 +460,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return rows.map((row) => parseId(row.id, 'ProfileVersion'));
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listLatestRevisionIdsPage(
     input: Parameters<MatchingRepository['listLatestRevisionIdsPage']>[0],
   ): ReturnType<MatchingRepository['listLatestRevisionIdsPage']> {
@@ -483,6 +512,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     return rows.map((row) => parseId(row.id, 'JobRevision'));
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listCurrentMatches(
     input: Parameters<MatchingRepository['listCurrentMatches']>[0],
   ): CurrentMatchPage {

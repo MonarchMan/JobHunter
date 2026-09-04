@@ -3,6 +3,7 @@ import type { Clock } from '@jobhunter/domain';
 import type { ArtifactStore, QuarantinedArtifact } from '../ports/artifact-store.js';
 import type { ResumeDeletionRepository, ResumeDeletionSnapshot } from '../ports/resume-deletion.js';
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeDeletionImpact {
   readonly impactHash: string;
   readonly snapshot: ResumeDeletionSnapshot;
@@ -18,12 +19,14 @@ export interface ResumeDeletionImpact {
   };
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeDeletionResult {
   readonly impactHash: string;
   readonly deleted: ResumeDeletionImpact['counts'];
   readonly pendingArtifactPurgeIds: readonly string[];
 }
 
+/** 删除目标不存在或已被删除。 */
 export class ResumeDeletionNotFoundError extends Error {
   public constructor() {
     super('Resume document does not exist or was already deleted.');
@@ -31,6 +34,7 @@ export class ResumeDeletionNotFoundError extends Error {
   }
 }
 
+/** 删除影响在预览后发生变化，需要重新确认。 */
 export class ResumeDeletionConfirmationError extends Error {
   public readonly currentImpact: ResumeDeletionImpact;
 
@@ -41,6 +45,7 @@ export class ResumeDeletionConfirmationError extends Error {
   }
 }
 
+/** 将删除快照转换为带确认哈希的影响摘要。 */
 function impact(snapshot: ResumeDeletionSnapshot): ResumeDeletionImpact {
   return {
     impactHash: hashCanonical(snapshot),
@@ -58,6 +63,7 @@ function impact(snapshot: ResumeDeletionSnapshot): ResumeDeletionImpact {
   };
 }
 
+/** 编排简历删除预览、隔离、事务删除和物理文件清理。 */
 export class ResumeDeletionService {
   readonly #repository: ResumeDeletionRepository;
   readonly #artifacts: ArtifactStore;
@@ -73,13 +79,16 @@ export class ResumeDeletionService {
     this.#clock = input.clock;
   }
 
+  /** 生成简历删除影响预览。 */
   public preview(resumeDocumentId: string): ResumeDeletionImpact {
     const snapshot = this.#repository.preview(resumeDocumentId);
     if (!snapshot) throw new ResumeDeletionNotFoundError();
     return impact(snapshot);
   }
 
+  /** 校验影响哈希后删除数据，并在失败时恢复隔离文件。 */
   public async deleteConfirmed(input: {
+    // 1、重新计算并校验影响；2、隔离文件；3、提交数据库删除；4、清理隔离文件。
     readonly resumeDocumentId: string;
     readonly expectedImpactHash: string;
   }): Promise<ResumeDeletionResult> {
@@ -134,6 +143,7 @@ export class ResumeDeletionService {
     };
   }
 
+  /** 重试之前未完成的物理文件清理。 */
   public async retryArtifactPurge(artifactId: string): Promise<'purged' | 'already_purged'> {
     const artifact = this.#repository.getDeletedArtifact(artifactId);
     if (!artifact) return 'already_purged';

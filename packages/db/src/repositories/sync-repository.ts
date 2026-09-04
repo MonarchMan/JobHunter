@@ -52,6 +52,7 @@ const syncPolicySchema: z.ZodType<SourceSyncPolicy> = z
   .refine((policy) => policy.closeAfterMisses >= policy.staleAfterMisses)
   .refine((policy) => policy.unhealthyAfterFailures >= policy.degradedAfterFailures);
 
+/** 数据库查询结果对应的行结构。 */
 interface SourceRow {
   readonly id: string;
   readonly company_id: string;
@@ -64,6 +65,7 @@ interface SourceRow {
   readonly cursor_out_json: string | null;
 }
 
+/** 数据库查询结果对应的行结构。 */
 interface CurrentJobRow {
   readonly id: string;
   readonly revision_id: string;
@@ -78,6 +80,7 @@ interface CurrentJobRow {
   readonly closed_at: number | null;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function currentJob(row: CurrentJobRow): CurrentJobRecord {
   return {
     jobId: parseId(row.id, 'Job'),
@@ -98,6 +101,7 @@ function currentJob(row: CurrentJobRow): CurrentJobRecord {
   };
 }
 
+/** 管理同步运行、已见职位和来源同步游标。 */
 export class SqliteSyncRepository implements SyncRepository {
   readonly #client: Database.Database;
 
@@ -105,6 +109,7 @@ export class SqliteSyncRepository implements SyncRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getSource(sourceId: JobSourceId): SyncSourceRecord | null {
     const row = this.#client
       .prepare(
@@ -137,6 +142,7 @@ export class SqliteSyncRepository implements SyncRepository {
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public startRun(input: StartSyncRunInput): StartSyncRunResult {
     this.#client
       .prepare(
@@ -180,6 +186,7 @@ export class SqliteSyncRepository implements SyncRepository {
     }
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getCachedJobDetail(
     sourceId: JobSourceId,
     externalJobId: string,
@@ -209,6 +216,7 @@ export class SqliteSyncRepository implements SyncRepository {
     };
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public recordJobDetailSuccess(input: {
     readonly sourceId: JobSourceId;
     readonly externalJobId: string;
@@ -241,6 +249,7 @@ export class SqliteSyncRepository implements SyncRepository {
       );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public recordJobDetailFailure(input: {
     readonly sourceId: JobSourceId;
     readonly externalJobId: string;
@@ -275,6 +284,7 @@ export class SqliteSyncRepository implements SyncRepository {
       );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public recordItemFailure(input: {
     readonly id: string;
     readonly runId: SyncRunId;
@@ -310,6 +320,7 @@ export class SqliteSyncRepository implements SyncRepository {
       );
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public findUnseenJobs(
     sourceId: JobSourceId,
     runId: SyncRunId,
@@ -331,6 +342,7 @@ export class SqliteSyncRepository implements SyncRepository {
     return rows.map(currentJob);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public markMissingProcessed(runId: SyncRunId, jobId: CurrentJobRecord['jobId']): void {
     this.#client
       .prepare(
@@ -339,6 +351,7 @@ export class SqliteSyncRepository implements SyncRepository {
       .run(runId, jobId);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public finishRun(input: FinishSyncRunInput): boolean {
     const updated = this.#client
       .prepare(
@@ -381,6 +394,7 @@ export class SqliteSyncRepository implements SyncRepository {
     return true;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public cleanupSeen(runId: SyncRunId): void {
     this.#client.prepare('DELETE FROM sync_seen_jobs WHERE sync_run_id = ?').run(runId);
   }

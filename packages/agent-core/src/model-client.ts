@@ -1,20 +1,24 @@
+/** 模块数据结构或契约。 */
 export interface ModelUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly estimatedCostMicros: number;
 }
 
+/** 模块数据结构或契约。 */
 export interface ModelToolSpec {
   readonly key: string;
   readonly description: string;
 }
 
+/** 模块数据结构或契约。 */
 export interface ModelToolResult {
   readonly callId: string;
   readonly toolKey: string;
   readonly output: unknown;
 }
 
+/** 模块数据结构或契约。 */
 export interface ModelRequest {
   readonly systemPrompt: string;
   readonly input: unknown;
@@ -29,12 +33,14 @@ export interface ModelRequest {
   };
 }
 
+/** 模块数据结构或契约。 */
 export interface ModelOutputResponse {
   readonly kind: 'output';
   readonly output: unknown;
   readonly usage: ModelUsage;
 }
 
+/** 模块数据结构或契约。 */
 export interface ModelToolCallResponse {
   readonly kind: 'tool_calls';
   readonly calls: readonly {
@@ -45,8 +51,10 @@ export interface ModelToolCallResponse {
   readonly usage: ModelUsage;
 }
 
+/** 模块使用的类型约束。 */
 export type ModelResponse = ModelOutputResponse | ModelToolCallResponse;
 
+/** 模块数据结构或契约。 */
 export interface ModelClient {
   readonly metadata: {
     readonly provider: string;

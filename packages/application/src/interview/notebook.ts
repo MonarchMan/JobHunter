@@ -18,7 +18,9 @@ function clean(value: string): string {
   return value.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
 }
 
+/** 将项目拷打的结构化快照投影为只读 Markdown 备忘录。 */
 export function renderProjectNotebook(detail: ProjectDossierDetail): string {
+  // 1、写入简历项目快照；2、逐会话输出覆盖图；3、按题目、回答修订和推导记录展开证据。
   const lines: string[] = [
     `# ${clean(detail.snapshot.project.name)} · 面试准备`,
     '',

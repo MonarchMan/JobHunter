@@ -2,6 +2,8 @@
 
 import { processCliIo } from './io.js';
 import { runLocalCli } from './local-runner.js';
+
+// 1、加载本地环境变量；2、转交 CLI 运行器；3、将结果写入进程退出码。
 try {
   process.loadEnvFile();
 } catch (error) {

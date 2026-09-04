@@ -4,6 +4,7 @@ import type { SourceErrorCategory } from './errors.js';
 import type { SourceHttpClient } from './http-client.js';
 
 /** Browser-backed implementations expose only a neutral snapshot, never Playwright objects. */
+/** 来源适配器使用的类型约束。 */
 export type SourcePageCollectionResponseShape =
   | 'ats-job-posts'
   | 'alibaba-campus'
@@ -13,6 +14,7 @@ export type SourcePageCollectionResponseShape =
   | 'xiaomi-jobs'
   | 'netease-jobs';
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourcePageCollectionRequest {
   readonly sourceKey: string;
   readonly requestId: string;
@@ -31,6 +33,7 @@ export interface SourcePageCollectionRequest {
   readonly responseShape: SourcePageCollectionResponseShape;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourcePageCollectionPage {
   readonly page: number;
   readonly url: string;
@@ -39,12 +42,14 @@ export interface SourcePageCollectionPage {
   readonly capturedAt: number;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourcePageCollection {
   readonly pages: readonly SourcePageCollectionPage[];
   readonly coverage: 'complete' | 'partial' | 'unknown';
   readonly diagnostics?: DiscoveryDiagnostics;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourcePageClient {
   snapshot(request: {
     readonly sourceKey: string;
@@ -62,6 +67,7 @@ export interface SourcePageClient {
   readonly collect?: (request: SourcePageCollectionRequest) => Promise<SourcePageCollection>;
 }
 
+/** 来源适配器元数据 Schema。 */
 export const sourceMetadataSchema = z
   .object({
     key: z
@@ -87,8 +93,10 @@ export const sourceMetadataSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type SourceMetadata = z.infer<typeof sourceMetadataSchema>;
 
+/** 来源发现职位的最小结构。 */
 export const discoveredJobSchema = z
   .object({
     externalJobId: z.string().min(1),
@@ -97,10 +105,13 @@ export const discoveredJobSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type DiscoveredJob = z.infer<typeof discoveredJobSchema>;
 
+/** 来源适配器使用的类型约束。 */
 export type DiscoveryCoverage = 'complete' | 'partial' | 'unknown';
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface DiscoveryDiagnostics {
   readonly reason: string | null;
   readonly retryable: boolean;
@@ -112,6 +123,7 @@ export interface DiscoveryDiagnostics {
   readonly totalChanged?: boolean;
 }
 
+/** 来源适配器使用的类型约束。 */
 export type DiscoveryEvent =
   | { readonly type: 'job'; readonly job: DiscoveredJob }
   | {
@@ -128,6 +140,7 @@ export type DiscoveryEvent =
       readonly diagnostics?: DiscoveryDiagnostics;
     };
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourceRequestContext<TConfig> {
   readonly sourceId: JobSourceId;
   readonly companyId: CompanyId;
@@ -139,21 +152,25 @@ export interface SourceRequestContext<TConfig> {
   readonly page?: SourcePageClient;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface DiscoverContext<TConfig> extends SourceRequestContext<TConfig> {
   readonly cursor: unknown;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface RawJobInput<TDetail = unknown> {
   readonly discovered: DiscoveredJob;
   readonly detail: TDetail | null;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface NormalizedSourceJob {
   readonly job: NormalizedJob;
   readonly provenance: Readonly<Record<string, string>>;
   readonly sourcePrivateJson: Readonly<Record<string, unknown>>;
 }
 
+/** 来源探活结果 Schema。 */
 export const sourceHealthSchema = z
   .object({
     status: z.enum(['healthy', 'degraded', 'unhealthy']),
@@ -181,8 +198,10 @@ export const sourceHealthSchema = z
   })
   .strict();
 
+/** 来源适配器使用的类型约束。 */
 export type SourceHealth = z.infer<typeof sourceHealthSchema>;
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface JobSourceAdapter<TConfig = unknown, TDetail = unknown> {
   readonly metadata: SourceMetadata;
   readonly configSchema: z.ZodType<TConfig>;

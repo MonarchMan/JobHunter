@@ -8,6 +8,7 @@ import type { JobSourceId } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
+/** 数据库查询结果对应的行结构。 */
 interface SourceRow {
   readonly id: string;
   readonly company_id: string;
@@ -59,14 +60,17 @@ const selection = `
   )
   LEFT JOIN schedules schedule ON schedule.schedule_key = 'source.sync:' || source.id`;
 
+/** 数据库查询结果对应的行结构。 */
 function instant(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function recruitmentChannels(channel: SourceRow['channel']): WebSource['recruitmentChannels'] {
   return channel === 'intern' ? ['internship'] : [channel];
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function source(row: SourceRow): WebSource {
   const recruitmentType = row.channel === 'social' ? 'social' : 'campus';
   return webSourceSchema.parse({
@@ -114,6 +118,7 @@ function source(row: SourceRow): WebSource {
   });
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 interface ChannelRow {
   readonly id: string;
   readonly company_id: string;
@@ -125,6 +130,7 @@ interface ChannelRow {
   readonly support_note: string | null;
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function channelSupport(sources: readonly WebSource[]): WebSourceChannel['supportStatus'] {
   const required = sources.filter((source) => source.coverageRole === 'required');
   if (required.length === 0 || required.every((source) => source.supportStatus === 'blocked')) {
@@ -135,6 +141,7 @@ function channelSupport(sources: readonly WebSource[]): WebSourceChannel['suppor
     : 'experimental';
 }
 
+/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function channelHealth(sources: readonly WebSource[]): WebSourceChannel['healthStatus'] {
   const required = sources.filter(
     (source) => source.coverageRole === 'required' && source.effectiveEnabled,
@@ -147,6 +154,7 @@ function channelHealth(sources: readonly WebSource[]): WebSourceChannel['healthS
   return 'degraded';
 }
 
+/** 为 Web 管理页提供来源目录、健康状态和同步历史查询。 */
 export class SqliteWebSourceRepository implements WebSourceRepository {
   readonly #client: Database.Database;
 
@@ -154,18 +162,21 @@ export class SqliteWebSourceRepository implements WebSourceRepository {
     this.#client = client;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public list(): readonly WebSource[] {
     return (
       this.#client.prepare(`${selection} ORDER BY company.name, source.id`).all() as SourceRow[]
     ).map(source);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public get(id: JobSourceId): WebSource | null {
     const row = this.#client.prepare(`${selection} WHERE source.id = ?`).get(id) as
       SourceRow | undefined;
     return row ? source(row) : null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public setEnabled(id: JobSourceId, enabled: boolean): WebSource {
     const changed = this.#client
       .prepare('UPDATE job_sources SET enabled = ?, updated_at = ? WHERE id = ?')
@@ -175,6 +186,7 @@ export class SqliteWebSourceRepository implements WebSourceRepository {
     return updated;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public listChannels(): readonly WebSourceChannel[] {
     const sourcesByChannel = new Map<string, WebSource[]>();
     for (const member of this.list()) {
@@ -210,10 +222,12 @@ export class SqliteWebSourceRepository implements WebSourceRepository {
     });
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public getChannel(id: Parameters<WebSourceRepository['getChannel']>[0]): WebSourceChannel | null {
     return this.listChannels().find((channel) => channel.id === id) ?? null;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public setChannelEnabled(
     id: Parameters<WebSourceRepository['setChannelEnabled']>[0],
     enabled: boolean,

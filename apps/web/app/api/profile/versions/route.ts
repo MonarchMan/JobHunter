@@ -10,6 +10,7 @@ import { getWebContainer } from '../../../../src/server/container.js';
 
 export const dynamic = 'force-dynamic';
 
+/** 处理 Web API 的 GET 请求，读取并返回对应资源。 */
 export async function GET(request: Request): Promise<Response> {
   try {
     const profileId = new URL(request.url).searchParams.get('profile');

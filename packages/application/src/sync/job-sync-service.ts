@@ -29,6 +29,7 @@ import type { SyncCoverage, SyncRunStats, SyncSourceRecord, SyncTrigger } from '
 import type { JobIntakePolicy } from './job-intake-policy.js';
 import { classifyJobRegion } from './region-policy.js';
 
+/** 应用层数据结构或端口契约。 */
 interface MutableSyncRunStats {
   discovered: number;
   created: number;
@@ -44,6 +45,7 @@ interface MutableSyncRunStats {
   followupEnqueued: number;
 }
 
+/** 应用层使用的类型约束。 */
 export type JobSyncResult =
   | { readonly kind: 'conflict'; readonly runId: SyncRunId }
   | {
@@ -56,11 +58,13 @@ export type JobSyncResult =
       readonly errorSummary: string | null;
     };
 
+/** 应用层数据结构或端口契约。 */
 export interface JobSyncServiceOptions {
   readonly normalizerVersion: string;
   readonly unseenBatchSize?: number;
 }
 
+/** 创建空的同步统计累加器。 */
 function emptyStats(): MutableSyncRunStats {
   return {
     discovered: 0,
@@ -78,10 +82,12 @@ function emptyStats(): MutableSyncRunStats {
   };
 }
 
+/** 将可变统计快照转换为只读结果。 */
 function immutableStats(stats: MutableSyncRunStats): SyncRunStats {
   return { ...stats };
 }
 
+/** 校验同步统计不出现负数或非法计数。 */
 function assertStats(stats: MutableSyncRunStats): void {
   const outcomes =
     stats.created +
@@ -96,6 +102,7 @@ function assertStats(stats: MutableSyncRunStats): void {
   }
 }
 
+/** 编排来源读取、职位规范化、去重和后续派生任务。 */
 export class JobSyncService {
   readonly #uow: UnitOfWork;
   readonly #registry: AdapterRegistry;
@@ -107,6 +114,7 @@ export class JobSyncService {
   readonly #unseenBatchSize: number;
   readonly #jobIntakePolicy: JobIntakePolicy | undefined;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly uow: UnitOfWork;
     readonly registry: AdapterRegistry;
@@ -128,6 +136,7 @@ export class JobSyncService {
     this.#jobIntakePolicy = input.jobIntakePolicy;
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #recordIsolated(input: {
     readonly sourceId: JobSourceId;
     readonly runId: SyncRunId;
@@ -355,10 +364,12 @@ export class JobSyncService {
     });
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #source(sourceId: JobSourceId): SyncSourceRecord | null {
     return this.#uow.run(({ sync }) => sync.getSource(sourceId));
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #processUnseen(input: {
     readonly source: SyncSourceRecord;
     readonly runId: SyncRunId;
@@ -394,7 +405,9 @@ export class JobSyncService {
     }
   }
 
+  /** 执行一次来源同步并提交完整/部分覆盖结果。 */
   public async run(
+    // 1、创建同步运行；2、分页读取来源；3、规范化并写入职位；4、完成统计并安排派生任务。
     command: { readonly sourceId: JobSourceId; readonly trigger: SyncTrigger },
     signal: AbortSignal,
   ): Promise<JobSyncResult> {

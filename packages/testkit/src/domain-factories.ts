@@ -5,6 +5,7 @@ import {
   type NormalizedJob,
 } from '@jobhunter/domain';
 
+/** 创建测试用规范职位，并允许覆盖指定字段。 */
 export function makeNormalizedJob(overrides: Partial<NormalizedJob> = {}): NormalizedJob {
   return parseNormalizedJob({
     companyId: '018f0000-0000-7000-8000-000000000001',
@@ -25,6 +26,7 @@ export function makeNormalizedJob(overrides: Partial<NormalizedJob> = {}): Norma
   });
 }
 
+/** 创建测试用候选人简历档案。 */
 export function makeCandidateProfile(
   overrides: Partial<CandidateProfileData> = {},
 ): CandidateProfileData {

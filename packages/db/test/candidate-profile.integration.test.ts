@@ -19,6 +19,7 @@ import {
   type SqliteDatabaseHandle,
 } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class AdvancingClock implements Clock {
   #value = 1_800_000_000_000;
 
@@ -28,6 +29,7 @@ class AdvancingClock implements Clock {
   }
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 class SequentialIds {
   #counter = 0x8000;
 
@@ -50,6 +52,7 @@ afterEach(async () => {
   }
 });
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function profile(overrides: Record<string, unknown> = {}): CandidateProfileData {
   return parseCandidateProfile({
     targetRoles: ['Agent 开发'],
@@ -77,6 +80,7 @@ function profile(overrides: Record<string, unknown> = {}): CandidateProfileData 
   });
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function setup(): Promise<{
   readonly handle: SqliteDatabaseHandle;
   readonly service: CandidateProfileService;

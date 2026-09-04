@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { resumeSectionIds } from './model.js';
 
+/** 内置简历模板键。 */
 export const resumeTemplateKeySchema = z.enum(['technical-blueprint', 'clean-single-column']);
 export type ResumeTemplateKey = z.infer<typeof resumeTemplateKeySchema>;
 
+/** 模板展示和渲染所需的版本化元数据。 */
 export const resumeTemplateMetadataSchema = z.object({
   key: resumeTemplateKeySchema,
   version: z.literal(1),
@@ -12,8 +14,10 @@ export const resumeTemplateMetadataSchema = z.object({
   thumbnailDataUrl: z.string().startsWith('data:image/svg+xml,'),
   sections: z.array(z.enum(resumeSectionIds)),
 });
+/** 模块使用的类型约束。 */
 export type ResumeTemplateMetadata = z.infer<typeof resumeTemplateMetadataSchema>;
 
+/** 当前发布的内置模板目录。 */
 export const resumeTemplates: readonly ResumeTemplateMetadata[] = [
   {
     key: 'technical-blueprint',
@@ -35,6 +39,7 @@ export const resumeTemplates: readonly ResumeTemplateMetadata[] = [
   },
 ];
 
+/** 按模板键和版本读取模板；不存在时拒绝渲染。 */
 export function getResumeTemplate(key: string, version = 1): ResumeTemplateMetadata {
   const parsedKey = resumeTemplateKeySchema.parse(key);
   const template = resumeTemplates.find(

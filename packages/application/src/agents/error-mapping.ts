@@ -1,6 +1,7 @@
 import type { AgentRuntimeError } from '@jobhunter/agent-core';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
 
+/** 将 Agent 运行分类映射为任务队列可执行的重试策略。 */
 export function mapAgentRuntimeError(
   error: AgentRuntimeError,
   operation: string,

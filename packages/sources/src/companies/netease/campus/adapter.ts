@@ -11,6 +11,7 @@ import {
   type NeteaseLeihuoJob,
 } from './schemas.js';
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createNeteaseCampusProjectAdapter(options: {
   readonly key: 'netease.campus.internet' | 'netease.campus.games';
   readonly projectId: 102 | 103;
@@ -76,6 +77,7 @@ function createNeteaseCampusProjectAdapter(options: {
   });
 }
 
+/** 招聘来源适配器实例。 */
 export const createNeteaseCampusInternetAdapter = (): JobSourceAdapter<
   NeteaseCampusConfig,
   never
@@ -86,6 +88,7 @@ export const createNeteaseCampusInternetAdapter = (): JobSourceAdapter<
     host: 'campus.163.com',
   });
 
+/** 招聘来源适配器实例。 */
 export const createNeteaseCampusGamesAdapter = (): JobSourceAdapter<NeteaseCampusConfig, never> =>
   createNeteaseCampusProjectAdapter({
     key: 'netease.campus.games',
@@ -93,6 +96,7 @@ export const createNeteaseCampusGamesAdapter = (): JobSourceAdapter<NeteaseCampu
     host: 'campus.game.163.com',
   });
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export function createNeteaseCampusLeihuoAdapter(): JobSourceAdapter<NeteaseCampusConfig, never> {
   const hosts = ['xiaozhao.leihuo.netease.com', 'campus.163.com'] as const;
   const entryUrl = 'https://leihuo.163.com/campus/#/full?channel=iSfFmJe';

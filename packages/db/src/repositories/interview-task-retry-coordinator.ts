@@ -9,6 +9,7 @@ import { canonicalJson } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 import type { SqliteTaskRepository } from './task-repository.js';
 
+/** 根据任务失败分类协调面试任务的重试与状态恢复。 */
 export class SqliteInterviewTaskRetryCoordinator implements TaskRetryCoordinator {
   readonly #client: Database.Database;
   readonly #tasks: SqliteTaskRepository;
@@ -18,6 +19,7 @@ export class SqliteInterviewTaskRetryCoordinator implements TaskRetryCoordinator
     this.#tasks = tasks;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public enqueueRetry(
     input: Parameters<TaskRetryCoordinator['enqueueRetry']>[0],
   ): EnqueueTaskResult {
@@ -47,6 +49,7 @@ export class SqliteInterviewTaskRetryCoordinator implements TaskRetryCoordinator
       .immediate();
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #link(
     taskType: string,
     payload: unknown,
@@ -96,6 +99,7 @@ export class SqliteInterviewTaskRetryCoordinator implements TaskRetryCoordinator
     return true;
   }
 
+  /** 处理数据库类内部的辅助逻辑。 */
   #replaceTaskReference(input: {
     readonly table: 'experience_research_requests' | 'drill_turns';
     readonly idColumn: 'id';

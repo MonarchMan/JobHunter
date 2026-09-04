@@ -12,6 +12,7 @@ import { createLocalWebContainer } from '../src/server/container.js';
 const profileId = '018f0000-0000-7000-8000-000000000901';
 const versionId = '018f0000-0000-7000-8000-000000000902';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedProfile(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
   const profile = makeCandidateProfile({

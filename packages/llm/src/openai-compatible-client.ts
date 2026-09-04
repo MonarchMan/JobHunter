@@ -58,6 +58,7 @@ const responseSchema = z.object({
     .optional(),
 });
 
+/** 模块数据结构或契约。 */
 export interface OpenAiCompatibleClientConfig {
   readonly baseUrl: string;
   readonly apiKey: string;
@@ -66,6 +67,7 @@ export interface OpenAiCompatibleClientConfig {
   readonly fetchImplementation?: typeof fetch;
 }
 
+/** 将基础地址规范化为 chat/completions 端点。 */
 function endpoint(baseUrl: string): string {
   const url = new URL(baseUrl);
   const path = url.pathname.replace(/\/+$/u, '');
@@ -74,6 +76,7 @@ function endpoint(baseUrl: string): string {
   return url.toString();
 }
 
+/** 将供应商 usage 字段转换为统一模型用量。 */
 function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
   return {
     inputTokens: value?.prompt_tokens ?? 0,
@@ -82,6 +85,7 @@ function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
   };
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function shouldDisableDeepSeekThinking(baseUrl: string, model: string): boolean {
   try {
     return new URL(baseUrl).hostname === 'api.deepseek.com' && model.startsWith('deepseek-v4');
@@ -90,6 +94,7 @@ function shouldDisableDeepSeekThinking(baseUrl: string, model: string): boolean 
   }
 }
 
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 async function responseError(response: Response): Promise<ModelClientError> {
   const status = response.status;
   if (status === 401 || status === 403)
@@ -127,12 +132,14 @@ async function responseError(response: Response): Promise<ModelClientError> {
 }
 
 /** OpenAI-compatible Chat Completions adapter. Provider DTOs stay inside this boundary. */
+/** 调用 OpenAI 协议兼容接口并校验响应结构。 */
 export class OpenAiCompatibleModelClient implements ModelClient {
   readonly #config: z.infer<typeof configSchema>;
   readonly #fetch: typeof fetch;
 
   public readonly metadata: ModelClient['metadata'];
 
+  /** 执行模块组件对外暴露的操作。 */
   public constructor(input: OpenAiCompatibleClientConfig) {
     this.#config = configSchema.parse({
       baseUrl: input.baseUrl,
@@ -150,6 +157,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
     };
   }
 
+  /** 发送一次模型请求并映射文本、工具调用和用量。 */
   public async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
     const timeout = AbortSignal.timeout(this.#config.timeoutMs);
     const combined = AbortSignal.any([signal, timeout]);
@@ -262,6 +270,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
   }
 }
 
+/** 将 OpenAI 兼容客户端注册到模型提供方注册表。 */
 export function registerOpenAiCompatibleProvider(registry: {
   register(
     provider: string,

@@ -24,6 +24,7 @@ import { chromium, type BrowserContext, type Page } from 'playwright';
 import { z } from 'zod';
 import { resolveBrowserExecutablePath } from './browser-source.js';
 
+/** Worker 运行时使用的类型约束。 */
 export type ResearchBrowserToolName = 'search' | 'open' | 'readPage';
 
 export const researchSourceIdentityVersion = 'source-identity@v1' as const;
@@ -38,6 +39,7 @@ export type ResearchPageRejectionCode =
   | 'insufficient_questions'
   | 'low_question_density';
 
+/** Worker 运行时使用的类型约束。 */
 export interface ResearchBrowserLimits {
   readonly maximumSearches: number;
   readonly maximumPages: number;
@@ -47,6 +49,7 @@ export interface ResearchBrowserLimits {
   readonly navigationTimeoutMs: number;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface ResearchBrowserTraceEntry {
   readonly sequence: number;
   readonly tool: ResearchBrowserToolName;
@@ -71,11 +74,13 @@ export interface ResearchBrowserTraceEntry {
   readonly errorCode?: string;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface ResearchBrowserSearchResult {
   readonly title: string;
   readonly url: string;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface ResearchBrowserOpenedPage {
   readonly driverPageId: string;
   readonly finalUrl: string;
@@ -83,10 +88,12 @@ export interface ResearchBrowserOpenedPage {
   readonly retrievedAt: string;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface ResearchBrowserPageContent extends ResearchBrowserOpenedPage {
   readonly bodyText: string;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface ResearchBrowserCollectedPage {
   readonly query: string;
   readonly searchRank: number;
@@ -98,6 +105,7 @@ export interface ResearchBrowserCollectedPage {
   readonly bodyLength: number;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface ResearchBrowserDriver {
   search(
     query: string,
@@ -110,8 +118,10 @@ export interface ResearchBrowserDriver {
   close(): Promise<void>;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export type ResearchBrowserUrlScope = 'source' | 'subresource' | 'infrastructure';
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface ResearchBrowserDriverFactoryInput {
   readonly limits: ResearchBrowserLimits;
   readonly validateUrl: (value: string, scope: ResearchBrowserUrlScope) => Promise<string>;
@@ -120,10 +130,12 @@ export interface ResearchBrowserDriverFactoryInput {
   readonly signal: AbortSignal;
 }
 
+/** Worker 运行时使用的类型约束。 */
 export type ResearchBrowserDriverFactory = (
   input: ResearchBrowserDriverFactoryInput,
 ) => Promise<ResearchBrowserDriver>;
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 export interface ResearchBrowserGatewayOptions {
   readonly driverFactory?: ResearchBrowserDriverFactory;
   readonly allowedDomains?: readonly string[];
@@ -133,6 +145,7 @@ export interface ResearchBrowserGatewayOptions {
   readonly signal?: AbortSignal;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface ResearchBrowserGateway {
   readonly url: string;
   readonly bearerToken: string;
@@ -172,10 +185,12 @@ const maximumProxyTaskDownloadBytes = 128 * 1024 * 1024;
 const maximumDohResponseBytes = 64 * 1024;
 const researchBrowserDebugEnabled = process.env.JOBHUNTER_BROWSER_DEBUG === '1';
 
+/** Worker 运行时数据结构或执行契约。 */
 function researchBrowserDebug(event: string, details: Readonly<Record<string, unknown>>): void {
   if (researchBrowserDebugEnabled) console.error('[research-browser]', event, details);
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 class ProxyDownloadBudget {
   #downloadedBytes = 0;
 
@@ -187,6 +202,7 @@ class ProxyDownloadBudget {
     return Math.max(0, maximumProxyTaskDownloadBytes - this.#downloadedBytes);
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public consume(bytes: number): boolean {
     if (bytes < 1) return true;
     if (bytes > this.remainingBytes) {
@@ -198,6 +214,7 @@ class ProxyDownloadBudget {
   }
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 class ResearchBrowserError extends Error {
   public constructor(
     readonly code: string,
@@ -208,11 +225,13 @@ class ResearchBrowserError extends Error {
   }
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 function assertActive(signal: AbortSignal): void {
   if (signal.aborted)
     throw new ResearchBrowserError('cancelled', 'Browser research was cancelled.');
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 function positiveLimit(value: number, maximum: number, name: string): number {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
     throw new TypeError(`${name} is invalid.`);
@@ -220,6 +239,7 @@ function positiveLimit(value: number, maximum: number, name: string): number {
   return value;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 function resolvedLimits(value: Partial<ResearchBrowserLimits> | undefined): ResearchBrowserLimits {
   const candidate = { ...defaultLimits, ...value };
   return {
@@ -256,6 +276,7 @@ function resolvedLimits(value: Partial<ResearchBrowserLimits> | undefined): Rese
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function normalizedDomain(value: string): string {
   const normalized = value
     .trim()
@@ -273,14 +294,17 @@ function normalizedDomain(value: string): string {
   return normalized;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function normalizedDomains(values: readonly string[]): readonly string[] {
   return [...new Set(values.map(normalizedDomain))];
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function matchesDomain(hostname: string, configured: string): boolean {
   return hostname === configured || hostname.endsWith(`.${configured}`);
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function privateNetworkBlockList(): BlockList {
   const blockList = new BlockList();
   const ipv4Subnets = [
@@ -324,6 +348,7 @@ function privateNetworkBlockList(): BlockList {
 
 const blockedNetworks = privateNetworkBlockList();
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function assertPublicAddress(address: string): void {
   const family = isIP(address);
   const canonical =
@@ -344,12 +369,14 @@ function assertPublicAddress(address: string): void {
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function isTransparentNetworkTranslationAddress(address: string): boolean {
   const parts = address.split('.').map(Number);
   return parts.length === 4 && parts[0] === 198 && (parts[1] === 18 || parts[1] === 19);
 }
 
 /** @internal Exported for the transparent-network security invariant regression test. */
+/** 解析研究代理的连接地址并拒绝私网目标。 */
 export function researchProxyConnectionAddress(
   pinnedPublicAddress: string,
   systemAddresses: readonly string[],
@@ -382,6 +409,7 @@ const dohResponseSchema = z
   })
   .loose();
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function readBoundedResponseText(response: Response, maximumBytes: number): Promise<string> {
   if (!response.body) return '';
   const reader = response.body.getReader();
@@ -407,6 +435,7 @@ async function readBoundedResponseText(response: Response, maximumBytes: number)
   ).toString('utf8');
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function resolveWithTrustedDoh(
   hostname: string,
   signal: AbortSignal,
@@ -442,6 +471,7 @@ async function resolveWithTrustedDoh(
   return [...new Set(addresses)];
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function defaultResolveHostname(
   hostname: string,
   signal: AbortSignal,
@@ -456,6 +486,7 @@ async function defaultResolveHostname(
   return values;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 interface ResolutionWaiter {
   readonly signal: AbortSignal;
   readonly resolve: () => void;
@@ -463,6 +494,7 @@ interface ResolutionWaiter {
   readonly onAbort: () => void;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 class ResolutionConcurrencyGate {
   readonly #maximum: number;
   readonly #waiters: ResolutionWaiter[] = [];
@@ -482,6 +514,7 @@ class ResolutionConcurrencyGate {
     }
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   #acquire(signal: AbortSignal): Promise<void> {
     if (signal.aborted) {
       return Promise.reject(
@@ -509,6 +542,7 @@ class ResolutionConcurrencyGate {
     });
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   #release(): void {
     while (this.#waiters.length > 0) {
       const waiter = this.#waiters.shift();
@@ -525,6 +559,7 @@ class ResolutionConcurrencyGate {
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function createTaskNetworkTargetResolver(input: {
   readonly signal: AbortSignal;
   readonly maximumTargets: number;
@@ -556,6 +591,7 @@ function createTaskNetworkTargetResolver(input: {
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function resolvePinnedPublicAddress(
   hostname: string,
   resolveHostname: (hostname: string) => Promise<readonly string[]>,
@@ -579,12 +615,14 @@ async function resolvePinnedPublicAddress(
   return address;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 class ResearchUrlPolicy {
   readonly #allowedDomains: readonly string[];
   readonly #blockedDomains: readonly string[];
   readonly #resolveHostname: (hostname: string) => Promise<readonly string[]>;
   readonly #resolutionCache = new Map<string, Promise<readonly string[]>>();
 
+  /** 执行Worker组件对外暴露的操作。 */
   public constructor(input: {
     readonly allowedDomains: readonly string[];
     readonly blockedDomains: readonly string[];
@@ -599,6 +637,7 @@ class ResearchUrlPolicy {
     return this.#allowedDomains.length;
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public async validate(value: string, scope: ResearchBrowserUrlScope): Promise<string> {
     let normalized: string;
     try {
@@ -644,6 +683,7 @@ class ResearchUrlPolicy {
     return normalized;
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   #resolution(hostname: string, allowCached: boolean): Promise<readonly string[]> {
     const existing = allowCached ? this.#resolutionCache.get(hostname) : undefined;
     if (existing) return existing;
@@ -653,6 +693,7 @@ class ResearchUrlPolicy {
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 interface PageState {
   readonly driverPageId: string;
   readonly finalUrl: string;
@@ -660,11 +701,13 @@ interface PageState {
   readonly retrievedAt: string;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 interface SearchReference {
   readonly url: string;
   readonly title: string;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function safeError(error: unknown): ResearchBrowserError {
   return error instanceof ResearchBrowserError
     ? error
@@ -674,6 +717,7 @@ function safeError(error: unknown): ResearchBrowserError {
       );
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function toolSuccess(value: unknown): CallToolResult {
   return {
     content: [
@@ -685,6 +729,7 @@ function toolSuccess(value: unknown): CallToolResult {
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function toolFailure(error: ResearchBrowserError): CallToolResult {
   return {
     content: [
@@ -700,6 +745,7 @@ function toolFailure(error: ResearchBrowserError): CallToolResult {
   };
 }
 
+/** 维护搜索、打开、读取配额、页面状态和研究轨迹。 */
 class ResearchBrowserTools {
   readonly #driver: ResearchBrowserDriver;
   readonly #policy: ResearchUrlPolicy;
@@ -715,6 +761,7 @@ class ResearchBrowserTools {
   #readCalls = 0;
   #returnedCharacters = 0;
 
+  /** 执行Worker组件对外暴露的操作。 */
   public constructor(input: {
     readonly driver: ResearchBrowserDriver;
     readonly policy: ResearchUrlPolicy;
@@ -727,10 +774,12 @@ class ResearchBrowserTools {
     this.#signal = input.signal;
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public readTrace(): readonly ResearchBrowserTraceEntry[] {
     return this.#trace.map((entry) => Object.freeze({ ...entry }));
   }
 
+  /** 按采集计划搜索并筛选高价值面经页面。 */
   public collectPages(
     queries: readonly string[],
     maximumSources: number,
@@ -893,6 +942,7 @@ class ResearchBrowserTools {
     return pages;
   }
 
+  /** 执行受限搜索并记录结果轨迹。 */
   public search(query: string): Promise<CallToolResult> {
     return this.#serialize(() => this.#search(query));
   }
@@ -950,6 +1000,7 @@ class ResearchBrowserTools {
     }
   }
 
+  /** 打开并校验公开页面，建立可读页面状态。 */
   public open(input: {
     readonly sourceRef?: string;
     readonly url?: string;
@@ -1033,6 +1084,7 @@ class ResearchBrowserTools {
     }
   }
 
+  /** 读取页面正文并应用字符预算和质量筛选。 */
   public readPage(pageId: string): Promise<CallToolResult> {
     return this.#serialize(() => this.#readPage(pageId));
   }
@@ -1115,6 +1167,7 @@ class ResearchBrowserTools {
   }
 
   // The direct URL gate needs only whether the Brief explicitly supplied an allowlist.
+  /** 处理Worker类内部的辅助逻辑。 */
   #policyAllowedDomainCount(): number {
     return this.#policy.allowedDomainCount;
   }
@@ -1128,11 +1181,13 @@ class ResearchBrowserTools {
     return result;
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   #record(entry: Omit<ResearchBrowserTraceEntry, 'sequence'>): void {
     this.#sequence += 1;
     this.#trace.push({ sequence: this.#sequence, ...entry });
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   #recordCollectionDecision(sequence: number, assessment: ResearchPageQualityAssessment): void {
     const index = this.#trace.findIndex((entry) => entry.sequence === sequence);
     const entry = this.#trace[index];
@@ -1151,6 +1206,7 @@ class ResearchBrowserTools {
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function cleanReadableText(value: string): string {
   return value
     .normalize('NFKC')
@@ -1161,6 +1217,7 @@ function cleanReadableText(value: string): string {
     .trim();
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function createMcpServer(tools: ResearchBrowserTools): McpServer {
   const server = new McpServer({ name: 'jobhunter-research-browser', version: '1.0.0' });
   const annotations = {
@@ -1214,6 +1271,7 @@ function createMcpServer(tools: ResearchBrowserTools): McpServer {
   return server;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function authorized(header: string | undefined, token: string): boolean {
   const prefix = 'Bearer ';
   if (!header?.startsWith(prefix)) return false;
@@ -1222,6 +1280,7 @@ function authorized(header: string | undefined, token: string): boolean {
   return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function mcpRequestPathname(requestTarget: string | undefined): string | null {
   if (!requestTarget?.startsWith('/') || requestTarget.startsWith('//')) return null;
   try {
@@ -1231,6 +1290,7 @@ function mcpRequestPathname(requestTarget: string | undefined): string | null {
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function closeHttpServer(server: HttpServer): Promise<void> {
   if (!server.listening) return Promise.resolve();
   server.closeAllConnections();
@@ -1242,6 +1302,7 @@ function closeHttpServer(server: HttpServer): Promise<void> {
   });
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function waitForListening(server: HttpServer): Promise<number> {
   return new Promise((resolve, reject) => {
     const onError = (error: Error): void => {
@@ -1263,6 +1324,7 @@ function waitForListening(server: HttpServer): Promise<number> {
   });
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 interface PinnedPublicNetworkProxy {
   readonly serverUrl: string;
   readonly username: string;
@@ -1270,6 +1332,7 @@ interface PinnedPublicNetworkProxy {
   close(): Promise<void>;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function proxyAuthorized(header: string | undefined, username: string, password: string): boolean {
   if (!header?.startsWith('Basic ')) return false;
   const received = Buffer.from(header.slice('Basic '.length), 'utf8');
@@ -1280,6 +1343,7 @@ function proxyAuthorized(header: string | undefined, username: string, password:
   return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function proxyHeaders(headers: IncomingHttpHeaders, host?: string): IncomingHttpHeaders {
   const forwarded: IncomingHttpHeaders = { ...headers, ...(host ? { host } : {}) };
   delete forwarded.connection;
@@ -1294,6 +1358,7 @@ function proxyHeaders(headers: IncomingHttpHeaders, host?: string): IncomingHttp
   return forwarded;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function writeProxySocketError(socket: Duplex, status: 400 | 403 | 407 | 502): void {
   const reason =
     status === 407
@@ -1311,6 +1376,7 @@ function writeProxySocketError(socket: Duplex, status: 400 | 403 | 407 | 502): v
   );
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function proxyUnavailable(
   signal: AbortSignal,
   ...streams: readonly { readonly destroyed: boolean }[]
@@ -1319,6 +1385,7 @@ function proxyUnavailable(
 }
 
 /** @internal Exported only so the socket lifecycle invariant has a focused regression test. */
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 export function bindProxyTunnelClientSocket(
   clientSocket: Duplex,
   pairedUpstream: () => Duplex | null,
@@ -1328,6 +1395,7 @@ export function bindProxyTunnelClientSocket(
   });
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function declaredContentLength(headers: IncomingHttpHeaders): number | null {
   const value = headers['content-length'];
   if (value === undefined) return null;
@@ -1341,6 +1409,7 @@ function declaredContentLength(headers: IncomingHttpHeaders): number | null {
   return length;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function forwardBoundedHttpResponse(input: {
   readonly method: string | undefined;
   readonly upstreamResponse: IncomingMessage;
@@ -1406,6 +1475,7 @@ function forwardBoundedHttpResponse(input: {
   });
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function parseConnectTarget(authority: string): {
   readonly hostname: string;
   readonly port: number;
@@ -1432,6 +1502,7 @@ function parseConnectTarget(authority: string): {
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function startPinnedPublicNetworkProxy(input: {
   readonly resolveHostname: (hostname: string) => Promise<readonly string[]>;
   readonly allowTransparentNetworkTranslation: boolean;
@@ -1676,6 +1747,7 @@ async function startPinnedPublicNetworkProxy(input: {
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 export async function startResearchBrowserGateway(
   options: ResearchBrowserGatewayOptions = {},
 ): Promise<ResearchBrowserGateway> {
@@ -1839,11 +1911,13 @@ export async function startResearchBrowserGateway(
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 interface ManagedPlaywrightPage {
   readonly page: Page;
   readonly scope: 'source' | 'infrastructure';
 }
 
+/** 使用 Playwright 执行公开页面搜索、打开和正文读取。 */
 class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
   readonly #context: BrowserContext;
   readonly #networkProxy: PinnedPublicNetworkProxy;
@@ -1854,6 +1928,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
   readonly #pageScopes = new WeakMap<Page, 'source' | 'infrastructure'>();
   #closed = false;
 
+  /** 执行Worker组件对外暴露的操作。 */
   public constructor(input: {
     readonly context: BrowserContext;
     readonly networkProxy: PinnedPublicNetworkProxy;
@@ -1868,6 +1943,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
     this.#validateUrl = input.validateUrl;
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public async initialize(): Promise<void> {
     for (const page of this.#context.pages()) await page.close().catch(() => undefined);
     await this.#context.routeWebSocket(/.*/u, async (socket) => {
@@ -1904,6 +1980,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
     });
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public async search(
     query: string,
     maximumResults: number,
@@ -2017,6 +2094,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
     return [];
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public async open(url: string, signal: AbortSignal): Promise<ResearchBrowserOpenedPage> {
     assertActive(signal);
     const page = await this.#newPage('source');
@@ -2048,6 +2126,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
     }
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public async readPage(
     driverPageId: string,
     signal: AbortSignal,
@@ -2091,6 +2170,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
     };
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public async closePage(driverPageId: string): Promise<void> {
     const managed = this.#pages.get(driverPageId);
     if (!managed) return;
@@ -2098,6 +2178,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
     await managed.page.close();
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
@@ -2135,6 +2216,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
 }
 
 /** @internal Exported only for deterministic search-provider redirect regression tests. */
+/** 从搜索结果包装 URL 中提取真实来源 URL。 */
 export function unwrapResearchSearchResultUrl(value: string): string | null {
   try {
     const parsed = new URL(value);
@@ -2177,6 +2259,7 @@ const nowcoderDetailTrackingParameters = new Set([
 ]);
 
 /** @internal Exported for deterministic identity regression tests. */
+/** 生成忽略跟踪参数的来源身份键，用于跨页面去重。 */
 export function researchSourceIdentity(value: string): string {
   const url = new URL(normalizePublicResearchUrl(value));
   const isNowcoderDetail =
@@ -2196,6 +2279,7 @@ export function researchSourceIdentity(value: string): string {
   return `${researchSourceIdentityVersion}:${url.toString()}`;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 interface ResearchPageQualityAssessment {
   readonly accepted: boolean;
   readonly rejectionCode?: ResearchPageRejectionCode;
@@ -2251,6 +2335,7 @@ function researchQuestionMetrics(bodyText: string): {
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function rejectedResearchPage(
   rejectionCode: ResearchPageRejectionCode,
   metrics: ReturnType<typeof researchQuestionMetrics>,
@@ -2258,6 +2343,7 @@ function rejectedResearchPage(
   return { accepted: false, rejectionCode, ...metrics };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function assessResearchPageQuality(
   finalUrl: string,
   title: string,
@@ -2328,6 +2414,7 @@ function normalizeResearchMatchText(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase('en-US').replaceAll(/\s+/gu, ' ').trim();
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function matchesResearchPageRelevance(
   title: string,
   bodyText: string,
@@ -2340,6 +2427,7 @@ function matchesResearchPageRelevance(
   );
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function researchBrowserUserAgent(
   executablePath: string | undefined,
   timeoutMs: number,
@@ -2370,6 +2458,7 @@ async function researchBrowserUserAgent(
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 export async function createPlaywrightResearchBrowserDriver(
   input: ResearchBrowserDriverFactoryInput,
 ): Promise<ResearchBrowserDriver> {

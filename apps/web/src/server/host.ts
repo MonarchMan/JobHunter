@@ -7,6 +7,7 @@ const webServerEnvironmentSchema = z.looseObject({
   NODE_ENV: z.enum(['development', 'production', 'test']).optional(),
 });
 
+/** 模块数据结构或契约。 */
 export interface WebServerConfig {
   readonly host: '127.0.0.1' | '::1';
   readonly port: number;
@@ -14,6 +15,7 @@ export interface WebServerConfig {
 }
 
 /** Refuse every wildcard, LAN and public address; v1 is intentionally local-only. */
+/** 将任意本机主机名规范化为受支持的监听地址。 */
 export function normalizeLoopbackHost(value: string | undefined): WebServerConfig['host'] {
   const host = (value ?? '127.0.0.1').trim().toLowerCase();
   if (host === 'localhost' || host === '127.0.0.1') return '127.0.0.1';
@@ -22,6 +24,7 @@ export function normalizeLoopbackHost(value: string | undefined): WebServerConfi
   throw new Error(`拒绝绑定 ${description}：个人版 Web 管理台只能监听 loopback。`);
 }
 
+/** 从环境变量和默认值解析 Web 服务配置。 */
 export function resolveWebServerConfig(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): WebServerConfig {

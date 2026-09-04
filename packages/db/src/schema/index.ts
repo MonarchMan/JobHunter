@@ -20,6 +20,7 @@ const jsonText = <TName extends string>(
 const epoch = <TName extends string>(name: TName): SQLiteIntegerBuilderInitial<TName> =>
   integer(name);
 
+/** 公司主数据及别名、规模和启用状态。 */
 export const companies = sqliteTable(
   'companies',
   {
@@ -36,6 +37,7 @@ export const companies = sqliteTable(
   (table) => [check('companies_enabled_check', sql`${table.enabled} in (0, 1)`)],
 );
 
+/** 公司下的招聘来源渠道。 */
 export const sourceChannels = sqliteTable(
   'source_channels',
   {
@@ -57,6 +59,7 @@ export const sourceChannels = sqliteTable(
   ],
 );
 
+/** 可执行同步的职位来源及其健康、策略配置。 */
 export const jobSources = sqliteTable(
   'job_sources',
   {
@@ -105,6 +108,7 @@ export const jobSources = sqliteTable(
   ],
 );
 
+/** 一次职位来源同步运行及覆盖统计。 */
 export const syncRuns = sqliteTable(
   'sync_runs',
   {
@@ -142,6 +146,7 @@ export const syncRuns = sqliteTable(
   ],
 );
 
+/** 物理文件实体，记录存储路径、媒体类型和字节哈希。 */
 export const files = sqliteTable(
   'files',
   {
@@ -172,6 +177,7 @@ export const files = sqliteTable(
   ],
 );
 
+/** 逻辑文件实体，跨版本承载简历、面经等业务文件。 */
 export const entities = sqliteTable(
   'entities',
   {
@@ -192,6 +198,7 @@ export const entities = sqliteTable(
   ],
 );
 
+/** 逻辑实体到物理文件版本的映射，限制每个实体最多五个版本。 */
 export const fileEntityMappings = sqliteTable(
   'file_entity_mappings',
   {
@@ -218,6 +225,7 @@ export const fileEntityMappings = sqliteTable(
   ],
 );
 
+/** 来源页面与规范职位之间的关联详情。 */
 export const sourceJobDetails = sqliteTable(
   'source_job_details',
   {
@@ -240,6 +248,7 @@ export const sourceJobDetails = sqliteTable(
   ],
 );
 
+/** 通用领域事件，记录聚合状态变化和可追溯载荷。 */
 export const events = sqliteTable(
   'events',
   {
@@ -259,6 +268,7 @@ export const events = sqliteTable(
   ],
 );
 
+/** 规范化职位主表，保存跨来源合并后的当前状态。 */
 export const jobs = sqliteTable(
   'jobs',
   {
@@ -303,6 +313,7 @@ export const jobs = sqliteTable(
   ],
 );
 
+/** 职位主表的历史修订快照。 */
 export const jobRevisions = sqliteTable(
   'job_revisions',
   {
@@ -327,6 +338,7 @@ export const jobRevisions = sqliteTable(
   ],
 );
 
+/** 来源对职位字段的观测记录，用于变化检测。 */
 export const jobObservations = sqliteTable(
   'job_observations',
   {
@@ -347,6 +359,7 @@ export const jobObservations = sqliteTable(
   ],
 );
 
+/** 求职者简历档案的逻辑主记录。 */
 export const candidateProfiles = sqliteTable('candidate_profiles', {
   id: text().primaryKey(),
   name: text().notNull(),
@@ -354,6 +367,7 @@ export const candidateProfiles = sqliteTable('candidate_profiles', {
   updatedAt: epoch('updated_at').notNull(),
 });
 
+/** Agent 执行记录、输入输出摘要和成本状态。 */
 export const agentRuns = sqliteTable(
   'agent_runs',
   {
@@ -383,6 +397,7 @@ export const agentRuns = sqliteTable(
   ],
 );
 
+/** 简历档案的版本记录及解析来源。 */
 export const profileVersions = sqliteTable(
   'profile_versions',
   {
@@ -410,6 +425,7 @@ export const profileVersions = sqliteTable(
   ],
 );
 
+/** 职位补充分析结果及其 Agent 版本。 */
 export const jobEnrichments = sqliteTable(
   'job_enrichments',
   {
@@ -428,6 +444,7 @@ export const jobEnrichments = sqliteTable(
   (table) => [unique('job_enrichments_run_unique').on(table.jobRevisionId, table.agentRunId)],
 );
 
+/** 职位匹配规则集及其版本哈希。 */
 export const matchRulesets = sqliteTable(
   'match_rulesets',
   {
@@ -445,6 +462,7 @@ export const matchRulesets = sqliteTable(
   ],
 );
 
+/** 简历版本与职位之间的匹配结果。 */
 export const matchResults = sqliteTable(
   'match_results',
   {
@@ -482,6 +500,7 @@ export const matchResults = sqliteTable(
   ],
 );
 
+/** 针对匹配结果生成的准备建议。 */
 export const matchAdvices = sqliteTable(
   'match_advices',
   {
@@ -500,6 +519,7 @@ export const matchAdvices = sqliteTable(
   (table) => [unique('match_advices_run_unique').on(table.matchResultId, table.agentRunId)],
 );
 
+/** 通用周期调度定义及其运行游标。 */
 export const schedules = sqliteTable('schedules', {
   id: text().primaryKey(),
   scheduleKey: text('schedule_key').notNull().unique(),
@@ -514,6 +534,7 @@ export const schedules = sqliteTable('schedules', {
   updatedAt: epoch('updated_at').notNull(),
 });
 
+/** 通用异步任务队列，承载可重试的后台工作。 */
 export const tasks = sqliteTable(
   'tasks',
   {
@@ -559,6 +580,7 @@ export const tasks = sqliteTable(
   ],
 );
 
+/** 本地应用设置键值。 */
 export const applicationSettings = sqliteTable('application_settings', {
   key: text().primaryKey(),
   valueJson: jsonText('value_json').notNull(),
@@ -566,6 +588,7 @@ export const applicationSettings = sqliteTable('application_settings', {
   updatedAt: epoch('updated_at').notNull(),
 });
 
+/** 从简历冻结的项目快照，作为项目拷打事实边界。 */
 export const resumeProjectSnapshots = sqliteTable(
   'resume_project_snapshots',
   {
@@ -587,6 +610,7 @@ export const resumeProjectSnapshots = sqliteTable(
   ],
 );
 
+/** 项目拷打档案及其最新备忘录引用。 */
 export const projectDossiers = sqliteTable(
   'project_dossiers',
   {
@@ -609,6 +633,7 @@ export const projectDossiers = sqliteTable(
   ],
 );
 
+/** 项目拷打会话，冻结档位和资料版本。 */
 export const drillSessions = sqliteTable(
   'drill_sessions',
   {
@@ -645,6 +670,7 @@ export const drillSessions = sqliteTable(
   ],
 );
 
+/** 网友面经研究请求及其外部执行状态。 */
 export const experienceResearchRequests = sqliteTable(
   'experience_research_requests',
   {
@@ -703,6 +729,7 @@ export const experienceResearchRequests = sqliteTable(
   ],
 );
 
+/** 拷打会话中的逐题状态和 Agent 任务引用。 */
 export const drillTurns = sqliteTable(
   'drill_turns',
   {
@@ -740,6 +767,7 @@ export const drillTurns = sqliteTable(
   ],
 );
 
+/** 用户对拷打问题提交的回答修订。 */
 export const drillAnswerRevisions = sqliteTable(
   'drill_answer_revisions',
   {
@@ -760,6 +788,7 @@ export const drillAnswerRevisions = sqliteTable(
   ],
 );
 
+/** 从回答中抽取的可追溯项目知识项。 */
 export const projectKnowledgeItems = sqliteTable(
   'project_knowledge_items',
   {
@@ -794,6 +823,7 @@ export const projectKnowledgeItems = sqliteTable(
   ],
 );
 
+/** 项目拷打维度的覆盖和澄清状态。 */
 export const drillCoverage = sqliteTable(
   'drill_coverage',
   {
@@ -818,6 +848,7 @@ export const drillCoverage = sqliteTable(
   ],
 );
 
+/** 个人或网友面经中的一次面试经历。 */
 export const interviewExperiences = sqliteTable(
   'interview_experiences',
   {
@@ -873,6 +904,7 @@ export const interviewExperiences = sqliteTable(
   ],
 );
 
+/** 面试经历中的问题、回答摘录和证据范围。 */
 export const interviewQuestionEntries = sqliteTable(
   'interview_question_entries',
   {
@@ -920,6 +952,7 @@ export const interviewQuestionEntries = sqliteTable(
   ],
 );
 
+/** 同步运行中已见职位键，用于识别下架或消失记录。 */
 export const syncSeenJobs = sqliteTable(
   'sync_seen_jobs',
   {

@@ -18,6 +18,7 @@ const deletionCountsSchema = z
   })
   .strict();
 
+/** 简历删除任务输入，绑定已确认的影响哈希。 */
 export const resumeDeletionTaskPayloadSchema = z
   .object({
     resumeDocumentId: z.string().trim().min(1),
@@ -25,6 +26,7 @@ export const resumeDeletionTaskPayloadSchema = z
   })
   .strict();
 
+/** 简历删除任务输出统计。 */
 export const resumeDeletionTaskOutputSchema = z
   .object({
     impactHash: z.string().length(64),
@@ -33,15 +35,19 @@ export const resumeDeletionTaskOutputSchema = z
   })
   .strict();
 
+/** 应用层输入输出的运行时校验 Schema。 */
 export const artifactPurgeTaskPayloadSchema = z
   .object({ artifactId: z.string().trim().min(1) })
   .strict();
 
+/** 应用层输入输出的运行时校验 Schema。 */
 export const artifactPurgeTaskOutputSchema = z
   .object({ status: z.enum(['purged', 'already_purged']) })
   .strict();
 
+/** 创建简历删除任务处理器，隔离数据库删除和物理文件清理。 */
 export function createResumeDeletionTaskHandler(
+  // 1、校验删除快照；2、隔离物理文件；3、提交事务删除；4、处理清理失败。
   service: ResumeDeletionService,
 ): TaskHandler<
   z.infer<typeof resumeDeletionTaskPayloadSchema>,
@@ -54,6 +60,7 @@ export function createResumeDeletionTaskHandler(
     defaultMaxAttempts: 3,
     leaseDurationMs: 120_000,
     concurrencyKey: (payload) => `resume-delete:${payload.resumeDocumentId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(_context, payload) {
       try {
         const result = await service.deleteConfirmed(payload);
@@ -76,6 +83,7 @@ export function createResumeDeletionTaskHandler(
   };
 }
 
+/** 执行应用层的解析、转换或编排辅助逻辑。 */
 export function createArtifactPurgeTaskHandler(
   service: ResumeDeletionService,
 ): TaskHandler<
@@ -89,6 +97,7 @@ export function createArtifactPurgeTaskHandler(
     defaultMaxAttempts: 5,
     leaseDurationMs: 60_000,
     concurrencyKey: (payload) => `artifact-purge:${payload.artifactId}`,
+    /** 执行应用适配器的该项操作。 */
     async execute(_context, payload) {
       try {
         return { status: await service.retryArtifactPurge(payload.artifactId) };

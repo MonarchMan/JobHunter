@@ -10,6 +10,7 @@ import {
 } from './backup.js';
 import { openSqliteDatabase } from './connection.js';
 
+/** 负责 SQLite 在线备份、校验和恢复前置操作。 */
 export class SqliteBackupOperations implements BackupOperationsPort {
   readonly #dataRoot: string;
 
@@ -17,6 +18,7 @@ export class SqliteBackupOperations implements BackupOperationsPort {
     this.#dataRoot = dataRoot;
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public async create(destination: string): ReturnType<BackupOperationsPort['create']> {
     if (!existsSync(path.join(this.#dataRoot, 'jobhunter.sqlite'))) {
       throw new TypeError('Data root is not initialized.');
@@ -34,14 +36,17 @@ export class SqliteBackupOperations implements BackupOperationsPort {
     }
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public list(root: string): ReturnType<BackupOperationsPort['list']> {
     return listBackups(root);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public verify(directory: string): ReturnType<BackupOperationsPort['verify']> {
     return verifyBackup(directory);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public planRestore(
     backupDirectory: string,
     targetDataRoot: string,
@@ -49,6 +54,7 @@ export class SqliteBackupOperations implements BackupOperationsPort {
     return planRestoreBackup(backupDirectory, targetDataRoot);
   }
 
+  /** 执行数据库组件对外暴露的操作。 */
   public restore(
     backupDirectory: string,
     targetDataRoot: string,

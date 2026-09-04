@@ -1,6 +1,7 @@
 import { SourceError } from './errors.js';
 import type { SourceRateLimitGate } from './http-client.js';
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface SourceRateLimitPolicy {
   readonly requestsPerMinute: number;
   readonly burst: number;
@@ -13,6 +14,7 @@ interface Waiter {
   readonly cancel: () => void;
 }
 
+/** 来源适配器使用的数据结构或契约。 */
 interface BucketState {
   tokens: number;
   updatedAt: number;
@@ -21,6 +23,7 @@ interface BucketState {
 }
 
 /** Per-source token buckets with FIFO, cancellation-aware wait queues. */
+/** 带 FIFO 排队和取消支持的来源令牌桶限流器。 */
 export class TokenBucketSourceRateLimitGate implements SourceRateLimitGate {
   readonly #policies: ReadonlyMap<string, SourceRateLimitPolicy>;
   readonly #states = new Map<string, BucketState>();
@@ -43,6 +46,7 @@ export class TokenBucketSourceRateLimitGate implements SourceRateLimitGate {
     this.#now = options.now ?? Date.now;
   }
 
+  /** 在来源请求前消耗令牌，必要时排队等待。 */
   public beforeRequest(input: {
     readonly sourceKey: string;
     readonly signal: AbortSignal;
@@ -82,6 +86,7 @@ export class TokenBucketSourceRateLimitGate implements SourceRateLimitGate {
     });
   }
 
+  /** 返回指定来源或全部来源的排队数量。 */
   public queuedCount(sourceKey?: string): number {
     if (sourceKey) return this.#states.get(sourceKey)?.queue.length ?? 0;
     return [...this.#states.values()].reduce((total, state) => total + state.queue.length, 0);
@@ -100,6 +105,7 @@ export class TokenBucketSourceRateLimitGate implements SourceRateLimitGate {
     return created;
   }
 
+  /** 处理来源类内部的辅助逻辑。 */
   #refill(state: BucketState, policy: SourceRateLimitPolicy): void {
     const now = this.#now();
     const elapsedMs = Math.max(0, now - state.updatedAt);
@@ -110,6 +116,7 @@ export class TokenBucketSourceRateLimitGate implements SourceRateLimitGate {
     state.updatedAt = now;
   }
 
+  /** 处理来源类内部的辅助逻辑。 */
   #schedule(sourceKey: string, state: BucketState, policy: SourceRateLimitPolicy): void {
     if (state.timer) {
       clearTimeout(state.timer);

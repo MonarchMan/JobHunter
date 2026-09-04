@@ -6,6 +6,7 @@ import { interviewErrorResponse } from '../../../../../../src/server/interview-h
 
 export const dynamic = 'force-dynamic';
 
+/** 处理 Web API 的 POST 请求，校验输入并提交业务操作。 */
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> },

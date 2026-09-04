@@ -22,6 +22,7 @@ import {
   type ResearchBrowserGatewayOptions,
 } from './research-browser-gateway.js';
 
+/** Worker 运行时使用的类型约束。 */
 export interface CodexResearchChildProcess {
   readonly pid?: number | undefined;
   readonly stdin: Writable;
@@ -32,6 +33,7 @@ export interface CodexResearchChildProcess {
   kill(signal?: NodeJS.Signals): boolean;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface CodexResearchSpawnOptions {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
@@ -41,14 +43,17 @@ export interface CodexResearchSpawnOptions {
   readonly stdio: readonly ['pipe', 'pipe', 'pipe'];
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 export type CodexResearchSpawn = (
   command: string,
   args: readonly string[],
   options: CodexResearchSpawnOptions,
 ) => CodexResearchChildProcess;
 
+/** Worker 运行时使用的类型约束。 */
 type ProcessStopReason = 'cancelled' | 'timeout' | 'stdout_limit' | 'stderr_limit' | 'stdin_error';
 
+/** Worker 运行时使用的类型约束。 */
 interface ProcessCompletion {
   readonly code: number | null;
   readonly signal: NodeJS.Signals | null;
@@ -57,6 +62,7 @@ interface ProcessCompletion {
   readonly stderr: BoundedCapture;
 }
 
+/** Worker 运行时使用的类型约束。 */
 export interface CodexResearchExecutorOptions {
   readonly command?: string;
   readonly spawn?: CodexResearchSpawn;
@@ -68,14 +74,17 @@ export interface CodexResearchExecutorOptions {
   readonly signalProcess?: (child: CodexResearchChildProcess, signal: NodeJS.Signals) => void;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 export type CodexLocalResearchExecutorOptions = CodexResearchExecutorOptions;
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface BrowserAssistedCodexResearchExecutorOptions extends CodexResearchExecutorOptions {
   readonly startBrowserGateway?: (
     options: ResearchBrowserGatewayOptions,
   ) => Promise<ResearchBrowserGateway>;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 interface PreparedCodexResearchExecution {
   readonly nativeWebSearch: boolean;
   readonly prompt: string;
@@ -85,6 +94,7 @@ interface PreparedCodexResearchExecution {
   close(): Promise<void> | void;
 }
 
+/** Worker 运行时数据结构或执行契约。 */
 interface BrowserResearchTraceEntry {
   readonly tool: 'search' | 'open' | 'readPage';
   readonly ok: boolean;
@@ -152,8 +162,10 @@ const disabledAgentFeatures = [
   'workspace_dependencies',
 ] as const;
 
+/** Worker 运行时数据结构或执行契约。 */
 type ExecutionGateRelease = () => void;
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 interface ExecutionGateWaiter {
   readonly signal: AbortSignal;
   readonly onAbort: () => void;
@@ -161,6 +173,7 @@ interface ExecutionGateWaiter {
   readonly reject: (error: ExternalResearchExecutorError) => void;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 class SingleExecutionGate {
   readonly #waiters: ExecutionGateWaiter[] = [];
   #active = false;
@@ -188,6 +201,7 @@ class SingleExecutionGate {
     });
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   #releaseOnce(): ExecutionGateRelease {
     let released = false;
     return () => {
@@ -197,6 +211,7 @@ class SingleExecutionGate {
     };
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   #dispatch(): void {
     const next = this.#waiters.shift();
     if (!next) {
@@ -212,6 +227,7 @@ class SingleExecutionGate {
     next.resolve(this.#releaseOnce());
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   #cancelled(): ExternalResearchExecutorError {
     return new ExternalResearchExecutorError(
       'cancelled',
@@ -222,6 +238,7 @@ class SingleExecutionGate {
 
 const codexExecutionGate = new SingleExecutionGate();
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 class BoundedCapture {
   readonly #captureLimit: number;
   readonly #receivedLimit: number;
@@ -229,11 +246,13 @@ class BoundedCapture {
   #storedBytes = 0;
   #receivedBytes = 0;
 
+  /** 执行Worker组件对外暴露的操作。 */
   public constructor(captureLimit: number, receivedLimit = captureLimit) {
     this.#captureLimit = captureLimit;
     this.#receivedLimit = receivedLimit;
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public append(value: unknown): boolean {
     const chunk = Buffer.isBuffer(value) ? value : Buffer.from(String(value));
     this.#receivedBytes += chunk.byteLength;
@@ -250,11 +269,13 @@ class BoundedCapture {
     return this.#receivedBytes;
   }
 
+  /** 执行Worker组件对外暴露的操作。 */
   public text(): string {
     return Buffer.concat(this.#chunks, this.#storedBytes).toString('utf8');
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function defaultSpawn(
   command: string,
   args: readonly string[],
@@ -270,12 +291,14 @@ function defaultSpawn(
   });
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function errorCode(error: unknown): string | null {
   return error instanceof Error && 'code' in error && typeof error.code === 'string'
     ? error.code
     : null;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function spawnError(error: unknown): ExternalResearchExecutorError {
   const code = errorCode(error);
   if (code === 'ENOENT') {
@@ -293,20 +316,24 @@ function spawnError(error: unknown): ExternalResearchExecutorError {
   return new ExternalResearchExecutorError('temporary', 'Codex research process could not start.');
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function validatePositiveInteger(value: number, maximum: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 1 || value > maximum) {
     throw new ExternalResearchExecutorError('invalid_config', `${name} is invalid.`);
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function normalizedEvidence(value: string): string {
   return value.normalize('NFKC').replaceAll(/\s+/gu, ' ').trim();
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function invalidBrowserEvidence(message: string): ExternalResearchExecutorError {
   return new ExternalResearchExecutorError('permanent', message);
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function normalizedResearchResultSourceUrl(value: string): string {
   try {
     return normalizePublicResearchUrl(value);
@@ -315,6 +342,7 @@ function normalizedResearchResultSourceUrl(value: string): string {
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function finalizeBrowserResearchBundle(
   bundleText: string,
   trace: readonly BrowserResearchTraceEntry[],
@@ -463,12 +491,14 @@ function finalizeBrowserResearchBundle(
   });
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function assertNotCancelled(signal: AbortSignal): void {
   if (signal.aborted) {
     throw new ExternalResearchExecutorError('cancelled', 'Codex research execution was cancelled.');
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function minimalEnvironment(
   source: NodeJS.ProcessEnv,
   directory: string,
@@ -488,6 +518,7 @@ function minimalEnvironment(
   return environment;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function defaultSignalProcess(
   child: CodexResearchChildProcess,
   signal: NodeJS.Signals,
@@ -508,6 +539,7 @@ function defaultSignalProcess(
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function classifyNonZeroExit(stderr: string): ExternalResearchExecutorError {
   if (
     /(?:unknown (?:feature|option)|unrecognized option|unexpected argument|invalid config|configuration error)/iu.test(
@@ -555,6 +587,7 @@ function classifyNonZeroExit(stderr: string): ExternalResearchExecutorError {
   );
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 async function readBoundedResult(filePath: string, maximumBytes: number): Promise<string> {
   let handle;
   try {
@@ -618,6 +651,7 @@ async function readBoundedResult(filePath: string, maximumBytes: number): Promis
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function waitForProcess(input: {
   readonly child: CodexResearchChildProcess;
   readonly prompt: string;
@@ -737,6 +771,7 @@ function waitForProcess(input: {
   });
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 abstract class BaseCodexResearchExecutor implements ExternalResearchExecutor {
   public abstract readonly key: ExternalResearchExecutor['key'];
   public abstract readonly version: string;
@@ -752,6 +787,7 @@ abstract class BaseCodexResearchExecutor implements ExternalResearchExecutor {
   readonly #terminationGraceMs: number;
   readonly #signalProcess: (child: CodexResearchChildProcess, signal: NodeJS.Signals) => void;
 
+  /** 执行Worker组件对外暴露的操作。 */
   public constructor(options: CodexResearchExecutorOptions = {}) {
     this.#command = options.command?.trim() ?? 'codex';
     if (!this.#command) {
@@ -781,10 +817,12 @@ abstract class BaseCodexResearchExecutor implements ExternalResearchExecutor {
     signal: AbortSignal,
   ): Promise<PreparedCodexResearchExecution>;
 
+  /** 执行Worker组件对外暴露的操作。 */
   public async execute(
     input: ExternalResearchInput,
     signal: AbortSignal,
   ): Promise<ExternalResearchOutput> {
+    // 1、校验输出/超时边界；2、准备 Prompt 和临时目录；3、串行运行 Codex；4、限制输出并分类退出原因。
     validatePositiveInteger(
       input.maximumOutputBytes,
       maximumConfiguredOutputBytes,
@@ -1032,6 +1070,7 @@ abstract class BaseCodexResearchExecutor implements ExternalResearchExecutor {
   }
 }
 
+/** 仅使用本地 Codex CLI 的研究执行器。 */
 export class CodexLocalResearchExecutor extends BaseCodexResearchExecutor {
   public readonly key = 'codex-local' as const;
   public readonly version = 'v1' as const;
@@ -1046,6 +1085,7 @@ export class CodexLocalResearchExecutor extends BaseCodexResearchExecutor {
     sandbox: 'web-search-only-local-process' as const,
   });
 
+  /** 处理Worker类内部的辅助逻辑。 */
   protected prepareExecution(
     input: ExternalResearchInput,
   ): Promise<PreparedCodexResearchExecution> {
@@ -1060,6 +1100,7 @@ export class CodexLocalResearchExecutor extends BaseCodexResearchExecutor {
   }
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function browserEvidencePrompt(
   prompt: string,
   version: string,
@@ -1080,6 +1121,7 @@ function browserEvidencePrompt(
   return result;
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function emptyCollectionError(
   trace: readonly { readonly ok: boolean; readonly errorCode?: string }[],
 ): ExternalResearchExecutorError {
@@ -1093,6 +1135,7 @@ function emptyCollectionError(
   );
 }
 
+/** 通过受限浏览器网关辅助 Codex 采集公开面经。 */
 export class BrowserAssistedCodexResearchExecutor extends BaseCodexResearchExecutor {
   public readonly key = 'browser-assisted-codex' as const;
   public readonly version = 'v2' as const;
@@ -1107,11 +1150,13 @@ export class BrowserAssistedCodexResearchExecutor extends BaseCodexResearchExecu
     options: ResearchBrowserGatewayOptions,
   ) => Promise<ResearchBrowserGateway>;
 
+  /** 执行Worker组件对外暴露的操作。 */
   public constructor(options: BrowserAssistedCodexResearchExecutorOptions = {}) {
     super(options);
     this.#startBrowserGateway = options.startBrowserGateway ?? startResearchBrowserGateway;
   }
 
+  /** 处理Worker类内部的辅助逻辑。 */
   protected async prepareExecution(
     input: ExternalResearchInput,
     signal: AbortSignal,

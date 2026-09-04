@@ -14,6 +14,7 @@ import type {
 } from './profile-inspection-service.js';
 import type { ResumeImportService } from './resume-import-service.js';
 
+/** 用户指定的候选人画像不存在时抛出的应用错误。 */
 export class CandidateProfileNotFoundError extends Error {
   public constructor(id: string) {
     super(`Candidate profile not found: ${id}`);
@@ -21,6 +22,7 @@ export class CandidateProfileNotFoundError extends Error {
   }
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface ResumeWorkflowImportResult {
   readonly document: {
     readonly id: string;
@@ -36,6 +38,7 @@ export interface ResumeWorkflowImportResult {
   readonly taskDeduplicated: boolean;
 }
 
+/** 编排文件读取、简历导入、候选人画像选择和提取任务入队。 */
 export class ResumeProfileWorkflow {
   readonly #files: ResumeFileReader;
   readonly #imports: ResumeImportService;
@@ -43,6 +46,7 @@ export class ResumeProfileWorkflow {
   readonly #tasks: TaskService;
   readonly #maximumFileBytes: number;
 
+  /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly files: ResumeFileReader;
     readonly imports: ResumeImportService;
@@ -57,12 +61,14 @@ export class ResumeProfileWorkflow {
     this.#maximumFileBytes = input.maximumFileBytes ?? 10 * 1024 * 1024;
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public async import(input: {
     readonly path: string;
     readonly profileId?: string;
     readonly profileName?: string;
     readonly signal: AbortSignal;
   }): Promise<ResumeWorkflowImportResult> {
+    // 1、读取文件后统一转入字节入口，确保 CLI 和 Web 共享同一导入规则。
     return this.importBytes({
       bytes: await this.#files.read(input.path, this.#maximumFileBytes),
       ...(input.profileId ? { profileId: input.profileId } : {}),
@@ -71,12 +77,14 @@ export class ResumeProfileWorkflow {
     });
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public async importBytes(input: {
     readonly bytes: Uint8Array;
     readonly profileId?: string;
     readonly profileName?: string;
     readonly signal: AbortSignal;
   }): Promise<ResumeWorkflowImportResult> {
+    // 1、保存并去重简历文件，再选择已有画像或创建默认画像。
     if (input.bytes.byteLength > this.#maximumFileBytes) {
       throw new TypeError('Resume file exceeds the size limit.');
     }
@@ -90,6 +98,7 @@ export class ResumeProfileWorkflow {
       imported.document.parseStatus === 'parsed' ||
       (imported.document.parseStatus === 'needs_ocr' &&
         isResumeOcrMediaType(imported.document.mediaType));
+    // 2、只有文本已解析或图片可 OCR 时才创建画像提取任务。
     const queued = canExtract
       ? this.#tasks.enqueue({
           taskType: 'resume.profile.extract',
@@ -118,6 +127,7 @@ export class ResumeProfileWorkflow {
     };
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #requiredProfile(id: string): CandidateProfileRecord {
     const parsed = parseId(id, 'CandidateProfile');
     const profile = this.#profiles.getProfile(parsed);
@@ -126,6 +136,7 @@ export class ResumeProfileWorkflow {
   }
 }
 
+/** 将人工修正用的规范 JSON Pointer 拆分为路径段。 */
 function pointerSegments(pointer: string): string[] {
   if (!pointer.startsWith('/') || pointer.endsWith('/') || pointer.includes('//')) {
     throw new TypeError('Path must be a canonical JSON Pointer.');
@@ -136,6 +147,7 @@ function pointerSegments(pointer: string): string[] {
     .map((segment) => segment.replaceAll('~1', '/').replaceAll('~0', '~'));
 }
 
+/** 在画像副本上应用 JSON Pointer 修正，避免直接修改当前版本。 */
 function setPointer(
   profile: CandidateProfileData,
   pointer: string,
@@ -165,6 +177,7 @@ function setPointer(
   throw new TypeError('Profile JSON Pointer does not exist.');
 }
 
+/** 提供画像查看、历史、人工修正及字段锁定管理。 */
 export class ProfileManagementService {
   readonly #profiles: CandidateProfileService;
   readonly #inspection: ProfileInspectionService;
@@ -177,6 +190,7 @@ export class ProfileManagementService {
     this.#inspection = input.inspection;
   }
 
+  /** 返回画像当前版本检查视图。 */
   public show(id: string): ProfileVersionInspection {
     const profileId = this.#profileId(id);
     const current = this.#inspection.current(profileId);
@@ -184,6 +198,7 @@ export class ProfileManagementService {
     return current;
   }
 
+  /** 返回画像版本历史检查视图。 */
   public history(id: string): readonly ProfileVersionInspection[] {
     const profileId = this.#profileId(id);
     return this.#inspection.history(profileId);
@@ -209,6 +224,7 @@ export class ProfileManagementService {
     return this.show(id);
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public replace(
     id: string,
     profile: CandidateProfileData,
@@ -228,6 +244,7 @@ export class ProfileManagementService {
     return this.show(id);
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public lock(
     id: string,
     pointer: string,
@@ -236,6 +253,7 @@ export class ProfileManagementService {
     return this.#locks(id, pointer, true, expectedCurrentVersionId);
   }
 
+  /** 执行应用组件对外暴露的操作。 */
   public unlock(
     id: string,
     pointer: string,
@@ -244,6 +262,7 @@ export class ProfileManagementService {
     return this.#locks(id, pointer, false, expectedCurrentVersionId);
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #locks(
     id: string,
     pointer: string,
@@ -273,6 +292,7 @@ export class ProfileManagementService {
     return this.show(id);
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #profileId(id: string): CandidateProfileId {
     const profileId = parseId(id, 'CandidateProfile');
     if (!this.#profiles.getProfile(profileId)) throw new CandidateProfileNotFoundError(id);

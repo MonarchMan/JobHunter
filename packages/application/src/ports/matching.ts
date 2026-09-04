@@ -21,6 +21,7 @@ import type {
   MatchRuleset,
 } from '@jobhunter/matching';
 
+/** 应用层数据结构或端口契约。 */
 export interface MatchingJobRevisionRecord {
   readonly id: JobRevisionId;
   readonly jobId: JobId;
@@ -30,6 +31,7 @@ export interface MatchingJobRevisionRecord {
   readonly lastSeenAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface JobEnrichmentRecord {
   readonly id: JobEnrichmentId;
   readonly jobRevisionId: JobRevisionId;
@@ -40,6 +42,7 @@ export interface JobEnrichmentRecord {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface MatchRulesetRecord {
   readonly id: MatchRulesetId;
   readonly version: string;
@@ -49,6 +52,7 @@ export interface MatchRulesetRecord {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface MatchResultRecord {
   readonly id: MatchResultId;
   readonly profileVersionId: ProfileVersionId;
@@ -63,6 +67,7 @@ export interface MatchResultRecord {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface MatchAdviceRecord {
   readonly id: MatchAdviceId;
   readonly matchResultId: MatchResultId;
@@ -73,6 +78,7 @@ export interface MatchAdviceRecord {
   readonly createdAt: UtcInstant;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface MatchAdviceSelector {
   readonly agentKey: string;
   readonly agentVersion: string;
@@ -80,6 +86,7 @@ export interface MatchAdviceSelector {
   readonly modelConfigHash: string;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CurrentMatchListItem {
   readonly match: MatchResultRecord;
   readonly jobId: JobId;
@@ -90,6 +97,7 @@ export interface CurrentMatchListItem {
   readonly rulesetVersion: string;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CurrentMatchQuery {
   readonly profileId: CandidateProfileId;
   readonly includeExcluded?: boolean;
@@ -99,11 +107,13 @@ export interface CurrentMatchQuery {
   readonly limit?: number;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface CurrentMatchPage {
   readonly items: readonly CurrentMatchListItem[];
   readonly nextCursor: string | null;
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface MatchingRepository {
   getRevision(id: JobRevisionId): MatchingJobRevisionRecord | null;
   getLatestRevisionForJob(jobId: JobId): MatchingJobRevisionRecord | null;

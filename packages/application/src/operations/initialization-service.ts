@@ -1,3 +1,4 @@
+/** 应用层数据结构或端口契约。 */
 export interface InitializationResult {
   readonly dataRoot: string;
   readonly databasePath: string;
@@ -12,6 +13,7 @@ export interface InitializationResult {
   };
 }
 
+/** 应用层数据结构或端口契约。 */
 export interface SystemInitializer {
   initialize(input: {
     readonly dataRoot: string;
@@ -20,6 +22,7 @@ export interface SystemInitializer {
   }): Promise<InitializationResult>;
 }
 
+/** 编排首次运行所需的目录、配置和数据库初始化。 */
 export class InitializationService {
   readonly #initializer: SystemInitializer;
 
@@ -27,6 +30,7 @@ export class InitializationService {
     this.#initializer = initializer;
   }
 
+  /** 执行初始化并返回结果。 */
   public initialize(
     input: Parameters<SystemInitializer['initialize']>[0],
   ): Promise<InitializationResult> {

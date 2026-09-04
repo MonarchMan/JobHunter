@@ -5,6 +5,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly stderr: string[] } {
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -18,6 +19,7 @@ function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly s
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 async function command(
   dataRoot: string,
   argv: readonly string[],
@@ -39,6 +41,7 @@ async function command(
   };
 }
 
+/** 构造测试输入或执行断言的辅助逻辑。 */
 function seedJobs(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
   try {

@@ -1,3 +1,4 @@
+/** 应用层数据结构或端口契约。 */
 interface QueuedPermit {
   readonly signal: AbortSignal;
   readonly resolve: (release: () => void) => void;
@@ -5,6 +6,7 @@ interface QueuedPermit {
   readonly cancel: () => void;
 }
 
+/** 信号量等待被取消时抛出的错误。 */
 export class AsyncSemaphoreCancelledError extends Error {
   public constructor() {
     super('Semaphore wait was cancelled.');
@@ -12,7 +14,7 @@ export class AsyncSemaphoreCancelledError extends Error {
   }
 }
 
-/** FIFO, cancellation-aware semaphore that suspends promises without blocking a thread. */
+/** FIFO、支持取消的异步信号量，不阻塞执行线程。 */
 export class AsyncSemaphore {
   readonly #capacity: number;
   readonly #queue: QueuedPermit[] = [];
@@ -33,7 +35,9 @@ export class AsyncSemaphore {
     return this.#queue.length;
   }
 
+  /** 获取许可后执行操作，并在成功、失败或取消时释放许可。 */
   public async run<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
+    // 1、等待许可；2. 执行操作；3. 无论结果如何释放许可。
     const release = await this.#acquire(signal);
     try {
       if (signal.aborted) throw new AsyncSemaphoreCancelledError();
@@ -43,6 +47,7 @@ export class AsyncSemaphore {
     }
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #acquire(signal: AbortSignal): Promise<() => void> {
     if (signal.aborted) return Promise.reject(new AsyncSemaphoreCancelledError());
     if (this.#active < this.#capacity) {
@@ -68,6 +73,7 @@ export class AsyncSemaphore {
     });
   }
 
+  /** 处理应用类内部的辅助逻辑。 */
   #releasePermit(): () => void {
     let released = false;
     return () => {

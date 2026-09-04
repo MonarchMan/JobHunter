@@ -1,3 +1,4 @@
+/** 数据库模块使用的类型约束。 */
 export type PersistenceErrorCode =
   | 'ARTIFACT_PATH_INVALID'
   | 'DATABASE_CAPABILITY_MISSING'
@@ -5,6 +6,7 @@ export type PersistenceErrorCode =
   | 'DATABASE_OPEN_FAILED'
   | 'SETTING_NOT_ALLOWED';
 
+/** 数据库层统一错误，避免向上层泄露驱动细节。 */
 export class PersistenceError extends Error {
   public readonly code: PersistenceErrorCode;
   public override readonly cause: unknown;

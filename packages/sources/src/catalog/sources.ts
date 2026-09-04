@@ -1,8 +1,12 @@
+/** 来源适配器使用的类型约束。 */
 export type SourceSupportStatus = 'experimental' | 'supported' | 'blocked';
+/** 来源适配器使用的类型约束。 */
 export type SourceChannel = 'intern' | 'campus' | 'social';
 
+/** 来源适配器使用的类型约束。 */
 export type SourceCoverageRole = 'required' | 'supplemental';
 
+/** 来源适配器使用的数据结构或契约。 */
 export interface FirstPartyPhysicalSourceSeed {
   readonly id: string;
   readonly slug: string;
@@ -20,6 +24,7 @@ export interface FirstPartyPhysicalSourceSeed {
   };
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export interface FirstPartySourceChannelSeed {
   readonly company: {
     readonly id: string;
@@ -39,12 +44,14 @@ export interface FirstPartySourceChannelSeed {
   readonly sources: readonly FirstPartyPhysicalSourceSeed[];
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 export interface FirstPartySourceSeed {
   readonly company: FirstPartySourceChannelSeed['company'];
   readonly channel: FirstPartySourceChannelSeed['channel'];
   readonly source: FirstPartyPhysicalSourceSeed;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 interface CatalogInput {
   readonly companyId: string;
   readonly sourceId: string;
@@ -855,12 +862,14 @@ const companyInputs = Array.from(
   new Map(canonicalInputs.map((input) => [input.companyId, input])).values(),
 );
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function channelId(companyId: string, channel: SourceChannel): string {
   const channelCode = { intern: '01', campus: '02', social: '03' }[channel];
   const companySuffix = companyId.replaceAll('-', '').slice(-10);
   return `018f0000-0000-7000-8200-${companySuffix}${channelCode}`;
 }
 
+/** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function physicalSource(input: CatalogInput): FirstPartyPhysicalSourceSeed {
   return {
     id: input.sourceId,
@@ -880,6 +889,7 @@ function physicalSource(input: CatalogInput): FirstPartyPhysicalSourceSeed {
   };
 }
 
+/** 招聘来源目录数据。 */
 export const firstPartySourceCatalog: readonly FirstPartySourceChannelSeed[] =
   companyInputs.flatMap((company) =>
     channelTypes.map((channel) => {
@@ -916,6 +926,7 @@ export const firstPartySourceCatalog: readonly FirstPartySourceChannelSeed[] =
     }),
   );
 
+/** 招聘来源目录数据。 */
 export const firstPartyPhysicalSourceCatalog: readonly FirstPartySourceSeed[] = canonicalInputs.map(
   (input) => {
     const channel = firstPartySourceCatalog.find(

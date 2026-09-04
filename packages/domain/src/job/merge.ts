@@ -7,8 +7,10 @@ import {
 } from './normalized-job.js';
 
 declare const revisionNumberBrand: unique symbol;
+/** 领域模型的类型约束。 */
 export type RevisionNumber = number & { readonly [revisionNumberBrand]: true };
 
+/** 校验并品牌化职位修订号。 */
 export function revisionNumber(value: number): RevisionNumber {
   if (!Number.isSafeInteger(value) || value < 1) {
     throw new DomainError('INVALID_DOMAIN_VALUE', 'Revision number must be a positive integer.');
@@ -16,6 +18,7 @@ export function revisionNumber(value: number): RevisionNumber {
   return value as RevisionNumber;
 }
 
+/** 模块数据结构或契约。 */
 export interface CurrentJobRevision {
   readonly jobId: JobId;
   readonly identity: SourceJobIdentity;
@@ -24,12 +27,14 @@ export interface CurrentJobRevision {
   readonly normalized: NormalizedJob;
 }
 
+/** 模块数据结构或契约。 */
 export interface ChangedField {
   readonly field: keyof NormalizedJob;
   readonly before: unknown;
   readonly after: unknown;
 }
 
+/** 领域模型的类型约束。 */
 export type JobMergeDecision =
   | {
       readonly type: 'create';
@@ -52,6 +57,7 @@ export type JobMergeDecision =
       readonly changes: readonly ChangedField[];
     };
 
+/** 比较规范职位的字段差异，使用规范 JSON 避免对象键顺序影响结果。 */
 function changesBetween(previous: NormalizedJob, incoming: NormalizedJob): ChangedField[] {
   const changes: ChangedField[] = [];
   for (const field of Object.keys(incoming) as (keyof NormalizedJob)[]) {
@@ -62,10 +68,12 @@ function changesBetween(previous: NormalizedJob, incoming: NormalizedJob): Chang
   return changes;
 }
 
+/** 执行领域校验、归一化或合并逻辑。 */
 export function decideJobMerge(
   current: CurrentJobRevision | null,
   incoming: NormalizedJob,
 ): JobMergeDecision {
+  // 1、计算内容哈希；无当前修订时直接创建首个职位。
   const incomingHash = normalizedJobContentHash(incoming);
   if (!current) {
     return {
@@ -77,6 +85,7 @@ export function decideJobMerge(
     };
   }
 
+  // 2、现有职位必须保持来源和外部 ID 一致，随后区分无变化和需要修订。
   if (
     current.identity.sourceId !== incoming.sourceId ||
     current.identity.externalJobId !== incoming.externalJobId

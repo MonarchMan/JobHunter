@@ -93,6 +93,7 @@ import { PlaywrightResumePdfRenderer } from './resume-pdf-renderer.js';
 
 export { createPlaywrightSourcePageClient } from './browser-source.js';
 
+/** Worker 运行时数据结构或执行契约。 */
 export interface WorkerApplication {
   readonly engine: WorkerEngine;
   close(): Promise<void>;
@@ -106,6 +107,7 @@ const systemRandom: RandomSource = {
   next: () => Math.random(),
 };
 
+/** 为来源 HTTP 客户端施加总并发和单来源限流。 */
 function limitSourceHttp(
   client: SourceHttpClient,
   semaphore: AsyncSemaphore,
@@ -129,6 +131,7 @@ function limitSourceHttp(
   };
 }
 
+/** 为来源分页客户端施加页面访问节流。 */
 function limitSourcePage(
   client: SourcePageClient,
   semaphore: AsyncSemaphore,
@@ -174,6 +177,7 @@ function limitSourcePage(
   };
 }
 
+/** 读取内置来源的默认限流配置。 */
 function firstPartyRateLimits(): ReadonlyMap<
   string,
   { readonly requestsPerMinute: number; readonly burst: number }
@@ -197,6 +201,7 @@ function firstPartyRateLimits(): ReadonlyMap<
   return policies;
 }
 
+/** 用统一信号量限制模型调用并发。 */
 function limitModel(client: ModelClient, semaphore: AsyncSemaphore): ModelClient {
   return {
     metadata: client.metadata,
@@ -213,7 +218,9 @@ function limitModel(client: ModelClient, semaphore: AsyncSemaphore): ModelClient
   };
 }
 
+/** 创建测试/开发环境 Worker 依赖并注册任务处理器。 */
 export function createWorkerApplication(input: {
+  // 1、组装数据库仓储；2、注入来源、模型和浏览器能力；3、注册任务；4、返回 Worker 引用。
   readonly dataRoot: string;
   readonly registry: HandlerRegistry;
   readonly ids: IdGenerator;
@@ -241,6 +248,7 @@ export function createWorkerApplication(input: {
   let closed = false;
   return {
     engine,
+    /** 执行Worker适配器的该项操作。 */
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
@@ -251,6 +259,7 @@ export function createWorkerApplication(input: {
 }
 
 /** Composes the production worker with the real SQLite sync pipeline and first-party adapters. */
+/** 创建生产 Worker，加载本机配置并启用受限外部执行器。 */
 export function createProductionWorkerApplication(input: {
   readonly dataRoot: string;
   readonly workerId?: string;
@@ -550,6 +559,7 @@ export function createProductionWorkerApplication(input: {
   let closed = false;
   return {
     engine,
+    /** 执行Worker适配器的该项操作。 */
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
@@ -561,6 +571,7 @@ export function createProductionWorkerApplication(input: {
   };
 }
 
+/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 export async function runWorkerProcess(application: WorkerApplication): Promise<void> {
   const abort = new AbortController();
   const requestShutdown = (): void => {
@@ -578,4 +589,5 @@ export async function runWorkerProcess(application: WorkerApplication): Promise<
 }
 
 /** Public package identifier used by composition smoke tests. */
+/** Worker 运行时使用的稳定配置或常量。 */
 export const packageId = '@jobhunter/worker' as const;
