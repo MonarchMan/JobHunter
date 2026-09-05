@@ -39,7 +39,9 @@ test.describe('深档项目文档拷打', () => {
     await page.getByLabel('release-notes.md · v1').check();
     await page.getByRole('button', { name: '开始新会话' }).click();
 
-    await expect(page.getByRole('status')).toContainText('新一轮拷打已建立');
+    await expect(
+      page.getByLabel('通知').getByRole('status').filter({ hasText: '新一轮拷打已建立' }),
+    ).toBeVisible();
     await expect(page.getByText('深档 · docs-grounded@v1')).toBeVisible();
     await expect(page.getByRole('button', { name: '生成第一题' })).toBeVisible();
 

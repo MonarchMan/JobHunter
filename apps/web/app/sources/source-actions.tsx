@@ -6,10 +6,7 @@ import { useState } from 'react';
 import { Icon } from '../components/ui-icon.js';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './source-actions.module.css';
-
-function classNames(...names: readonly (string | false | undefined)[]): string {
-  return names.filter(Boolean).join(' ');
-}
+import { useToast } from '../components/toast-provider.js';
 
 interface ActionResponse {
   readonly data?: {
@@ -34,7 +31,7 @@ export function SourceChannelSyncAction({
   const [tokens] = useState(() =>
     Object.fromEntries(channels.map((channel) => [channel.id, crypto.randomUUID()])),
   );
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null);
+  const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
   const enabledChannels = channels.filter(
     (channel) =>
@@ -43,7 +40,6 @@ export function SourceChannelSyncAction({
 
   const sync = async (): Promise<void> => {
     setBusy(true);
-    setFeedback(null);
     try {
       const headers = await mutationHeaders();
       const responses = await Promise.allSettled(
@@ -66,17 +62,15 @@ export function SourceChannelSyncAction({
       if (failures.length > 0) {
         const firstFailure: unknown = failures[0]?.reason;
         const reason = firstFailure instanceof Error ? firstFailure.message : '渠道同步失败。';
-        setFeedback({
-          tone: 'error',
-          message:
-            taskCount > 0 ? `已创建 ${String(taskCount)} 个任务，部分渠道失败：${reason}` : reason,
-        });
+        showToast(
+          taskCount > 0 ? `已创建 ${String(taskCount)} 个任务，部分渠道失败：${reason}` : reason,
+          taskCount > 0 ? 'warning' : 'error',
+        );
       } else {
-        setFeedback({
-          tone: 'success',
-          message: `同步任务已创建，共 ${String(taskCount)} 个来源。`,
-        });
+        showToast(`同步任务已创建，共 ${String(taskCount)} 个来源。`);
       }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '渠道同步失败。', 'error');
     } finally {
       setBusy(false);
     }
@@ -100,17 +94,6 @@ export function SourceChannelSyncAction({
           {actionLabel}
         </span>
       </button>
-      {feedback ? (
-        <p
-          className={classNames(
-            styles.headerFeedback,
-            feedback.tone === 'success' ? styles.headerSuccess : styles.headerError,
-          )}
-          role={feedback.tone === 'error' ? 'alert' : 'status'}
-        >
-          {feedback.message}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -119,10 +102,9 @@ export function SourceChannelToggle({
   channel,
 }: Readonly<{ channel: WebSourceChannel }>): ReactElement {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { showToast, showToastAfterReload } = useToast();
   const toggle = async (): Promise<void> => {
     setBusy(true);
-    setError(null);
     try {
       const response = await fetch(`/api/source-channels/${channel.id}`, {
         method: 'PATCH',
@@ -131,9 +113,10 @@ export function SourceChannelToggle({
       });
       const result = (await response.json()) as ActionResponse;
       if (!response.ok) throw new Error(result.error?.message ?? '渠道设置保存失败。');
+      showToastAfterReload('渠道设置已保存。');
       window.location.reload();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '渠道设置保存失败。');
+      showToast(cause instanceof Error ? cause.message : '渠道设置保存失败。', 'error');
       setBusy(false);
     }
   };
@@ -142,14 +125,8 @@ export function SourceChannelToggle({
       <button type="button" className="button-muted" disabled={busy} onClick={() => void toggle()}>
         {channel.enabled ? '停用渠道' : '启用渠道'}
       </button>
-      {error ? <p className={styles.error}>{error}</p> : null}
     </div>
   );
-}
-
-interface ActionFeedback {
-  readonly tone: 'success' | 'error';
-  readonly message: string;
 }
 
 export function SourceSyncAction({
@@ -166,13 +143,12 @@ export function SourceSyncAction({
   const [tokens] = useState(() =>
     Object.fromEntries(sources.map((source) => [source.id, crypto.randomUUID()])),
   );
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null);
+  const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
   const enabledSources = sources.filter((source) => source.enabled);
 
   const sync = async (): Promise<void> => {
     setBusy(true);
-    setFeedback(null);
     try {
       const results = await Promise.allSettled(
         enabledSources.map(async (source) => {
@@ -191,24 +167,17 @@ export function SourceSyncAction({
       if (failures.length > 0) {
         const firstFailure: unknown = failures[0]?.reason;
         const reason = firstFailure instanceof Error ? firstFailure.message : '来源同步失败。';
-        setFeedback({
-          tone: 'error',
-          message:
-            succeeded > 0
-              ? `已创建 ${String(succeeded)} 个任务，${String(failures.length)} 个失败：${reason}`
-              : reason,
-        });
+        showToast(
+          succeeded > 0
+            ? `已创建 ${String(succeeded)} 个任务，${String(failures.length)} 个失败：${reason}`
+            : reason,
+          succeeded > 0 ? 'warning' : 'error',
+        );
         return;
       }
-      setFeedback({
-        tone: 'success',
-        message: succeeded > 1 ? `已创建 ${String(succeeded)} 个同步任务。` : '同步任务已创建。',
-      });
+      showToast(succeeded > 1 ? `已创建 ${String(succeeded)} 个同步任务。` : '同步任务已创建。');
     } catch (error) {
-      setFeedback({
-        tone: 'error',
-        message: error instanceof Error ? error.message : '来源同步失败。',
-      });
+      showToast(error instanceof Error ? error.message : '来源同步失败。', 'error');
     } finally {
       setBusy(false);
     }
@@ -237,17 +206,6 @@ export function SourceSyncAction({
       <span className="sr-only" aria-live="polite">
         {busy ? `${actionLabel}进行中` : ''}
       </span>
-      {feedback ? (
-        <p
-          className={classNames(
-            styles.headerFeedback,
-            feedback.tone === 'success' ? styles.headerSuccess : styles.headerError,
-          )}
-          role={feedback.tone === 'error' ? 'alert' : 'status'}
-        >
-          {feedback.message}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -262,12 +220,11 @@ export function SourceActions({
     source.schedule?.cronExpression ?? '0 9 * * *',
   );
   const [scheduleEnabled, setScheduleEnabled] = useState(source.schedule?.enabled ?? true);
-  const [feedback, setFeedback] = useState<ActionFeedback | null>(null);
+  const { showToast, showToastAfterReload } = useToast();
   const [busy, setBusy] = useState(false);
 
   const request = async (url: string, method: 'POST' | 'PATCH', body: unknown): Promise<void> => {
     setBusy(true);
-    setFeedback(null);
     try {
       const response = await fetch(url, {
         method,
@@ -277,13 +234,14 @@ export function SourceActions({
       const result = (await response.json()) as ActionResponse;
       if (!response.ok) throw new Error(result.error?.message ?? '来源操作失败。');
       const taskId = result.data?.task?.taskId;
-      setFeedback({ tone: 'success', message: taskId ? '同步任务已创建。' : '设置已保存。' });
-      if (!taskId) window.location.reload();
+      if (taskId) {
+        showToast('同步任务已创建。');
+      } else {
+        showToastAfterReload('设置已保存。');
+        window.location.reload();
+      }
     } catch (error) {
-      setFeedback({
-        tone: 'error',
-        message: error instanceof Error ? error.message : '来源操作失败。',
-      });
+      showToast(error instanceof Error ? error.message : '来源操作失败。', 'error');
     } finally {
       setBusy(false);
     }
@@ -365,17 +323,6 @@ export function SourceActions({
           </button>
         </form>
       </details>
-      {feedback ? (
-        <p
-          className={classNames(
-            styles.feedback,
-            feedback.tone === 'success' ? styles.success : styles.error,
-          )}
-          role={feedback.tone === 'error' ? 'alert' : 'status'}
-        >
-          {feedback.message}
-        </p>
-      ) : null}
     </div>
   );
 }

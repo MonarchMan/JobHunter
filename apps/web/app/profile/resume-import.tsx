@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation.js';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './resume-import.module.css';
+import { useToast } from '../components/toast-provider.js';
 
 interface ImportResponse {
   readonly data?: {
@@ -25,7 +26,7 @@ export function ResumeImport({ profileId }: Readonly<{ profileId?: string }>): R
   const router = useRouter();
   const formReference = useRef<HTMLFormElement>(null);
   const taskAbortReference = useRef<AbortController | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -58,12 +59,11 @@ export function ResumeImport({ profileId }: Readonly<{ profileId?: string }>): R
         const body = (await response.json()) as TaskResponse;
         const status = body.data?.status;
         if (status === 'succeeded') {
-          setFeedback('OCR 与个人资料提取已完成，在线简历已更新。');
+          showToast('OCR 与个人资料提取已完成，在线简历已更新。');
           router.refresh();
           return;
         }
         if (status === 'failed' || status === 'cancelled') {
-          setFeedback(null);
           setError(
             status === 'cancelled'
               ? '个人资料提取任务已取消。'
@@ -72,10 +72,10 @@ export function ResumeImport({ profileId }: Readonly<{ profileId?: string }>): R
           return;
         }
       }
-      setFeedback('任务仍在后台运行，请稍后刷新页面或前往任务页查看进度。');
+      showToast('任务仍在后台运行，可前往任务页查看进度。', 'warning');
     } catch {
       if (controller.signal.aborted) return;
-      setFeedback('任务已创建，但自动刷新暂时不可用；请稍后手动刷新页面。');
+      showToast('任务已创建，但自动刷新暂时不可用。', 'warning');
     }
   };
 
@@ -94,7 +94,6 @@ export function ResumeImport({ profileId }: Readonly<{ profileId?: string }>): R
     }
     setBusy(true);
     setError(null);
-    setFeedback(null);
     try {
       const response = await fetch('/api/profile/resume', {
         method: 'POST',
@@ -105,10 +104,13 @@ export function ResumeImport({ profileId }: Readonly<{ profileId?: string }>): R
       if (!response.ok) throw new Error(body.error?.message ?? '简历导入失败。');
       const taskId = body.data?.task?.taskId;
       const usesOcr = body.data?.document?.parseStatus === 'needs_ocr';
-      setFeedback(
+      showToast(
         taskId
-          ? `${usesOcr ? '图片已保存，OCR 与个人资料提取任务已创建' : '简历已保存，个人资料提取任务已创建'}：${taskId}`
+          ? usesOcr
+            ? '图片已保存，OCR 与个人资料提取任务已创建。'
+            : '简历已保存，个人资料提取任务已创建。'
           : `简历已保存，但当前状态为 ${body.data?.document?.parseStatus ?? '未知'}。${body.data?.document?.errorSummary ?? ''}`,
+        taskId ? 'success' : 'warning',
       );
       if (taskId) void trackTask(taskId);
       form.reset();
@@ -183,11 +185,6 @@ export function ResumeImport({ profileId }: Readonly<{ profileId?: string }>): R
       {error ? (
         <p className="form-feedback error" role="alert">
           {error}
-        </p>
-      ) : null}
-      {feedback ? (
-        <p className="form-feedback success" role="status">
-          {feedback}
         </p>
       ) : null}
     </section>

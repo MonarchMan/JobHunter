@@ -176,7 +176,11 @@ export default async function TasksPage({
                     </td>
                     <td>
                       {task.kind === 'task' ? (
-                        <TaskActions taskId={task.id} status={task.status} />
+                        <TaskActions
+                          taskId={task.id}
+                          status={task.status}
+                          taskType={task.taskType}
+                        />
                       ) : (
                         '—'
                       )}
@@ -211,7 +215,9 @@ export default async function TasksPage({
                   {String(task.jobDetailBatch.counts.failed)}
                 </p>
               ) : null}
-              {task.kind === 'task' ? <TaskActions taskId={task.id} status={task.status} /> : null}
+              {task.kind === 'task' ? (
+                <TaskActions taskId={task.id} status={task.status} taskType={task.taskType} />
+              ) : null}
             </article>
           ))}
         </div>

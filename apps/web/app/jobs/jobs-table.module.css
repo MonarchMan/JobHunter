@@ -101,6 +101,33 @@
   background: var(--warning-soft);
 }
 
+.linkedRow {
+  cursor: pointer;
+}
+
+.detailLink {
+  color: var(--primary-hover);
+  cursor: pointer;
+}
+
+.detailLink small {
+  display: block;
+  color: inherit;
+}
+
+.detailLink:hover {
+  text-decoration: underline;
+}
+
+.detailLink:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}
+
+.linkedRow [data-row-navigation-ignore] {
+  cursor: default;
+}
+
 .tableScroll .selectionCell {
   width: 3.25rem;
   min-width: 3.25rem;

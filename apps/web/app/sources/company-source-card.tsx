@@ -40,6 +40,16 @@ const healthWeight: Record<WebSource['healthStatus'], number> = {
   unhealthy: 3,
 };
 
+/** 按最差成员状态聚合当前视图的运行健康，空渠道保持未知。 */
+function aggregateHealth(sources: readonly WebSource[]): WebSource['healthStatus'] {
+  if (sources.length === 0) return 'unknown';
+  return sources.reduce<WebSource['healthStatus']>(
+    (worst, source) =>
+      healthWeight[source.healthStatus] > healthWeight[worst] ? source.healthStatus : worst,
+    'healthy',
+  );
+}
+
 function SourcePanel({
   source,
   channel,
@@ -215,10 +225,9 @@ export function CompanySourceCard({
   const companyName = channels[0]?.companyName ?? '未知公司';
   const showsOverview = selected === 'all';
   const officialUrl = visibleSources[0]?.officialUrl ?? sources[0]?.officialUrl;
-  const companyHealth = sources.reduce<WebSource['healthStatus']>(
-    (worst, source) =>
-      healthWeight[source.healthStatus] > healthWeight[worst] ? source.healthStatus : worst,
-    'healthy',
+  const companyHealth = aggregateHealth(sources);
+  const activeChannelHealth = aggregateHealth(
+    channels.find((channel) => channel.channel === activeSyncChannel)?.sources ?? [],
   );
   const syncContextLabel =
     selected === 'all'
@@ -259,11 +268,15 @@ export function CompanySourceCard({
           </p>
         </div>
         <div
-          className={styles['company-sync-channel']}
-          data-company-sync-channel={activeSyncChannel}
+          className={classNames(
+            styles['company-sync-channel'],
+            styles[`health-${activeChannelHealth}`],
+          )}
+          data-company-channel-health={activeChannelHealth}
+          data-company-active-channel={activeSyncChannel}
         >
-          <span className="sr-only">同步招聘渠道：</span>
-          <strong>{channelLabels[activeSyncChannel]}</strong>
+          <span className="sr-only">当前同步招聘渠道状态：</span>
+          <strong>{healthLabels[activeChannelHealth]}</strong>
         </div>
         <div className={styles['company-source-controls']} data-company-source-controls>
           <label className={styles['company-channel-selector']} data-company-channel-selector>

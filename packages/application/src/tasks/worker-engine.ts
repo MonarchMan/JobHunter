@@ -57,6 +57,10 @@ export class WorkerEngine implements TaskCancellationNotifier {
   readonly #scheduleService: ScheduleService;
   readonly #logger: TaskLogger;
   readonly #delay: WorkerDelay;
+  readonly #periodicWork: ((signal: AbortSignal) => Promise<void>) | undefined;
+  readonly #isQueueBusy: (error: unknown) => boolean;
+  readonly #lifecycle = new AbortController();
+  #periodicLoop: Promise<void> | undefined;
   readonly #options: Required<WorkerEngineOptions>;
   readonly #controllers = new Map<TaskId, AbortController>();
   readonly #inFlight = new Set<Promise<void>>();
@@ -71,6 +75,8 @@ export class WorkerEngine implements TaskCancellationNotifier {
     readonly scheduleService: ScheduleService;
     readonly logger?: TaskLogger;
     readonly workerDelay?: WorkerDelay;
+    readonly periodicWork?: (signal: AbortSignal) => Promise<void>;
+    readonly isQueueBusy?: (error: unknown) => boolean;
     readonly options: WorkerEngineOptions;
   }) {
     this.#queue = input.queue;
@@ -80,6 +86,8 @@ export class WorkerEngine implements TaskCancellationNotifier {
     this.#scheduleService = input.scheduleService;
     this.#logger = input.logger ?? silentLogger;
     this.#delay = input.workerDelay ?? nativeWorkerDelay;
+    this.#periodicWork = input.periodicWork;
+    this.#isQueueBusy = input.isQueueBusy ?? (() => false);
     this.#options = {
       workerId: input.options.workerId,
       heartbeatIntervalMs: input.options.heartbeatIntervalMs ?? 30_000,
@@ -158,7 +166,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
           logger: this.#logger,
           services: this.#options.services,
         },
-        task.payload,
+        handler.retryPayload?.(task.payload, task.result) ?? task.payload,
       );
       const lateCancellationPolicy =
         typeof handler.lateCancellationPolicy === 'function'
@@ -192,7 +200,16 @@ export class WorkerEngine implements TaskCancellationNotifier {
       }
     } catch (error) {
       // 2、失败路径统一交给分类、退避和最终失败处理。
-      this.#handleFailure(task, controller, error);
+      try {
+        if (this.#isQueueBusy(error)) {
+          // 2.a、数据库提交不可用时停止续租，由既有租约恢复处理，不能误报业务失败。
+          controller.abort('lease_lost' satisfies AbortReason);
+          this.#logger.warn('worker.queue_busy', { phase: 'completion', taskId: task.id });
+        } else this.#handleFailure(task, controller, error);
+      } catch (failureError) {
+        if (!this.#isQueueBusy(failureError)) throw failureError;
+        this.#logger.warn('worker.queue_busy', { phase: 'failure_commit', taskId: task.id });
+      }
     } finally {
       heartbeatStopped = true;
       controller.abort('finished');
@@ -215,14 +232,20 @@ export class WorkerEngine implements TaskCancellationNotifier {
         return;
       }
       if (stopped()) return;
-      const result = this.#queue.heartbeat({
-        taskId: task.id,
-        workerId: this.#options.workerId,
-        now: this.#clock.now(),
-        leaseDurationMs,
-      });
-      if (!result.ownsLease) controller.abort('lease_lost' satisfies AbortReason);
-      else if (result.cancelRequested) controller.abort('cancelled' satisfies AbortReason);
+      try {
+        const result = this.#queue.heartbeat({
+          taskId: task.id,
+          workerId: this.#options.workerId,
+          now: this.#clock.now(),
+          leaseDurationMs,
+        });
+        if (!result.ownsLease) controller.abort('lease_lost' satisfies AbortReason);
+        else if (result.cancelRequested) controller.abort('cancelled' satisfies AbortReason);
+      } catch (error) {
+        if (!this.#isQueueBusy(error)) throw error;
+        // 1、锁忙不代表已续租，下轮仍通过仓储检查实际租约所有权。
+        this.#logger.warn('worker.queue_busy', { phase: 'heartbeat', taskId: task.id });
+      }
     }
   }
 
@@ -263,6 +286,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
         occurredAt: this.#clock.now(),
         category: classified.category,
         summary: classified.safeSummary,
+        result: classified.result,
       });
       this.#logger.warn('task.retry_scheduled', {
         taskId: task.id,
@@ -281,6 +305,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       finishedAt: this.#clock.now(),
       category,
       summary: classified.safeSummary,
+      result: classified.result,
     });
     this.#logger.error('task.failed', {
       taskId: task.id,
@@ -315,19 +340,25 @@ export class WorkerEngine implements TaskCancellationNotifier {
     };
     signal?.addEventListener('abort', shutdown, { once: true });
     if (signal?.aborted) await this.shutdown();
-    try {
-      await Promise.all([
-        this.#runSchedulerLoop(),
-        ...this.#registry
-          .taskTypes()
-          .flatMap((taskType) =>
-            Array.from({ length: this.#options.taskTypeConcurrency[taskType] ?? 1 }, () =>
-              this.#runClaimLoop(taskType),
-            ),
+    this.#periodicLoop = this.#periodicWork ? this.#runPeriodicLoop() : undefined;
+    const loops = [
+      ...(this.#periodicLoop ? [this.#periodicLoop] : []),
+      this.#runSchedulerLoop(),
+      ...this.#registry
+        .taskTypes()
+        .flatMap((taskType) =>
+          Array.from({ length: this.#options.taskTypeConcurrency[taskType] ?? 1 }, () =>
+            this.#runClaimLoop(taskType),
           ),
-      ]);
+        ),
+    ];
+    try {
+      await Promise.all(loops);
     } finally {
       signal?.removeEventListener('abort', shutdown);
+      // 3、异常退出也先取消各循环，等待子进程退出后才能关闭数据库连接。
+      await this.shutdown();
+      await Promise.allSettled(loops);
     }
   }
 
@@ -335,13 +366,19 @@ export class WorkerEngine implements TaskCancellationNotifier {
   async #runClaimLoop(taskType: string): Promise<void> {
     let emptyDelay = this.#options.emptyPollMinimumMs;
     while (!this.#stopping) {
-      const claimed = await this.runOnce(taskType);
+      let claimed = false;
+      try {
+        claimed = await this.runOnce(taskType);
+      } catch (error) {
+        if (!this.#isQueueBusy(error)) throw error;
+        this.#logger.warn('worker.queue_busy', { phase: 'claim', taskType });
+      }
       if (claimed) {
         emptyDelay = this.#options.emptyPollMinimumMs;
         continue;
       }
       try {
-        await this.#delay.wait(emptyDelay, AbortSignal.timeout(emptyDelay + 100));
+        await this.#delay.wait(emptyDelay, this.#lifecycle.signal);
       } catch {
         // A timer cancellation is only a wake-up signal for the next state check.
       }
@@ -349,15 +386,35 @@ export class WorkerEngine implements TaskCancellationNotifier {
     }
   }
 
-  /** 周期扫描到期调度，并将其转换为幂等任务。 */
+  /** 独立驱动周期工作，维护子进程等待不阻塞普通调度。 */
+  async #runPeriodicLoop(): Promise<void> {
+    while (!this.#stopping) {
+      // 1、周期维护自行判断持久化到期时间；异常只记录，不终止任务调度。
+      try {
+        await this.#periodicWork?.(this.#lifecycle.signal);
+      } catch {
+        if (!this.#lifecycle.signal.aborted)
+          this.#logger.warn('worker.periodic_work_failed', { result: 'failed' });
+      }
+      try {
+        await this.#delay.wait(this.#options.schedulerPollMs, this.#lifecycle.signal);
+      } catch {
+        return;
+      }
+    }
+  }
+
+  /** 周期扫描到期调度；锁冲突延后本轮，不改变调度游标。 */
   async #runSchedulerLoop(): Promise<void> {
     while (!this.#stopping) {
-      this.#scheduleService.enqueueDue();
       try {
-        await this.#delay.wait(
-          this.#options.schedulerPollMs,
-          AbortSignal.timeout(this.#options.schedulerPollMs + 100),
-        );
+        this.#scheduleService.enqueueDue();
+      } catch (error) {
+        if (!this.#isQueueBusy(error)) throw error;
+        this.#logger.warn('worker.queue_busy', { phase: 'schedule' });
+      }
+      try {
+        await this.#delay.wait(this.#options.schedulerPollMs, this.#lifecycle.signal);
       } catch {
         // A timer cancellation is only a wake-up signal for the next state check.
       }
@@ -368,14 +425,24 @@ export class WorkerEngine implements TaskCancellationNotifier {
   public async shutdown(): Promise<void> {
     if (this.#stopping) return;
     this.#stopping = true;
+    this.#lifecycle.abort('shutdown');
     for (const controller of this.#controllers.values()) {
       controller.abort('shutdown' satisfies AbortReason);
     }
-    if (this.#inFlight.size === 0) return;
-    await Promise.race([
-      Promise.allSettled([...this.#inFlight]),
-      delay(this.#options.shutdownGraceMs),
-    ]);
+    if (this.#inFlight.size === 0 && !this.#periodicLoop) return;
+    const grace = new AbortController();
+    try {
+      await Promise.race([
+        Promise.allSettled([
+          ...this.#inFlight,
+          ...(this.#periodicLoop ? [this.#periodicLoop] : []),
+        ]),
+        delay(this.#options.shutdownGraceMs, undefined, { signal: grace.signal }),
+      ]);
+    } finally {
+      // 1、提前收敛时清除宽限定时器，避免没有剩余工作却仍阻止进程退出。
+      grace.abort();
+    }
   }
 
   /** 接收应用层取消通知并中止对应任务的本地执行。 */

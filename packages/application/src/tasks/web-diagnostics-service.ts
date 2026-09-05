@@ -21,6 +21,8 @@ import type { TaskService } from './task-service.js';
 
 /** 应用层数据结构或端口契约。 */
 export interface WebDiagnosticsRepository {
+  /** 批量读取当前页普通任务及关联来源信息，不返回执行 payload。 */
+  getTaskDetails(ids: readonly string[]): readonly WebTask[];
   listTaskEntries(input: {
     readonly status?: TaskRecord['status'];
     readonly taskType?: string;
@@ -110,12 +112,10 @@ function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): We
 /** 执行应用层的解析、转换或编排辅助逻辑。 */
 function presentTaskEntry(
   entry: WebTaskListEntry,
-  tasks: Pick<TaskService, 'get'>,
-  repository: WebDiagnosticsRepository,
+  details: ReadonlyMap<string, WebTask>,
 ): WebTask | null {
   if (entry.kind === 'task') {
-    const task = tasks.get(parseId(entry.taskId, 'Task'));
-    return task ? presentTask(task, repository) : null;
+    return details.get(entry.taskId) ?? null;
   }
   return webTaskSchema.parse({
     kind: entry.kind,
@@ -188,9 +188,18 @@ export class WebDiagnosticsService {
       offset: (agentPage - 1) * pageSize,
     });
     const agentPagination = webPagination(agentPageResult.total, agentPage, pageSize);
+    // 1、确定有效页后一次性读取普通任务，避免逐条查询任务及同步运行。
+    const details = new Map(
+      this.#repository
+        .getTaskDetails(
+          taskPageResult.items.flatMap((entry) => (entry.kind === 'task' ? [entry.taskId] : [])),
+        )
+        .map((task) => [task.id, task]),
+    );
+    // 2、按原分页顺序合并普通任务与批次，统一校验安全展示契约。
     return webDiagnosticsSchema.parse({
       tasks: taskPageResult.items
-        .map((entry) => presentTaskEntry(entry, this.#tasks, this.#repository))
+        .map((entry) => presentTaskEntry(entry, details))
         .filter((task): task is WebTask => task !== null),
       taskPagination,
       agentRuns: agentPageResult.items,
@@ -214,6 +223,9 @@ export class WebDiagnosticsService {
   public mutate(input: WebTaskMutation): WebTaskMutationResult {
     const mutation = webTaskMutationSchema.parse(input);
     const taskId = parseId(mutation.taskId, 'Task');
+    // 1、维护任务仅供审计，重查由持久化周期驱动，不能转交普通 Handler。
+    if (this.#tasks.get(taskId)?.taskType === 'maintenance.sqlite')
+      throw new TypeError('SQLite maintenance audit is read-only.');
     if (mutation.kind === 'cancel') {
       const result = this.#tasks.cancel(taskId);
       return result.kind === 'not_found'

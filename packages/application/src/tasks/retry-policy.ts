@@ -20,6 +20,8 @@ export class TaskExecutionError extends Error {
   public readonly safeSummary: string;
   public readonly retryAfterAt: UtcInstant | null;
   public readonly retryable: boolean | null;
+  /** 已提交业务阶段的安全摘要，只能包含可公开的结果 ID 和状态。 */
+  public readonly result: unknown;
 
   /** 执行应用组件对外暴露的操作。 */
   public constructor(
@@ -29,6 +31,7 @@ export class TaskExecutionError extends Error {
       readonly retryAfterAt?: UtcInstant;
       readonly retryable?: boolean;
       readonly cause?: unknown;
+      readonly result?: unknown;
     } = {},
   ) {
     super(sanitizeTaskErrorSummary(safeSummary), { cause: options.cause });
@@ -37,6 +40,7 @@ export class TaskExecutionError extends Error {
     this.safeSummary = sanitizeTaskErrorSummary(safeSummary) || 'Task execution failed.';
     this.retryAfterAt = options.retryAfterAt ?? null;
     this.retryable = options.retryable ?? null;
+    this.result = options.result;
   }
 }
 

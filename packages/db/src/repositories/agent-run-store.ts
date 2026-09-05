@@ -112,6 +112,16 @@ export class SqliteAgentRunStore implements AgentRunStore {
     return row ? toRecord(row) : null;
   }
 
+  /** 1、仅失效仍为成功的记录，保留原始输出、时间与用量，不覆盖并发失败状态。 */
+  public invalidateSucceeded(id: string): void {
+    this.#client
+      .prepare(
+        `UPDATE agent_runs SET status = 'failed', error_category = 'invalid_output',
+      error_summary = 'Cached output failed validation.' WHERE id = ? AND status = 'succeeded'`,
+      )
+      .run(id);
+  }
+
   /** 执行数据库组件对外暴露的操作。 */
   public createRunning(record: AgentRunRecord): void {
     if (record.status !== 'running') throw new TypeError('New agent run must be running.');

@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { Icon } from './ui-icon.js';
 import styles from './job-score-action.module.css';
+import { useToast } from './toast-provider.js';
 
 export function JobScoreAction({
   jobIds,
@@ -24,7 +25,7 @@ export function JobScoreAction({
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 0, top: 0 });
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const { showToast } = useToast();
   const unavailableReason = !profileVersionId
     ? '请先导入或选择个人资料'
     : jobIds.length === 0
@@ -34,7 +35,6 @@ export function JobScoreAction({
   const score = async (mode: 'rules' | 'llm'): Promise<void> => {
     if (unavailableReason) return;
     setBusy(true);
-    setMessage(null);
     setOpen(false);
     try {
       const bulk = jobIds.length > 1;
@@ -53,11 +53,11 @@ export function JobScoreAction({
       );
       const body = (await response.json()) as { readonly error?: { readonly message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? '评分任务创建失败。');
-      setMessage(
+      showToast(
         `已为 ${String(jobIds.length)} 个职位创建${mode === 'llm' ? ' LLM 深度' : '规则'}评分任务。`,
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '评分任务创建失败。');
+      showToast(error instanceof Error ? error.message : '评分任务创建失败。', 'error');
     } finally {
       setBusy(false);
     }
@@ -180,11 +180,6 @@ export function JobScoreAction({
       )}
       {showHint && unavailableReason ? (
         <span className={styles.hint}>{unavailableReason}</span>
-      ) : null}
-      {message ? (
-        <span className={styles.feedback} role="status">
-          {message}
-        </span>
       ) : null}
     </div>
   );

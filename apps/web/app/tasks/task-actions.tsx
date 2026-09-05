@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './task-actions.module.css';
+import { useToast } from '../components/toast-provider.js';
 
 interface ActionResponse {
   readonly error?: { readonly message?: string };
@@ -13,15 +14,15 @@ interface ActionResponse {
 export function TaskActions({
   taskId,
   status,
-}: Readonly<{ taskId: string; status: string }>): ReactElement | null {
+  taskType,
+}: Readonly<{ taskId: string; status: string; taskType?: string }>): ReactElement | null {
   const router = useRouter();
   const [retryToken] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const act = async (action: 'retry' | 'cancel'): Promise<void> => {
     setBusy(true);
-    setFeedback(null);
     try {
       const response = await fetch(`/api/tasks/${taskId}/${action}`, {
         method: 'POST',
@@ -30,15 +31,17 @@ export function TaskActions({
       });
       const result = (await response.json()) as ActionResponse;
       if (!response.ok) throw new Error(result.error?.message ?? '任务操作失败。');
-      setFeedback(action === 'retry' ? '重试任务已创建。' : '取消请求已提交。');
+      showToast(action === 'retry' ? '重试任务已创建。' : '取消请求已提交。');
       router.refresh();
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : '任务操作失败。');
+      showToast(error instanceof Error ? error.message : '任务操作失败。', 'error');
     } finally {
       setBusy(false);
     }
   };
 
+  // 1、维护审计由专用子进程管理，不提供普通队列的重试和取消入口。
+  if (taskType === 'maintenance.sqlite') return <small>系统自动维护</small>;
   if (status !== 'failed' && status !== 'pending' && status !== 'running') return null;
   return (
     <div className={styles.cell}>
@@ -67,7 +70,6 @@ export function TaskActions({
           取消
         </button>
       )}
-      {feedback ? <span role="status">{feedback}</span> : null}
     </div>
   );
 }

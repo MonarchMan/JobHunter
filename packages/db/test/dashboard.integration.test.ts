@@ -78,6 +78,36 @@ describe('SQLite dashboard read model', () => {
         },
         highlightJobs: [],
       });
+      // 1、同一职位存在多次修订时仍只展示一次；无修订、过期和关闭职位不误入精选。
+      const now = Date.now();
+      handle.client
+        .prepare('UPDATE jobs SET first_seen_at=?, updated_at=? WHERE id=?')
+        .run(now, now, 'job-1');
+      const insertRevision = handle.client.prepare(`INSERT INTO job_revisions
+        (id,job_id,revision_no,content_hash,normalizer_version,source_payload_hash,source_url,snapshot_json,change_set_json,created_at)
+        VALUES(?,'job-1',?,?,'v1',?,'https://jobs.example.com/1','{}','[]',?)`);
+      insertRevision.run('revision-1', 1, 'hash-1', 'a'.repeat(64), now - 1000);
+      insertRevision.run('revision-2', 2, 'hash-2', 'b'.repeat(64), now);
+      expect(new SqliteDashboardReadModel(handle.client).snapshot().highlightJobs).toMatchObject([
+        { id: 'job-1', title: 'Agent 工程师', score: null, isNew: true },
+      ]);
+      expect(new SqliteDashboardReadModel(handle.client).snapshot().highlightJobs).toHaveLength(1);
+      // 2、旧修订高分不能进入精选，新修订被排除时同样不显示。
+      handle.client.exec(`INSERT INTO candidate_profiles VALUES('profile-1','test',1,1);
+        INSERT INTO profile_versions(id,profile_id,version_no,extracted_json,effective_json,content_hash,is_current,created_at)
+        VALUES('profile-version-1','profile-1',1,'{}','{}','profile-hash',1,1);
+        INSERT INTO match_rulesets VALUES('rules-1','v1','{}','rules-hash',1,1);
+        INSERT INTO match_results(id,profile_version_id,job_revision_id,ruleset_id,filter_status,total_score,components_json,risks_json,input_hash,created_at)
+        VALUES('match-1','profile-version-1','revision-1','rules-1','eligible',95,'[]','[]','match-hash-1',1),
+        ('match-2','profile-version-1','revision-2','rules-1','eligible',40,'[]','[]','match-hash-2',2)`);
+      expect(new SqliteDashboardReadModel(handle.client).snapshot().highlightJobs[0]?.score).toBe(
+        40,
+      );
+      handle.client.exec("UPDATE match_results SET filter_status='excluded' WHERE id='match-2'");
+      expect(new SqliteDashboardReadModel(handle.client).snapshot().highlightJobs).toEqual([]);
+      handle.client.exec("UPDATE match_results SET filter_status='eligible' WHERE id='match-2'");
+      handle.client.exec("UPDATE jobs SET status='closed' WHERE id='job-1'");
+      expect(new SqliteDashboardReadModel(handle.client).snapshot().highlightJobs).toEqual([]);
     } finally {
       handle.close();
       await root.cleanup();

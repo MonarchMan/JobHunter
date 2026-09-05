@@ -20,3 +20,8 @@
 - [ADR-0018：项目拷打问题由 Web 同步生成](./0018-synchronous-project-question-generation.md)
 
 ADR 一经 Accepted 不直接改写历史结论；需要改变决策时新增 ADR，并把旧记录标为 Superseded。
+
+- [ADR-0019：任务诊断写入投影与批量读取](./0019-task-diagnostic-projection.md)
+
+- [ADR-0020：SQLite 阈值维护与跨进程写入保护](./0020-sqlite-automatic-maintenance.md)
+- [ADR-0021：Agent 业务校验与评分阶段恢复](./0021-agent-output-validation-and-score-recovery.md)

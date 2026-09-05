@@ -545,6 +545,10 @@ export const tasks = sqliteTable(
     priority: integer().notNull().default(0),
     idempotencyKey: text('idempotency_key').notNull().unique(),
     concurrencyKey: text('concurrency_key'),
+    // 1、由数据库插入触发器维护不可变任务输入的诊断投影。
+    sourceRunId: text('source_run_id'),
+    sourceId: text('source_id'),
+    retryRootTaskId: text('retry_root_task_id'),
     scheduleId: text('schedule_id').references(() => schedules.id, { onDelete: 'restrict' }),
     retryOfTaskId: text('retry_of_task_id').references((): AnySQLiteColumn => tasks.id, {
       onDelete: 'restrict',
@@ -572,6 +576,15 @@ export const tasks = sqliteTable(
       table.createdAt,
     ),
     index('tasks_recovery_idx').on(table.status, table.leaseExpiresAt),
+    index('tasks_detail_batch_idx')
+      .on(
+        table.sourceRunId,
+        table.sourceId,
+        table.retryRootTaskId,
+        sql`${table.createdAt} DESC`,
+        sql`${table.id} DESC`,
+      )
+      .where(sql`${table.taskType} = 'source.job-detail'`),
     uniqueIndex('tasks_active_concurrency_idx')
       .on(table.concurrencyKey)
       .where(
@@ -579,6 +592,18 @@ export const tasks = sqliteTable(
       ),
   ],
 );
+
+/** SQLite 维护单例：保存检查节奏、进程互斥和最近一次安全摘要。 */
+export const databaseMaintenance = sqliteTable('database_maintenance', {
+  id: integer().primaryKey(),
+  nextCheckAt: integer('next_check_at').notNull().default(0),
+  lastDailyAt: integer('last_daily_at'),
+  lastVacuumAt: integer('last_vacuum_at'),
+  vacuumPending: integer('vacuum_pending').notNull().default(0),
+  ownerPid: integer('owner_pid'),
+  taskId: text('task_id'),
+  summaryJson: jsonText('summary_json'),
+});
 
 /** 本地应用设置键值。 */
 export const applicationSettings = sqliteTable('application_settings', {

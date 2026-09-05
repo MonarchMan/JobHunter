@@ -1,6 +1,17 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('校招实习管理台核心流程', () => {
+  test('shows the three focused workflow setting groups', async ({ page }) => {
+    await page.goto('/settings');
+    await expect(page.getByRole('group', { name: '自动同步' })).toBeVisible();
+    await expect(page.getByRole('group', { name: '自动匹配' })).toBeVisible();
+    await expect(page.getByRole('group', { name: '默认职位视图' })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: '同步频率' })).toBeVisible();
+    await expect(page.getByLabel('执行时间')).toBeVisible();
+    await expect(page.getByRole('combobox', { name: '默认职位排序' })).toBeVisible();
+    await expect(page.getByText('记住筛选条件', { exact: true })).toBeVisible();
+  });
+
   test('renders the JobHunter mark in navigation and the dashboard hero', async ({ page }) => {
     await page.goto('/');
 
@@ -48,13 +59,25 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(page.getByText('浅档 · 尚未开始')).toBeVisible();
 
     await page.getByRole('button', { name: '开始拷打' }).click();
-    await expect(page.getByRole('status')).toContainText('新一轮拷打已建立');
+    await expect(
+      page
+        .getByRole('region', { name: '通知', exact: true })
+        .getByRole('status')
+        .filter({ hasText: '新一轮拷打已建立' }),
+    ).toBeVisible();
     await expect(page.getByText('浅档 · resume-only@v1')).toBeVisible();
     await page.getByRole('button', { name: '生成第一题' }).click();
     await expect(page.getByRole('button', { name: '取消生成' })).toBeVisible();
-    await expect(page.getByRole('status')).toContainText('模型正在选择最值得继续追问');
+    await expect(page.getByRole('main').getByRole('status')).toContainText(
+      '模型正在选择最值得继续追问',
+    );
     await page.getByRole('button', { name: '取消生成' }).click();
-    await expect(page.getByRole('status')).toContainText('已取消问题生成');
+    await expect(
+      page
+        .getByRole('region', { name: '通知', exact: true })
+        .getByRole('status')
+        .filter({ hasText: '已取消问题生成' }),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: '生成第一题' })).toBeEnabled();
     await page.getByRole('button', { name: '生成第一题' }).click();
     await expect(page.getByText('这个项目最初要解决什么问题')).toBeVisible();
@@ -97,8 +120,8 @@ test.describe('校招实习管理台核心流程', () => {
     await page.setViewportSize({ width: 768, height: 900 });
     await page.goto('/jobs');
 
-    await expect(page.getByRole('link', { name: '大模型应用实习生' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '历史算法实习生' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: '大模型应用实习生', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: '历史算法实习生', exact: true })).toHaveCount(0);
     await page
       .locator('details')
       .filter({ hasText: '筛选职位' })
@@ -108,7 +131,7 @@ test.describe('校招实习管理台核心流程', () => {
     await page.getByRole('button', { name: '应用筛选' }).click();
     await expect(page).toHaveURL(/q=%E5%A4%A7%E6%A8%A1%E5%9E%8B/);
 
-    const link = page.getByRole('link', { name: '大模型应用实习生' }).first();
+    const link = page.getByRole('link', { name: '大模型应用实习生', exact: true }).first();
     await expect(link).toHaveAttribute('href', 'https://careers.tencent.com/campus/agent-intern');
     await expect(link).toHaveAttribute('target', '_blank');
     await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -211,7 +234,51 @@ test.describe('校招实习管理台核心流程', () => {
     expect(panelBox).not.toBeNull();
     if (triggerBox && panelBox) expect(Math.abs(panelBox.y - triggerBox.y)).toBeLessThan(12);
     await scorePanel.getByRole('button', { name: /^规则评分/ }).click();
-    await expect(page.getByRole('status')).toContainText('已为 1 个职位创建规则评分任务');
+    const toast = page.getByRole('region', { name: '通知', exact: true }).getByRole('status');
+    await expect(toast).toContainText('已为 1 个职位创建规则评分任务');
+    await expect(toast).toHaveCSS('position', 'static');
+    await expect(page.getByRole('region', { name: '通知', exact: true })).toHaveCSS(
+      'position',
+      'fixed',
+    );
+    expect((await scoreTrigger.boundingBox())?.y).toBe(triggerBox?.y);
+    await expect(toast).toBeHidden({ timeout: 4_500 });
+  });
+
+  test('restores a reload toast exactly once', async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              resolve();
+            }),
+          );
+        }),
+    );
+    await page.evaluate(() => {
+      sessionStorage.setItem(
+        'jobhunter.toast.after-reload',
+        JSON.stringify({ message: '跨刷新通知测试。', tone: 'success' }),
+      );
+    });
+    const restoredToast = page
+      .getByRole('region', { name: '通知', exact: true })
+      .getByRole('status')
+      .filter({ hasText: '跨刷新通知测试。' });
+    await expect
+      .poll(() => page.evaluate(() => sessionStorage.getItem('jobhunter.toast.after-reload')))
+      .not.toBeNull();
+    await page.reload();
+    await expect
+      .poll(() => page.evaluate(() => sessionStorage.getItem('jobhunter.toast.after-reload')))
+      .toBeNull();
+    await expect(restoredToast).toBeVisible();
+    await restoredToast.getByRole('button', { name: '关闭通知' }).click();
+    await expect(restoredToast).toBeHidden();
+    await page.reload();
+    await expect(restoredToast).toHaveCount(0);
   });
 
   test('keeps job actions aligned and exposes complete truncated locations', async ({ page }) => {
@@ -222,7 +289,7 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(page.getByText('类别未注明')).toHaveCount(0);
 
     const row = page.getByRole('row').filter({ hasText: 'AI 产品实习生' });
-    const titleLink = row.getByRole('link', { name: 'AI 产品实习生' });
+    const titleLink = row.getByRole('link', { name: 'AI 产品实习生', exact: true });
     await expect(titleLink).toHaveAttribute(
       'href',
       'https://careers.tencent.com/campus/ai-product-intern',
@@ -242,7 +309,7 @@ test.describe('校招实习管理台核心流程', () => {
   test('queues an idempotent source sync without waiting for collection', async ({ page }) => {
     await page.goto('/sources?page=2');
     const sourceCard = page.locator('[data-company-source-card]').filter({
-      has: page.getByRole('heading', { name: '腾讯' }),
+      has: page.getByRole('heading', { name: '腾讯', exact: true }),
     });
     await expect(sourceCard).toHaveCount(1);
     const sync = sourceCard.getByRole('button', { name: /^立即同步 / });
@@ -253,19 +320,24 @@ test.describe('校招实习管理台核心流程', () => {
     const sourceHeader = sourceCard.locator('[data-company-source-header]');
     const sourceCardBox = await sourceCard.boundingBox();
     const syncBox = await sync.boundingBox();
-    const syncChannel = sourceHeader.locator('[data-company-sync-channel]');
-    const syncChannelBox = await syncChannel.boundingBox();
+    const channelHealth = sourceHeader.locator('[data-company-channel-health]');
+    const channelHealthBox = await channelHealth.boundingBox();
     expect(syncBox).not.toBeNull();
-    expect(syncChannelBox).not.toBeNull();
+    expect(channelHealthBox).not.toBeNull();
     expect(sourceCardBox).not.toBeNull();
     if (sourceCardBox) expect(sourceCardBox.height).toBeLessThan(560);
     await expect(sourceCard).toHaveAttribute(
       'data-health-status',
       /^(healthy|unknown|degraded|unhealthy)$/,
     );
-    await expect(syncChannel).toHaveAttribute('data-company-sync-channel', 'intern');
-    await expect(syncChannel).toContainText('实习');
-    await expect(syncChannel.locator('[aria-hidden="true"]')).toHaveCount(0);
+    await expect(channelHealth).toHaveAttribute(
+      'data-company-channel-health',
+      /^(healthy|unknown|degraded|unhealthy)$/,
+    );
+    // 当前夹具启用校招；内置腾讯尚无运行记录，健康状态应为未知。
+    await expect(channelHealth).toHaveAttribute('data-company-active-channel', 'campus');
+    await expect(channelHealth).toHaveAttribute('data-company-channel-health', 'unknown');
+    await expect(channelHealth).toContainText('未知');
     expect(await sourceCard.evaluate((element) => getComputedStyle(element).boxShadow)).toContain(
       'inset',
     );
@@ -281,12 +353,40 @@ test.describe('校招实习管理台核心流程', () => {
       ).toBeLessThan(1);
     }
     await sync.click();
-    await expect(page.getByRole('status')).toContainText('同步任务已创建');
-    const firstFeedback = await page.getByRole('status').textContent();
+    await expect(
+      page.getByRole('region', { name: '通知', exact: true }).getByRole('status'),
+    ).toContainText('同步任务已创建');
+    expect(
+      await page
+        .getByRole('region', { name: '通知', exact: true })
+        .getByRole('status')
+        .evaluate((element) => getComputedStyle(element).animationName),
+    ).toContain('toast-in');
+    const firstFeedback = await page
+      .getByRole('region', { name: '通知', exact: true })
+      .getByRole('status')
+      .textContent();
 
     await sync.click();
-    await expect(page.getByRole('status')).toContainText('同步任务已创建');
-    await expect(page.getByRole('status')).toHaveText(firstFeedback ?? '');
+    await expect(
+      page.getByRole('region', { name: '通知', exact: true }).getByRole('status'),
+    ).toContainText('同步任务已创建');
+    await expect(
+      page.getByRole('region', { name: '通知', exact: true }).getByRole('status'),
+    ).toHaveText(firstFeedback ?? '');
+
+    await sourceCard.getByLabel('腾讯招聘渠道', { exact: true }).selectOption('intern');
+    await expect(channelHealth).toHaveAttribute('data-company-channel-health', 'unknown');
+    await expect(channelHealth).toContainText('未知');
+    await expect(channelHealth).not.toContainText('实习');
+    await expect(channelHealth).toHaveAttribute('data-company-active-channel', 'campus');
+    const toast = page.getByRole('region', { name: '通知', exact: true }).getByRole('status');
+    await toast.getByRole('button', { name: '关闭通知' }).click();
+    await expect(toast).toHaveAttribute('data-state', 'closing');
+    expect(await toast.evaluate((element) => getComputedStyle(element).animationName)).toContain(
+      'toast-out',
+    );
+    await expect(toast).toBeHidden();
   });
 
   test('separates official and platform recruitment sources', async ({ page }) => {
@@ -313,7 +413,9 @@ test.describe('校招实习管理台核心流程', () => {
     await allSync.focus();
     await expect(allSync.getByRole('tooltip', { name: '全部同步' })).toBeVisible();
     await allSync.click();
-    await expect(page.getByRole('status')).toContainText('同步任务');
+    await expect(
+      page.getByRole('region', { name: '通知', exact: true }).getByRole('status'),
+    ).toContainText('同步任务');
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(allSync).toBeVisible();
     await expect
@@ -584,6 +686,15 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(
       page.getByRole('heading', { name: `版本 ${String(currentVersion + 1)}` }),
     ).toBeVisible();
+    const savedToast = page
+      .getByRole('region', { name: '通知', exact: true })
+      .getByRole('status')
+      .filter({ hasText: '结构化简历已保存为新版本。' });
+    await expect(savedToast).toBeVisible();
+    await savedToast.getByRole('button', { name: '关闭通知' }).click();
+    await expect(savedToast).toBeHidden();
+    await page.reload();
+    await expect(savedToast).toHaveCount(0);
     await expect(page.getByLabel('姓名')).toHaveValue('测试候选人');
     await expect(page.getByRole('heading', { name: '项目经历' })).toBeVisible();
     await expect(page.getByText(/JPEG 和 PNG 会进入后台 OCR/)).toBeVisible();
@@ -747,11 +858,24 @@ test.describe('校招实习管理台核心流程', () => {
     await page.keyboard.press('Space');
     await expect(projectOption).toBeChecked();
     await panel.getByRole('button', { name: '生成 AI 润色建议' }).click();
+    await expect(
+      page.getByRole('region', { name: '通知', exact: true }).getByText('AI 润色任务已创建。'),
+    ).toBeVisible();
     await expect(panel.getByText('预览润色建议')).toBeVisible({ timeout: 5_000 });
+    await expect(
+      page
+        .getByRole('region', { name: '通知', exact: true })
+        .getByText('AI 润色建议已生成，请预览后决定是否应用到草稿。'),
+    ).toBeVisible();
     await expect(panel.getByText(/围绕目标岗位优化第 1 项已有项目描述/)).toBeVisible();
     await expect(projectDescriptions.first()).not.toHaveValue(/围绕目标岗位优化/);
 
     await panel.getByRole('button', { name: '应用到草稿' }).click();
+    await expect(
+      page
+        .getByRole('region', { name: '通知', exact: true })
+        .getByText('润色建议已应用到草稿，请检查后保存简历。'),
+    ).toBeVisible();
     await expect(projectDescriptions.first()).toHaveValue('围绕目标岗位优化第 1 项已有项目描述。');
     await expect(page.getByText('有尚未保存的修改')).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
@@ -797,72 +921,99 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(toolTable).toBeVisible();
   });
 
+  test('reports task retry and cancel results through the global toast', async ({ page }) => {
+    let attempts = 0;
+    await page.route(/\/api\/tasks\/[^/]+\/(?:cancel|retry)$/, async (route) => {
+      attempts += 1;
+      await route.fulfill({
+        status: attempts === 1 ? 500 : 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          attempts === 1 ? { error: { message: '模拟任务操作失败。' } } : { data: {} },
+        ),
+      });
+    });
+    await page.goto('/tasks');
+    const action = page.getByRole('button', { name: /^(?:取消|重试)任务 / }).first();
+    await expect(action).toBeVisible();
+    const actionBox = await action.boundingBox();
+
+    await action.click();
+    const toastViewport = page.getByLabel('通知', { exact: true });
+    const errorToast = toastViewport.getByRole('alert');
+    await expect(errorToast).toContainText('模拟任务操作失败。');
+    await expect(toastViewport).toHaveCSS('position', 'fixed');
+    expect(Math.abs(((await action.boundingBox())?.y ?? 0) - (actionBox?.y ?? 0))).toBeLessThan(1);
+    await errorToast.getByRole('button', { name: '关闭通知' }).click();
+    await expect(errorToast).toBeHidden();
+
+    await action.click();
+    await expect(
+      page.getByRole('region', { name: '通知', exact: true }).getByRole('status'),
+    ).toContainText(/重试任务已创建|取消请求已提交/);
+  });
+
   test('requires confirming a target role before source sync', async ({ page }) => {
     await page.goto('/sources');
-    const originalTargetRoles = await page.evaluate(async () => {
-      const profileResponse = await fetch('/api/profile');
-      const profileBody = (await profileResponse.json()) as {
+    const csrf = await page.request.get('/api/csrf');
+    const {
+      data: { token },
+    } = (await csrf.json()) as { data: { token: string } };
+    const profilesResponse = await page.request.get('/api/profile');
+    const {
+      data: { profiles },
+    } = (await profilesResponse.json()) as {
+      data: { profiles: { id: string }[] };
+    };
+    const originals: { id: string; targetRoles: string[] }[] = [];
+
+    /** 读取当前版本后修改意向，避免恢复时使用已过期的版本号。 */
+    const setRoles = async (id: string, targetRoles: string[]): Promise<void> => {
+      // 1. 使用最新版本执行乐观锁写入，仅操作临时测试画像。
+      const response = await page.request.get(`/api/profile?profile=${id}`);
+      const {
+        data: { detail },
+      } = (await response.json()) as {
+        data: { detail: { current: { id: string } } };
+      };
+      const mutation = await page.request.patch('/api/profile', {
+        headers: { 'x-jobhunter-csrf': token, origin: new URL(page.url()).origin },
         data: {
-          detail: {
-            profile: { id: string };
-            current: { id: string; effective: { targetRoles: string[] } };
-          };
-        };
-      };
-      const csrfResponse = await fetch('/api/csrf');
-      const csrfBody = (await csrfResponse.json()) as { data: { token: string } };
-      const detail = profileBody.data.detail;
-      const mutationResponse = await fetch('/api/profile', {
-        method: 'PATCH',
-        headers: {
-          'content-type': 'application/json',
-          'x-jobhunter-csrf': csrfBody.data.token,
-        },
-        body: JSON.stringify({
           kind: 'set',
-          profileId: detail.profile.id,
-          expectedVersionId: detail.current.id,
-          pointer: '/targetRoles',
-          value: [],
-        }),
-      });
-      if (!mutationResponse.ok) throw new Error('Failed to clear target roles.');
-      return detail.current.effective.targetRoles;
-    });
-
-    await page.goto('/sources');
-    await expect(page.getByRole('heading', { name: '确认目标岗位后再同步' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '去确认目标岗位' })).toHaveAttribute(
-      'href',
-      '/profile#resume-intention',
-    );
-    await expect(page.getByRole('button', { name: '全部同步 全部官网来源' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: /^立即同步 / }).first()).toBeDisabled();
-
-    await page.evaluate(async (targetRoles) => {
-      const profileResponse = await fetch('/api/profile');
-      const profileBody = (await profileResponse.json()) as {
-        data: { detail: { profile: { id: string }; current: { id: string } } };
-      };
-      const csrfResponse = await fetch('/api/csrf');
-      const csrfBody = (await csrfResponse.json()) as { data: { token: string } };
-      const detail = profileBody.data.detail;
-      const mutationResponse = await fetch('/api/profile', {
-        method: 'PATCH',
-        headers: {
-          'content-type': 'application/json',
-          'x-jobhunter-csrf': csrfBody.data.token,
-        },
-        body: JSON.stringify({
-          kind: 'set',
-          profileId: detail.profile.id,
+          profileId: id,
           expectedVersionId: detail.current.id,
           pointer: '/targetRoles',
           value: targetRoles,
-        }),
+        },
       });
-      if (!mutationResponse.ok) throw new Error('Failed to restore target roles.');
-    }, originalTargetRoles);
+      expect(mutation.ok()).toBe(true);
+    };
+
+    try {
+      // 1. 前置条件针对所有画像，不能依赖夹具只有一个有效意向。
+      for (const profile of profiles) {
+        const response = await page.request.get(`/api/profile?profile=${profile.id}`);
+        const {
+          data: { detail },
+        } = (await response.json()) as {
+          data: { detail: { current: { effective: { targetRoles: string[] } } } };
+        };
+        originals.push({ id: profile.id, targetRoles: detail.current.effective.targetRoles });
+        await setRoles(profile.id, []);
+      }
+      // 2. 缺少意向时保留完整的提示、跳转与禁用行为断言。
+      await page.goto('/sources');
+      await expect(page.getByRole('heading', { name: '确认目标岗位后再同步' })).toBeVisible();
+      await expect(page.getByRole('link', { name: '去确认目标岗位' })).toHaveAttribute(
+        'href',
+        '/profile#resume-intention',
+      );
+      await expect(page.getByRole('button', { name: '全部同步 全部官网来源' })).toBeDisabled();
+      await expect(page.getByRole('button', { name: /^立即同步 / }).first()).toBeDisabled();
+    } finally {
+      // 3. 断言失败也恢复画像，避免污染后续流程。
+      for (const original of originals) await setRoles(original.id, original.targetRoles);
+    }
   });
 
   test('uses shared authored selects throughout the profile page', async ({ page }) => {

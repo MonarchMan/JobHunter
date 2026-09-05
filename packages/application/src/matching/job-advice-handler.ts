@@ -1,6 +1,10 @@
 import { AgentRuntimeError, type AgentRunner } from '@jobhunter/agent-core';
 import { contentHash, parseId, type Clock, type IdGenerator } from '@jobhunter/domain';
-import { jobAdviceAgentDefinition, parseJobAdviceAgentOutput } from '@jobhunter/matching';
+import {
+  jobAdviceAgentDefinition,
+  resolveJobAdviceAgentOutput,
+  buildJobAdviceReferenceCatalog,
+} from '@jobhunter/matching';
 import { z } from 'zod';
 import { mapAgentRuntimeError } from '../agents/error-mapping.js';
 import type { MatchingRepository } from '../ports/matching.js';
@@ -13,6 +17,8 @@ export const jobAdviceTaskPayloadSchema = z
   .object({
     matchResultId: z.string().trim().min(1),
     adviceVersion: z.string().trim().min(1),
+    jobRevisionId: z.string().optional(),
+    profileVersionId: z.string().optional(),
   })
   .strict();
 
@@ -60,6 +66,17 @@ export function createJobAdviceTaskHandler(
       }
       const match = input.matching.getMatch(parseId(payload.matchResultId, 'MatchResult'));
       if (!match) throw new TaskExecutionError('validation_failed', 'Match result does not exist.');
+      // 1、恢复建议时确认评分仍绑定原职位与画像，拒绝跨输入复用。
+      if (
+        (payload.jobRevisionId !== undefined && match.jobRevisionId !== payload.jobRevisionId) ||
+        (payload.profileVersionId !== undefined &&
+          match.profileVersionId !== payload.profileVersionId)
+      ) {
+        throw new TaskExecutionError(
+          'validation_failed',
+          'Match advice checkpoint does not match task inputs.',
+        );
+      }
       const profile = input.profiles.getVersion(match.profileVersionId);
       const revision = input.matching.getRevision(match.jobRevisionId);
       if (!profile || !revision) {
@@ -78,10 +95,10 @@ export function createJobAdviceTaskHandler(
       try {
         const result = await input.runner.run({
           definition: jobAdviceAgentDefinition,
-          value: agentInput,
+          value: { ...agentInput, referenceCatalog: buildJobAdviceReferenceCatalog(agentInput) },
           signal: context.signal,
         });
-        const output = parseJobAdviceAgentOutput(result.output, agentInput);
+        const output = resolveJobAdviceAgentOutput(result.output, agentInput);
         const stored = input.matching.saveAdvice({
           id: parseId(input.ids.generate(), 'MatchAdvice'),
           matchResultId: match.id,
@@ -94,6 +111,12 @@ export function createJobAdviceTaskHandler(
         return { matchAdviceId: stored.id, agentRunId: result.run.id, cacheHit: result.cacheHit };
       } catch (error) {
         if (error instanceof AgentRuntimeError) {
+          if (error.category === 'invalid_output')
+            throw new TaskExecutionError(
+              'validation_failed',
+              '建议生成失败：输出结构或证据引用校验未通过（已纠正一次）。',
+              { cause: error },
+            );
           throw mapAgentRuntimeError(error, 'Job advice Agent');
         }
         throw error;

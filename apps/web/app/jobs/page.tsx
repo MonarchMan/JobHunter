@@ -15,6 +15,7 @@ import {
   type SearchParameterSource,
 } from '../../src/server/job-query.js';
 import styles from './page.module.css';
+import { JobsFilterMemory } from './jobs-filter-memory.js';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '职位' };
@@ -36,17 +37,22 @@ export default async function JobsPage({
       (name) => Boolean(firstSearchParameter(parameters, name)),
     ) || Boolean(firstSearchParameter(parameters, 'category'));
   const container = await getWebContainer();
+  const jobListPreferences = container.services.settings.get().jobListPreferences;
+  const effectiveParameters = firstSearchParameter(parameters, 'sort')
+    ? parameters
+    : { ...parameters, sort: jobListPreferences.defaultSort };
   const companies = container.services.webSources.list();
   const profiles = container.services.webProfiles.list();
   const defaultProfileId = profiles[0]?.currentVersionId;
   const query = parseWebJobQuery(
     firstSearchParameter(parameters, 'profile') || !defaultProfileId
-      ? parameters
-      : { ...parameters, profile: defaultProfileId },
+      ? effectiveParameters
+      : { ...effectiveParameters, profile: defaultProfileId },
   );
   const page = container.services.webJobs.list(query);
   return (
     <main id="main-content" tabIndex={-1}>
+      <JobsFilterMemory enabled={jobListPreferences.rememberFilters} />
       <PageHeader
         title="职位列表"
         description="默认隐藏已关闭职位。筛选条件会保存在当前 URL 中。"
@@ -59,6 +65,7 @@ export default async function JobsPage({
           method="get"
           aria-label="职位筛选"
           noValidate
+          data-job-filters
         >
           <label>
             招聘类别
@@ -131,7 +138,7 @@ export default async function JobsPage({
             <SelectField
               name="sort"
               label="排序"
-              defaultValue={fieldValue(parameters, 'sort') || 'updated_desc'}
+              defaultValue={fieldValue(parameters, 'sort') || jobListPreferences.defaultSort}
               options={[
                 { value: 'updated_desc', label: '最近更新' },
                 { value: 'published_desc', label: '最近发布' },

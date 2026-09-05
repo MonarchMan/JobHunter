@@ -39,6 +39,7 @@ export const taskTypeLabels: Readonly<Record<string, string>> = {
   'interview.project-notebook.render': '项目面试档案生成',
   'interview.experience-research.execute': '面经研究',
   'maintenance.cleanup': '系统数据清理',
+  'maintenance.sqlite': '数据库空间整理',
 };
 
 export const supportStatusLabels = {

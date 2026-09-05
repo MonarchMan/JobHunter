@@ -23,6 +23,11 @@ import {
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 class MemoryStore implements AgentRunStore {
+  /** 测试替身保留失败缓存审计。 */
+  public invalidateSucceeded(id: string): void {
+    const record = this.required(id);
+    this.runs.set(id, { ...record, status: 'failed', errorCategory: 'invalid_output' });
+  }
   public readonly runs = new Map<string, AgentRunRecord>();
   public readonly toolCalls: ToolCallRecord[] = [];
 
@@ -173,6 +178,51 @@ function runner(store: MemoryStore, model: ModelClient): AgentRunner {
 }
 
 describe('agent runtime', () => {
+  it('repairs business validation before caching and rejects bad cached output', async () => {
+    const store = new MemoryStore();
+    const model = new QueueModel([output('bad'), output('valid'), output('valid')]);
+    const runtime = runner(store, model);
+    const checked = definition({
+      validateOutput: (value) => {
+        if (value.answer !== 'valid')
+          throw new AgentRuntimeError('invalid_output', 'Unknown reference ID ref-99.');
+      },
+    });
+    const request = {
+      definition: checked,
+      value: { text: 'test' },
+      signal: new AbortController().signal,
+    };
+    const first = await runtime.run(request);
+    expect(first.output.answer).toBe('valid');
+    expect(model.requests).toHaveLength(2);
+    expect(model.requests[1]?.repair?.validationSummary).toContain('ref-99');
+    expect((await runtime.run(request)).cacheHit).toBe(true);
+    // 1、模拟历史坏缓存，确认失效保留审计并重新生成。
+    store.runs.set(first.run.id, { ...first.run, output: { answer: 'bad' } });
+    expect((await runtime.run(request)).cacheHit).toBe(false);
+    expect(store.get(first.run.id)?.status).toBe('failed');
+    expect(model.requests).toHaveLength(3);
+  });
+
+  it('shares one repair budget between schema and business failures', async () => {
+    const store = new MemoryStore();
+    const model = new QueueModel([output(42), output('bad')]);
+    const runtime = runner(store, model);
+    await expect(
+      runtime.run({
+        definition: definition({
+          validateOutput: () => {
+            throw new AgentRuntimeError('invalid_output', 'Unknown reference ID ref-99.');
+          },
+        }),
+        value: { text: 'test' },
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({ category: 'invalid_output' });
+    expect(model.requests).toHaveLength(2);
+    expect([...store.runs.values()].map((run) => run.status)).toEqual(['failed']);
+  });
   it('canonicalizes input and hashes object key order consistently', () => {
     expect(canonicalJson({ b: 2, a: { y: 1, x: 0 } })).toBe('{"a":{"x":0,"y":1},"b":2}');
     expect(hashCanonical({ b: 2, a: 1 })).toBe(hashCanonical({ a: 1, b: 2 }));

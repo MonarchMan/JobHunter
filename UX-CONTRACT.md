@@ -35,16 +35,16 @@
 
 ## Canonical UI Map
 
-| Capability      | Canonical owner                    | Source of truth | Allowed variants           | Verification      |
-| --------------- | ---------------------------------- | --------------- | -------------------------- | ----------------- |
-| Table Selection | `jobs-table.tsx` 职位批量选择      | 014 规格        | 桌面表格 / 移动记录卡      | E2E               |
-| Select/Listbox  | 共享 `SelectField` / 原生 `select` | 本契约          | authored / native          | 键盘 + 弹层几何   |
-| Combobox        | 共享 `CompanyCombobox`             | 014 规格        | authored                   | 键盘 + 弹层 + IME |
-| Date            | ISO 显示层 + 原生 `date` 交互层    | 014 规格        | native-picker / ISO-shell  | locale + E2E      |
-| Form            | 页面表单 + 共享全局字段状态        | Schema 与本契约 | edit/upload/filter         | validation E2E    |
-| Scrollbar       | 全局应用样式                       | DESIGN.md       | stable gutter 例外         | computed style    |
-| Toast           | 当前不使用；持久内联反馈为规范     | 本契约          | success/warning/info/error | live-region test  |
-| CRUD            | Route Handler + 应用服务           | 011/013 规格    | stay/queued                | full-flow E2E     |
+| Capability      | Canonical owner                    | Source of truth | Allowed variants          | Verification      |
+| --------------- | ---------------------------------- | --------------- | ------------------------- | ----------------- |
+| Table Selection | `jobs-table.tsx` 职位批量选择      | 014 规格        | 桌面表格 / 移动记录卡     | E2E               |
+| Select/Listbox  | 共享 `SelectField` / 原生 `select` | 本契约          | authored / native         | 键盘 + 弹层几何   |
+| Combobox        | 共享 `CompanyCombobox`             | 014 规格        | authored                  | 键盘 + 弹层 + IME |
+| Date            | ISO 显示层 + 原生 `date` 交互层    | 014 规格        | native-picker / ISO-shell | locale + E2E      |
+| Form            | 页面表单 + 共享全局字段状态        | Schema 与本契约 | edit/upload/filter        | validation E2E    |
+| Scrollbar       | 全局应用样式                       | DESIGN.md       | stable gutter 例外        | computed style    |
+| Toast           | 顶部居中、最多三条、不占布局空间   | 本契约          | success/warning/error     | live-region test  |
+| CRUD            | Route Handler + 应用服务           | 011/013 规格    | stay/queued               | full-flow E2E     |
 
 ## Component behavior
 
@@ -104,7 +104,7 @@
 
 - Dialog primitive: 现有应用内 `dialog`，继续统一焦点、Escape、滚动锁定和恢复。
 - Destructive confirmation levels: 简历硬删除保留影响预览与输入确认；普通可恢复操作不追加确认。
-- Toast placement/duration/deduplication: 当前不使用瞬时 Toast，关键反馈使用持久内联状态。
+- Toast placement/duration/deduplication: 短暂操作结果固定在页面顶部居中，以短距离自上而下减速进入、反向加速退出；成功 3 秒、警告 5 秒、错误 6 秒后消失，悬停或聚焦时暂停，最多堆叠三条。字段校验和需要用户持续处理的错误保留内联状态。
 - Alert/banner scope and persistence: 字段问题内联、页面问题在内容标题下、全局不可用才使用壳层横幅。
 - Tooltip delay/dismissal: 仅用于非通用图标，键盘聚焦可见，Escape 可关闭。
 - Unsaved-changes behavior: 在线简历以客户端草稿承载未保存内容；预览读取草稿。当前离页使用浏览器生命周期提示，后续共享路由拦截器可替换为应用内确认。
@@ -116,6 +116,7 @@
 - Profile date inputs: 经历、项目、竞赛和证书日期使用原生 `date`；接受 Edge/Chrome 平台弹层的本地化、月/年切换和键盘行为。起止时间额外使用应用拥有的只读 ISO 表面，透明原生输入仍是实际交互与无障碍所有者，应用不仿制日历弹层。
 - Profile date ranges: 教育、工作和项目的开始/结束日期由同一字段组拥有；桌面端该组占一列（半行，外宽与普通字段一致），内部两个日期等宽同排，移动端扩为整行；应用表面固定显示 `YYYY-MM-DD`，旧的月份值载入时补齐为当月首日，保存值统一为完整 ISO 日期字符串。标题沿用普通字段的正常字重、行高和标签间距，日期控件顶边与同行普通输入框对齐。
 - Job title navigation: 职位列表的职位名称直接使用 `detailUrl` 在安全新标签页打开官网详情；站内 `/jobs/[id]` 是诊断详情而非列表默认落点，其历史修订读取必须兼容数组式和对象式 change set。
+- Job row navigation: 职位行/移动卡片的非交互区域进入站内详情，匹配分数区域提供原生详情链接作为键盘和新标签入口。复用共享 `openLinkedRow` 保护官网标题、投递、评分、勾选和 portal 控件，选中文字及修饰键点击不导航。站内详情携带画像与列表 returnTo，返回恢复筛选和页码；官网标题行为不变。依据 WEB-003 补充验收。
 - Professional skills: 在线简历用单一多行文本编辑“专业技能”，每行保存一条完整事实句子，预览和模板导出以无序列表显示；解析得到的结构化 `skills`/`domains` 继续供匹配使用，不得回填为大量零散名词。
 - Resume template studio: 在线简历使用共享 `SelectField` 选择内置模板并创建或恢复唯一草稿；`/resume-studio/[draftId]` 使用沉浸式壳层、与 A4 画布水平中心对齐的顶部章节排版工具、紧凑章节索引和完整 A4 画布。画布中的投递字段点击后直接原位编辑，章节索引提供键盘定位，空的列表章节通过顶部动作添加首项；求职方向合并到基本信息并显示在姓名右侧。当前章节支持字号、字距和行高调整。右上“预览”位于“导出 HTML”左侧，使用当前模板与本地输入生成非交互 A4 快照，隐藏空章节和编辑标记，关闭后焦点返回触发按钮；该流程不复用在线简历预览。字段失焦保存，排版和结构动作立即保存；revision 冲突保留输入、显示持久错误并阻止导出。画像版本变化只提示，不自动覆盖；确认重建保留头像。PDF 轮询真实 Worker Task，界面统一使用“生成/导出”而非“下载”。轻量返回按钮和任务标题按钮保持透明背景，悬停仅改变文字颜色。
 - Target role family: 在线简历的“目标岗位”使用共享 authored `SelectField` 展示规范大类，空值表示尚未确认；保存时写入零或一个 `targetRoles` 值，不接受自由文本作为同步范围。
@@ -124,6 +125,7 @@
 ## Async and resilience
 
 - Mutation default: 悲观提交；耗时操作仅入队。
+- SQLite maintenance audit: `maintenance.sqlite` 在桌面任务表、移动记录卡和详情中统一显示“系统自动维护”，不提供普通队列重试或取消；服务端同样拒绝这两类操作。维护写锁期间使用可重试 503，保留当前页面上下文。来源：`specs/012-operations/spec.md` OPS-013、OPS-015。
 - Idempotency and duplicate-submit policy: mutation 使用现有 CSRF/idempotency，提交期间禁用重复触发。
 - Auto-save/draft recovery: 当前设置即时保存，在线简历显式整份保存；失败与版本冲突均保留客户端输入，不自动覆盖新版本。
 - Resume studio auto-save: 模板草稿在字段失焦或结构操作后保存，状态明确区分未保存、正在保存、已保存、失败和 revision 冲突；导出必须等待当前保存结束，离线或冲突时不得伪造成功。

@@ -30,6 +30,7 @@
   --health-unhealthy-soft: #fdf0ee;
   --health-unknown: #596275;
   --health-unknown-soft: #f2f4f7;
+  --shadow-toast: 0 0.75rem 2rem rgb(24 31 52 / 16%);
   --neutral-soft: #eef0f4;
   --violet: #6655a6;
   --violet-soft: #eeefff;

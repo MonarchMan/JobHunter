@@ -145,18 +145,24 @@ test.describe('外部 Agent 网友面经研究', () => {
     );
     await page.getByRole('button', { name: '校验并导入候选' }).click();
     expect((await bundleImport).ok()).toBe(true);
-    await expect(page.getByRole('status')).toContainText('已导入 2 份候选面经');
+    await expect(
+      page.getByLabel('通知').getByRole('status').filter({ hasText: '已导入 2 份候选面经' }),
+    ).toBeVisible();
     await expect(page.getByRole('heading', { name: '研究包警告' })).toBeVisible();
 
     const reviewQueue = page.locator('section[aria-labelledby="candidate-review-title"]');
     const firstCandidate = reviewQueue.getByRole('article').filter({ hasText: firstSourceTitle });
     await firstCandidate.getByRole('button', { name: '接受' }).click();
-    await expect(page.getByRole('status')).toContainText('候选已进入网友面经');
+    await expect(
+      page.getByLabel('通知').getByRole('status').filter({ hasText: '候选已进入网友面经' }),
+    ).toBeVisible();
     await expect(firstCandidate).toHaveCount(0);
 
     const secondCandidate = reviewQueue.getByRole('article').filter({ hasText: secondSourceTitle });
     await secondCandidate.getByRole('button', { name: '接受' }).click();
-    await expect(page.getByRole('status')).toContainText('候选已进入网友面经');
+    await expect(
+      page.getByLabel('通知').getByRole('status').filter({ hasText: '候选已进入网友面经' }),
+    ).toBeVisible();
     await expect(secondCandidate).toHaveCount(0);
     await expect(page.getByText('请求：已完成')).toBeVisible();
 

@@ -22,4 +22,5 @@ export * from './project-notebook-reader.js';
 export * from './repositories/resume-deletion-repository.js';
 export * from './repositories/resume-draft-repository.js';
 export * from './settings.js';
+export * from './maintenance-gate.js';
 export * from './seeding/source-catalog.js';

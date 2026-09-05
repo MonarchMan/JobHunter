@@ -77,6 +77,7 @@ import { firstPartySourceCatalog } from '@jobhunter/sources';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
 import { createConfiguredModelClient } from '@jobhunter/llm';
 import path from 'node:path';
+import { createRetryableSingleton } from './retryable-singleton.js';
 
 /** 模块数据结构或契约。 */
 export interface WebApplicationServices {
@@ -96,6 +97,7 @@ export interface WebApplicationServices {
   readonly resumeTemplates: ResumeTemplateService;
   readonly matches: MatchWorkflowService;
   readonly settings: SystemSettingsService;
+  readonly sourceSchedules: SourceScheduleReconciliationService;
   readonly interview: InterviewProjectService;
   readonly experiences: InterviewExperienceService;
   readonly research: ExperienceResearchService;
@@ -251,12 +253,14 @@ export function createLocalWebContainer(
       activeChannel: () => settings.get().sourceSync.channel,
     });
     const schedules = new ScheduleService({ queue, clock, ids }, registry);
-    new SourceScheduleReconciliationService({
+    const sourceSchedules = new SourceScheduleReconciliationService({
       sources: sourceRepository,
       schedules,
       jobIntakePolicy,
       activeChannel: () => settings.get().sourceSync.channel,
-    }).reconcile();
+      automation: () => settings.get().sourceAutomation,
+    });
+    sourceSchedules.reconcile();
     const services: WebApplicationServices = {
       dashboard: new DashboardQueryService(new SqliteDashboardReadModel(database.client)),
       jobs,
@@ -307,6 +311,7 @@ export function createLocalWebContainer(
         ids,
       }),
       settings,
+      sourceSchedules,
       interview: new InterviewProjectService({
         profiles: profileRepository,
         repository: interviewRepository,
@@ -348,16 +353,16 @@ export function createLocalWebContainer(
   }
 }
 
-let sharedContainer: Promise<WebApplicationContainer> | undefined;
+const loadSharedContainer = createRetryableSingleton(async () => {
+  const workspaceRoot = process.env.JOBHUNTER_WORKSPACE_ROOT ?? process.cwd();
+  const config = await loadRuntimeAppConfig({ workspaceRoot });
+  return createLocalWebContainer(config, {
+    migrationsFolder: path.join(workspaceRoot, 'packages', 'db', 'migrations'),
+  });
+});
 
 /** One SQLite handle per Next.js server process; development reloads may recreate the module. */
 /** 获取进程级单例 Web 容器，避免每个请求重复打开数据库。 */
 export function getWebContainer(): Promise<WebApplicationContainer> {
-  const workspaceRoot = process.env.JOBHUNTER_WORKSPACE_ROOT ?? process.cwd();
-  sharedContainer ??= loadRuntimeAppConfig({ workspaceRoot }).then((config) =>
-    createLocalWebContainer(config, {
-      migrationsFolder: path.join(workspaceRoot, 'packages', 'db', 'migrations'),
-    }),
-  );
-  return sharedContainer;
+  return loadSharedContainer();
 }

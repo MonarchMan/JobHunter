@@ -75,6 +75,32 @@ export const defaultSettingsRegistry = new SettingsRegistry([
     schemaVersion: '1',
     schema: z.object({ channel: z.enum(['intern', 'campus', 'social']) }).strict(),
   },
+  {
+    key: 'sources.automation',
+    schemaVersion: '1',
+    schema: z
+      .object({
+        enabled: z.boolean(),
+        frequency: z.enum(['daily', 'weekly']),
+        time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      })
+      .strict(),
+  },
+  {
+    key: 'matching.automation',
+    schemaVersion: '1',
+    schema: z.object({ scoreEnabled: z.boolean(), adviceEnabled: z.boolean() }).strict(),
+  },
+  {
+    key: 'ui.jobListPreferences',
+    schemaVersion: '1',
+    schema: z
+      .object({
+        defaultSort: z.enum(['updated_desc', 'published_desc', 'score_desc']),
+        rememberFilters: z.boolean(),
+      })
+      .strict(),
+  },
 ]);
 
 /** 数据库查询结果对应的行结构。 */

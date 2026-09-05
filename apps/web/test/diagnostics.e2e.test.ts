@@ -221,6 +221,9 @@ describe('Web diagnostics', () => {
             stats: { discovered: 8, created: 1, revised: 2, followupEnqueued: 3 },
           },
         });
+        expect(
+          container.services.diagnostics.list().tasks.find((task) => task.id === taskId),
+        ).toEqual(container.services.diagnostics.getTask(taskId));
         expect(JSON.stringify(container.services.diagnostics.getTask(taskId))).not.toContain(
           sourceId,
         );
@@ -363,6 +366,20 @@ describe('Web diagnostics', () => {
         });
         expect(failed.taskPagination.total).toBe(1);
         expect(failed.tasks[0]?.jobDetailBatch?.companyName).toBe('拼多多');
+
+        const outOfRange = container.services.diagnostics.list({
+          taskType: 'source.job-detail',
+          taskPage: 99,
+        });
+        expect(outOfRange.taskPagination).toMatchObject({ current: 1, total: 2 });
+        expect(outOfRange.tasks).toHaveLength(2);
+
+        const empty = container.services.diagnostics.list({
+          taskType: 'source.job-detail',
+          status: 'cancelled',
+        });
+        expect(empty.taskPagination.total).toBe(0);
+        expect(empty.tasks).toHaveLength(0);
       } finally {
         container.close();
       }

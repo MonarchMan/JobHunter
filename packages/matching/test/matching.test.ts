@@ -7,7 +7,9 @@ import {
   evaluateMatchingGoldenCase,
   filterCurrentRecommendations,
   jobAdviceAgentDefinition,
-  jobAdvicePromptV1,
+  jobAdvicePromptV2,
+  buildJobAdviceReferenceCatalog,
+  resolveJobAdviceAgentOutput,
   jobUnderstandingAgentDefinition,
   jobUnderstandingPromptV1,
   matchRulesetV1,
@@ -208,9 +210,41 @@ describe('current recommendation filtering and stable sorting', () => {
 });
 
 describe('job advice Agent', () => {
+  it('resolves system IDs and rejects fabricated IDs and literal references', () => {
+    const agentInput = { profile, job, match: calculateDeterministicMatch(input()) };
+    const catalog = buildJobAdviceReferenceCatalog(agentInput);
+    const first = catalog[0];
+    if (!first) throw new Error('Expected evidence.');
+    const output = {
+      highlights: [{ text: '匹配', references: [first.id] }],
+      gaps: [],
+      uncertainties: [],
+      resumeEmphasis: [],
+      preparation: [],
+    };
+    expect(resolveJobAdviceAgentOutput(output, agentInput).highlights[0]?.references).toEqual([
+      { kind: first.kind, value: first.value },
+    ]);
+    expect(() =>
+      resolveJobAdviceAgentOutput(
+        { ...output, highlights: [{ text: '未知', references: ['ref-99999'] }] },
+        agentInput,
+      ),
+    ).toThrow(/Unknown reference ID/);
+    expect(() =>
+      resolveJobAdviceAgentOutput(
+        {
+          ...output,
+          highlights: [{ text: '原文', references: [{ kind: first.kind, value: first.value }] }],
+        },
+        agentInput,
+      ),
+    ).toThrow();
+    expect(buildJobAdviceReferenceCatalog(agentInput)).toEqual(catalog);
+  });
   it('keeps prompt metadata aligned and accepts references from deterministic evidence', () => {
     expect(() => {
-      assertPromptMatchesDefinition(jobAdvicePromptV1, jobAdviceAgentDefinition);
+      assertPromptMatchesDefinition(jobAdvicePromptV2, jobAdviceAgentDefinition);
     }).not.toThrow();
     const match = calculateDeterministicMatch(input());
     const evidence = match.components.flatMap((component) => component.matchedEvidence)[0];

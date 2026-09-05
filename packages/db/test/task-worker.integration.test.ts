@@ -14,9 +14,10 @@ import {
 import { utcInstant, type UtcInstant } from '@jobhunter/domain';
 import { createTemporaryDataRoot, SeededRandom } from '@jobhunter/testkit';
 import { z } from 'zod';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   openSqliteDatabase,
+  isSqliteBusyError,
   SqliteTaskRepository,
   type SqliteDatabaseHandle,
 } from '../src/index.js';
@@ -138,6 +139,7 @@ function engine(
     queue: input.queue,
     registry,
     clock: input.clock,
+    isQueueBusy: isSqliteBusyError,
     retryPolicy: new RetryPolicy(new SeededRandom(42), {
       baseDelayMs: 100,
       jitterRatio: 0,
@@ -149,6 +151,163 @@ function engine(
 }
 
 describe('persistent task queue', () => {
+  it('persists partial results and restores them on manual retry after reopening', async () => {
+    const input = await setup();
+    const registry = new HandlerRegistry();
+    const payloadSchema = z.object({ resume: z.boolean().optional() });
+    const resultSchema = z.object({ scoringStatus: z.literal('succeeded') });
+    registry.register({
+      taskType: 'test.partial',
+      payloadSchema,
+      outputSchema: voidTaskOutputSchema,
+      defaultMaxAttempts: 2,
+      leaseDurationMs: 1_000,
+      retryPayload: (payload, result) => ({
+        ...payloadSchema.parse(payload),
+        ...(resultSchema.safeParse(result).success ? { resume: true } : {}),
+      }),
+      execute: (_context, payload) => {
+        if (!payload.resume)
+          return Promise.reject(
+            new TaskExecutionError('validation_failed', '评分完成，建议生成失败', {
+              result: { scoringStatus: 'succeeded' },
+            }),
+          );
+        return Promise.resolve();
+      },
+    });
+    const { tasks } = services(input, registry);
+    const created = tasks.enqueue({
+      taskType: 'test.partial',
+      payload: {},
+      idempotencyKey: 'partial',
+    });
+    await engine(input, registry).runOnce();
+    expect(input.queue.get(created.task.id)).toMatchObject({
+      status: 'failed',
+      result: { scoringStatus: 'succeeded' },
+    });
+    input.handle.close();
+    const reopened = openSqliteDatabase({ dataRoot: input.handle.dataRoot });
+    handles.push(reopened);
+    const resumed = {
+      ...input,
+      handle: reopened,
+      queue: new SqliteTaskRepository(reopened.client),
+    };
+    const retried = services(resumed, registry).tasks.retryFailed(created.task.id, 'resume');
+    expect(retried.task.payload).toEqual({ resume: true });
+    await engine(resumed, registry).runOnce();
+    expect(resumed.queue.get(retried.task.id)?.status).toBe('succeeded');
+  });
+  it('retries busy heartbeats but still propagates non-lock claim errors', async () => {
+    const input = await setup();
+    const registry = registryWith({
+      execute: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      },
+    });
+    const { tasks } = services(input, registry);
+    const task = enqueueSync(tasks, 'heartbeat-lock').task;
+    const heartbeat = vi.spyOn(input.queue, 'heartbeat').mockImplementationOnce(() => {
+      throw Object.assign(new Error('locked'), { code: 'SQLITE_BUSY' });
+    });
+    await engine(input, registry).runOnce();
+    expect(heartbeat.mock.calls.length).toBeGreaterThan(1);
+    expect(tasks.get(task.id)?.status).toBe('succeeded');
+    vi.spyOn(input.queue, 'claim').mockImplementationOnce(() => {
+      throw Object.assign(new Error('corrupt'), { code: 'SQLITE_CORRUPT' });
+    });
+    await expect(engine(input, registry).run()).rejects.toThrow('corrupt');
+  });
+
+  it('recovers a real writer lock without terminating the claim loop', async () => {
+    const input = await setup();
+    input.handle.client.pragma('busy_timeout=5');
+    const registry = registryWith({ execute: () => undefined });
+    const { tasks } = services(input, registry);
+    const task = enqueueSync(tasks, 'lock-recovery').task;
+    const other = openSqliteDatabase({ dataRoot: input.handle.dataRoot });
+    handles.push(other);
+    other.client.exec('BEGIN IMMEDIATE');
+    const worker = engine(input, registry);
+    const abort = new AbortController();
+    const run = worker.run(abort.signal);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      other.client.exec('ROLLBACK');
+      await vi.waitFor(
+        () => {
+          expect(tasks.get(task.id)?.status).toBe('succeeded');
+        },
+        {
+          timeout: 3000,
+        },
+      );
+    } finally {
+      abort.abort();
+      await run;
+    }
+  });
+
+  it('leaves a busy completion for lease recovery rather than marking business failure', async () => {
+    const input = await setup();
+    const registry = registryWith({ execute: () => undefined });
+    const { tasks } = services(input, registry);
+    const task = enqueueSync(tasks, 'completion-lock').task;
+    vi.spyOn(input.queue, 'complete').mockImplementationOnce(() => {
+      throw Object.assign(new Error('locked'), { code: 'SQLITE_BUSY' });
+    });
+    expect(await engine(input, registry).runOnce()).toBe(true);
+    expect(tasks.get(task.id)?.status).toBe('running');
+    expect(tasks.get(task.id)?.errorCategory).toBeNull();
+  });
+
+  it('keeps scheduling during periodic work and cancels that work on shutdown', async () => {
+    const input = await setup();
+    const registry = registryWith({ execute: () => undefined });
+    const { schedules } = services(input, registry);
+    const scan = vi.spyOn(schedules, 'enqueueDue').mockImplementationOnce(() => {
+      throw Object.assign(new Error('locked'), { code: 'SQLITE_BUSY' });
+    });
+    let cancelled = false;
+    const periodicWork = vi.fn(
+      (signal: AbortSignal) =>
+        new Promise<void>((resolve) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              cancelled = true;
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+    );
+    const worker = new WorkerEngine({
+      queue: input.queue,
+      registry,
+      clock: input.clock,
+      retryPolicy: new RetryPolicy(new SeededRandom(42)),
+      scheduleService: schedules,
+      periodicWork,
+      isQueueBusy: isSqliteBusyError,
+      options: { workerId: 'periodic', schedulerPollMs: 5, shutdownGraceMs: 100 },
+    });
+    const abort = new AbortController();
+    const run = worker.run(abort.signal);
+    try {
+      await vi.waitFor(() => {
+        expect(scan.mock.calls.length).toBeGreaterThan(1);
+      });
+      expect(periodicWork).toHaveBeenCalledTimes(1);
+    } finally {
+      abort.abort();
+      await run;
+    }
+    expect(cancelled).toBe(true);
+  });
+
   it('validates payloads and returns deterministic idempotency and concurrency conflicts', async () => {
     const input = await setup();
     const registry = registryWith({ execute: () => undefined });

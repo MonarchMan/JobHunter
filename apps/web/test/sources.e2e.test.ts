@@ -196,6 +196,9 @@ describe('Web source management', () => {
         expect(container.services.settings.get()).toEqual({
           jobUnderstanding: { enabled: false },
           sourceSync: { channel: 'intern' },
+          sourceAutomation: { enabled: true, frequency: 'daily', time: '03:00' },
+          matchingAutomation: { scoreEnabled: true, adviceEnabled: false },
+          jobListPreferences: { defaultSort: 'updated_desc', rememberFilters: false },
         });
         container.services.sources.enqueueSync({
           sourceIds: [parseId(sourceId, 'JobSource')],
@@ -212,16 +215,26 @@ describe('Web source management', () => {
           container.services.settings.update({
             jobUnderstandingEnabled: true,
             sourceSyncChannel: 'campus',
+            sourceAutomationEnabled: false,
+            sourceAutomationFrequency: 'weekly',
+            sourceAutomationTime: '09:30',
+            automaticScoringEnabled: false,
+            automaticAdviceEnabled: false,
+            defaultJobSort: 'published_desc',
+            rememberJobFilters: true,
           }),
         ).toEqual({
           jobUnderstanding: { enabled: true },
           sourceSync: { channel: 'campus' },
+          sourceAutomation: { enabled: false, frequency: 'weekly', time: '09:30' },
+          matchingAutomation: { scoreEnabled: false, adviceEnabled: false },
+          jobListPreferences: { defaultSort: 'published_desc', rememberFilters: true },
         });
+        container.services.sourceSchedules.reconcile();
         expect(container.services.tasks.list()[0]?.status).toBe('cancelled');
         expect(
-          container.services.webSources.list().find((source) => source.id === sourceId)?.schedule
-            ?.enabled,
-        ).toBe(false);
+          container.services.webSources.list().find((source) => source.id === sourceId)?.schedule,
+        ).toMatchObject({ enabled: false, cronExpression: '30 9 * * 1' });
         expect(() =>
           container.services.webSources.mutate({
             kind: 'sync',

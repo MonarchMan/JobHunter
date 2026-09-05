@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
-const profileId = '018f0000-0000-7000-8000-000000000601';
+// 简历制作独占画像，避免核心流程的偏好修改污染初始草稿。
+const profileId = '018f0000-0000-7000-8000-000000000621';
 
 test.describe('多模板简历制作', () => {
   test('restores a template draft, autosaves edits and exports self-contained HTML', async ({

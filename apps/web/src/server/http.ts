@@ -1,5 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server.js';
+import { isSqliteMaintenanceError } from '@jobhunter/db/web';
+
+/** 写锁等待可能先于维护触发器超时，统一返回可重试响应而非内部错误。 */
+function isDatabaseBusy(error: unknown): boolean {
+  const seen = new Set<unknown>();
+  while (error instanceof Error && !seen.has(error)) {
+    if ('code' in error && (error.code === 'SQLITE_BUSY' || error.code === 'SQLITE_LOCKED'))
+      return true;
+    seen.add(error);
+    error = error.cause;
+  }
+  return false;
+}
 
 /** 生成统一 JSON 成功响应。 */
 export function dataResponse(data: unknown, init?: ResponseInit): NextResponse {
@@ -8,6 +21,12 @@ export function dataResponse(data: unknown, init?: ResponseInit): NextResponse {
 
 /** 将未知异常映射为统一 JSON 错误响应。 */
 export function errorResponse(error: unknown): NextResponse {
+  // 1、维护写保护是暂时不可用，保留客户端草稿并允许稍后重试。
+  if (isSqliteMaintenanceError(error) || isDatabaseBusy(error)) {
+    const response = serviceUnavailableResponse('数据库正在整理或暂时繁忙，请稍后重试。');
+    response.headers.set('Retry-After', '5');
+    return response;
+  }
   const correlationId = randomUUID();
   // Detailed failures belong in the redacted server logger; HTTP never exposes stacks.
   process.stderr.write(

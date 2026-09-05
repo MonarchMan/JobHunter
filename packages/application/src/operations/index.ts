@@ -1,4 +1,5 @@
 export * from './cleanup-service.js';
+export * from './sqlite-maintenance-service.js';
 export * from './cleanup-handler.js';
 export * from './doctor-service.js';
 export * from './initialization-service.js';

@@ -2,6 +2,9 @@ import type { Clock } from '@jobhunter/domain';
 import { z } from 'zod';
 import {
   JOB_UNDERSTANDING_SETTING_KEY,
+  JOB_LIST_PREFERENCES_SETTING_KEY,
+  MATCHING_AUTOMATION_SETTING_KEY,
+  SOURCE_AUTOMATION_SETTING_KEY,
   SOURCE_SYNC_CHANNEL_SETTING_KEY,
   type ApplicationSettingsRepository,
   type SourceSyncChannel,
@@ -16,21 +19,57 @@ export const sourceSyncSettingSchema = z
   .object({ channel: z.enum(['intern', 'campus', 'social']) })
   .strict();
 export type SourceSyncSetting = z.infer<typeof sourceSyncSettingSchema>;
+export const sourceAutomationSettingSchema = z
+  .object({
+    enabled: z.boolean(),
+    frequency: z.enum(['daily', 'weekly']),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+  })
+  .strict();
+export const matchingAutomationSettingSchema = z
+  .object({ scoreEnabled: z.boolean(), adviceEnabled: z.boolean() })
+  .strict();
+export const jobListPreferencesSettingSchema = z
+  .object({
+    defaultSort: z.enum(['updated_desc', 'published_desc', 'score_desc']),
+    rememberFilters: z.boolean(),
+  })
+  .strict();
 
 /** 应用层数据结构或端口契约。 */
 export interface SystemSettings {
   readonly jobUnderstanding: JobUnderstandingSetting;
   readonly sourceSync: SourceSyncSetting;
+  readonly sourceAutomation: z.infer<typeof sourceAutomationSettingSchema>;
+  readonly matchingAutomation: z.infer<typeof matchingAutomationSettingSchema>;
+  readonly jobListPreferences: z.infer<typeof jobListPreferencesSettingSchema>;
 }
 
 /** 应用层数据结构或端口契约。 */
 export interface SystemSettingsMutation {
   readonly jobUnderstandingEnabled: boolean;
   readonly sourceSyncChannel: SourceSyncChannel;
+  readonly sourceAutomationEnabled: boolean;
+  readonly sourceAutomationFrequency: 'daily' | 'weekly';
+  readonly sourceAutomationTime: string;
+  readonly automaticScoringEnabled: boolean;
+  readonly automaticAdviceEnabled: boolean;
+  readonly defaultJobSort: 'updated_desc' | 'published_desc' | 'score_desc';
+  readonly rememberJobFilters: boolean;
 }
 
 const defaultJobUnderstandingSetting: JobUnderstandingSetting = { enabled: false };
 const defaultSourceSyncSetting: SourceSyncSetting = { channel: 'intern' };
+const defaultSourceAutomationSetting = {
+  enabled: true,
+  frequency: 'daily',
+  time: '03:00',
+} as const;
+const defaultMatchingAutomationSetting = { scoreEnabled: true, adviceEnabled: false } as const;
+const defaultJobListPreferencesSetting = {
+  defaultSort: 'updated_desc',
+  rememberFilters: false,
+} as const;
 
 /** 管理职位理解开关和来源同步渠道。 */
 export class SystemSettingsService {
@@ -49,6 +88,9 @@ export class SystemSettingsService {
   public get(): SystemSettings {
     const stored = this.#repository.get(JOB_UNDERSTANDING_SETTING_KEY);
     const storedSourceSync = this.#repository.get(SOURCE_SYNC_CHANNEL_SETTING_KEY);
+    const storedSourceAutomation = this.#repository.get(SOURCE_AUTOMATION_SETTING_KEY);
+    const storedMatchingAutomation = this.#repository.get(MATCHING_AUTOMATION_SETTING_KEY);
+    const storedJobListPreferences = this.#repository.get(JOB_LIST_PREFERENCES_SETTING_KEY);
     return {
       jobUnderstanding:
         stored === null
@@ -58,6 +100,18 @@ export class SystemSettingsService {
         storedSourceSync === null
           ? defaultSourceSyncSetting
           : sourceSyncSettingSchema.parse(storedSourceSync),
+      sourceAutomation:
+        storedSourceAutomation === null
+          ? defaultSourceAutomationSetting
+          : sourceAutomationSettingSchema.parse(storedSourceAutomation),
+      matchingAutomation:
+        storedMatchingAutomation === null
+          ? defaultMatchingAutomationSetting
+          : matchingAutomationSettingSchema.parse(storedMatchingAutomation),
+      jobListPreferences:
+        storedJobListPreferences === null
+          ? defaultJobListPreferencesSetting
+          : jobListPreferencesSettingSchema.parse(storedJobListPreferences),
     };
   }
 
@@ -74,6 +128,31 @@ export class SystemSettingsService {
     });
     this.#repository.set(JOB_UNDERSTANDING_SETTING_KEY, value, this.#clock.now());
     this.#repository.setSourceSyncChannel(mutation.sourceSyncChannel, this.#clock.now());
+    this.#repository.set(
+      SOURCE_AUTOMATION_SETTING_KEY,
+      sourceAutomationSettingSchema.parse({
+        enabled: mutation.sourceAutomationEnabled,
+        frequency: mutation.sourceAutomationFrequency,
+        time: mutation.sourceAutomationTime,
+      }),
+      this.#clock.now(),
+    );
+    this.#repository.set(
+      MATCHING_AUTOMATION_SETTING_KEY,
+      matchingAutomationSettingSchema.parse({
+        scoreEnabled: mutation.automaticScoringEnabled,
+        adviceEnabled: mutation.automaticAdviceEnabled,
+      }),
+      this.#clock.now(),
+    );
+    this.#repository.set(
+      JOB_LIST_PREFERENCES_SETTING_KEY,
+      jobListPreferencesSettingSchema.parse({
+        defaultSort: mutation.defaultJobSort,
+        rememberFilters: mutation.rememberJobFilters,
+      }),
+      this.#clock.now(),
+    );
     return this.get();
   }
 

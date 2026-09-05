@@ -3,6 +3,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { SiteNav } from './components/site-nav.js';
 import './styles.css';
 import styles from './app-shell.module.css';
+import { ToastProvider } from './components/toast-provider.js';
 
 export const metadata: Metadata = {
   title: {
@@ -16,24 +17,26 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
   return (
     <html lang="zh-CN">
       <body className={styles.body}>
-        <a className="skip-link" href="#main-content">
-          跳到主要内容
-        </a>
-        <header className={styles.header}>
-          <a className={styles.brand} href="/">
-            <img
-              className={styles.brandMark}
-              src="/assets/brand/jobhunter-logo.png"
-              alt=""
-              width={30}
-              height={30}
-              data-brand-logo="navigation"
-            />
-            <span>JobHunter</span>
+        <ToastProvider>
+          <a className="skip-link" href="#main-content">
+            跳到主要内容
           </a>
-          <SiteNav />
-        </header>
-        {children}
+          <header className={styles.header}>
+            <a className={styles.brand} href="/">
+              <img
+                className={styles.brandMark}
+                src="/assets/brand/jobhunter-logo.png"
+                alt=""
+                width={30}
+                height={30}
+                data-brand-logo="navigation"
+              />
+              <span>JobHunter</span>
+            </a>
+            <SiteNav />
+          </header>
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

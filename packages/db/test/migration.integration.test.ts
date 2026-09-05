@@ -2,15 +2,31 @@ import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import Database from 'better-sqlite3';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as health from '../src/health.js';
 import { openSqliteDatabase, type SqliteDatabaseHandle } from '../src/index.js';
 
 const dataRoots: Awaited<ReturnType<typeof createTemporaryDataRoot>>[] = [];
 const handles: SqliteDatabaseHandle[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const handle of handles.splice(0)) handle.close();
   await Promise.all(dataRoots.splice(0).map((root) => root.cleanup()));
+});
+
+it('checks new databases and explicit verification but avoids full scans on ordinary reopen', async () => {
+  const integrity = vi.spyOn(health, 'assertDatabaseIntegrity');
+  const first = await openTestDatabase();
+  expect(integrity).toHaveBeenCalledTimes(1);
+  first.close();
+  const reopened = openSqliteDatabase({ dataRoot: first.dataRoot });
+  handles.push(reopened);
+  expect(integrity).toHaveBeenCalledTimes(1);
+  reopened.close();
+  const checked = openSqliteDatabase({ dataRoot: first.dataRoot, checkIntegrity: true });
+  handles.push(checked);
+  expect(integrity).toHaveBeenCalledTimes(2);
 });
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -55,6 +71,37 @@ async function migrationsBefore(
 }
 
 describe('SQLite migrations and capabilities', () => {
+  it('backfills retry roots and maintains projections for newly inserted retries', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-task-projection-');
+    dataRoots.push(root);
+    const folder = await migrationsBefore(root.path, 'before-projection', 32);
+    const integrity = vi.spyOn(health, 'assertDatabaseIntegrity');
+    const old = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+    const insert = `INSERT INTO tasks
+      (id, task_type, payload_json, status, idempotency_key, retry_of_task_id,
+       max_attempts, available_at, created_at)
+      VALUES (?, 'source.job-detail', ?, 'failed', ?, ?, 3, 0, 0)`;
+    const payload = JSON.stringify({ sourceId: 'source', runId: 'run' });
+    old.client.prepare(insert).run('root', payload, 'root', null);
+    old.client.prepare(insert).run('retry', payload, 'retry', 'root');
+    old.close();
+    const current = openSqliteDatabase({ dataRoot: root.path });
+    expect(integrity).toHaveBeenCalledTimes(2);
+    handles.push(current);
+    current.client.prepare(insert).run('retry-again', payload, 'retry-again', 'retry');
+    expect(
+      current.client
+        .prepare('SELECT source_id, source_run_id, retry_root_task_id FROM tasks ORDER BY id')
+        .all(),
+    ).toEqual(
+      Array.from({ length: 3 }, () => ({
+        source_id: 'source',
+        source_run_id: 'run',
+        retry_root_task_id: 'root',
+      })),
+    );
+  });
+
   it('initializes the compact final schema with constraints, WAL and foreign keys', async () => {
     const handle = await openTestDatabase();
     const tables = handle.client
@@ -151,7 +198,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      32,
+      34,
     );
   });
 

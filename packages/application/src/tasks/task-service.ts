@@ -124,7 +124,9 @@ export class TaskService {
     const token = retryToken.trim();
     if (!token) throw new TypeError('Retry token must not be empty.');
     const handler = this.#registry.get(source.taskType);
-    const payload = handler.payloadSchema.parse(source.payload);
+    const payload = handler.payloadSchema.parse(
+      handler.retryPayload?.(source.payload, source.result) ?? source.payload,
+    );
     const now = this.#dependencies.clock.now();
     const retry: PersistedTaskInput = {
       id: parseId(this.#dependencies.ids.generate(), 'Task'),

@@ -53,34 +53,6 @@
   transform: translateY(0);
 }
 
-.headerFeedback {
-  position: absolute;
-  z-index: 4;
-  top: calc(100% + 2.8rem);
-  right: 0;
-  width: max-content;
-  max-width: min(18rem, 70vw);
-  margin: 0;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  box-shadow: var(--shadow-panel);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.headerSuccess {
-  border-color: #bfd9ce;
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.headerError {
-  border-color: #edc7c2;
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
 .actions {
   display: grid;
   gap: 1rem;
@@ -128,36 +100,6 @@
   min-height: auto;
 }
 
-.feedback {
-  margin: 0;
-  padding: 0.65rem 0.8rem;
-  border-radius: 0.55rem;
-  font-size: 0.85rem;
-  animation: feedbackIn var(--motion-standard) var(--ease-out) both;
-}
-
-.success {
-  background: var(--success-soft);
-  color: var(--success);
-}
-
-.error {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
-@keyframes feedbackIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @keyframes syncSpin {
   to {
     transform: rotate(1turn);
@@ -172,7 +114,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .feedback,
   .syncIconBusy {
     animation: none;
   }

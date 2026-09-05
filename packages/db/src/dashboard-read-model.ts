@@ -243,13 +243,10 @@ export class SqliteDashboardReadModel implements DashboardReadModel {
 
   /** 处理数据库类内部的辅助逻辑。 */
   #getHighlightJobs(): WebDashboardHighlightJob[] {
+    // 1、通过 (job_id, revision_no) 索引定位最新修订，避免为五条精选记录排名全部历史。
     const rows = this.#client
       .prepare(
-        `WITH latest_revisions AS (
-           SELECT id, job_id, row_number() OVER (PARTITION BY job_id ORDER BY revision_no DESC) AS position
-           FROM job_revisions
-         )
-         SELECT
+        `SELECT
            j.id,
            c.name AS company_name,
            j.title,
@@ -260,8 +257,10 @@ export class SqliteDashboardReadModel implements DashboardReadModel {
            j.first_seen_at
          FROM jobs j
          JOIN companies c ON c.id = j.company_id
-         JOIN latest_revisions lr ON lr.job_id = j.id AND lr.position = 1
-         JOIN job_revisions jr ON jr.id = lr.id
+         JOIN job_revisions lr ON lr.id = (
+           SELECT revision.id FROM job_revisions revision
+           WHERE revision.job_id = j.id ORDER BY revision.revision_no DESC LIMIT 1
+         )
          LEFT JOIN profile_versions pv ON pv.is_current = 1
          LEFT JOIN match_results mr ON mr.job_revision_id = lr.id AND mr.profile_version_id = pv.id
          WHERE j.status = 'active'

@@ -199,12 +199,14 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     const paged = filter.page !== undefined && !filter.cursor;
     const requestedPage = filter.page ?? 1;
     const pageSize = filter.pageSize ?? filter.limit;
-    const total = paged
-      ? (this.#client
-          .prepare<unknown[], { readonly total: number }>(`SELECT COUNT(*) AS total ${baseSql}`)
-          .get(...selectParameters, ...innerParameters, ...outerParameters)?.total ?? 0)
-      : undefined;
-    const page =
+    const sharedSearch = paged && Boolean(filter.search);
+    let total =
+      paged && !sharedSearch
+        ? (this.#client
+            .prepare<unknown[], { readonly total: number }>(`SELECT COUNT(*) AS total ${baseSql}`)
+            .get(...selectParameters, ...innerParameters, ...outerParameters)?.total ?? 0)
+        : undefined;
+    let page =
       paged && total !== undefined
         ? Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)))
         : requestedPage;
@@ -215,15 +217,47 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       LIMIT ?${paged ? ' OFFSET ?' : ''}`;
     const limit = pageSize;
     const queryLimit = limit + 1;
-    const rows = this.#client
-      .prepare<unknown[], JobQueryRow>(sql)
-      .all(
-        ...selectParameters,
-        ...innerParameters,
-        ...outerParameters,
-        queryLimit,
-        ...(paged ? [(page - 1) * limit] : []),
-      );
+    let rows = sharedSearch
+      ? []
+      : this.#client
+          .prepare<unknown[], JobQueryRow>(sql)
+          .all(
+            ...selectParameters,
+            ...innerParameters,
+            ...outerParameters,
+            queryLimit,
+            ...(paged ? [(page - 1) * limit] : []),
+          );
+    // 1、关键词匹配只执行一次，物化结果不包含正文；计数和分页扫描轻量结果集。
+    if (sharedSearch) {
+      const result = this.#client
+        .prepare<unknown[], (JobQueryRow & { total: number }) | { id: null; total: number }>(
+          `
+        WITH matched AS MATERIALIZED (
+          SELECT query.*, ${sortExpression} AS sort_value ${baseSql}
+        ), totals AS (SELECT COUNT(*) AS total FROM matched),
+        page_rows AS (
+          SELECT * FROM matched ORDER BY sort_value DESC, id ASC LIMIT ?
+          OFFSET (SELECT MIN(?, MAX(0, (total - 1) / ?)) * ? FROM totals)
+        )
+        SELECT page_rows.*, totals.total FROM totals LEFT JOIN page_rows ON TRUE
+        ORDER BY sort_value DESC, id ASC
+      `,
+        )
+        .all(
+          ...selectParameters,
+          ...innerParameters,
+          ...outerParameters,
+          queryLimit,
+          requestedPage - 1,
+          pageSize,
+          pageSize,
+        );
+      // 2、空集合仍返回计数行；剔除哨兵后沿用原有映射和游标规则。
+      total = result[0]?.total ?? 0;
+      page = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)));
+      rows = result.filter((row) => row.id !== null);
+    }
     const pageRows = rows.slice(0, limit);
     const items: JobListItem[] = pageRows.map((row) => ({
       id: parseId(row.id, 'Job'),

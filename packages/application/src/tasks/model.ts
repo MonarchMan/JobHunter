@@ -65,6 +65,8 @@ export interface TaskHandler<TPayload, TOutput> {
   readonly lateCancellationPolicy?:
     'cancel' | 'complete' | ((output: TOutput) => 'cancel' | 'complete');
   readonly concurrencyKey?: (payload: TPayload) => string | null;
+  /** 根据已保存的部分结果构造恢复输入，返回值仍须通过 payloadSchema。 */
+  readonly retryPayload?: (payload: unknown, result: unknown) => unknown;
   execute(context: TaskHandlerContext, payload: TPayload): Promise<TOutput>;
 }
 
@@ -220,6 +222,7 @@ export interface TaskQueue {
     options?: { readonly allowRequestedCancellation?: boolean },
   ): boolean;
   reschedule(input: {
+    readonly result?: unknown;
     readonly taskId: TaskId;
     readonly workerId: string;
     readonly availableAt: UtcInstant;
@@ -228,6 +231,7 @@ export interface TaskQueue {
     readonly summary: string;
   }): boolean;
   fail(input: {
+    readonly result?: unknown;
     readonly taskId: TaskId;
     readonly workerId: string;
     readonly finishedAt: UtcInstant;

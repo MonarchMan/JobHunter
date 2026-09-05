@@ -10,6 +10,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { SelectField } from '../components/select-field.js';
+import { useToast } from '../components/toast-provider.js';
 import { ResumePolish } from './resume-polish.js';
 import { ResumeTemplateEntry } from './resume-template-entry.js';
 import styles from './resume-editor.module.css';
@@ -614,6 +615,7 @@ export function ResumeEditor({
   versionId,
   profile,
 }: Readonly<{ profileId: string; versionId: string; profile: Draft }>): ReactElement {
+  const { showToastAfterReload } = useToast();
   const [draft, setDraft] = useState<Draft>(() => prepareDraft(profile));
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -695,7 +697,7 @@ export function ResumeEditor({
       if (!response.ok) throw new Error(body.error?.message ?? '结构化简历保存失败。');
       allowUnload.current = true;
       setSaved(true);
-      setFeedback({ kind: 'success', text: '结构化简历已保存为新版本。' });
+      showToastAfterReload('结构化简历已保存为新版本。');
       window.location.reload();
     } catch (error) {
       setFeedback({

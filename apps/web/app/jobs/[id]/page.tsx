@@ -36,6 +36,14 @@ export default async function JobDetailPage({
 }: JobDetailPageProperties): Promise<ReactElement> {
   const [{ id }, query] = await Promise.all([params, searchParams]);
   const profile = firstSearchParameter(query, 'profile');
+  // 1、只接受本地列表地址，返回时恢复筛选分页，不允许任意外部跳转。
+  const returnTo = firstSearchParameter(query, 'returnTo');
+  const returnHref =
+    returnTo === '/jobs' || returnTo?.startsWith('/jobs?')
+      ? returnTo
+      : profile
+        ? `/jobs?profile=${encodeURIComponent(profile)}`
+        : '/jobs';
   const container = await getWebContainer();
   const currentProfileVersionId =
     profile ?? container.services.webProfiles.list()[0]?.currentVersionId ?? undefined;
@@ -48,10 +56,7 @@ export default async function JobDetailPage({
   }
   return (
     <main id="main-content" tabIndex={-1}>
-      <a
-        className={styles.backLink}
-        href={profile ? `/jobs?profile=${encodeURIComponent(profile)}` : '/jobs'}
-      >
+      <a className={styles.backLink} href={returnHref}>
         ← 返回职位列表
       </a>
       <header className={styles.heading}>

@@ -1,0 +1,109 @@
+.viewport {
+  position: fixed;
+  z-index: 1000;
+  top: 1rem;
+  left: 50%;
+  display: grid;
+  width: min(30rem, calc(100vw - 2rem));
+  gap: 0.55rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.7rem;
+  align-items: center;
+  min-height: 3rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-toast);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  pointer-events: auto;
+  animation: toast-in var(--motion-standard) var(--ease-out) both;
+}
+
+.toast[data-state='closing'] {
+  pointer-events: none;
+  animation: toast-out var(--motion-fast) cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+.success {
+  background: var(--health-healthy-soft);
+  color: var(--health-healthy);
+}
+
+.warning {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.symbol {
+  display: grid;
+  width: 1.4rem;
+  height: 1.4rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-weight: 800;
+}
+
+.message {
+  min-width: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.close {
+  width: 2rem;
+  min-width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  font-size: 1.2rem;
+}
+
+.close:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: currentColor;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.6rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(-0.6rem);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

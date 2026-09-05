@@ -6,6 +6,7 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../../src/client/csrf.js';
 import { SelectField } from '../../../components/select-field.js';
+import { useToast } from '../../../components/toast-provider.js';
 import { CommunityExperienceRecord } from '../community-experience-record.js';
 import styles from '../research.module.css';
 
@@ -78,6 +79,7 @@ export function ResearchWorkbench({
   task: ResearchTaskView | null;
 }>): ReactElement {
   const router = useRouter();
+  const { showToast } = useToast();
   const feedbackRef = useRef<HTMLParagraphElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [current, setCurrent] = useState(detail);
@@ -109,9 +111,16 @@ export function ResearchWorkbench({
   }, [router, taskPending]);
 
   const report = (message: string, isError = false): void => {
+    if (!isError) {
+      setFeedback(null);
+      setFeedbackError(false);
+      showToast(message);
+      return;
+    }
+    // 错误保留在工作台内，确保较长的诊断信息不会随 Toast 超时消失。
     setFeedback(message);
-    setFeedbackError(isError);
-    if (isError) queueMicrotask(() => feedbackRef.current?.focus());
+    setFeedbackError(true);
+    queueMicrotask(() => feedbackRef.current?.focus());
   };
 
   const copyAsset = async (kind: 'prompt' | 'schema'): Promise<void> => {

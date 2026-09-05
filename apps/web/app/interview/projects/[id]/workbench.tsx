@@ -9,6 +9,7 @@ import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
 import { mutationHeaders } from '../../../../src/client/csrf.js';
+import { useToast } from '../../../components/toast-provider.js';
 import styles from './workbench.module.css';
 
 export interface DrillTaskView {
@@ -130,6 +131,7 @@ export function DrillWorkbench({
   tasks: Readonly<Record<string, DrillTaskView>>;
 }>): ReactElement {
   const router = useRouter();
+  const { showToast } = useToast();
   const deleteDialog = useRef<HTMLDialogElement>(null);
   const materialInput = useRef<HTMLInputElement>(null);
   const questionAbort = useRef<AbortController | null>(null);
@@ -245,7 +247,7 @@ export function DrillWorkbench({
       );
       // 2、选中新轮次后刷新权威详情，后续问题和覆盖记录都以服务端状态为准。
       setSelectedSessionId(result.sessionId);
-      setFeedback('新一轮拷打已建立，可以生成第一题。');
+      showToast('新一轮拷打已建立，可以生成第一题。');
       router.refresh();
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : '无法开始拷打。');
@@ -283,11 +285,12 @@ export function DrillWorkbench({
         if (materialInput.current) materialInput.current.value = '';
         router.refresh();
       }
-      setFeedback(
-        failures.length === 0
-          ? `已登记 ${String(succeeded)} 份项目资料。`
-          : `已登记 ${String(succeeded)} 份；${failures.join('；')}`,
-      );
+      if (failures.length === 0) {
+        showToast(`已登记 ${String(succeeded)} 份项目资料。`);
+      } else {
+        // 部分失败需要保持可见，便于用户根据文件名逐项处理。
+        setFeedback(`已登记 ${String(succeeded)} 份；${failures.join('；')}`);
+      }
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : '项目资料上传失败。');
     } finally {
@@ -366,16 +369,14 @@ export function DrillWorkbench({
       buffer += decoder.decode();
       completed = consumeMessage(buffer) || completed;
       if (!completed) throw new Error('问题生成连接提前结束，请重新生成。');
-      setFeedback('问题已生成。');
+      showToast('问题已生成。');
       router.refresh();
     } catch (error) {
-      setFeedback(
-        error instanceof DOMException && error.name === 'AbortError'
-          ? '已取消问题生成，可以重新生成。'
-          : error instanceof Error
-            ? error.message
-            : '无法生成下一题。',
-      );
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        showToast('已取消问题生成，可以重新生成。', 'warning');
+      } else {
+        setFeedback(error instanceof Error ? error.message : '无法生成下一题。');
+      }
     } finally {
       if (questionAbort.current === controller) questionAbort.current = null;
       setQuestionStage(null);
@@ -396,7 +397,7 @@ export function DrillWorkbench({
         `/api/interview/turns/${currentTurn.id}/answers`,
         { sessionId: session.id, answer, idempotencyToken: answerToken },
       );
-      setFeedback(`回答已原样保存，分析任务已创建：${result.taskId}`);
+      showToast(`回答已原样保存，分析任务已创建：${result.taskId}`);
       setAnswer('');
       setAnswerToken(crypto.randomUUID());
       router.refresh();
@@ -408,7 +409,7 @@ export function DrillWorkbench({
   const simpleAction = async (key: string, url: string, message: string): Promise<void> => {
     try {
       await mutate(key, url);
-      setFeedback(message);
+      showToast(message);
       router.refresh();
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : '操作失败，请稍后重试。');
@@ -419,7 +420,7 @@ export function DrillWorkbench({
     if (!session) return;
     try {
       await mutate('state', `/api/interview/sessions/${session.id}/state`, { action });
-      setFeedback(
+      showToast(
         action === 'pause' ? '会话已暂停。' : action === 'resume' ? '会话已继续。' : '会话已完成。',
       );
       router.refresh();
@@ -464,7 +465,7 @@ export function DrillWorkbench({
       );
       deleteDialog.current?.close();
       if (result.pendingArtifactPurgeId) {
-        setFeedback('档案已删除，投影文件仍待后台清理。');
+        showToast('档案已删除，投影文件仍待后台清理。', 'warning');
       }
       router.push('/interview');
       router.refresh();

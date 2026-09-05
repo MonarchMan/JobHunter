@@ -34,4 +34,7 @@ export * from './repositories/task-repository.js';
 export * from './schema/index.js';
 export * from './seeding/source-catalog.js';
 export * from './settings.js';
+export * from './maintenance-gate.js';
+export * from './busy-error.js';
+export * from './sqlite-maintenance-repository.js';
 export * from './unit-of-work.js';

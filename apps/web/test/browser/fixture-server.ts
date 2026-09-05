@@ -32,6 +32,8 @@ const ids = {
   profileVersion: '018f0000-0000-7000-8000-000000000602',
   interviewProfile: '018f0000-0000-7000-8000-000000000611',
   interviewProfileVersion: '018f0000-0000-7000-8000-000000000612',
+  studioProfile: '018f0000-0000-7000-8000-000000000621',
+  studioProfileVersion: '018f0000-0000-7000-8000-000000000622',
   deepSnapshot: '018f0000-0000-7000-8000-000000000901',
   deepDossier: '018f0000-0000-7000-8000-000000000902',
   deepMaterialFile: '018f0000-0000-7000-8000-000000000903',
@@ -340,6 +342,28 @@ async function seedFixture(dataRoot: string): Promise<void> {
         '9'.repeat(64),
       );
 
+    // 简历制作使用独立画像；创建时间排在既有画像之后，保持默认画像不变。
+    database.client
+      .prepare(
+        `INSERT INTO candidate_profiles (id, name, created_at, updated_at)
+         VALUES (?, '简历制作专用画像', 3, 3)`,
+      )
+      .run(ids.studioProfile);
+    database.client
+      .prepare(
+        `INSERT INTO profile_versions
+         (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+          content_hash, is_current, created_at)
+         VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 3)`,
+      )
+      .run(
+        ids.studioProfileVersion,
+        ids.studioProfile,
+        JSON.stringify(profile),
+        JSON.stringify(profile),
+        createHash('sha256').update(JSON.stringify(profile)).digest('hex'),
+      );
+
     const deepProject = interviewProfile.projects[1];
     if (!deepProject) throw new Error('Deep drill browser fixture project is missing.');
     const materialText = [
@@ -529,6 +553,11 @@ async function seedFixture(dataRoot: string): Promise<void> {
           'fixture-pending-sync', 0, 3, 1, 2)`,
       )
       .run(ids.task);
+    // 1、维护记录仅用于只读审计展示，不应提供普通队列的重试/取消入口。
+    database.client.exec(`INSERT INTO tasks
+      (id,task_type,payload_json,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
+      VALUES('018f0000-0000-7000-8000-000000000709','maintenance.sqlite','{}','failed',
+      'fixture-maintenance-audit',1,1,1,3)`);
     database.client
       .prepare(
         `INSERT INTO agent_runs

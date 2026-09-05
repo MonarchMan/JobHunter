@@ -100,6 +100,15 @@ export class SqliteCleanupRepository implements CleanupRepository {
             break;
         }
       }
+      // 2、大量删除后请求空间补查；只登记检查，不改变清理授权与数据保留策略。
+      if (candidates.length >= 1_000) {
+        this.#client
+          .prepare(
+            `UPDATE database_maintenance SET next_check_at = 0,
+          last_daily_at = NULL WHERE id = 1`,
+          )
+          .run();
+      }
     })();
   }
 

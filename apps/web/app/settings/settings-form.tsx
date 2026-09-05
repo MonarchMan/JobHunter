@@ -4,6 +4,8 @@ import type { SystemSettings } from '@jobhunter/application/web';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import { SelectField } from '../components/select-field.js';
+import { useToast } from '../components/toast-provider.js';
 import styles from './settings.module.css';
 
 interface SettingsFormProperties {
@@ -17,29 +19,42 @@ interface ApiFailure {
 export function SettingsForm({ settings }: SettingsFormProperties): ReactElement {
   const [enabled, setEnabled] = useState(settings.jobUnderstanding.enabled);
   const [sourceSyncChannel, setSourceSyncChannel] = useState(settings.sourceSync.channel);
-  const [feedback, setFeedback] = useState<{ kind: 'success' | 'error'; text: string } | null>(
-    null,
+  const [syncEnabled, setSyncEnabled] = useState(settings.sourceAutomation.enabled);
+  const [syncFrequency, setSyncFrequency] = useState(settings.sourceAutomation.frequency);
+  const [syncTime, setSyncTime] = useState(settings.sourceAutomation.time);
+  const [scoreEnabled, setScoreEnabled] = useState(settings.matchingAutomation.scoreEnabled);
+  const [adviceEnabled, setAdviceEnabled] = useState(settings.matchingAutomation.adviceEnabled);
+  const [defaultSort, setDefaultSort] = useState(settings.jobListPreferences.defaultSort);
+  const [rememberFilters, setRememberFilters] = useState(
+    settings.jobListPreferences.rememberFilters,
   );
+  const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: SyntheticEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setBusy(true);
-    setFeedback(null);
     try {
       const response = await fetch('/api/settings', {
         method: 'PATCH',
         headers: await mutationHeaders(),
-        body: JSON.stringify({ jobUnderstandingEnabled: enabled, sourceSyncChannel }),
+        body: JSON.stringify({
+          jobUnderstandingEnabled: enabled,
+          sourceSyncChannel,
+          sourceAutomationEnabled: syncEnabled,
+          sourceAutomationFrequency: syncFrequency,
+          sourceAutomationTime: syncTime,
+          automaticScoringEnabled: scoreEnabled,
+          automaticAdviceEnabled: adviceEnabled,
+          defaultJobSort: defaultSort,
+          rememberJobFilters: rememberFilters,
+        }),
       });
       const body = (await response.json()) as ApiFailure;
       if (!response.ok) throw new Error(body.error?.message ?? '设置保存失败。');
-      setFeedback({ kind: 'success', text: '设置已保存。' });
+      showToast('设置已保存。');
     } catch (error) {
-      setFeedback({
-        kind: 'error',
-        text: error instanceof Error ? error.message : '设置保存失败。',
-      });
+      showToast(error instanceof Error ? error.message : '设置保存失败。', 'error');
     } finally {
       setBusy(false);
     }
@@ -84,6 +99,114 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
           ))}
         </div>
       </fieldset>
+      <fieldset className={styles.settingGroup}>
+        <legend>自动同步</legend>
+        <label className={styles.settingsToggle}>
+          <input
+            type="checkbox"
+            checked={syncEnabled}
+            onChange={(event) => {
+              setSyncEnabled(event.target.checked);
+            }}
+          />
+          <span>
+            <strong>定时同步职位</strong>
+            <small>{syncEnabled ? '已开启' : '已关闭'}</small>
+          </span>
+        </label>
+        <div className={styles.compactFields}>
+          <label>
+            同步频率
+            <SelectField
+              name="sync-frequency"
+              label="同步频率"
+              value={syncFrequency}
+              disabled={!syncEnabled}
+              onValueChange={(value) => {
+                setSyncFrequency(value as 'daily' | 'weekly');
+              }}
+              options={[
+                { value: 'daily', label: '每天' },
+                { value: 'weekly', label: '每周一' },
+              ]}
+            />
+          </label>
+          <label>
+            执行时间
+            <input
+              type="time"
+              value={syncTime}
+              disabled={!syncEnabled}
+              onChange={(event) => {
+                setSyncTime(event.target.value);
+              }}
+            />
+          </label>
+        </div>
+      </fieldset>
+      <fieldset className={styles.settingGroup}>
+        <legend>自动匹配</legend>
+        <label className={styles.settingsToggle}>
+          <input
+            type="checkbox"
+            checked={scoreEnabled}
+            onChange={(event) => {
+              setScoreEnabled(event.target.checked);
+              if (!event.target.checked) setAdviceEnabled(false);
+            }}
+          />
+          <span>
+            <strong>同步后自动评分</strong>
+            <small>为新职位计算与当前画像的匹配度</small>
+          </span>
+        </label>
+        <label className={styles.settingsToggle}>
+          <input
+            type="checkbox"
+            checked={adviceEnabled}
+            disabled={!scoreEnabled}
+            onChange={(event) => {
+              setAdviceEnabled(event.target.checked);
+            }}
+          />
+          <span>
+            <strong>自动生成求职建议</strong>
+            <small>需要已经配置 AI 模型</small>
+          </span>
+        </label>
+      </fieldset>
+      <fieldset className={styles.settingGroup}>
+        <legend>默认职位视图</legend>
+        <label className={styles.compactSelect}>
+          默认排序
+          <SelectField
+            name="default-job-sort"
+            label="默认职位排序"
+            value={defaultSort}
+            onValueChange={(value) => {
+              setDefaultSort(value as typeof defaultSort);
+            }}
+            options={[
+              { value: 'updated_desc', label: '最近更新' },
+              { value: 'published_desc', label: '最近发布' },
+              { value: 'score_desc', label: '匹配分数' },
+            ]}
+          />
+        </label>
+        <label className={styles.settingsToggle}>
+          <input
+            type="checkbox"
+            checked={rememberFilters}
+            onChange={(event) => {
+              setRememberFilters(event.target.checked);
+            }}
+          />
+          <span>
+            <strong>记住筛选条件</strong>
+            <small>下次打开职位页时恢复上次筛选</small>
+          </span>
+        </label>
+      </fieldset>
       <label className={styles.settingsToggle}>
         <input
           type="checkbox"
@@ -102,14 +225,6 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
           {busy ? '保存中…' : '保存设置'}
         </button>
       </div>
-      {feedback ? (
-        <p
-          className={`form-feedback ${feedback.kind}`}
-          role={feedback.kind === 'error' ? 'alert' : 'status'}
-        >
-          {feedback.text}
-        </p>
-      ) : null}
     </form>
   );
 }

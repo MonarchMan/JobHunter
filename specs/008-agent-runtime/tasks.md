@@ -1,6 +1,9 @@
 # 008 轻量 Agent 运行时任务
 
 > 状态：Implemented
+
+- [x] **AGT-T012** 增加成功提交前业务校验、坏缓存失效与共享修复预算测试。（AGT-004,009）
+
 > 显式覆盖：AGT-001, AGT-002, AGT-003, AGT-004, AGT-005, AGT-006, AGT-007, AGT-008, AGT-009, AGT-010, AGT-011, AGT-012, AGT-013, AGT-Q01, AGT-Q02, AGT-Q03, AGT-Q04
 
 - [x] **AGT-T001** 定义 ModelClient DTO、错误分类、FakeModelClient 和契约测试。（AGT-001, AGT-Q03）

@@ -32,7 +32,9 @@ test.describe('个人面经导入', () => {
     const answer = page.getByLabel('当时的回答（可留空）');
     await answer.fill('使用内容哈希、短事务和数据库唯一约束。');
     await page.getByRole('button', { name: '保存草稿' }).click();
-    await expect(page.getByRole('status')).toContainText('草稿已保存');
+    await expect(
+      page.getByLabel('通知').getByRole('status').filter({ hasText: '草稿已保存' }),
+    ).toBeVisible();
     await page.getByRole('button', { name: '接受为历史面经' }).click();
 
     await expect(page.getByRole('heading', { name: '已进入历史面经' })).toBeVisible();

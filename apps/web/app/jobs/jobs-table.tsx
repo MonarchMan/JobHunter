@@ -3,6 +3,8 @@
 import type { WebJobListItem } from '@jobhunter/application/web';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation.js';
+import { openLinkedRow } from '../components/linked-row.js';
 import { JobScoreAction } from '../components/job-score-action.js';
 import { JobStatus } from '../components/job-status.js';
 import { Icon } from '../components/ui-icon.js';
@@ -18,6 +20,13 @@ export function JobsTable({
   profileVersionId: string | undefined;
 }>): ReactElement {
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const search = useSearchParams().toString();
+  /** 保留当前列表条件和评分画像，返回时不丢失用户的筛选上下文。 */
+  const detailHref = (jobId: string): string => {
+    const query = new URLSearchParams({ returnTo: search ? `/jobs?${search}` : '/jobs' });
+    if (profileVersionId) query.set('profile', profileVersionId);
+    return `/jobs/${encodeURIComponent(jobId)}?${query.toString()}`;
+  };
   const allSelected = jobs.length > 0 && jobs.every((job) => selected.has(job.id));
   const selectedIds = jobs.filter((job) => selected.has(job.id)).map((job) => job.id);
 
@@ -67,8 +76,14 @@ export function JobsTable({
           </thead>
           <tbody>
             {jobs.map((job) => (
-              <tr key={job.id} className={job.status === 'stale' ? styles.staleRow : undefined}>
-                <td className={styles.selectionCell}>
+              <tr
+                key={job.id}
+                className={[styles.linkedRow, job.status === 'stale' ? styles.staleRow : ''].join(
+                  ' ',
+                )}
+                onClick={openLinkedRow}
+              >
+                <td className={styles.selectionCell} data-row-navigation-ignore>
                   <input
                     type="checkbox"
                     checked={selected.has(job.id)}
@@ -108,14 +123,24 @@ export function JobsTable({
                     className="location-truncate"
                   />
                 </td>
-                <td>{job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`}</td>
+                <td>
+                  <a
+                    className={styles.detailLink}
+                    href={detailHref(job.id)}
+                    data-row-detail-link
+                    aria-label={`查看职位详情：${job.title}`}
+                  >
+                    {job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`}
+                    <small>查看详情</small>
+                  </a>
+                </td>
                 <td>
                   <time dateTime={job.updatedAt}>
                     {new Intl.DateTimeFormat('zh-CN').format(new Date(job.updatedAt))}
                   </time>
                 </td>
                 <td>
-                  <div className={styles.rowActions}>
+                  <div className={styles.rowActions} data-row-navigation-ignore>
                     <a
                       className={['button-secondary', styles.applyLink].filter(Boolean).join(' ')}
                       href={job.applyUrl}
@@ -135,7 +160,11 @@ export function JobsTable({
       </div>
       <div className={styles.cards} aria-label="可投递职位卡片列表">
         {jobs.map((job) => (
-          <article className={styles.card} key={job.id}>
+          <article
+            className={[styles.card, styles.linkedRow].join(' ')}
+            key={job.id}
+            onClick={openLinkedRow}
+          >
             <div className={styles.cardHeading}>
               <label className={styles.cardSelection}>
                 <input
@@ -161,10 +190,17 @@ export function JobsTable({
               {job.companyName} · {job.locations.join('、') || '地点未注明'}
             </p>
             <small>
-              {job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`} · 更新于{' '}
-              {new Intl.DateTimeFormat('zh-CN').format(new Date(job.updatedAt))}
+              <a
+                className={styles.detailLink}
+                href={detailHref(job.id)}
+                data-row-detail-link
+                aria-label={`查看职位详情：${job.title}`}
+              >
+                {job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`} · 查看详情
+              </a>{' '}
+              · 更新于 {new Intl.DateTimeFormat('zh-CN').format(new Date(job.updatedAt))}
             </small>
-            <div className={styles.rowActions}>
+            <div className={styles.rowActions} data-row-navigation-ignore>
               <a
                 className={['button-primary', styles.applyLink].filter(Boolean).join(' ')}
                 href={job.applyUrl}

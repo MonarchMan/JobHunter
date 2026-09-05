@@ -599,6 +599,22 @@ export const webSettingsSchema = z
         channel: z.enum(['intern', 'campus', 'social']),
       })
       .strict(),
+    sourceAutomation: z
+      .object({
+        enabled: z.boolean(),
+        frequency: z.enum(['daily', 'weekly']),
+        time: z.string(),
+      })
+      .strict(),
+    matchingAutomation: z
+      .object({ scoreEnabled: z.boolean(), adviceEnabled: z.boolean() })
+      .strict(),
+    jobListPreferences: z
+      .object({
+        defaultSort: z.enum(['updated_desc', 'published_desc', 'score_desc']),
+        rememberFilters: z.boolean(),
+      })
+      .strict(),
   })
   .strict();
 
@@ -610,6 +626,13 @@ export const webSettingsMutationSchema = z
   .object({
     jobUnderstandingEnabled: z.boolean(),
     sourceSyncChannel: z.enum(['intern', 'campus', 'social']),
+    sourceAutomationEnabled: z.boolean(),
+    sourceAutomationFrequency: z.enum(['daily', 'weekly']),
+    sourceAutomationTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    automaticScoringEnabled: z.boolean(),
+    automaticAdviceEnabled: z.boolean(),
+    defaultJobSort: z.enum(['updated_desc', 'published_desc', 'score_desc']),
+    rememberJobFilters: z.boolean(),
   })
   .strict();
 

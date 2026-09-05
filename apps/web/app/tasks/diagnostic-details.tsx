@@ -288,7 +288,9 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                 <p>{task.errorSummary ?? '系统未记录可展示的失败原因。'}</p>
               </section>
             ) : null}
-            {task.kind === 'task' ? <TaskActions taskId={task.id} status={task.status} /> : null}
+            {task.kind === 'task' ? (
+              <TaskActions taskId={task.id} status={task.status} taskType={task.taskType} />
+            ) : null}
           </div>
         </DialogShell>
       ) : null}

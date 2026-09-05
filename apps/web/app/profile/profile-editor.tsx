@@ -5,6 +5,7 @@ import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { SelectField } from '../components/select-field.js';
+import { useToast } from '../components/toast-provider.js';
 import styles from './profile-editor.module.css';
 
 interface ApiFailure {
@@ -19,6 +20,7 @@ function commaList(value: string): string[] {
 }
 
 export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>): ReactElement {
+  const { showToastAfterReload } = useToast();
   const preferences = detail.current.effective.preferences;
   const [pointer, setPointer] = useState('/preferences/locations');
   const [jsonValue, setJsonValue] = useState(JSON.stringify(preferences.locations));
@@ -45,7 +47,7 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
       });
       const body = (await response.json()) as ApiFailure;
       if (!response.ok) throw new Error(body.error?.message ?? '个人资料修改失败。');
-      setFeedback({ kind: 'success', text: '已创建新的个人资料版本，正在刷新。' });
+      showToastAfterReload('已创建新的个人资料版本。');
       window.location.reload();
     } catch (error) {
       setFeedback({

@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { decideJobMerge, parseId, utcInstant, type NormalizedJob } from '@jobhunter/domain';
 import { createTemporaryDataRoot, makeNormalizedJob } from '@jobhunter/testkit';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   openSqliteDatabase,
   PersistenceError,
@@ -322,6 +322,44 @@ describe('SqliteJobQueryRepository', () => {
     });
     expect(filtered.items.map((job) => job.id)).toEqual(['018f0000-0000-7000-8000-000000000040']);
 
+    const prepare = vi.spyOn(handle.client, 'prepare');
+    const searched = repository.query({ search: '工程师', page: 1, pageSize: 1 });
+    expect(prepare).toHaveBeenCalledTimes(1);
+    prepare.mockRestore();
+    expect(searched).toMatchObject({ total: 2, page: 1, pageSize: 1 });
+    expect(searched.nextCursor).not.toBeNull();
+    if (!searched.nextCursor) throw new Error('Expected a search cursor.');
+    expect(
+      repository.query({ search: '工程师', cursor: searched.nextCursor, limit: 1 }).items[0]?.id,
+    ).toBe('018f0000-0000-7000-8000-000000000041');
+    expect(repository.query({ search: '工程师', page: 1, sort: 'published_desc' }).items).toEqual(
+      repository.query({ search: '工程师', sort: 'published_desc' }).items,
+    );
+    expect(repository.query({ search: '工程师', page: 99, pageSize: 1 })).toMatchObject({
+      total: 2,
+      page: 2,
+      items: [{ id: '018f0000-0000-7000-8000-000000000041' }],
+      nextCursor: null,
+    });
+    for (const search of ['不存在', '%', '_', '!']) {
+      expect(repository.query({ search, page: 99, pageSize: 1 })).toEqual({
+        total: 0,
+        page: 1,
+        pageSize: 1,
+        items: [],
+        nextCursor: null,
+      });
+    }
+    expect(
+      repository.query({
+        search: '大模型',
+        page: 1,
+        statuses: ['active'],
+        locations: ['北京'],
+        jobFamilies: ['研发'],
+      }).items,
+    ).toEqual(filtered.items);
+
     const firstPage = repository.query({ limit: 1 });
     expect(firstPage.items[0]?.id).toBe('018f0000-0000-7000-8000-000000000040');
     expect(firstPage.nextCursor).not.toBeNull();
@@ -392,5 +430,17 @@ describe('SqliteJobQueryRepository', () => {
     });
     expect(page.items).toHaveLength(1);
     expect(page.items[0]?.score).toBe(88);
+    const search = page.items[0]?.title;
+    if (!search) throw new Error('Expected a scored job.');
+    expect(
+      repository.query({
+        search,
+        page: 99,
+        pageSize: 1,
+        minimumScore: 80,
+        profileVersionId: parseId('018f0000-0000-7000-8000-000000000054', 'ProfileVersion'),
+        sort: 'score_desc',
+      }),
+    ).toMatchObject({ total: 1, page: 1, items: page.items });
   });
 });

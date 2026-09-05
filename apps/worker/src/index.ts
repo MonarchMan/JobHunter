@@ -46,6 +46,7 @@ import { AgentRunner, ModelClientError, type ModelClient } from '@jobhunter/agen
 import {
   defaultMatchRulesetId,
   openSqliteDatabase,
+  isSqliteBusyError,
   SqliteArtifactStore,
   DataRootCleanupFileStore,
   SqliteAgentRunStore,
@@ -90,6 +91,7 @@ import {
   CodexLocalResearchExecutor,
 } from './codex-research-executor.js';
 import { PlaywrightResumePdfRenderer } from './resume-pdf-renderer.js';
+import { createSqliteMaintenanceTick } from './sqlite-maintenance.js';
 
 export { createPlaywrightSourcePageClient } from './browser-source.js';
 
@@ -281,6 +283,10 @@ export function createProductionWorkerApplication(input: {
   const adapters = new AdapterRegistry();
   registerFirstPartyAdapters(adapters);
   const profileRepository = new SqliteCandidateProfileRepository(database.client);
+  const settings = new SystemSettingsService({
+    repository: new SqliteSettingsStore(database.client),
+    clock,
+  });
   const uow = new SqliteUnitOfWork(database.client);
   const networkSemaphore = new AsyncSemaphore(input.maxConcurrentNetworkTasks ?? 4);
   const sourceRateLimit = new TokenBucketSourceRateLimitGate(firstPartyRateLimits());
@@ -316,6 +322,14 @@ export function createProductionWorkerApplication(input: {
     clock,
     ids,
     jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
+    automaticMatching: {
+      settings: () => settings.get().matchingAutomation,
+      currentProfileVersionIds: () =>
+        profileRepository.listProfiles().flatMap((profile) => {
+          const current = profileRepository.getCurrentVersion(profile.id);
+          return current ? [current.id] : [];
+        }),
+    },
     options: { normalizerVersion: 'normalize-v1' },
   });
   const registry = new HandlerRegistry();
@@ -526,23 +540,25 @@ export function createProductionWorkerApplication(input: {
     cronExpression: '15 * * * *',
     timezone: 'Asia/Shanghai',
   });
-  const settings = new SystemSettingsService({
-    repository: new SqliteSettingsStore(database.client),
-    clock,
-  });
   settings.applySourceSyncChannelSelection();
   new SourceScheduleReconciliationService({
     sources: new SqliteSourceManagementRepository(database.client),
     schedules: scheduleService,
     jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
     activeChannel: () => settings.get().sourceSync.channel,
+    automation: () => settings.get().sourceAutomation,
   }).reconcile();
+  const maintenanceAbort = new AbortController();
+  // 1、初始化完成后，同步锁等待仅保留短窗口，运行期竞争由引擎异步退避处理。
+  database.client.pragma('busy_timeout = 100');
   const engine = new WorkerEngine({
     queue,
     registry,
     clock,
     retryPolicy: new RetryPolicy(systemRandom),
     scheduleService,
+    periodicWork: createSqliteMaintenanceTick(database, input.logger, maintenanceAbort.signal),
+    isQueueBusy: isSqliteBusyError,
     options: {
       workerId: input.workerId ?? `worker-${process.pid.toString()}`,
       emptyPollMinimumMs: input.pollIntervalMs ?? 1_000,
@@ -563,6 +579,7 @@ export function createProductionWorkerApplication(input: {
     async close(): Promise<void> {
       if (closed) return;
       closed = true;
+      maintenanceAbort.abort();
       if (runtimeMetrics) clearInterval(runtimeMetrics);
       eventLoopDelay?.disable();
       await engine.shutdown();

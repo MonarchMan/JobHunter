@@ -485,6 +485,7 @@ export async function restoreBackup(
       dataRoot: temporary,
       databaseFileName: manifest.database.fileName,
       runMigrations: false,
+      checkIntegrity: true,
     });
     verification.close();
 

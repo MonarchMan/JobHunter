@@ -2,6 +2,8 @@
 
 > 状态：Implemented
 
+建议 Agent v2 使用确定性去重证据目录和 ID 输出，持久化 MatchAdvice 继续使用既有 kind/value 结构。Runner 调用定义中的纯业务校验器后才能提交成功；缓存命中同样校验。手动评分失败携带已完成评分的部分结果，队列保存至 result_json，处理器定义重试 payload 以仅恢复建议阶段；不引入新的任务状态。
+
 实现遵循 [Agent 与匹配设计](../../docs/arch/agent-and-matching.md)。
 
 ## 模块

@@ -20,6 +20,7 @@ import {
   type UtcInstant,
 } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
+import { isSqliteMaintenanceActive } from '../maintenance-gate.js';
 
 /** 数据库查询结果对应的行结构。 */
 interface TaskRow {
@@ -364,6 +365,8 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly recovered: number;
     readonly exhausted: number;
   } {
+    // 1、维护进程持有写保护时暂缓租约恢复，避免空闲维护被普通轮询写入打断。
+    if (isSqliteMaintenanceActive(this.#client)) return { recovered: 0, exhausted: 0 };
     this.#client
       .prepare(
         `UPDATE tasks SET status = 'cancelled', finished_at = ?, lease_owner = NULL,
@@ -397,7 +400,14 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly recovered: number;
     readonly exhausted: number;
   } {
-    return this.#recoveryTransaction(now);
+    // 1、先读维护标记，避免 VACUUM 持有写锁时阻塞主 Worker；事务内仍再次校验。
+    if (isSqliteMaintenanceActive(this.#client)) return { recovered: 0, exhausted: 0 };
+    try {
+      return this.#recoveryTransaction(now);
+    } catch (error) {
+      if (isSqliteMaintenanceActive(this.#client)) return { recovered: 0, exhausted: 0 };
+      throw error;
+    }
   }
 
   /** 处理数据库类内部的辅助逻辑。 */
@@ -407,6 +417,8 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly now: UtcInstant;
     readonly leaseDurationMsFor: (taskType: string) => number;
   }): TaskRecord | null {
+    // 1、维护保护与领取位于同一写事务，防止空闲检查后又领取新任务。
+    if (isSqliteMaintenanceActive(this.#client)) return null;
     this.#recoverExpiredInside(input.now);
     const candidate = this.#client
       .prepare(
@@ -441,7 +453,14 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly now: UtcInstant;
     readonly leaseDurationMsFor: (taskType: string) => number;
   }): TaskRecord | null {
-    return this.#claimTransaction(input);
+    // 1、维护期间直接暂停领取；再次检查覆盖读标记与获取写锁之间的竞态。
+    if (isSqliteMaintenanceActive(this.#client)) return null;
+    try {
+      return this.#claimTransaction(input);
+    } catch (error) {
+      if (isSqliteMaintenanceActive(this.#client)) return null;
+      throw error;
+    }
   }
 
   /** 执行数据库组件对外暴露的操作。 */
@@ -499,6 +518,7 @@ export class SqliteTaskRepository implements TaskQueue {
 
   /** 执行数据库组件对外暴露的操作。 */
   public reschedule(input: {
+    readonly result?: unknown;
     readonly taskId: TaskId;
     readonly workerId: string;
     readonly availableAt: UtcInstant;
@@ -511,13 +531,14 @@ export class SqliteTaskRepository implements TaskQueue {
         .prepare(
           `UPDATE tasks SET status = 'pending', available_at = ?, lease_owner = NULL,
              lease_expires_at = NULL, last_heartbeat_at = NULL,
-             error_category = ?, error_summary = ?
+             error_category = ?, error_summary = ?, result_json = COALESCE(?, result_json)
            WHERE id = ? AND status = 'running' AND lease_owner = ? AND lease_expires_at > ?`,
         )
         .run(
           input.availableAt,
           input.category,
           input.summary,
+          input.result === undefined ? null : canonicalJson(input.result),
           input.taskId,
           input.workerId,
           input.occurredAt,
@@ -527,6 +548,7 @@ export class SqliteTaskRepository implements TaskQueue {
 
   /** 执行数据库组件对外暴露的操作。 */
   public fail(input: {
+    readonly result?: unknown;
     readonly taskId: TaskId;
     readonly workerId: string;
     readonly finishedAt: UtcInstant;
@@ -538,13 +560,14 @@ export class SqliteTaskRepository implements TaskQueue {
         .prepare(
           `UPDATE tasks SET status = 'failed', finished_at = ?, lease_owner = NULL,
              lease_expires_at = NULL, last_heartbeat_at = NULL,
-             error_category = ?, error_summary = ?
+             error_category = ?, error_summary = ?, result_json = COALESCE(?, result_json)
            WHERE id = ? AND status = 'running' AND lease_owner = ? AND lease_expires_at > ?`,
         )
         .run(
           input.finishedAt,
           input.category,
           input.summary,
+          input.result === undefined ? null : canonicalJson(input.result),
           input.taskId,
           input.workerId,
           input.finishedAt,
@@ -659,6 +682,8 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly task: PersistedTaskInput;
     readonly now: UtcInstant;
   }): EnqueueTaskResult | null {
+    // 1、维护期间保留到期调度，结束后按原错过周期策略只补一次。
+    if (isSqliteMaintenanceActive(this.#client)) return null;
     const schedule = this.#client
       .prepare('SELECT next_run_at FROM schedules WHERE id = ? AND enabled = 1')
       .get(input.scheduleId) as { readonly next_run_at: number } | undefined;
@@ -694,6 +719,13 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly task: PersistedTaskInput;
     readonly now: UtcInstant;
   }): EnqueueTaskResult | null {
-    return this.#scheduleTransaction(input);
+    // 1、维护期间保留调度游标，下次循环再提交本次 occurrence。
+    if (isSqliteMaintenanceActive(this.#client)) return null;
+    try {
+      return this.#scheduleTransaction(input);
+    } catch (error) {
+      if (isSqliteMaintenanceActive(this.#client)) return null;
+      throw error;
+    }
   }
 }

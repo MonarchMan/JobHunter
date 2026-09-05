@@ -434,7 +434,10 @@ describe('matching persistence pipeline', () => {
       new ModelClientError('temporary', 'provider unavailable'),
       {
         kind: 'output',
-        output: adviceOutput,
+        output: {
+          ...adviceOutput,
+          highlights: [{ ...adviceOutput.highlights[0], references: ['ref-1'] }],
+        },
         usage: { inputTokens: 80, outputTokens: 40, estimatedCostMicros: 20 },
       },
     ]);

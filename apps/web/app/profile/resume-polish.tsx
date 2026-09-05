@@ -6,6 +6,7 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './resume-polish.module.css';
+import { useToast } from '../components/toast-provider.js';
 
 interface AcceptedResponse {
   readonly data?: {
@@ -47,7 +48,7 @@ export function ResumePolish({
   const abortReference = useRef<AbortController | null>(null);
   const [sections, setSections] = useState<ResumePolishSection[]>([]);
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const { showToast } = useToast();
   const [error, setError] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<StatusResponse['data']>();
 
@@ -81,7 +82,7 @@ export function ResumePolish({
         const status = data?.status;
         if (data?.status === 'succeeded' && data.suggestion) {
           setSuggestion(data);
-          setFeedback('AI 润色建议已生成，请预览后决定是否应用到草稿。');
+          showToast('AI 润色建议已生成，请预览后决定是否应用到草稿。');
           setBusy(false);
           return;
         }
@@ -91,16 +92,15 @@ export function ResumePolish({
               ? 'AI 润色任务已取消，可重新生成。'
               : (data?.errorSummary ?? 'AI 润色失败，请检查模型配置后重试。'),
           );
-          setFeedback(null);
           setBusy(false);
           return;
         }
       }
-      setFeedback('任务仍在后台运行，可稍后返回本页查看。');
+      showToast('润色任务仍在后台运行，可稍后返回本页查看。', 'warning');
       setBusy(false);
     } catch {
       if (controller.signal.aborted) return;
-      setFeedback('任务已创建，但自动刷新暂时不可用，请稍后重试。');
+      showToast('润色任务已创建，但自动刷新暂时不可用。', 'warning');
       setBusy(false);
     }
   };
@@ -124,7 +124,6 @@ export function ResumePolish({
     }
     setBusy(true);
     setError(null);
-    setFeedback('正在创建 AI 润色任务…');
     setSuggestion(undefined);
     try {
       const response = await fetch('/api/profile/polish', {
@@ -141,11 +140,10 @@ export function ResumePolish({
       if (!response.ok || !body.data) {
         throw new Error(body.error?.message ?? 'AI 润色任务创建失败。');
       }
-      setFeedback(`AI 润色任务已创建：${body.data.task.taskId}`);
+      showToast('AI 润色任务已创建。');
       void track(body.data.task.statusUrl);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'AI 润色任务创建失败。');
-      setFeedback(null);
       setBusy(false);
     }
   };
@@ -204,11 +202,6 @@ export function ResumePolish({
           {error}
         </p>
       ) : null}
-      {feedback ? (
-        <p className="form-feedback success" role="status">
-          {feedback}
-        </p>
-      ) : null}
       {readySuggestion ? (
         <div className={styles.suggestion}>
           <details open>
@@ -242,7 +235,7 @@ export function ResumePolish({
             onClick={() => {
               onApply(readySuggestion.result, readySuggestion.sections);
               setSuggestion(undefined);
-              setFeedback('润色建议已应用到草稿，请检查后保存简历。');
+              showToast('润色建议已应用到草稿，请检查后保存简历。');
             }}
           >
             应用到草稿

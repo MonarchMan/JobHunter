@@ -51,6 +51,8 @@ export interface ToolCallRecord {
 export interface AgentRunStore {
   get(id: string): AgentRunRecord | null;
   findSucceeded(cacheKey: string): AgentRunRecord | null;
+  /** 将校验失败的成功缓存失效，保留输出和用量作为审计。 */
+  invalidateSucceeded(id: string): void;
   createRunning(record: AgentRunRecord): void;
   completeSucceeded(input: {
     readonly id: string;

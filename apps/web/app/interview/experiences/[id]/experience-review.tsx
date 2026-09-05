@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation.js';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../../src/client/csrf.js';
+import { useToast } from '../../../components/toast-provider.js';
 import styles from './experience-review.module.css';
 
 interface ApiEnvelope<T> {
@@ -80,6 +81,7 @@ export function ExperienceReview({
   detail,
 }: Readonly<{ detail: ExperienceDocumentDetail }>): ReactElement {
   const router = useRouter();
+  const { showToast } = useToast();
   const dialog = useRef<HTMLDialogElement>(null);
   const cancelDelete = useRef<HTMLButtonElement>(null);
   const feedbackRef = useRef<HTMLParagraphElement>(null);
@@ -89,7 +91,6 @@ export function ExperienceReview({
   const [warnings, setWarnings] = useState(detail.document.warnings);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState<'save' | 'accept' | 'delete' | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [impact, setImpact] = useState<DeletionImpact | null>(null);
   const [confirmation, setConfirmation] = useState('');
@@ -111,7 +112,6 @@ export function ExperienceReview({
   ): void => {
     setDrafts(drafts.map((draft, index) => (index === experienceIndex ? update(draft) : draft)));
     setDirty(true);
-    setFeedback(null);
     setError(null);
   };
 
@@ -130,7 +130,7 @@ export function ExperienceReview({
     setRevision(body.data.document.revision);
     setWarnings(body.data.document.warnings);
     setDirty(false);
-    if (announce) setFeedback('草稿已保存。');
+    if (announce) showToast('草稿已保存。');
     return body.data;
   };
 
@@ -138,7 +138,6 @@ export function ExperienceReview({
     event.preventDefault();
     setBusy('save');
     setError(null);
-    setFeedback(null);
     try {
       await persist(true);
     } catch (caught) {
@@ -154,7 +153,6 @@ export function ExperienceReview({
   const handleAccept = async (): Promise<void> => {
     setBusy('accept');
     setError(null);
-    setFeedback(null);
     try {
       const saved = await persist(false);
       const response = await fetch(`/api/interview/experiences/${detail.document.id}/accept`, {
@@ -169,7 +167,7 @@ export function ExperienceReview({
       setRevision(body.data.document.revision);
       setStatus('accepted');
       setDirty(false);
-      setFeedback('已进入历史面经。');
+      showToast('已进入历史面经。');
       router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '无法接受面经草稿。');
@@ -461,12 +459,6 @@ export function ExperienceReview({
           {error}
         </p>
       ) : null}
-      {feedback ? (
-        <p className="form-feedback success" role="status">
-          {feedback}
-        </p>
-      ) : null}
-
       <DeletionArea
         documentId={detail.document.id}
         fileName={detail.document.fileName}

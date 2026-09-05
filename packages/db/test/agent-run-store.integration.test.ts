@@ -63,6 +63,34 @@ const usage: AgentRunUsage = {
 };
 
 describe('SQLite agent run store', () => {
+  it('invalidates a bad success without deleting its audit and allows a new winner', async () => {
+    const { store } = await setup();
+    store.createRunning(running('invalid'));
+    store.completeSucceeded({
+      id: 'invalid',
+      cacheKey: 'cache-key',
+      output: { bad: true },
+      usage,
+      finishedAt: 2,
+    });
+    store.invalidateSucceeded('invalid');
+    expect(store.findSucceeded('cache-key')).toBeNull();
+    expect(store.get('invalid')).toMatchObject({
+      status: 'failed',
+      output: { bad: true },
+      inputTokens: 10,
+    });
+    store.createRunning(running('valid'));
+    expect(
+      store.completeSucceeded({
+        id: 'valid',
+        cacheKey: 'cache-key',
+        output: { valid: true },
+        usage,
+        finishedAt: 3,
+      }).kind,
+    ).toBe('stored');
+  });
   it('allows failure then success for the same cache key and only caches success', async () => {
     const { handle, store } = await setup();
     store.createRunning(running('run-failed'));

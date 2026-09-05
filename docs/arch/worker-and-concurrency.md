@@ -125,3 +125,10 @@ match.compute:{profileVersionId}:{jobRevisionId}:{jobEnrichmentIdOrNone}:{rulese
 - 取消信号能传递到网络和模型调用。
 - running 取消默认优先于完成；只有最终业务事务已按 Task ID、running 与未取消条件门控的 Handler 才允许“提交先发生”时由完成获胜，避免业务结果已可见但 Task 状态为 cancelled。
 - 不同幂等键但相同并发键的任务不能同时处于 pending/running。
+
+任务诊断使用 tasks 上的批次与重试根派生字段，由数据库迁移回填、插入触发器维护；
+执行 payload 与重试关系入队后不可变。普通任务及来源运行详情通过诊断仓储批量投影，
+不暴露 payload。详见 [ADR-0019](../adr/0019-task-diagnostic-projection.md)。
+
+Worker 调度循环驱动 SQLite 维护子进程；数据库维护标记与连接级写保护协调 Web 和 Worker 的短暂写入窗口。
+详见 [ADR-0020](../adr/0020-sqlite-automatic-maintenance.md)，应用端口仍由数据库基础设施实现。

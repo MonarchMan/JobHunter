@@ -1,7 +1,10 @@
 # 012 配置、可观测性与运维任务
 
 > 状态：Implemented
-> 显式覆盖：OPS-001, OPS-002, OPS-003, OPS-004, OPS-005, OPS-006, OPS-007, OPS-008, OPS-009, OPS-010, OPS-011, OPS-Q01, OPS-Q02, OPS-Q03, OPS-Q04
+
+- [x] **OPS-T011** 实现 SQLite 阈值检查、跨进程写保护、子进程维护、备份保留及诊断摘要，并覆盖跳过、故障恢复和数据完整性。（OPS-012..015）
+
+> 显式覆盖：OPS-001, OPS-002, OPS-003, OPS-004, OPS-005, OPS-006, OPS-007, OPS-008, OPS-009, OPS-010, OPS-011, OPS-012, OPS-013, OPS-014, OPS-015, OPS-Q01, OPS-Q02, OPS-Q03, OPS-Q04
 
 - [x] **OPS-T001** 定义 BootstrapConfig/AppConfig 两阶段解析、`JOBHUNTER_` 环境映射、优先级和 SecretString。（OPS-001, OPS-Q02）
 - [x] **OPS-T002** 实现 SafeLogger、Pino sink、字段级 redactor 和日志泄漏测试。（OPS-003,004, OPS-Q01）

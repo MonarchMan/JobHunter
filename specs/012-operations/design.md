@@ -2,6 +2,12 @@
 
 > 状态：Implemented
 
+SQLite 维护由应用服务负责检查频率与阈值，数据库维护仓储负责检查、互斥、备份与空间回收。Worker 调度循环通过可选周期工作端口驱动检查，持久化 next_check_at 防止重启补发，独立子进程执行同步 SQLite 重操作。
+
+database_maintenance 单例保存检查摘要与 owner_pid。所有标准连接安装临时写保护触发器，活跃维护进程存在时拒绝业务写入；维护连接绕开该保护，仅在 BEGIN IMMEDIATE 中检查任务和调度并取得维护标记。检查与标记受同一写事务保护，既有写事务先完成，新写事务被拒绝。进程死亡后保护不再生效，下次检查回收遗留审计；Worker 领取和调度提交在同一事务中识别标记并跳过。
+
+正常 PASSIVE 检查不等待读者。TRUNCATE 使用短锁等待，繁忙退出；VACUUM 前按主库三倍加 64 MiB 校验剩余空间，使用 backup API，成功后完整性与外键校验，通过校验的维护备份保留最近两份。备份是数据库快照，不替代包含附件的全量应用备份。维护失败不自动恢复快照覆盖当前库。
+
 ## 配置
 
 `packages/application/config` 定义 BootstrapConfig、AppConfig 和唯一的运行时配置加载器。CLI、Web 与 Worker 都显式传入工作区根目录；加载器先读取 `<workspaceRoot>/.env`，再以进程环境覆盖同名值，随后执行两阶段解析：第一阶段只从 CLI、合并环境和内置默认值解析 dataRoot/configPath；第二阶段从该路径加载非敏感文件，再合并普通配置。这样配置结果不受进程当前工作目录影响，也不依赖 Next、tsx 或 Shell 各自的环境文件行为。

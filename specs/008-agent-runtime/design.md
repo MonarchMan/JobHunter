@@ -2,6 +2,8 @@
 
 > 状态：Implemented
 
+AgentDefinition.validateOutput 在 Schema 校验后执行，业务拒绝使用 invalid_output 分类并给出安全纠正摘要；Runner 在 completeSucceeded 前执行它。缓存校验失败通过条件更新失效，不删除审计；并发胜者也重新校验。所有输出错误共享现有单次修复调用，不增加独立重试循环。
+
 实现遵循 [Agent 与匹配设计](../../docs/arch/agent-and-matching.md)。
 
 ## 包

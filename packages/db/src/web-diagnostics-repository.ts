@@ -1,5 +1,7 @@
 import {
   webAgentRunDetailSchema,
+  webTaskSchema,
+  type WebTask,
   webAgentRunSummarySchema,
   webSourceSyncTaskDetailSchema,
   type WebAgentRunDetail,
@@ -44,10 +46,10 @@ const columns = `id, agent_key, agent_version, prompt_version, model_config_hash
 
 /** 数据库查询结果对应的行结构。 */
 interface TaskEntryRow {
-  readonly kind: 'task' | 'source_job_detail_batch';
-  readonly id: string;
-  readonly status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
-  readonly created_at: number;
+  readonly kind: 'task' | 'source_job_detail_batch' | null;
+  readonly id: string | null;
+  readonly status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | null;
+  readonly created_at: number | null;
   readonly started_at: number | null;
   readonly finished_at: number | null;
   readonly cancel_requested: number;
@@ -60,35 +62,31 @@ interface TaskEntryRow {
   readonly succeeded: number | null;
   readonly failed: number | null;
   readonly cancelled: number | null;
+  readonly result_total: number;
 }
 
 const taskEntriesCte = `
-  WITH RECURSIVE detail_roots(task_id, root_id) AS (
-    SELECT task.id, task.id FROM tasks task
-    WHERE task.task_type = 'source.job-detail' AND task.retry_of_task_id IS NULL
-    UNION ALL
-    SELECT child.id, parent.root_id
-    FROM tasks child
-    JOIN detail_roots parent ON child.retry_of_task_id = parent.task_id
-    WHERE child.task_type = 'source.job-detail'
+  WITH detail_tasks AS (
+    SELECT task.id, task.status, task.created_at, task.started_at, task.finished_at,
+           task.cancel_requested_at,
+           task.source_run_id AS run_id,
+           task.source_id,
+           task.retry_root_task_id AS retry_root_id
+    FROM tasks task
+    WHERE task.task_type = 'source.job-detail'
+      AND task.source_run_id IS NOT NULL
+      AND task.source_id IS NOT NULL
   ),
   detail_ranked AS (
     SELECT task.*,
            ROW_NUMBER() OVER (
-             PARTITION BY json_extract(task.payload_json, '$.runId'),
-                          json_extract(task.payload_json, '$.sourceId'),
-                          COALESCE(root.root_id, task.id)
+             PARTITION BY task.run_id, task.source_id, task.retry_root_id
              ORDER BY task.created_at DESC, task.id DESC
            ) AS retry_rank
-    FROM tasks task
-    LEFT JOIN detail_roots root ON root.task_id = task.id
-    WHERE task.task_type = 'source.job-detail'
-      AND json_type(task.payload_json, '$.runId') = 'text'
-      AND json_type(task.payload_json, '$.sourceId') = 'text'
+    FROM detail_tasks task
   ),
   detail_groups AS (
-    SELECT json_extract(task.payload_json, '$.runId') AS run_id,
-           json_extract(task.payload_json, '$.sourceId') AS source_id,
+    SELECT task.run_id, task.source_id,
            MIN(task.created_at) AS created_at,
            MIN(task.started_at) AS started_at,
            CASE WHEN SUM(CASE WHEN task.status IN ('pending', 'running') THEN 1 ELSE 0 END) = 0
@@ -163,6 +161,55 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     this.#client = client;
   }
 
+  /** 当前页普通任务一次关联来源和同步运行，仅投影 WebTask 所需安全字段。 */
+  public getTaskDetails(ids: readonly string[]): readonly WebTask[] {
+    // 1、空页无需访问数据库；ID 通过 JSON 参数绑定，避免动态拼接用户输入。
+    if (ids.length === 0) return [];
+    const rows = this.#client
+      .prepare(
+        `
+      SELECT json_object(
+        'kind', 'task', 'id', task.id, 'taskType', task.task_type, 'status', task.status,
+        'attemptCount', task.attempt_count, 'maxAttempts', task.max_attempts,
+        'retryOfTaskId', task.retry_of_task_id,
+        'errorCategory', task.error_category, 'errorSummary', task.error_summary,
+        'cancelRequested', json(CASE WHEN task.cancel_requested_at IS NULL THEN 'false' ELSE 'true' END),
+        'createdAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.created_at / 1000.0, 'unixepoch'),
+        'startedAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.started_at / 1000.0, 'unixepoch'),
+        'finishedAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.finished_at / 1000.0, 'unixepoch'),
+        'jobDetailBatch', NULL,
+        'sourceSync', CASE WHEN source.id IS NULL THEN NULL ELSE json_object(
+          'companyName', company.name, 'channel', channel.channel,
+          'sourceSlug', source.slug, 'adapterKey', source.adapter_key,
+          'trigger', json_extract(task.payload_json, '$.trigger'),
+          'run', CASE WHEN run.id IS NULL THEN NULL ELSE json_object(
+            'id', run.id, 'status', run.status, 'coverage', run.coverage,
+            'stats', json(run.stats_json), 'errorCategory', run.error_category,
+            'errorSummary', run.error_summary
+          ) END
+        ) END
+      ) AS detail_json
+      FROM tasks task
+      LEFT JOIN job_sources source ON task.task_type = 'source.sync'
+        AND source.id = task.source_id
+        AND json_extract(task.payload_json, '$.trigger') IN ('manual', 'schedule', 'retry')
+      LEFT JOIN companies company ON company.id = source.company_id
+      LEFT JOIN source_channels channel ON channel.id = source.channel_id
+      LEFT JOIN sync_runs run ON run.id = (
+        SELECT candidate.id FROM sync_runs candidate
+        WHERE candidate.source_id = source.id
+          AND candidate.started_at >= COALESCE(task.started_at, task.created_at)
+          AND (task.finished_at IS NULL OR candidate.started_at <= task.finished_at)
+        ORDER BY candidate.started_at DESC, candidate.id DESC LIMIT 1
+      )
+      WHERE task.id IN (SELECT value FROM json_each(?))
+    `,
+      )
+      .all(JSON.stringify(ids)) as { readonly detail_json: string }[];
+    // 2、与单任务详情共用运行时校验，阻止原始执行数据进入页面。
+    return rows.map((row) => webTaskSchema.parse(JSON.parse(row.detail_json) as unknown));
+  }
+
   /** 执行数据库组件对外暴露的操作。 */
   public listTaskEntries(input: {
     readonly status?: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
@@ -181,23 +228,39 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       parameters.push(input.taskType);
     }
     const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const count = this.#client
-      .prepare(`${taskEntriesCte} SELECT COUNT(*) AS total FROM task_entries ${where}`)
-      .get(...parameters) as { readonly total: number };
+    // 1、物化筛选结果，避免总数和当前页分别重算详情任务的重试链与批次。
+    // 2、从同一物化结果读取总数和分页；左连接保证空页仍返回总数供应用层回落。
     const rows = this.#client
       .prepare(
         `${taskEntriesCte}
-         SELECT kind, id, status, created_at, started_at, finished_at, cancel_requested,
-                company_name, channel, source_slug, total, pending, running, succeeded,
-                failed, cancelled
-         FROM task_entries ${where}
-         ORDER BY created_at DESC, id ASC LIMIT ? OFFSET ?`,
+         , filtered_entries AS MATERIALIZED (
+           SELECT * FROM task_entries ${where}
+         ),
+         entry_count AS (
+           SELECT COUNT(*) AS result_total FROM filtered_entries
+         ),
+         page_entries AS (
+           SELECT * FROM filtered_entries
+           ORDER BY created_at DESC, id ASC LIMIT ? OFFSET ?
+         )
+         SELECT page.kind, page.id, page.status, page.created_at, page.started_at,
+                page.finished_at, page.cancel_requested, page.company_name, page.channel,
+                page.source_slug, page.total, page.pending, page.running, page.succeeded,
+                page.failed, page.cancelled, count.result_total
+         FROM entry_count count
+         LEFT JOIN page_entries page ON TRUE
+         ORDER BY page.created_at DESC, page.id ASC`,
       )
       .all(...parameters, input.limit, input.offset) as TaskEntryRow[];
+    const total = rows[0]?.result_total ?? 0;
     return {
-      total: count.total,
-      items: rows.map((row): WebTaskListEntry => {
-        if (row.kind === 'task') return { kind: 'task', taskId: row.id };
+      total,
+      items: rows.flatMap((row): readonly WebTaskListEntry[] => {
+        if (row.kind === null) return [];
+        if (!row.id || !row.status || row.created_at === null) {
+          throw new TypeError('Task projection is incomplete.');
+        }
+        if (row.kind === 'task') return [{ kind: 'task', taskId: row.id }];
         if (
           !row.company_name ||
           !row.channel ||
@@ -211,29 +274,31 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
         ) {
           throw new TypeError('Source job detail batch projection is incomplete.');
         }
-        return {
-          kind: row.kind,
-          id: row.id,
-          status: row.status,
-          createdAt: row.created_at,
-          startedAt: row.started_at,
-          finishedAt: row.finished_at,
-          cancelRequested: row.cancel_requested === 1,
-          batch: {
-            runId: row.id,
-            companyName: row.company_name,
-            channel: row.channel,
-            sourceSlug: row.source_slug,
-            counts: {
-              total: row.total,
-              pending: row.pending,
-              running: row.running,
-              succeeded: row.succeeded,
-              failed: row.failed,
-              cancelled: row.cancelled,
+        return [
+          {
+            kind: row.kind,
+            id: row.id,
+            status: row.status,
+            createdAt: row.created_at,
+            startedAt: row.started_at,
+            finishedAt: row.finished_at,
+            cancelRequested: row.cancel_requested === 1,
+            batch: {
+              runId: row.id,
+              companyName: row.company_name,
+              channel: row.channel,
+              sourceSlug: row.source_slug,
+              counts: {
+                total: row.total,
+                pending: row.pending,
+                running: row.running,
+                succeeded: row.succeeded,
+                failed: row.failed,
+                cancelled: row.cancelled,
+              },
             },
           },
-        };
+        ];
       }),
     };
   }

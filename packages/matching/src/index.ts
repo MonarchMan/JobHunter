@@ -4,6 +4,7 @@ export * from './job-understanding.js';
 export * from './job-understanding-agent.js';
 export * from './prompts/job-understanding/v1.js';
 export * from './prompts/job-advice/v1.js';
+export * from './prompts/job-advice/v2.js';
 export * from './model.js';
 export * from './query.js';
 export * from './rules.js';

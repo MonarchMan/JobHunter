@@ -35,6 +35,25 @@ function validationSummary(error: z.ZodError): string {
     .join('; ');
 }
 
+/** 1、先校验结构，2、再执行纯业务约束；仅预期校验错误进入纠正流程。 */
+function validateOutput<TInput, TOutput>(
+  definition: AgentDefinition<TInput, TOutput>,
+  value: unknown,
+  input: TInput,
+): TOutput {
+  const output = definition.outputSchema.parse(value);
+  definition.validateOutput?.(output, input);
+  return output;
+}
+
+/** 仅返回安全校验摘要，编程错误不伪装成模型输出错误。 */
+function outputIssue(error: unknown): string {
+  if (error instanceof z.ZodError) return validationSummary(error);
+  if (error instanceof AgentRuntimeError && error.category === 'invalid_output')
+    return sanitizeAgentErrorSummary(error.message);
+  throw error;
+}
+
 /** 执行版本化 Agent，负责校验、缓存、工具循环、用量限制和结果持久化。 */
 export class AgentRunner {
   readonly #store: AgentRunStore;
@@ -84,7 +103,16 @@ export class AgentRunner {
     );
     const cached = this.#store.findSucceeded(cacheKey);
     if (cached?.output !== null && cached?.output !== undefined) {
-      return { run: cached, output: definition.outputSchema.parse(cached.output), cacheHit: true };
+      try {
+        return {
+          run: cached,
+          output: validateOutput(definition, cached.output, parsedInput),
+          cacheHit: true,
+        };
+      } catch (error) {
+        outputIssue(error);
+        this.#store.invalidateSucceeded(cached.id);
+      }
     }
 
     // 2、先登记 running 记录，再在事务外执行模型调用。
@@ -124,7 +152,14 @@ export class AgentRunner {
         usage: this.#usage(totals),
         finishedAt: this.#now(),
       });
-      const winnerOutput = definition.outputSchema.parse(completion.record.output);
+      let winnerOutput: TOutput;
+      try {
+        winnerOutput = validateOutput(definition, completion.record.output, parsedInput);
+      } catch (error) {
+        const summary = outputIssue(error);
+        this.#store.invalidateSucceeded(completion.record.id);
+        throw new AgentRuntimeError('invalid_output', summary);
+      }
       return { run: completion.record, output: winnerOutput, cacheHit: completion.kind === 'race' };
     } catch (error) {
       // 4、将异常分类、脱敏并持久化，再把稳定错误交给上层重试策略。
@@ -133,14 +168,15 @@ export class AgentRunner {
         classified = new AgentRuntimeError('timeout', 'Agent run exceeded its timeout.', true);
       }
       const status = classified.category === 'cancelled' ? 'cancelled' : 'failed';
-      this.#store.completeFailed({
-        id: runId,
-        status,
-        category: classified.category,
-        summary: sanitizeAgentErrorSummary(classified.message) || 'Agent run failed.',
-        usage: this.#usage(totals),
-        finishedAt: this.#now(),
-      });
+      if (this.#store.get(runId)?.status === 'running')
+        this.#store.completeFailed({
+          id: runId,
+          status,
+          category: classified.category,
+          summary: sanitizeAgentErrorSummary(classified.message) || 'Agent run failed.',
+          usage: this.#usage(totals),
+          finishedAt: this.#now(),
+        });
       throw classified;
     }
   }
@@ -228,10 +264,12 @@ export class AgentRunner {
     let invalidOutput: unknown;
     let invalidSummary: string;
     if (response.kind === 'output') {
-      const initial = definition.outputSchema.safeParse(response.output);
-      if (initial.success) return initial.data;
       invalidOutput = response.output;
-      invalidSummary = validationSummary(initial.error);
+      try {
+        return validateOutput(definition, response.output, parsedInput);
+      } catch (error) {
+        invalidSummary = outputIssue(error);
+      }
     } else {
       invalidOutput = response.text;
       invalidSummary = '<root>: invalid_json';
@@ -263,10 +301,14 @@ export class AgentRunner {
     }
     if (repaired.kind === 'unparsed_output')
       throw new AgentRuntimeError('invalid_output', 'Repair response was not JSON.');
-    const result = definition.outputSchema.safeParse(repaired.output);
-    if (!result.success)
-      throw new AgentRuntimeError('invalid_output', 'Model output remains invalid.');
-    return result.data;
+    try {
+      return validateOutput(definition, repaired.output, parsedInput);
+    } catch (error) {
+      throw new AgentRuntimeError(
+        'invalid_output',
+        `Model output remains invalid: ${outputIssue(error)}`,
+      );
+    }
   }
 
   #checkUsage<TInput, TOutput>(definition: AgentDefinition<TInput, TOutput>, totals: Totals): void {

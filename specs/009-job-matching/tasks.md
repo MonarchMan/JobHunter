@@ -1,6 +1,9 @@
 # 009 职位匹配与建议任务
 
 > 状态：Implemented
+
+- [x] **MCH-T011** 实现证据 ID、业务校验与缓存边界、单次纠正以及建议阶段恢复回归。（MCH-008,009,013）
+
 > 显式覆盖：MCH-001, MCH-002, MCH-003, MCH-004, MCH-005, MCH-006, MCH-007, MCH-008, MCH-009, MCH-010, MCH-011, MCH-012, MCH-013, MCH-Q01, MCH-Q02, MCH-Q03, MCH-Q04
 
 - [x] **MCH-T001** 定义 JobUnderstanding Schema、Agent 和 enrichment Handler。（MCH-001）

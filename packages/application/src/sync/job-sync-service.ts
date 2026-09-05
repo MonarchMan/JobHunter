@@ -27,6 +27,7 @@ import {
 import type { UnitOfWork } from '../ports/unit-of-work.js';
 import type { SyncCoverage, SyncRunStats, SyncSourceRecord, SyncTrigger } from './model.js';
 import type { JobIntakePolicy } from './job-intake-policy.js';
+import type { SystemSettings } from '../settings/system-settings-service.js';
 import { classifyJobRegion } from './region-policy.js';
 
 /** 应用层数据结构或端口契约。 */
@@ -113,6 +114,12 @@ export class JobSyncService {
   readonly #normalizerVersion: string;
   readonly #unseenBatchSize: number;
   readonly #jobIntakePolicy: JobIntakePolicy | undefined;
+  readonly #automaticMatching:
+    | {
+        readonly settings: () => SystemSettings['matchingAutomation'];
+        readonly currentProfileVersionIds: () => readonly string[];
+      }
+    | undefined;
 
   /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
@@ -123,6 +130,10 @@ export class JobSyncService {
     readonly clock: Clock;
     readonly ids: IdGenerator;
     readonly jobIntakePolicy?: JobIntakePolicy;
+    readonly automaticMatching?: {
+      readonly settings: () => SystemSettings['matchingAutomation'];
+      readonly currentProfileVersionIds: () => readonly string[];
+    };
     readonly options: JobSyncServiceOptions;
   }) {
     this.#uow = input.uow;
@@ -134,6 +145,7 @@ export class JobSyncService {
     this.#normalizerVersion = input.options.normalizerVersion;
     this.#unseenBatchSize = input.options.unseenBatchSize ?? 100;
     this.#jobIntakePolicy = input.jobIntakePolicy;
+    this.#automaticMatching = input.automaticMatching;
   }
 
   /** 处理应用类内部的辅助逻辑。 */
@@ -360,6 +372,28 @@ export class JobSyncService {
           createdAt: observedAt,
         });
         if (enqueued.kind === 'enqueued') input.stats.followupEnqueued += 1;
+      }
+
+      const automaticMatching = this.#automaticMatching?.settings();
+      if (revisionId && automaticMatching?.scoreEnabled) {
+        // 新修订只为当前画像创建一次自动评分；开启建议时复用完整 AI 评分链路。
+        for (const profileVersionId of this.#automaticMatching?.currentProfileVersionIds() ?? []) {
+          const mode = automaticMatching.adviceEnabled ? 'llm' : 'rules';
+          const enqueued = tasks.enqueue({
+            id: parseId(this.#ids.generate(), 'Task'),
+            taskType: 'match.score-job',
+            payload: { jobRevisionId: revisionId, profileVersionId, mode },
+            priority: 100,
+            idempotencyKey: `match.score-job:auto:${mode}:${revisionId}:${profileVersionId}`,
+            concurrencyKey: `match-score:${revisionId}:${profileVersionId}`,
+            scheduleId: null,
+            retryOfTaskId: null,
+            maxAttempts: 3,
+            availableAt: observedAt,
+            createdAt: observedAt,
+          });
+          if (enqueued.kind === 'enqueued') input.stats.followupEnqueued += 1;
+        }
       }
     });
   }

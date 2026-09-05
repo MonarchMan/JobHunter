@@ -26,7 +26,9 @@ export async function PATCH(request: Request): Promise<Response> {
     const body = (await request.json()) as unknown;
     const mutation = webSettingsMutationSchema.parse(body);
     const container = await getWebContainer();
-    return dataResponse(webSettingsSchema.parse(container.services.settings.update(mutation)));
+    const settings = container.services.settings.update(mutation);
+    container.services.sourceSchedules.reconcile();
+    return dataResponse(webSettingsSchema.parse(settings));
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError) {
       return badRequestResponse('系统设置无效。');

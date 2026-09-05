@@ -20,6 +20,8 @@ export interface AgentDefinition<TInput, TOutput> {
   readonly systemPrompt: string;
   readonly inputSchema: z.ZodType<TInput>;
   readonly outputSchema: z.ZodType<TOutput>;
+  /** 纯业务校验；不合法时抛出 invalid_output，摘要只包含安全的纠正信息。 */
+  readonly validateOutput?: (output: TOutput, input: TInput) => void;
   readonly tools: readonly ToolDefinition<unknown, unknown>[];
   readonly limits: AgentLimits;
 }

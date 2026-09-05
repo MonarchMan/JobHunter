@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './resume-deletion.module.css';
+import { useToast } from '../components/toast-provider.js';
 
 interface ApiEnvelope<T> {
   readonly data?: T;
@@ -17,12 +18,13 @@ export function ResumeDeletion({
   const [impact, setImpact] = useState<WebResumeDeletionImpact | null>(null);
   const [confirmation, setConfirmation] = useState('');
   const [token] = useState(() => crypto.randomUUID());
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const { showToast } = useToast();
   const [busy, setBusy] = useState(false);
 
   const preview = async (): Promise<void> => {
     setBusy(true);
-    setFeedback(null);
+    setError(null);
     try {
       const response = await fetch(`/api/resumes/${resumeDocumentId}/deletion`, {
         cache: 'no-store',
@@ -31,7 +33,7 @@ export function ResumeDeletion({
       if (!response.ok || !body.data) throw new Error(body.error?.message ?? '无法生成删除预览。');
       setImpact(body.data);
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : '无法生成删除预览。');
+      setError(error instanceof Error ? error.message : '无法生成删除预览。');
     } finally {
       setBusy(false);
     }
@@ -40,7 +42,7 @@ export function ResumeDeletion({
   const submitDeletion = async (): Promise<void> => {
     if (!impact || confirmation !== 'DELETE') return;
     setBusy(true);
-    setFeedback(null);
+    setError(null);
     try {
       const response = await fetch(`/api/resumes/${resumeDocumentId}/deletion`, {
         method: 'POST',
@@ -53,9 +55,9 @@ export function ResumeDeletion({
       });
       const body = (await response.json()) as ApiEnvelope<{ readonly taskId: string }>;
       if (!response.ok || !body.data) throw new Error(body.error?.message ?? '无法创建删除任务。');
-      setFeedback(`敏感数据删除任务已创建：${body.data.taskId}`);
+      showToast('敏感数据删除任务已创建。');
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : '无法创建删除任务。');
+      showToast(error instanceof Error ? error.message : '无法创建删除任务。', 'error');
     } finally {
       setBusy(false);
     }
@@ -107,7 +109,11 @@ export function ResumeDeletion({
           </button>
         </div>
       )}
-      {feedback ? <p role="status">{feedback}</p> : null}
+      {error ? (
+        <p className="form-feedback error" role="alert">
+          {error}
+        </p>
+      ) : null}
     </section>
   );
 }
