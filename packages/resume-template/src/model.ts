@@ -38,6 +38,14 @@ export const resumeTextStyleSchema = z
 /** 模块使用的类型约束。 */
 export type ResumeTextStyle = z.infer<typeof resumeTextStyleSchema>;
 
+/** 投递描述只保留段落类型和纯文本，禁止持久化任意 HTML。 */
+export const resumeDescriptionBlockSchema = z.object({
+  type: z.enum(['paragraph', 'bullet']),
+  text: z.string(),
+});
+/** 一个描述编辑区中的段落或职责条目。 */
+export type ResumeDescriptionBlock = z.infer<typeof resumeDescriptionBlockSchema>;
+
 /** 在线简历草稿内容 Schema，统一编辑、渲染和导出输入。 */
 export const resumeDocumentContentSchema = z
   .object({
@@ -63,6 +71,7 @@ export const resumeDocumentContentSchema = z
         title: text,
         ...period,
         highlights: z.array(text),
+        descriptionBlocks: z.array(resumeDescriptionBlockSchema).optional(),
       }),
     ),
     projects: z.array(
@@ -71,6 +80,7 @@ export const resumeDocumentContentSchema = z
         role: optionalText,
         ...period,
         highlights: z.array(text),
+        descriptionBlocks: z.array(resumeDescriptionBlockSchema).optional(),
       }),
     ),
     works: z.array(z.object({ name: text, description: optionalText, url: optionalText })),
@@ -78,8 +88,25 @@ export const resumeDocumentContentSchema = z
     certificates: z.array(z.object({ name: text, issuer: optionalText, date: optionalText })),
     languages: z.array(z.object({ name: text, proficiency: optionalText })),
     professionalSkills: optionalText,
+    professionalSkillBlocks: z.array(resumeDescriptionBlockSchema).optional(),
     selfEvaluation: optionalText,
+    sectionVisibility: z.partialRecord(z.enum(resumeSectionIds), z.boolean()).optional(),
     formatting: z.partialRecord(z.enum(resumeSectionIds), resumeTextStyleSchema).optional(),
+    hiddenBlocks: z.array(z.string()).optional(),
+    textRows: z
+      .partialRecord(
+        z.enum(resumeSectionIds),
+        z.array(
+          z.object({
+            afterBlock: z.string().optional(),
+            cells: z
+              .array(z.union([z.string(), z.array(resumeDescriptionBlockSchema)]))
+              .min(1)
+              .max(3),
+          }),
+        ),
+      )
+      .optional(),
   })
   .readonly();
 

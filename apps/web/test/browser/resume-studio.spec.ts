@@ -5,6 +5,79 @@ import { AxeBuilder } from '@axe-core/playwright';
 const profileId = '018f0000-0000-7000-8000-000000000621';
 
 test.describe('多模板简历制作', () => {
+  test('keeps project paragraphs and bullets in one editor and supports multiline columns', async ({
+    page,
+  }) => {
+    await page.goto(`/profile?profile=${profileId}`);
+    const entry = page.locator('[data-resume-template-entry]');
+    await entry.getByRole('combobox', { name: '简历模板' }).click();
+    await page.getByRole('option', { name: '标准单页' }).click();
+    await entry.getByRole('button', { name: '导出', exact: true }).click();
+    await page.waitForURL(/\/resume-studio\//u);
+    const canvas = page.locator('iframe').contentFrame();
+    await page.getByRole('button', { name: '项目经历', exact: true }).click();
+    await page.getByRole('button', { name: '添加一项' }).click();
+    const descriptionBlock = canvas
+      .locator('[data-section-id="projects"] [data-block-id$=".description"]')
+      .last();
+    const description = descriptionBlock.locator('[data-description]');
+    await expect(descriptionBlock.locator('.row-actions')).toHaveCSS('opacity', '0');
+    await descriptionBlock.hover();
+    await expect(descriptionBlock.locator('.row-actions')).toHaveCSS('opacity', '1');
+    await expect(descriptionBlock.locator('.row-actions')).toHaveCSS('position', 'absolute');
+    await description.fill('项目介绍');
+    await description.press('End');
+    await description.press('Enter');
+    await description.pressSequentially('第一条职责');
+    await description.press('ControlOrMeta+Shift+8');
+    await description.press('End');
+    await description.press('Enter');
+    await description.pressSequentially('第二条职责');
+    await expect(description.locator('li')).toHaveCount(2);
+    await description.press('Home');
+    await description.press('Backspace');
+    await expect(description.locator('li')).toHaveCount(1);
+    const addCertificate = page.getByRole('button', { name: '新增证书', exact: true });
+    if (await addCertificate.isEnabled()) await addCertificate.click();
+    await page.getByRole('button', { name: '证书', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('已保存');
+    await canvas.locator('[data-section-id="certificates"] .resume-block').last().hover();
+    await canvas
+      .locator('[data-section-id="certificates"]')
+      .getByRole('button', { name: '在本块后新增 1 栏', exact: true })
+      .last()
+      .click();
+    const block = canvas.locator('[data-section-id="certificates"] [data-description]').last();
+    await block.fill('完整章节第一段');
+    await block.press('End');
+    await block.press('Enter');
+    await block.pressSequentially('完整章节第二段');
+    await page.getByRole('button', { name: '预览', exact: true }).click();
+    const preview = page
+      .getByRole('dialog', { name: /导出效果预览/u })
+      .locator('iframe')
+      .contentFrame();
+    await expect(preview.getByText('完整章节第二段')).toBeVisible();
+    await page.getByRole('button', { name: '关闭预览' }).click();
+    await expect(page.getByRole('status')).toContainText('已保存');
+    await page.reload();
+    await expect(description).toContainText('项目介绍');
+    await expect(description.locator('li')).toHaveCount(1);
+    await expect(block).toContainText('完整章节第二段');
+    // 1、浮动操作针对文本块，删除描述不能误删项目标题。
+    const headers = canvas.locator('[data-section-id="projects"] [data-block-id$=".header"]');
+    const headerCount = await headers.count();
+    await descriptionBlock.hover();
+    await descriptionBlock.getByRole('button', { name: '在本块后新增 2 栏', exact: true }).click();
+    const inserted = canvas.locator('[data-section-id="projects"] .text-row').last();
+    await expect(inserted.locator('.text-cell')).toHaveCount(2);
+    await inserted.hover();
+    await inserted.getByRole('button', { name: '删除本块', exact: true }).click();
+    await descriptionBlock.hover();
+    await descriptionBlock.getByRole('button', { name: '删除本块', exact: true }).click();
+    await expect(headers).toHaveCount(headerCount);
+  });
+
   test('restores a template draft, autosaves edits and exports self-contained HTML', async ({
     page,
   }) => {

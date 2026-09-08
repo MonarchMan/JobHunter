@@ -3,6 +3,11 @@
 import type { ResumeDraftDetail } from '@jobhunter/application/web';
 import {
   renderResumeHtml,
+  addResumeSection,
+  removeResumeSection,
+  isResumeSectionAdded,
+  hasResumeSectionContent,
+  initializeResumeSections,
   resumeSectionIds,
   resumeSectionLabels,
   type ResumeDocumentContent,
@@ -12,7 +17,9 @@ import {
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../src/client/csrf.js';
+import { Icon } from '../../components/ui-icon.js';
 import styles from './studio.module.css';
+import { handleDescriptionKey, pastePlainText, readDescription } from './description-editor.js';
 
 interface Envelope<T> {
   readonly data?: T;
@@ -113,6 +120,52 @@ function ConfirmRefresh({
   );
 }
 
+/** 删除整章使用应用内模态确认；原生 dialog 提供焦点隔离与 Escape 行为。 */
+function ConfirmSectionDelete({
+  section,
+  onCancel,
+  onConfirm,
+  returnFocusTo,
+}: Readonly<{
+  section: StudioSectionId;
+  onCancel: () => void;
+  onConfirm: () => void;
+  returnFocusTo: HTMLButtonElement | null;
+}>): ReactElement {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    dialog.current?.showModal();
+    return () => {
+      if (!returnFocusTo?.disabled) returnFocusTo?.focus();
+    };
+  }, [returnFocusTo]);
+  return (
+    <dialog
+      ref={dialog}
+      className={[styles.dialog, styles.deleteDialog].join(' ')}
+      aria-labelledby="delete-section-title"
+      aria-describedby="delete-section-description"
+      onCancel={(event) => {
+        event.preventDefault();
+        onCancel();
+      }}
+    >
+      <h2 id="delete-section-title">删除{resumeSectionLabels[section]}？</h2>
+      <p id="delete-section-description">
+        此章节的模板内容及新增文本块将被清空，无法撤销。在线简历不受影响。
+      </p>
+      <div>
+        <button type="button" className="button-secondary" autoFocus onClick={onCancel}>
+          保留章节
+        </button>
+        <button type="button" className="button-danger" onClick={onConfirm}>
+          删除章节
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
 function TemplatePreviewDialog({
   html,
   templateName,
@@ -201,12 +254,14 @@ function FormatControl({
   );
 }
 
+/** 更新受控字段路径；富描述以结构化段落数组保存，普通字段保留纯文本。 */
 function setValueAtPath(
   content: ResumeDocumentContent,
   path: string,
-  value: string,
+  value: string | ReturnType<typeof readDescription>,
 ): ResumeDocumentContent {
-  if (path === 'targetRoles') {
+  // 1、求职方向保留原有数组契约。
+  if (path === 'targetRoles' && typeof value === 'string') {
     return {
       ...content,
       targetRoles: value
@@ -216,6 +271,7 @@ function setValueAtPath(
     };
   }
   const next = structuredClone(content);
+  // 2、字段路径由内置模板提供，不从粘贴内容读取任意对象路径。
   const segments = path.split('.');
   let cursor: unknown = next;
   for (const segment of segments.slice(0, -1)) {
@@ -225,9 +281,10 @@ function setValueAtPath(
   }
   const final = segments.at(-1);
   if (!final) return next;
-  if (Array.isArray(cursor)) cursor[Number(final)] = value.trim();
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  if (Array.isArray(cursor)) cursor[Number(final)] = normalized;
   else if (cursor && typeof cursor === 'object')
-    (cursor as Record<string, unknown>)[final] = value.trim();
+    (cursor as Record<string, unknown>)[final] = normalized;
   return next;
 }
 
@@ -237,19 +294,26 @@ function eventElement(event: Event): HTMLElement | null {
 }
 
 export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail }>): ReactElement {
-  const [content, setContent] = useState(initial.draft.content);
+  const initializedContent = useMemo(
+    () => initializeResumeSections(initial.draft.content),
+    [initial.draft.content],
+  );
+  const [content, setContent] = useState(initializedContent);
   const [revision, setRevision] = useState(initial.draft.revision);
   const [stale, setStale] = useState(initial.stale);
   const [active, setActive] = useState<StudioSectionId>('basic');
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [message, setMessage] = useState('已保存');
   const [showRefresh, setShowRefresh] = useState(false);
+  const [deleteSection, setDeleteSection] = useState<StudioSectionId | null>(null);
+  const sectionActionButton = useRef<HTMLButtonElement | null>(null);
   const [previewContent, setPreviewContent] = useState<ResumeDocumentContent | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState<'pdf' | 'html' | null>(null);
   const iframe = useRef<HTMLIFrameElement>(null);
   const previewButton = useRef<HTMLButtonElement>(null);
-  const pendingContent = useRef(initial.draft.content);
+  const pendingFocus = useRef<string | null>(null);
+  const pendingContent = useRef(initializedContent);
   const savedJson = useRef(JSON.stringify(initial.draft.content));
   const revisionRef = useRef(initial.draft.revision);
   const saveQueue = useRef(Promise.resolve(true));
@@ -337,7 +401,7 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
       element.classList.remove('is-active');
     const selected = canvasDocument.querySelector<HTMLElement>(`[data-section-id="${section}"]`);
     selected?.classList.add('is-active');
-    selected?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (focus) selected?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (focus) selected?.querySelector<HTMLElement>('[data-field]')?.focus();
   };
 
@@ -351,55 +415,180 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
   useEffect(() => {
     const frame = iframe.current;
     if (!frame) return;
-    const connect = (): void => {
+    let disconnect: (() => void) | undefined;
+    const connect = (event?: Event): void => {
+      // 1、同一文档只注册一次监听；画布重建时释放旧文档上的监听器。
+      disconnect?.();
+      const controller = new AbortController();
+      disconnect = () => {
+        controller.abort();
+      };
       const canvasDocument = frame.contentDocument;
-      if (!canvasDocument) return;
+      if (!canvasDocument?.documentElement) return;
+      // 1.a、仅编辑控件消费后台令牌；模板正文仍保留独立投递色板。
+      const tokens = getComputedStyle(document.documentElement);
+      for (const token of ['--action', '--action-soft', '--danger', '--danger-soft']) {
+        canvasDocument.documentElement.style.setProperty(token, tokens.getPropertyValue(token));
+      }
       markSection(active);
-      canvasDocument.addEventListener('click', (event) => {
-        const target = eventElement(event);
-        const section = target?.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId;
-        if (!studioSectionIds.includes(section as StudioSectionId)) return;
-        setActive(section as StudioSectionId);
-        markSection(section as StudioSectionId);
-      });
-      canvasDocument.addEventListener('focusin', (event) => {
-        const target = eventElement(event);
-        if (!target) return;
-        const section = target.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId;
-        if (!studioSectionIds.includes(section as StudioSectionId)) return;
-        setActive(section as StudioSectionId);
-        markSection(section as StudioSectionId);
-      });
-      canvasDocument.addEventListener('input', (event) => {
-        const target = eventElement(event);
-        if (!target) return;
-        const editable = target.closest<HTMLElement>('[data-field]');
-        const field = editable?.dataset.field;
-        if (!field) return;
-        pendingContent.current = setValueAtPath(
-          pendingContent.current,
-          field,
-          field === 'professionalSkills' ? editable.innerText : editable.textContent,
-        );
-        setSaveState('dirty');
-        setMessage('有尚未保存的修改');
-      });
-      canvasDocument.addEventListener('focusout', (event) => {
-        const target = eventElement(event);
-        if (!target?.closest('[data-field]')) return;
-        setContent(pendingContent.current);
-        void save(pendingContent.current);
-      });
-      canvasDocument.addEventListener('keydown', (event) => {
-        const target = eventElement(event);
-        if (!target) return;
-        if (event.key === 'Enter' && !target.closest('[data-multiline]')) event.preventDefault();
-      });
+      if (event && pendingFocus.current) {
+        canvasDocument.querySelector<HTMLElement>(pendingFocus.current)?.focus();
+        pendingFocus.current = null;
+      }
+      canvasDocument.addEventListener(
+        'click',
+        (event) => {
+          const target = eventElement(event);
+          const insertBlock =
+            target?.closest<HTMLElement>('[data-insert-block]')?.dataset.insertBlock;
+          if (insertBlock) {
+            const [section, anchor] = insertBlock.split(':');
+            if (!anchor) return;
+            const separator = anchor.lastIndexOf('.');
+            if (studioSectionIds.includes(section as StudioSectionId))
+              addTextBlocks(
+                Number(anchor.slice(separator + 1)),
+                section as StudioSectionId,
+                undefined,
+                anchor.slice(0, separator).endsWith('.empty')
+                  ? undefined
+                  : anchor.slice(0, separator),
+              );
+            return;
+          }
+          const deleteBlock =
+            target?.closest<HTMLElement>('[data-delete-block]')?.dataset.deleteBlock;
+          if (deleteBlock) {
+            // 1、只移除当前文本块的呈现，保留同一经历及其后插入的内容。
+            const section = target.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId;
+            if (section)
+              pendingFocus.current = `[data-section-id="${section}"] [data-field], [data-section-id="${section}"] button`;
+            replaceContent(
+              {
+                ...pendingContent.current,
+                hiddenBlocks: [
+                  ...new Set([...(pendingContent.current.hiddenBlocks ?? []), deleteBlock]),
+                ],
+              },
+              true,
+            );
+            return;
+          }
+          const insertRow = target?.closest<HTMLElement>('[data-insert-row]')?.dataset.insertRow;
+          if (insertRow) {
+            const [section, index, columns] = insertRow.split('.');
+            if (studioSectionIds.includes(section as StudioSectionId))
+              addTextBlocks(Number(columns), section as StudioSectionId, Number(index));
+            return;
+          }
+          const removeRow = target?.closest<HTMLElement>('[data-remove-row]')?.dataset.removeRow;
+          if (removeRow) {
+            const [section, index] = removeRow.split('.');
+            if (studioSectionIds.includes(section as StudioSectionId)) {
+              const id = section as StudioSectionId;
+              const remaining = (pendingContent.current.textRows?.[id]?.length ?? 1) - 1;
+              pendingFocus.current =
+                remaining > 0
+                  ? `[data-field="textRows.${id}.${String(Math.min(Number(index), remaining - 1))}.cells.0"]`
+                  : `[data-section-id="${id}"] button`;
+              replaceContent(
+                {
+                  ...pendingContent.current,
+                  textRows: {
+                    ...pendingContent.current.textRows,
+                    [id]: (pendingContent.current.textRows?.[id] ?? []).filter(
+                      (_, i) => i !== Number(index),
+                    ),
+                  },
+                },
+                true,
+              );
+            }
+            return;
+          }
+          const section = target?.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId;
+          if (!studioSectionIds.includes(section as StudioSectionId)) return;
+          setActive(section as StudioSectionId);
+          markSection(section as StudioSectionId);
+        },
+        { signal: controller.signal },
+      );
+      canvasDocument.addEventListener(
+        'focusin',
+        (event) => {
+          const target = eventElement(event);
+          if (!target) return;
+          const section = target.closest<HTMLElement>('[data-section-id]')?.dataset.sectionId;
+          if (!studioSectionIds.includes(section as StudioSectionId)) return;
+          setActive(section as StudioSectionId);
+          markSection(section as StudioSectionId);
+        },
+        { signal: controller.signal },
+      );
+      canvasDocument.addEventListener(
+        'input',
+        (event) => {
+          const target = eventElement(event);
+          if (!target) return;
+          const editable = target.closest<HTMLElement>('[data-field]');
+          const field = editable?.dataset.field;
+          if (!field) return;
+          pendingContent.current = setValueAtPath(
+            pendingContent.current,
+            field,
+            editable.hasAttribute('data-description')
+              ? readDescription(editable)
+              : editable.hasAttribute('data-multiline')
+                ? editable.innerText
+                : editable.textContent,
+          );
+          setSaveState('dirty');
+          setMessage('有尚未保存的修改');
+        },
+        { signal: controller.signal },
+      );
+      canvasDocument.addEventListener(
+        'focusout',
+        (event) => {
+          const target = eventElement(event);
+          if (!target?.closest('[data-field]')) return;
+          // 2、失焦只保存快照，避免重载 iframe 导致下一字段焦点和撤销栈丢失。
+          void save(pendingContent.current);
+        },
+        { signal: controller.signal },
+      );
+      canvasDocument.addEventListener(
+        'keydown',
+        (event) => {
+          const target = eventElement(event);
+          if (!target) return;
+          if (event.isComposing) return;
+          const description = target.closest<HTMLElement>('[data-description]');
+          if (description) handleDescriptionKey(event, description);
+          // 3、仅拦截单行文字的换行，按钮仍使用原生 Enter／Space 激活。
+          if (
+            event.key === 'Enter' &&
+            target.closest('[data-field]') &&
+            !target.closest('[data-multiline]')
+          )
+            event.preventDefault();
+        },
+        { signal: controller.signal },
+      );
+      canvasDocument.addEventListener(
+        'paste',
+        (event) => {
+          const editable = eventElement(event)?.closest<HTMLElement>('[data-field]');
+          if (editable) pastePlainText(event, editable);
+        },
+        { signal: controller.signal },
+      );
     };
     frame.addEventListener('load', connect);
     connect();
     return () => {
       frame.removeEventListener('load', connect);
+      disconnect?.();
     };
   }, [html]);
 
@@ -420,8 +609,8 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
       });
       const body = (await response.json()) as Envelope<ResumeDraftDetail>;
       if (!response.ok || !body.data) throw new Error(body.error?.message ?? '重新生成失败。');
-      pendingContent.current = body.data.draft.content;
-      setContent(body.data.draft.content);
+      pendingContent.current = initializeResumeSections(body.data.draft.content);
+      setContent(pendingContent.current);
       savedJson.current = JSON.stringify(body.data.draft.content);
       revisionRef.current = body.data.draft.revision;
       setRevision(body.data.draft.revision);
@@ -520,10 +709,11 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
         active === 'work' ? 'workExperience' : (active as Exclude<RepeatableSectionId, 'work'>)
       ]
     : null;
-  const addEntry = (): void => {
+  /** 在指定经历后插入空条目，保留其余经历的顺序和内容。 */
+  const addEntry = (section: StudioSectionId = active, afterIndex?: number): void => {
     const current = pendingContent.current;
     let next: ResumeDocumentContent;
-    switch (active) {
+    switch (section) {
       case 'education':
         next = {
           ...current,
@@ -575,41 +765,68 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
       default:
         return;
     }
+    // 1、空条目由各章节结构构造，再移动到被点击条目后方。
+    const key = section === 'work' ? 'workExperience' : section;
+    const items = [...next[key]];
+    const added = items.pop();
+    const index =
+      afterIndex === undefined ? items.length : Math.max(0, Math.min(afterIndex + 1, items.length));
+    if (added) items.splice(index, 0, added);
+    next = { ...next, [key]: items };
+    // 2、文档加载完成后聚焦新条目的首个字段，不依赖固定延时。
+    pendingFocus.current = `[data-field^="${key}.${String(index)}."]`;
+    setActive(section);
     replaceContent(next, true);
-    window.setTimeout(() => {
-      switchSection(active, true);
-    }, 50);
   };
 
-  const removeLastEntry = (): void => {
-    const current = pendingContent.current;
-    let next: ResumeDocumentContent;
-    switch (active) {
-      case 'education':
-        next = { ...current, education: current.education.slice(0, -1) };
-        break;
-      case 'work':
-        next = { ...current, workExperience: current.workExperience.slice(0, -1) };
-        break;
-      case 'projects':
-        next = { ...current, projects: current.projects.slice(0, -1) };
-        break;
-      case 'works':
-        next = { ...current, works: current.works.slice(0, -1) };
-        break;
-      case 'competitions':
-        next = { ...current, competitions: current.competitions.slice(0, -1) };
-        break;
-      case 'certificates':
-        next = { ...current, certificates: current.certificates.slice(0, -1) };
-        break;
-      case 'languages':
-        next = { ...current, languages: current.languages.slice(0, -1) };
-        break;
-      default:
-        return;
-    }
-    replaceContent(next, true);
+  /** 为当前普通章节追加一组 1–3 栏内容块，每栏允许多段文字与列表。 */
+  const addTextBlocks = (
+    columns: number,
+    section: StudioSectionId = active,
+    afterIndex?: number,
+    afterBlock?: string,
+  ): void => {
+    // 1、每栏从空段落开始，不虚构候选人经历。
+    if (![1, 2, 3].includes(columns)) return;
+    const rows = pendingContent.current.textRows?.[section] ?? [];
+    const anchor = afterIndex === undefined ? afterBlock : rows[afterIndex]?.afterBlock;
+    const row = {
+      ...(anchor ? { afterBlock: anchor } : {}),
+      cells: Array.from({ length: columns }, () => [{ type: 'paragraph' as const, text: '' }]),
+    };
+    const firstAnchored = rows.findIndex((item) => item.afterBlock === anchor);
+    const index =
+      afterIndex === undefined
+        ? firstAnchored < 0
+          ? rows.length
+          : firstAnchored
+        : Math.max(0, Math.min(afterIndex + 1, rows.length));
+    const nextRows = [...rows];
+    nextRows.splice(index, 0, row);
+    pendingFocus.current = `[data-field="textRows.${section}.${String(index)}.cells.0"]`;
+    setActive(section);
+    // 2、按草稿原有 revision 即时保存，模板自身负责分栏渲染。
+    replaceContent(
+      {
+        ...pendingContent.current,
+        textRows: { ...pendingContent.current.textRows, [section]: nextRows },
+      },
+      true,
+    );
+  };
+
+  /** 整章清空后将焦点交还该章节的新增入口，避免落到已删除的画布节点。 */
+  const removeSection = (section: StudioSectionId): void => {
+    // 1、使用共享章节所有权规则清理草稿并加入现有自动保存队列。
+    replaceContent(removeResumeSection(pendingContent.current, section), true);
+    // 2、React 提交 disabled 状态后，焦点恢复到同一行唯一可用的新增按钮。
+    requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          `[data-section-nav="${section}"] button[aria-label^="新增"]`,
+        )
+        ?.focus();
+    });
   };
 
   return (
@@ -737,18 +954,16 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
             恢复默认
           </button>
         </div>
-        {activeList ? (
+        {activeList && isResumeSectionAdded(content, active) ? (
           <div className={styles.entryActions}>
-            <button type="button" className="button-secondary" onClick={addEntry}>
-              添加一项
-            </button>
             <button
               type="button"
               className="button-secondary"
-              disabled={activeList.length === 0}
-              onClick={removeLastEntry}
+              onClick={() => {
+                addEntry();
+              }}
             >
-              删除末项
+              添加一项
             </button>
           </div>
         ) : null}
@@ -757,19 +972,56 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
         <aside className={styles.sidebar}>
           <nav className={styles.tabs} aria-label="简历章节">
             <p>选择章节并在画布内编辑</p>
-            {studioSectionIds.map((section) => (
-              <button
-                key={section}
-                type="button"
-                className={active === section ? styles.activeTab : undefined}
-                aria-current={active === section ? 'true' : undefined}
-                onClick={() => {
-                  switchSection(section, true);
-                }}
-              >
-                {resumeSectionLabels[section]}
-              </button>
-            ))}
+            {studioSectionIds.map((section) => {
+              const added = isResumeSectionAdded(content, section);
+              const label = resumeSectionLabels[section];
+              return (
+                <div key={section} className={styles.tabRow} data-section-nav={section}>
+                  <button
+                    type="button"
+                    className={active === section && added ? styles.activeTab : undefined}
+                    aria-current={active === section && added ? 'true' : undefined}
+                    disabled={!added}
+                    onClick={() => {
+                      switchSection(section, true);
+                    }}
+                  >
+                    {label}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.sectionAction}
+                    aria-label={`新增${label}`}
+                    title={added ? `${label}已添加` : `新增${label}`}
+                    disabled={added || saveState === 'conflict'}
+                    onClick={() => {
+                      // 1、空白章节立即持久化；加载完成后聚焦首个输入块。
+                      pendingFocus.current = `[data-section-id="${section}"] [data-field]`;
+                      setActive(section);
+                      replaceContent(addResumeSection(pendingContent.current, section), true);
+                    }}
+                  >
+                    <Icon name="plus" size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.sectionAction}
+                    aria-label={`删除${label}`}
+                    title={`删除${label}`}
+                    disabled={!added || saveState === 'conflict'}
+                    onClick={(event) => {
+                      sectionActionButton.current = event.currentTarget;
+                      // 2、有内容先确认；空白章节直接移除，均不更改在线画像。
+                      if (hasResumeSectionContent(pendingContent.current, section))
+                        setDeleteSection(section);
+                      else removeSection(section);
+                    }}
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </nav>
         </aside>
         <section className={styles.canvas} aria-label="可直接编辑的简历画布">
@@ -779,7 +1031,8 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
               ref={iframe}
               title={`${initial.template.name}可编辑简历`}
               srcDoc={html}
-              sandbox="allow-same-origin"
+              // WebKit 需要此标记才能执行父页回调；srcDoc 首部 CSP 仍禁止文档脚本。
+              sandbox="allow-same-origin allow-scripts"
             />
           </div>
         </section>
@@ -791,6 +1044,19 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
             setShowRefresh(false);
           }}
           onConfirm={() => void refresh()}
+        />
+      ) : null}
+      {deleteSection ? (
+        <ConfirmSectionDelete
+          section={deleteSection}
+          returnFocusTo={sectionActionButton.current}
+          onCancel={() => {
+            setDeleteSection(null);
+          }}
+          onConfirm={() => {
+            removeSection(deleteSection);
+            setDeleteSection(null);
+          }}
         />
       ) : null}
       {previewHtml ? (

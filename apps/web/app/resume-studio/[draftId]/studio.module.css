@@ -180,20 +180,48 @@
   color: var(--ink-muted);
   font-size: 0.75rem;
 }
+.tabRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px 24px;
+  align-items: center;
+  gap: 2px;
+}
 .tabs button {
   position: relative;
   width: 100%;
   min-height: 2.55rem;
-  padding: 0.55rem 0.65rem;
+  padding: 0.55rem 0.35rem;
   border: 0;
   background: transparent;
   color: var(--ink-muted);
   text-align: left;
 }
-.tabs button:hover {
+.tabs button:hover:not(:disabled) {
   background: var(--primary-soft);
   color: var(--ink);
   transform: none;
+}
+.tabs button:disabled {
+  color: var(--ink-muted);
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.tabs .sectionAction {
+  display: grid;
+  min-height: 24px;
+  width: 24px;
+  padding: 0;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+}
+.tabs .sectionAction:hover:not(:disabled) {
+  background: var(--action-soft);
+  color: var(--danger);
+}
+.tabs button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
 }
 .tabs .activeTab {
   background: var(--primary-soft);
@@ -251,6 +279,15 @@
 }
 .dialog h2 {
   margin-top: 0;
+}
+.deleteDialog {
+  margin: auto;
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+.deleteDialog::backdrop {
+  background: rgb(28 33 48 / 55%);
 }
 .dialog > div {
   display: flex;
@@ -359,6 +396,11 @@
   .tabs button {
     width: auto;
     min-width: max-content;
+  }
+  .tabRow {
+    flex: none;
+    grid-template-columns: auto 24px 24px;
+    margin-right: 0.5rem;
   }
   .canvas {
     min-height: 0;

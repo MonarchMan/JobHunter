@@ -18,7 +18,9 @@ export type IconName =
   | 'sparkles'
   | 'chevronDown'
   | 'chevronUp'
-  | 'check';
+  | 'check'
+  | 'plus'
+  | 'trash';
 
 const paths: Readonly<Record<IconName, ReactElement>> = {
   dashboard: (
@@ -111,6 +113,8 @@ const paths: Readonly<Record<IconName, ReactElement>> = {
   chevronDown: <path d="m6 9 6 6 6-6" />,
   chevronUp: <path d="m6 15 6-6 6 6" />,
   check: <path d="m5 12 4 4L19 6" />,
+  plus: <path d="M12 5v14M5 12h14" />,
+  trash: <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" />,
 };
 
 export function Icon({

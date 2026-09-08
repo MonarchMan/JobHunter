@@ -69,9 +69,15 @@ describe('Web resume template composition', () => {
         const editedContent = {
           ...technical.draft.content,
           selfEvaluation: '模板草稿中的独立修改',
+          sectionVisibility: { languages: true, works: false },
+          professionalSkillBlocks: [{ type: 'paragraph', text: '保留为普通技能段落' }],
           formatting: { work: { fontSize: 13, letterSpacing: 0.5, lineHeight: 1.5 } },
         };
         const edited = await service.save(technical.draft.id, 0, editedContent);
+        expect(edited.draft.content.sectionVisibility).toEqual({ languages: true, works: false });
+        expect(edited.draft.content.professionalSkillBlocks).toEqual(
+          editedContent.professionalSkillBlocks,
+        );
         await expect(service.save(technical.draft.id, 0, editedContent)).rejects.toBeInstanceOf(
           ResumeDraftConflictError,
         );

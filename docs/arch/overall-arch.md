@@ -1,6 +1,9 @@
 # JobHunter 总体架构
 
 > 状态：Accepted
+
+简历制作的受控编辑 iframe 通过文档 CSP 禁止脚本和外部资源，并允许父页面事件在 WebKit 中执行；只读预览仍采用禁脚本沙箱。隔离约束见 [ADR-0022](../adr/0022-resume-studio-webkit-event-boundary.md)。
+
 > 版本：1.5.0
 > 更新日期：2026-08-30
 > 适用阶段：数据内核、Web 管理台、面试准备与后续演进

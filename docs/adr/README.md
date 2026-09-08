@@ -1,5 +1,7 @@
 # 架构决策记录索引
 
+- [ADR-0022：简历编辑画布的 WebKit 事件边界](./0022-resume-studio-webkit-event-boundary.md)
+
 - [ADR-0001：TypeScript 模块化单体（已被 ADR-0007 替代）](./0001-typescript-modular-monolith.md)
 - [ADR-0002：SQLite 与本地文件存储](./0002-sqlite-local-storage.md)
 - [ADR-0003：独立 Worker 与 SQLite 持久化队列](./0003-persistent-worker-queue.md)

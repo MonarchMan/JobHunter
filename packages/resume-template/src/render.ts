@@ -1,8 +1,10 @@
 import { getResumeTemplate, type ResumeTemplateKey } from './catalog.js';
+import { isResumeSectionAdded } from './sections.js';
 import {
   resumeDocumentContentSchema,
   resumeSectionLabels,
   type ResumeDocumentContent,
+  type ResumeDescriptionBlock,
   type ResumeSectionId,
 } from './model.js';
 
@@ -18,7 +20,7 @@ function escapeHtml(value: string | null | undefined): string {
 
 /** 生成可选的 contenteditable 字段标记及其 JSON 路径。 */
 function editable(path: string, interactive: boolean, placeholder?: string): string {
-  return ` data-editable data-field="${path}"${placeholder ? ` data-placeholder="${placeholder}"` : ''}${interactive ? ' contenteditable="true" spellcheck="false"' : ''}`;
+  return ` data-editable data-field="${path}"${placeholder ? ` data-placeholder="${placeholder}"` : ''}${interactive ? ` contenteditable="true" spellcheck="false"${placeholder ? ` title="${escapeHtml(placeholder)}"` : ''}` : ''}`;
 }
 
 /** 将章节排版设置转换为受控 CSS 自定义属性。 */
@@ -81,94 +83,288 @@ function section(
   active?: ResumeSectionId,
   interactive = false,
 ): string {
-  if (!body.trim()) return '';
+  if (!isResumeSectionAdded(content, id)) return '';
+  body += textRows(content, id, interactive);
+  // 空章节保留一个可聚焦的文本块入口；已有块不额外增加占位行。
+  if (interactive && !body.includes('class="resume-block"') && !body.includes(' resume-block"'))
+    body = block(
+      '<p class="empty-block">点击 + 添加内容块</p>',
+      `${id}.empty`,
+      id,
+      content,
+      interactive,
+    );
+  if (!body.replace(/<[^>]*>/gu, '').trim() && !interactive) return '';
   return `<section class="resume-section${active === id ? ' is-active' : ''}" data-section-id="${id}"${sectionStyle(content, id)}${interactive ? ' tabindex="0"' : ''}><div class="section-heading"><span class="section-icon" aria-hidden="true">${sectionIcons[id]}</span><h2>${resumeSectionLabels[id]}</h2><span class="section-rule"></span></div><div class="section-body">${body}</div></section>`;
 }
 
-/** 渲染工作/项目描述列表并绑定字段路径。 */
-function lines(items: readonly string[], path: string, interactive: boolean): string {
-  const content = items
-    .filter((item) => interactive || item.trim())
+/** 将整段描述渲染为一个编辑区，相邻职责共享无序列表，普通段落保留顺序。 */
+function lines(
+  items: readonly string[],
+  path: string,
+  interactive: boolean,
+  blocks?: readonly ResumeDescriptionBlock[],
+): string {
+  // 1、兼容旧草稿；仅在编辑模式提供空列表供继续输入。
+  const source = blocks ?? items.map((text) => ({ type: 'bullet' as const, text }));
+  const visible = source.filter((block) => interactive || block.text.trim());
+  if (interactive && visible.length === 0) visible.push({ type: 'bullet', text: '' });
+  // 2、按原始顺序分组，任何用户文字均经过转义。
+  let body = '';
+  let inList = false;
+  for (const block of visible) {
+    if (block.type === 'bullet') {
+      if (!inList) body += '<ul class="detail-list">';
+      body += `<li>${escapeHtml(block.text)}</li>`;
+      inList = true;
+    } else {
+      if (inList) body += '</ul>';
+      inList = false;
+      body += `<p>${escapeHtml(block.text)}</p>`;
+    }
+  }
+  if (inList) body += '</ul>';
+  return body
+    ? `<div class="description-group"><div class="description-block" data-description data-multiline${editable(path, interactive, '输入介绍或职责')}>${body}</div></div>`
+    : '';
+}
+
+/** 使用参考图的紧凑图标按钮，保留键盘与读屏可访问名称。 */
+function blockButtons(insertAttribute: string, deleteAttribute?: string): string {
+  const insert = [1, 2, 3]
     .map(
-      (item, index) =>
-        `<li${editable(`${path}.${String(index)}`, interactive, '输入一条描述')}>${escapeHtml(item)}</li>`,
+      (columns) =>
+        `<button type="button" ${insertAttribute}.${String(columns)}" aria-label="在本块后新增 ${String(columns)} 栏" title="新增 ${String(columns)} 栏"><span aria-hidden="true">✚</span><b aria-hidden="true">${String(columns)}</b></button>`,
     )
     .join('');
-  return content ? `<ul class="detail-list">${content}</ul>` : '';
+  const remove = deleteAttribute
+    ? `<button type="button" class="block-delete" ${deleteAttribute} aria-label="删除本块" title="删除本块">${svg('<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/>')}</button>`
+    : '';
+  return `<span class="row-actions" contenteditable="false">${insert}${remove}</span>`;
+}
+
+/** 文本块是最小结构操作单位；删除一个块不删除整个经历。 */
+function block(
+  body: string,
+  key: string,
+  id: ResumeSectionId,
+  content: ResumeDocumentContent,
+  interactive: boolean,
+): string {
+  // 1、保留锚点后插入的内容，即使源文本块已被删除。
+  const extra = textRows(content, id, interactive, key);
+  if (content.hiddenBlocks?.includes(key)) return extra;
+  if (!body && !interactive) return extra;
+  // 2、非交互模式没有工具栏和编辑轮廓，维持模板原有排版。
+  if (!interactive) return body + extra;
+  return `<div class="resume-block" data-block-id="${key}">${body}${blockButtons(`data-insert-block="${id}:${key}`, key.endsWith('.empty') ? undefined : `data-delete-block="${key}"`)}</div>${extra}`;
+}
+
+/** 普通文本行最多三栏；编辑控件只出现在制作页。 */
+function textRows(
+  content: ResumeDocumentContent,
+  id: ResumeSectionId,
+  interactive: boolean,
+  afterBlock?: string,
+): string {
+  // 1、保留行号用于精确更新；导出过滤整行空白而不改变各栏文字。
+  return (content.textRows?.[id] ?? [])
+    .map((row, index) => {
+      if (row.afterBlock !== afterBlock) return '';
+      if (
+        !interactive &&
+        !row.cells.some((cell) =>
+          typeof cell === 'string' ? cell.trim() : cell.some((block) => block.text.trim()),
+        )
+      )
+        return '';
+      const path = `textRows.${id}.${String(index)}`;
+      const cells = row.cells
+        .map(
+          (cell, column) =>
+            `<div class="text-cell">${lines(
+              [],
+              `${path}.cells.${String(column)}`,
+              interactive,
+              typeof cell === 'string' ? [{ type: 'paragraph', text: cell }] : cell,
+            )}</div>`,
+        )
+        .join('');
+      // 2、操作栏放在可编辑单元格之外，避免将按钮文字保存进简历。
+      const actions = interactive
+        ? blockButtons(
+            `data-insert-row="${id}.${String(index)}`,
+            `data-remove-row="${id}.${String(index)}"`,
+          )
+        : '';
+      return `<div class="text-row${interactive ? ' resume-block' : ''}" style="--row-columns:${String(row.cells.length)}">${cells}${actions}</div>`;
+    })
+    .join('');
 }
 
 /** 将多行专业技能描述渲染为技能列表。 */
-function professionalSkills(value: string | null, interactive: boolean): string {
-  const items = (value ?? '')
+function professionalSkills(content: ResumeDocumentContent, interactive: boolean): string {
+  const items = (content.professionalSkills ?? '')
     .split(/\r?\n|(?<=[。；;])\s*/u)
     .map((item) => item.replace(/^\s*[-•·]\s*/u, '').trim())
     .filter(Boolean);
-  if (interactive && items.length === 0) items.push('');
-  if (items.length === 0) return '';
-  return `<ul class="detail-list skills-list" data-multiline${editable('professionalSkills', interactive)}>${items.map((item) => `<li data-placeholder="输入一条完整的技能描述">${escapeHtml(item)}</li>`).join('')}</ul>`;
+  // 1、编辑宿主是列表外的整块容器，取消圆点后仍能容纳普通段落。
+  return lines(
+    items,
+    'professionalSkillBlocks',
+    interactive,
+    content.professionalSkillBlocks,
+  ).replaceAll('class="detail-list"', 'class="detail-list skills-list"');
 }
 
 /** 将结构化经历渲染为各章节卡片 HTML。 */
 function cards(content: ResumeDocumentContent, interactive: boolean): Record<string, string> {
   const education = content.education
-    .filter((item) => interactive || [item.institution, item.degree, item.field].some(Boolean))
+    .map((item, index) => ({ item, index }))
+    .filter(
+      ({ item, index }) =>
+        interactive ||
+        (content.textRows?.education?.some((row) =>
+          row.afterBlock?.startsWith(`education.${String(index)}.`),
+        ) ??
+          false) ||
+        [item.institution, item.degree, item.field].some(Boolean),
+    )
     .map(
-      (item, index) =>
-        `<article class="entry"><div class="entry-head"><strong${editable(`education.${String(index)}.institution`, interactive, '学校名称')}>${escapeHtml(item.institution)}</strong><span><span${editable(`education.${String(index)}.startDate`, interactive, '开始日期')}>${escapeHtml(item.startDate)}</span><span aria-hidden="true"> — </span><span${editable(`education.${String(index)}.endDate`, interactive, '结束日期')}>${escapeHtml(item.endDate)}</span></span></div><p><span${editable(`education.${String(index)}.degree`, interactive, '学历')}>${escapeHtml(item.degree)}</span><span aria-hidden="true"> · </span><span${editable(`education.${String(index)}.field`, interactive, '专业')}>${escapeHtml(item.field)}</span></p></article>`,
+      ({ item, index }) =>
+        `<article class="entry">${block(`<div class="entry-head"><strong${editable(`education.${String(index)}.institution`, interactive, '学校名称')}>${escapeHtml(item.institution)}</strong><span><span${editable(`education.${String(index)}.startDate`, interactive, '开始日期')}>${escapeHtml(item.startDate)}</span><span aria-hidden="true"> — </span><span${editable(`education.${String(index)}.endDate`, interactive, '结束日期')}>${escapeHtml(item.endDate)}</span></span></div>`, `education.${String(index)}.header`, 'education', content, interactive)}${block(`<p><span${editable(`education.${String(index)}.degree`, interactive, '学历')}>${escapeHtml(item.degree)}</span><span aria-hidden="true"> · </span><span${editable(`education.${String(index)}.field`, interactive, '专业')}>${escapeHtml(item.field)}</span></p>`, `education.${String(index)}.summary`, 'education', content, interactive)}</article>`,
     )
     .join('');
   const work = content.workExperience
+    .map((item, index) => ({ item, index }))
     .filter(
-      (item) =>
-        interactive || [item.organization, item.title, item.highlights.length > 0].some(Boolean),
+      ({ item, index }) =>
+        interactive ||
+        (content.textRows?.work?.some((row) =>
+          row.afterBlock?.startsWith(`workExperience.${String(index)}.`),
+        ) ??
+          false) ||
+        [
+          item.organization,
+          item.title,
+          (item.descriptionBlocks ?? item.highlights.map((text) => ({ text }))).some((block) =>
+            block.text.trim(),
+          ),
+        ].some(Boolean),
     )
     .map(
-      (item, index) =>
-        `<article class="entry timeline-entry"><span class="timeline-dot" aria-hidden="true"></span><div class="entry-head"><strong><span class="entry-mark" aria-hidden="true">${sectionIcons.work}</span><span${editable(`workExperience.${String(index)}.organization`, interactive, '公司 / 组织')}>${escapeHtml(item.organization)}</span></strong><span><span${editable(`workExperience.${String(index)}.startDate`, interactive, '开始日期')}>${escapeHtml(item.startDate)}</span><span aria-hidden="true"> — </span><span${editable(`workExperience.${String(index)}.endDate`, interactive, '结束日期')}>${escapeHtml(item.endDate)}</span></span></div><h3${editable(`workExperience.${String(index)}.title`, interactive, '职位')}>${escapeHtml(item.title)}</h3>${lines(item.highlights, `workExperience.${String(index)}.highlights`, interactive)}</article>`,
+      ({ item, index }) =>
+        `<article class="entry timeline-entry"><span class="timeline-dot" aria-hidden="true"></span>${block(`<div class="entry-head"><strong><span class="entry-mark" aria-hidden="true">${sectionIcons.work}</span><span${editable(`workExperience.${String(index)}.organization`, interactive, '公司 / 组织')}>${escapeHtml(item.organization)}</span></strong><span><span${editable(`workExperience.${String(index)}.startDate`, interactive, '开始日期')}>${escapeHtml(item.startDate)}</span><span aria-hidden="true"> — </span><span${editable(`workExperience.${String(index)}.endDate`, interactive, '结束日期')}>${escapeHtml(item.endDate)}</span></span></div>`, `workExperience.${String(index)}.header`, 'work', content, interactive)}${block(`<h3${editable(`workExperience.${String(index)}.title`, interactive, '职位')}>${escapeHtml(item.title)}</h3>`, `workExperience.${String(index)}.role`, 'work', content, interactive)}${block(lines(item.highlights, `workExperience.${String(index)}.descriptionBlocks`, interactive, item.descriptionBlocks), `workExperience.${String(index)}.description`, 'work', content, interactive)}</article>`,
     )
     .join('');
   const projects = content.projects
+    .map((item, index) => ({ item, index }))
     .filter(
-      (item) => interactive || [item.name, item.role, item.highlights.length > 0].some(Boolean),
+      ({ item, index }) =>
+        interactive ||
+        (content.textRows?.projects?.some((row) =>
+          row.afterBlock?.startsWith(`projects.${String(index)}.`),
+        ) ??
+          false) ||
+        [
+          item.name,
+          item.role,
+          (item.descriptionBlocks ?? item.highlights.map((text) => ({ text }))).some((block) =>
+            block.text.trim(),
+          ),
+        ].some(Boolean),
     )
     .map(
-      (item, index) =>
-        `<article class="entry timeline-entry"><span class="timeline-dot" aria-hidden="true"></span><div class="entry-head"><strong><span class="entry-mark" aria-hidden="true">${sectionIcons.projects}</span><span${editable(`projects.${String(index)}.name`, interactive, '项目名称')}>${escapeHtml(item.name)}</span></strong><span><span${editable(`projects.${String(index)}.startDate`, interactive, '开始日期')}>${escapeHtml(item.startDate)}</span><span aria-hidden="true"> — </span><span${editable(`projects.${String(index)}.endDate`, interactive, '结束日期')}>${escapeHtml(item.endDate)}</span></span></div><h3${editable(`projects.${String(index)}.role`, interactive, '项目角色')}>${escapeHtml(item.role)}</h3>${lines(item.highlights, `projects.${String(index)}.highlights`, interactive)}</article>`,
+      ({ item, index }) =>
+        `<article class="entry timeline-entry"><span class="timeline-dot" aria-hidden="true"></span>${block(`<div class="entry-head"><strong><span class="entry-mark" aria-hidden="true">${sectionIcons.projects}</span><span${editable(`projects.${String(index)}.name`, interactive, '项目名称')}>${escapeHtml(item.name)}</span></strong><span><span${editable(`projects.${String(index)}.startDate`, interactive, '开始日期')}>${escapeHtml(item.startDate)}</span><span aria-hidden="true"> — </span><span${editable(`projects.${String(index)}.endDate`, interactive, '结束日期')}>${escapeHtml(item.endDate)}</span></span></div>`, `projects.${String(index)}.header`, 'projects', content, interactive)}${block(`<h3${editable(`projects.${String(index)}.role`, interactive, '项目角色')}>${escapeHtml(item.role)}</h3>`, `projects.${String(index)}.role`, 'projects', content, interactive)}${block(lines(item.highlights, `projects.${String(index)}.descriptionBlocks`, interactive, item.descriptionBlocks), `projects.${String(index)}.description`, 'projects', content, interactive)}</article>`,
     )
     .join('');
   const works = content.works
-    .filter((item) => interactive || [item.name, item.description, item.url].some(Boolean))
+    .map((item, index) => ({ item, index }))
+    .filter(
+      ({ item, index }) =>
+        interactive ||
+        (content.textRows?.works?.some((row) =>
+          row.afterBlock?.startsWith(`works.${String(index)}.`),
+        ) ??
+          false) ||
+        [item.name, item.description, item.url].some(Boolean),
+    )
     .map(
-      (item, index) =>
-        `<article class="entry"><div class="entry-head"><strong${editable(`works.${String(index)}.name`, interactive, '作品名称')}>${escapeHtml(item.name)}</strong><span${editable(`works.${String(index)}.url`, interactive, '作品链接')}>${escapeHtml(item.url)}</span></div><p${editable(`works.${String(index)}.description`, interactive, '作品说明')}>${escapeHtml(item.description)}</p></article>`,
+      ({ item, index }) =>
+        `<article class="entry">${block(`<div class="entry-head"><strong${editable(`works.${String(index)}.name`, interactive, '作品名称')}>${escapeHtml(item.name)}</strong><span${editable(`works.${String(index)}.url`, interactive, '作品链接')}>${escapeHtml(item.url)}</span></div>`, `works.${String(index)}.header`, 'works', content, interactive)}${block(`<p${editable(`works.${String(index)}.description`, interactive, '作品说明')}>${escapeHtml(item.description)}</p>`, `works.${String(index)}.summary`, 'works', content, interactive)}</article>`,
     )
     .join('');
   const competitions = content.competitions
-    .filter((item) => interactive || [item.name, item.award, item.date].some(Boolean))
-    .map(
-      (item, index) =>
+    .map((item, index) => ({ item, index }))
+    .filter(
+      ({ item, index }) =>
+        interactive ||
+        (content.textRows?.competitions?.some((row) =>
+          row.afterBlock?.startsWith(`competitions.${String(index)}.`),
+        ) ??
+          false) ||
+        [item.name, item.award, item.date].some(Boolean),
+    )
+    .map(({ item, index }) =>
+      block(
         `<article class="compact-entry"><strong${editable(`competitions.${String(index)}.name`, interactive, '竞赛名称')}>${escapeHtml(item.name)}</strong><span${editable(`competitions.${String(index)}.award`, interactive, '奖项')}>${escapeHtml(item.award)}</span><time${editable(`competitions.${String(index)}.date`, interactive, '时间')}>${escapeHtml(item.date)}</time></article>`,
+        `competitions.${String(index)}.text`,
+        'competitions',
+        content,
+        interactive,
+      ),
     )
     .join('');
   const certificates = content.certificates
-    .filter((item) => interactive || [item.name, item.issuer, item.date].some(Boolean))
-    .map(
-      (item, index) =>
+    .map((item, index) => ({ item, index }))
+    .filter(
+      ({ item, index }) =>
+        interactive ||
+        (content.textRows?.certificates?.some((row) =>
+          row.afterBlock?.startsWith(`certificates.${String(index)}.`),
+        ) ??
+          false) ||
+        [item.name, item.issuer, item.date].some(Boolean),
+    )
+    .map(({ item, index }) =>
+      block(
         `<article class="compact-entry"><strong${editable(`certificates.${String(index)}.name`, interactive, '证书名称')}>${escapeHtml(item.name)}</strong><span${editable(`certificates.${String(index)}.issuer`, interactive, '颁发机构')}>${escapeHtml(item.issuer)}</span><time${editable(`certificates.${String(index)}.date`, interactive, '取得时间')}>${escapeHtml(item.date)}</time></article>`,
+        `certificates.${String(index)}.text`,
+        'certificates',
+        content,
+        interactive,
+      ),
     )
     .join('');
   const languages = content.languages
-    .filter((item) => interactive || [item.name, item.proficiency].some(Boolean))
-    .map(
-      (item, index) =>
+    .map((item, index) => ({ item, index }))
+    .filter(
+      ({ item, index }) =>
+        interactive ||
+        (content.textRows?.languages?.some((row) =>
+          row.afterBlock?.startsWith(`languages.${String(index)}.`),
+        ) ??
+          false) ||
+        [item.name, item.proficiency].some(Boolean),
+    )
+    .map(({ item, index }) =>
+      block(
         `<span class="tag"><span${editable(`languages.${String(index)}.name`, interactive, '语言')}>${escapeHtml(item.name)}</span><span aria-hidden="true"> · </span><span${editable(`languages.${String(index)}.proficiency`, interactive, '熟练程度')}>${escapeHtml(item.proficiency)}</span></span>`,
+        `languages.${String(index)}.text`,
+        'languages',
+        content,
+        interactive,
+      ),
     )
     .join('');
   return { education, work, projects, works, competitions, certificates, languages };
 }
 
+// 编辑态悬停块高于仍聚焦的相邻块；行内字段使用独立点击盒，避免占位文字误命中邻项。
 const sharedCss = `
-*{box-sizing:border-box}html{background:#e9edf4}body{margin:0;color:#1c2430;font:14px/1.55 "Aptos","PingFang SC","Microsoft YaHei",sans-serif}.resume-paper{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:13mm 14mm 12mm}.hero{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:start;padding-bottom:18px}.hero.has-avatar{grid-template-columns:30mm minmax(0,1fr)}.avatar{width:28mm;height:36mm;object-fit:cover;border:1px solid #d7e0ec}.profile-kicker{display:none}.identity{font-size:var(--section-font-size,inherit);letter-spacing:var(--section-letter-spacing,normal);line-height:var(--section-line-height,inherit)}.identity-title{display:flex;align-items:baseline;justify-content:flex-start;gap:16px}.identity h1{margin:0;font-size:30px;letter-spacing:-.04em;line-height:1.15}.role-line{flex:1 1 45%;margin:0;color:#596275;font-weight:750;text-align:left}.contact{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:11px;color:#596275;font-size:12px}.contact-icon,.section-icon,.entry-mark,.timeline-dot{display:none}.resume-section{position:relative;margin-top:18px;break-inside:auto}.section-body{font-size:var(--section-font-size,inherit);letter-spacing:var(--section-letter-spacing,normal);line-height:var(--section-line-height,inherit)}.section-heading{display:flex;align-items:center;gap:10px;margin-bottom:9px}.section-heading h2{margin:0;font-size:16px;letter-spacing:.04em}.section-rule{height:2px;flex:1;background:#dbe3ef}.entry{position:relative;padding:9px 0;break-inside:avoid}.entry+.entry{border-top:1px solid #e3e8f0}.entry-head{display:flex;justify-content:space-between;gap:16px}.entry-head>span{color:#657188;font-size:12px;text-align:right}.entry h3,.entry p{margin:3px 0}.entry h3{font-size:13px}.detail-list{margin:5px 0 0;padding-left:18px}.detail-list li{margin:2px 0}.skills-list{white-space:normal}.compact-entry{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;gap:12px;padding:5px 0;break-inside:avoid}.compact-entry time,.compact-entry span{color:#657188}.tag-list{display:flex;flex-wrap:wrap;gap:6px}.tag{display:inline-block;padding:3px 8px;border:1px solid #d7e0ec;border-radius:4px}.copy{white-space:pre-wrap}.is-active{outline:2px solid #4e5fbb;outline-offset:5px}.is-active:before{content:"";position:absolute;left:-9px;top:0;width:3px;height:30px;background:#e06c5d}[contenteditable=true]{min-width:1ch;cursor:text;outline:0;border-radius:2px}[contenteditable=true]:hover{background:rgb(50 108 255 / 7%)}[contenteditable=true]:focus{background:#fff;box-shadow:0 0 0 2px #7897ff}[contenteditable=true]:empty:before,[contenteditable=true] [data-placeholder]:empty:before{color:#8b95a7;content:attr(data-placeholder)}.export-toolbar{position:sticky;z-index:5;top:0;display:flex;gap:8px;justify-content:center;padding:10px;background:#111827;color:#fff}.export-toolbar button{border:1px solid #94a3b8;border-radius:6px;background:#fff;color:#111827;padding:7px 11px;cursor:pointer}.export-toolbar+main{margin-top:16px}@page{size:A4;margin:0}@media print{html,body{width:210mm;background:#fff}.export-toolbar{display:none!important}.resume-paper{margin:0;box-shadow:none}.is-active{outline:none}.is-active:before{display:none}}
+.description-block{min-height:1.5em;white-space:pre-wrap}.description-block ul{white-space:normal}.text-row{position:relative;display:grid;grid-template-columns:repeat(var(--row-columns),minmax(0,1fr));gap:10px;margin:6px 0;break-inside:avoid}.text-row>div:not(.row-actions){min-width:0;overflow-wrap:anywhere;white-space:pre-wrap}.text-row:focus-within{outline:1px dashed #4e5fbb;outline-offset:3px}.resume-block{position:relative;min-width:0}.resume-block:hover,.resume-block:focus-within{outline:1px dashed var(--action,#e06c5d);outline-offset:2px;z-index:2}.resume-block:hover{z-index:3}.resume-block>.row-actions{position:absolute;right:0;top:100%;z-index:10;display:flex;gap:2px;opacity:0;pointer-events:none;white-space:nowrap}.resume-block:hover>.row-actions,.resume-block:focus-within>.row-actions{opacity:1;pointer-events:auto}.row-actions button{display:inline-flex;align-items:center;justify-content:center;gap:3px;min-width:30px;height:24px;padding:2px 4px;border:0;border-radius:0;background:var(--action-soft,#fdece9);color:var(--danger,#a13d32);cursor:pointer;font:700 11px/1 sans-serif}.row-actions b{display:inline-grid;place-items:center;background:white;color:var(--danger,#a13d32);width:12px;height:15px;border-radius:2px}.row-actions .block-delete{background:var(--danger-soft,#fcebe8);color:var(--danger,#a13d32);min-width:24px}.row-actions svg{width:16px;height:16px}.row-actions button:hover{filter:brightness(.9)}.row-actions button:focus-visible{outline:2px solid #263247;outline-offset:-2px}.empty-block{min-height:24px;color:#7b8794}@media(hover:none){.resume-block:focus-within>.row-actions{opacity:1;pointer-events:auto}}@media print{.row-actions{display:none!important}}
+*{box-sizing:border-box}html{background:#e9edf4}body{margin:0;color:#1c2430;font:14px/1.55 "Aptos","PingFang SC","Microsoft YaHei",sans-serif}.resume-paper{width:210mm;min-height:297mm;margin:0 auto;background:#fff;padding:13mm 14mm 12mm}.hero{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:20px;align-items:start;padding-bottom:18px}.hero.has-avatar{grid-template-columns:30mm minmax(0,1fr)}.avatar{width:28mm;height:36mm;object-fit:cover;border:1px solid #d7e0ec}.profile-kicker{display:none}.identity{font-size:var(--section-font-size,inherit);letter-spacing:var(--section-letter-spacing,normal);line-height:var(--section-line-height,inherit)}.identity-title{display:flex;align-items:baseline;justify-content:flex-start;gap:16px}.identity h1{margin:0;font-size:30px;letter-spacing:-.04em;line-height:1.15}.role-line{flex:1 1 45%;margin:0;color:#596275;font-weight:750;text-align:left}.contact{display:flex;flex-wrap:wrap;gap:5px 14px;margin-top:11px;color:#596275;font-size:12px}.contact-icon,.section-icon,.entry-mark,.timeline-dot{display:none}.resume-section{position:relative;margin-top:18px;break-inside:auto}.section-body{font-size:var(--section-font-size,inherit);letter-spacing:var(--section-letter-spacing,normal);line-height:var(--section-line-height,inherit)}.section-heading{display:flex;align-items:center;gap:10px;margin-bottom:9px}.section-heading h2{margin:0;font-size:16px;letter-spacing:.04em}.section-rule{height:2px;flex:1;background:#dbe3ef}.entry{position:relative;padding:9px 0;break-inside:avoid}.entry+.entry{border-top:1px solid #e3e8f0}.entry-head{display:flex;justify-content:space-between;gap:16px}.entry-head>span{color:#657188;font-size:12px;text-align:right}.entry h3,.entry p{margin:3px 0}.entry h3{font-size:13px}.detail-list{margin:5px 0 0;padding-left:18px}.detail-list li{margin:2px 0}.skills-list{white-space:normal}.compact-entry{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto;gap:12px;padding:5px 0;break-inside:avoid}.compact-entry time,.compact-entry span{color:#657188}.tag-list{display:flex;flex-wrap:wrap;gap:6px}.tag{display:inline-block;padding:3px 8px;border:1px solid #d7e0ec;border-radius:4px}.copy{white-space:pre-wrap}.is-active{outline:2px solid #4e5fbb;outline-offset:5px}.is-active:before{content:"";position:absolute;left:-9px;top:0;width:3px;height:30px;background:#e06c5d}[contenteditable=true]{min-width:1ch;cursor:text;outline:0;border-radius:2px}span[contenteditable=true]{display:inline-block;min-height:1em}[contenteditable=true]:hover{background:rgb(50 108 255 / 7%)}[contenteditable=true]:focus{background:#fff;box-shadow:0 0 0 2px #7897ff}[contenteditable=true]:empty:before,[contenteditable=true] [data-placeholder]:empty:before{color:#8b95a7;content:attr(data-placeholder)}.export-toolbar{position:sticky;z-index:5;top:0;display:flex;gap:8px;justify-content:center;padding:10px;background:#111827;color:#fff}.export-toolbar button{border:1px solid #94a3b8;border-radius:6px;background:#fff;color:#111827;padding:7px 11px;cursor:pointer}.export-toolbar+main{margin-top:16px}@page{size:A4;margin:0}@media print{html,body{width:210mm;background:#fff}.export-toolbar{display:none!important}.resume-paper{margin:0;box-shadow:none}.is-active{outline:none}.is-active:before{display:none}}
 `;
 
 const technicalCss = `
@@ -239,7 +435,13 @@ export function renderResumeHtml(input: RenderResumeHtmlInput): string {
     ),
     section(
       'skills',
-      professionalSkills(content.professionalSkills, interactive),
+      block(
+        professionalSkills(content, interactive),
+        'skills.text',
+        'skills',
+        content,
+        interactive,
+      ),
       content,
       input.activeSection,
       interactive,
@@ -247,7 +449,13 @@ export function renderResumeHtml(input: RenderResumeHtmlInput): string {
     section(
       'evaluation',
       content.selfEvaluation || interactive
-        ? `<p class="copy" data-multiline${editable('selfEvaluation', interactive, '输入自我评价')}>${escapeHtml(content.selfEvaluation)}</p>`
+        ? block(
+            `<p class="copy" data-multiline${editable('selfEvaluation', interactive, '输入自我评价')}>${escapeHtml(content.selfEvaluation)}</p>`,
+            'evaluation.text',
+            'evaluation',
+            content,
+            interactive,
+          )
         : '',
       content,
       input.activeSection,
@@ -255,9 +463,14 @@ export function renderResumeHtml(input: RenderResumeHtmlInput): string {
     ),
   ].join('');
   // 2、按输出模式附加编辑/打印工具栏，并返回无外部资源依赖的 HTML 快照。
-  const exportToolbar = input.editable
-    ? `<div class="export-toolbar"><button type="button" data-action="edit">编辑文字</button><button type="button" data-action="save">保存当前 HTML</button><button type="button" data-action="print">打印 / 导出 PDF</button></div>`
+  const exportToolbar =
+    input.editable && !interactive
+      ? `<div class="export-toolbar"><button type="button" data-action="edit">编辑文字</button><button type="button" data-action="save">保存当前 HTML</button><button type="button" data-action="print">打印 / 导出 PDF</button></div>`
+      : '';
+  // 3、编辑态允许父页回调，但 CSP 禁止画布自身脚本、外部资源及表单；必须先于正文解析。
+  const editorPolicy = interactive
+    ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">`
     : '';
   const bodyClass = template.key === 'technical-blueprint' ? 'template-one-page' : 'template-clean';
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(content.basicInfo.name ?? '我的简历')} - ${escapeHtml(template.name)}</title><style>${sharedCss}${technicalCss}${cleanCss}</style></head><body class="${bodyClass}">${exportToolbar}<main class="resume-paper"><header class="hero${avatar ? ' has-avatar' : ''}${input.activeSection === 'basic' ? ' is-active' : ''}" data-section-id="basic"${sectionStyle(content, 'basic')}${interactive ? ' tabindex="0"' : ''}>${avatar}<div class="identity"><div class="profile-kicker">个人简历 / RESUME</div><div class="identity-title"><h1${editable('basicInfo.name', interactive, '姓名')}>${escapeHtml(content.basicInfo.name ?? (interactive ? '' : '姓名'))}</h1><p class="role-line"${editable('targetRoles', interactive, '求职方向')}>${escapeHtml(content.targetRoles.join(' / '))}</p></div><div class="contact">${contact}</div></div></header>${sections}</main>${input.editable ? editableScript : ''}</body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">${editorPolicy}<meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(content.basicInfo.name ?? '我的简历')} - ${escapeHtml(template.name)}</title><style>${sharedCss}${technicalCss}${cleanCss}</style></head><body class="${bodyClass}">${exportToolbar}<main class="resume-paper" aria-label="简历正文">${isResumeSectionAdded(content, 'basic') ? `<header class="hero${avatar ? ' has-avatar' : ''}${input.activeSection === 'basic' ? ' is-active' : ''}" data-section-id="basic"${sectionStyle(content, 'basic')}${interactive ? ' tabindex="0"' : ''}>${avatar}<div class="identity"><div class="profile-kicker">个人简历 / RESUME</div>${block(`<div class="identity-title"><h1${editable('basicInfo.name', interactive, '姓名')}>${escapeHtml(content.basicInfo.name ?? (interactive ? '' : '姓名'))}</h1><p class="role-line"${editable('targetRoles', interactive, '求职方向')}>${escapeHtml(content.targetRoles.join(' / '))}</p></div>`, 'basic.title', 'basic', content, interactive)}${block(`<div class="contact">${contact}</div>`, 'basic.contact', 'basic', content, interactive)}${textRows(content, 'basic', interactive)}</div></header>` : ''}${sections}</main>${input.editable && !interactive ? editableScript : ''}</body></html>`;
 }
