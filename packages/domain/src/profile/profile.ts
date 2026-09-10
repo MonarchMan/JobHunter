@@ -42,6 +42,19 @@ export const candidatePreferencesSchema = z
 /** 候选人画像完整领域 Schema，负责统一默认值和文本约束。 */
 export const candidateProfileSchema = z
   .object({
+    // 可选对象保持旧画像兼容；身份与可用时间由用户确认，不按当前日期推测。
+    matchingConstraints: z
+      .object({
+        targetSubfamily: optionalText,
+        graduationYear: z.number().int().min(1900).max(2200).nullable(),
+        studentStatus: z.enum(['student', 'graduating', 'fresh_graduate', 'graduated']).nullable(),
+        internshipDaysPerWeek: z.number().int().min(1).max(7).nullable(),
+        internshipMonths: z.number().min(0).max(60).nullable(),
+        availableFrom: z.iso.date().nullable(),
+      })
+      .strict()
+      .readonly()
+      .optional(),
     basicInfo: z
       .object({
         name: optionalText,

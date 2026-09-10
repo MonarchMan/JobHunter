@@ -92,6 +92,9 @@ importers:
       '@jobhunter/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@jobhunter/matching':
+        specifier: workspace:*
+        version: link:../../packages/matching
       '@jobhunter/resume-template':
         specifier: workspace:*
         version: link:../../packages/resume-template

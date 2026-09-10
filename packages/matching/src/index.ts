@@ -10,3 +10,5 @@ export * from './query.js';
 export * from './rules.js';
 export * from './rulesets.js';
 export * from './scoring.js';
+export * from './recruitment-scoring.js';
+export * from './recruitment-requirements.js';

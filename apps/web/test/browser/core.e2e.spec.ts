@@ -296,6 +296,13 @@ test.describe('校招实习管理台核心流程', () => {
     );
     await expect(titleLink).toHaveAttribute('target', '_blank');
     await expect(titleLink).toHaveAttribute('rel', 'noopener noreferrer');
+    const cells = row.getByRole('cell');
+    await expect(cells).toHaveCount(7);
+    for (let index = 0; index < 7; index += 1) {
+      await expect(cells.nth(index)).toHaveCSS('vertical-align', 'middle');
+    }
+    await expect(row.getByText('查看详情', { exact: true })).toHaveCount(0);
+    await expect(row.getByRole('link', { name: /查看职位详情/ })).toBeVisible();
     const applyBox = await row.getByRole('link', { name: '官网投递' }).boundingBox();
     const scoreBox = await row.getByRole('button', { name: '评分' }).boundingBox();
     expect(applyBox?.y).toBe(scoreBox?.y);
@@ -1019,7 +1026,8 @@ test.describe('校招实习管理台核心流程', () => {
   test('uses shared authored selects throughout the profile page', async ({ page }) => {
     await page.goto('/profile');
     await expect(page.locator('select:not([aria-hidden="true"])')).toHaveCount(0);
-    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(6);
+    // 原有六项加上细分岗位、学籍身份和每周实习天数，全部由共享组件承载。
+    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(9);
 
     const targetRole = page.getByRole('combobox', { name: '目标岗位' });
     await expect(targetRole).not.toHaveText('');

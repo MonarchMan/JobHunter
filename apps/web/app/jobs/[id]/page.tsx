@@ -1,4 +1,5 @@
 import { JobNotFoundError } from '@jobhunter/application/web';
+import { matchEvidenceCoverage } from '@jobhunter/matching';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
@@ -19,6 +20,7 @@ interface JobDetailPageProperties {
 const dimensionLabels: Readonly<Record<string, string>> = {
   skills: '技能',
   experience: '经验',
+  projects: '项目 / 实践',
   role: '岗位方向',
   industry: '行业',
   location: '地点',
@@ -157,12 +159,31 @@ export default async function JobDetailPage({
                 </div>
                 <small>个人资料版本 {match.profileVersionId}</small>
               </header>
+              {matchEvidenceCoverage(match.components) !== null && (
+                <p>
+                  招聘类别：
+                  {
+                    { social: '社招', campus: '校招', internship: '实习', unknown: '待确认' }[
+                      match.components[0]?.recruitmentCategory ?? 'unknown'
+                    ]
+                  }
+                  {' · '}证据完整度 {matchEvidenceCoverage(match.components)}%
+                  {(matchEvidenceCoverage(match.components) ?? 100) < 100 ||
+                  match.filterStatus === 'uncertain'
+                    ? ' · 暂定分，补充事实后可重新评分'
+                    : ''}
+                </p>
+              )}
               <div className={styles.scoreGrid}>
                 {match.components.map((component) => (
                   <section key={component.dimension}>
                     <h3>{dimensionLabels[component.dimension] ?? component.dimension}</h3>
                     <strong>
-                      {component.score.toFixed(1)} / {component.maximumScore.toFixed(1)}
+                      {component.evidenceStatus === 'not_applicable'
+                        ? '不适用'
+                        : component.evidenceStatus === 'unknown'
+                          ? `待确认 / ${component.maximumScore.toFixed(1)}`
+                          : `${component.score.toFixed(1)} / ${component.maximumScore.toFixed(1)}`}
                     </strong>
                     {component.matchedEvidence.map((evidence) => (
                       <p key={`${evidence.path}:${evidence.summary}`}>✓ {evidence.summary}</p>
@@ -183,8 +204,8 @@ export default async function JobDetailPage({
               <details>
                 <summary>查看资格规则证据</summary>
                 <ul className={styles.evidenceList}>
-                  {match.ruleOutcomes.map((outcome) => (
-                    <li key={outcome.ruleId}>
+                  {match.ruleOutcomes.map((outcome, index) => (
+                    <li key={`${outcome.ruleId}:${String(index)}`}>
                       <strong>{outcome.status}</strong> {outcome.explanation}
                     </li>
                   ))}

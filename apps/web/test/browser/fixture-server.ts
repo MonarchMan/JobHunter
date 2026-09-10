@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { makeCandidateProfile, FakeModel } from '@jobhunter/testkit';
 import { openSqliteDatabase } from '@jobhunter/db';
+import { calculateDeterministicMatch, matchRulesetV2 } from '@jobhunter/matching';
 import {
   contentHash,
   drillCoverageDimensions,
@@ -543,6 +544,40 @@ async function seedFixture(dataRoot: string): Promise<void> {
           },
         ]),
         'f'.repeat(64),
+      );
+    // 分型详情夹具使用真实纯规则引擎，不改变活动列表的旧评分基线。
+    const recruitmentMatch = calculateDeterministicMatch(
+      {
+        profile: interviewProfile,
+        job: campusJobs[1],
+        company: { sizeCategory: 'large', industry: null },
+        understanding: null,
+      },
+      matchRulesetV2,
+    );
+    database.client
+      .prepare(
+        `INSERT INTO match_rulesets (id, version, definition_json, definition_hash, active, created_at) VALUES (?, 'v2-fixture', ?, ?, 0, 1)`,
+      )
+      .run(
+        '018f0000-0000-7000-8000-000000000631',
+        JSON.stringify({ ...matchRulesetV2, version: 'v2-fixture' }),
+        contentHash({ ...matchRulesetV2, version: 'v2-fixture' }),
+      );
+    database.client
+      .prepare(
+        `INSERT INTO match_results (id, profile_version_id, job_revision_id, ruleset_id, filter_status, total_score, components_json, risks_json, input_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 3)`,
+      )
+      .run(
+        '018f0000-0000-7000-8000-000000000632',
+        ids.interviewProfileVersion,
+        ids.staleRevision,
+        '018f0000-0000-7000-8000-000000000631',
+        recruitmentMatch.filterStatus,
+        recruitmentMatch.totalScore,
+        JSON.stringify(recruitmentMatch.components),
+        JSON.stringify(recruitmentMatch.ruleOutcomes),
+        contentHash(recruitmentMatch),
       );
     database.client
       .prepare(

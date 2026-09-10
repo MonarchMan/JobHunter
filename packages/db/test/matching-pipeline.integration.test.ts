@@ -278,6 +278,36 @@ async function setup(): Promise<{
 }
 
 describe('matching persistence pipeline', () => {
+  it('activates v3 without overwriting v1/v2 results and replays immutable versions', async () => {
+    const fixture = await setup();
+    const service = new DeterministicMatchingService(fixture);
+    service.ensureRulesetV1({ id: rulesetId });
+    const input = { profileVersionId, jobRevisionId: revisionId, jobEnrichmentId: null };
+    const legacy = service.compute(input).match;
+    const nextId = parseId('018f0000-0000-7000-8000-00000000d008', 'MatchRuleset');
+    service.ensureRulesetV2({ id: nextId });
+    const next = service.compute(input).match;
+    expect(next.id).not.toBe(legacy.id);
+    expect(next.rulesetId).toBe(nextId);
+    expect(next.components[0]).toMatchObject({
+      recruitmentCategory: 'unknown',
+      evidenceStatus: 'unknown',
+    });
+    expect(service.compute(input)).toEqual({ match: next, created: false });
+    expect(service.compute({ ...input, rulesetId }).match).toEqual(legacy);
+    expect(fixture.matching.getActiveRuleset()?.id).toBe(nextId);
+    // 条件语义升级独立保存 v3；旧版本指定规则 ID 后仍逐字重放。
+    const v3Id = parseId('018f0000-0000-7000-8000-00000000d009', 'MatchRuleset');
+    service.ensureRulesetV3({ id: v3Id });
+    const v3 = service.compute(input).match;
+    expect(v3.rulesetId).toBe(v3Id);
+    expect(v3.id).not.toBe(next.id);
+    expect(service.compute(input)).toEqual({ match: v3, created: false });
+    expect(service.compute({ ...input, rulesetId: nextId }).match).toEqual(next);
+    expect(service.compute({ ...input, rulesetId }).match).toEqual(legacy);
+    expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('evidence-v3');
+  });
+
   it('pre-filters job revisions by target roles and excluded terms before calculation', async () => {
     const fixture = await setup();
 

@@ -13,6 +13,7 @@ import { SelectField } from '../components/select-field.js';
 import { useToast } from '../components/toast-provider.js';
 import { ResumePolish } from './resume-polish.js';
 import { ResumeTemplateEntry } from './resume-template-entry.js';
+import { MatchingConstraintsFields } from './matching-constraints.js';
 import styles from './resume-editor.module.css';
 
 function classNames(...names: readonly (string | false | undefined)[]): string {
@@ -680,6 +681,14 @@ export function ResumeEditor({
   };
   const save = async (event: SyntheticEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
+    // 1. 资格字段的应用内校验先于请求，保留草稿并聚焦首个错误。
+    const invalid = event.currentTarget.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (invalid) {
+      setFeedback({ kind: 'error', text: '请先修正标记的资格信息。' });
+      invalid.focus();
+      return;
+    }
+    // 2. 沿用整份版本保存，失败不清空用户输入。
     setBusy(true);
     setFeedback(null);
     try {
@@ -834,7 +843,7 @@ export function ResumeEditor({
           <EditorSection
             id="resume-intention"
             title="求职意向"
-            description="用于职位筛选和匹配排序。"
+            description="用于职位筛选和匹配排序。资格信息可留空，留空表示待确认；保存简历后生效。"
           >
             <div className={styles['resume-field-grid']}>
               <label>
@@ -849,6 +858,12 @@ export function ResumeEditor({
                   }}
                 />
               </label>
+              <MatchingConstraintsFields
+                value={draft.matchingConstraints}
+                onChange={(value) => {
+                  updateArray('matchingConstraints', value);
+                }}
+              />
               <label>
                 期望地点
                 <input

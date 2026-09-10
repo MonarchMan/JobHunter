@@ -44,6 +44,10 @@
   vertical-align: top;
 }
 
+.tableScroll tbody td {
+  vertical-align: middle;
+}
+
 .tableScroll th {
   color: #626b7c;
   font-size: 0.78rem;
@@ -108,11 +112,6 @@
 .detailLink {
   color: var(--primary-hover);
   cursor: pointer;
-}
-
-.detailLink small {
-  display: block;
-  color: inherit;
 }
 
 .detailLink:hover {

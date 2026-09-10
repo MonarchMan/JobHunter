@@ -14,7 +14,7 @@ export default async function SettingsPage(): Promise<ReactElement> {
     <main id="main-content" tabIndex={-1}>
       <PageHeader
         title="设置"
-        description="管理影响整个系统的非敏感运行开关。修改会立即保存，下一次同步开始时生效。"
+        description="管理影响整个系统的非敏感运行开关。修改后请点击“保存设置”，保存成功后对后续同步生效。"
       />
       <section
         className={[styles.settingsPanel, 'panel'].join(' ')}

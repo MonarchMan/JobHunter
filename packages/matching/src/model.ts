@@ -28,6 +28,7 @@ export const scoreDimensionSchema = z.enum([
   'role',
   'industry',
   'location',
+  'projects',
 ]);
 
 /** 单个评分维度的分数和证据。 */
@@ -39,6 +40,8 @@ export const scoreComponentSchema = z
     matchedEvidence: z.array(matchingEvidenceSchema),
     missingEvidence: z.array(z.string()),
     uncertainties: z.array(z.string()),
+    evidenceStatus: z.enum(['known', 'unknown', 'not_applicable']).optional(),
+    recruitmentCategory: z.enum(['social', 'campus', 'internship', 'unknown']).optional(),
   })
   .strict()
   .refine((value) => value.score <= value.maximumScore, 'Component score exceeds its maximum.');

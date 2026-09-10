@@ -202,7 +202,10 @@ async function setup(
   options: {
     readonly rejectAllJobs?: boolean;
     readonly deferredDetails?: boolean;
-    readonly automaticMatching?: { readonly adviceEnabled: boolean };
+    readonly automaticMatching?: {
+      readonly scoreEnabled?: boolean;
+      readonly adviceEnabled: boolean;
+    };
   } = {},
 ): Promise<SyncFixture> {
   const root = await createTemporaryDataRoot('jobhunter-sync-');
@@ -279,7 +282,7 @@ async function setup(
       ? {
           automaticMatching: {
             settings: () => ({
-              scoreEnabled: true,
+              scoreEnabled: automaticMatching.scoreEnabled ?? true,
               adviceEnabled: automaticMatching.adviceEnabled,
             }),
             currentProfileVersionIds: () => ['018f0000-0000-7000-8000-000000009999'],
@@ -348,6 +351,21 @@ describe('JobSyncService', () => {
           manualJobScoreTaskPayloadSchema.parse(JSON.parse(row.payload_json)).mode === 'rules',
       ),
     ).toBe(true);
+  });
+
+  it('does not enqueue automatic scoring for new revisions when disabled', async () => {
+    // 1. 显式关闭评分，验证新职位仍同步但不会创建评分任务。
+    const fixture = await setup({
+      automaticMatching: { scoreEnabled: false, adviceEnabled: false },
+    });
+    const result = await run(fixture);
+    expect(result).toMatchObject({ stats: { created: 3, followupEnqueued: 0 } });
+    expect(
+      fixture.handle.client
+        .prepare("SELECT count(*) FROM tasks WHERE task_type = 'match.score-job'")
+        .pluck()
+        .get(),
+    ).toBe(0);
   });
 
   it('keeps complete runs healthy when jobs are intentionally filtered out', async () => {

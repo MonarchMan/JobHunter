@@ -9,7 +9,12 @@ import {
   type MatchRulesetId,
   type ProfileVersionId,
 } from '@jobhunter/domain';
-import { calculateDeterministicMatch, matchRulesetV1 } from '@jobhunter/matching';
+import {
+  calculateDeterministicMatch,
+  matchRulesetV1,
+  matchRulesetV2,
+  matchRulesetV3,
+} from '@jobhunter/matching';
 import type { MatchingRepository, MatchResultRecord } from '../ports/matching.js';
 import type { CandidateProfileRepository } from '../ports/profiles.js';
 
@@ -51,6 +56,36 @@ export class DeterministicMatchingService {
       version: matchRulesetV1.version,
       definition: matchRulesetV1,
       definitionHash: contentHash(matchRulesetV1),
+      active: input.activate ?? true,
+      createdAt: this.#clock.now(),
+    });
+  }
+
+  /** 新计算启用招聘分类规则，独立版本不会覆盖 v1 历史记录。 */
+  public ensureRulesetV2(input: {
+    readonly id: MatchRulesetId;
+    readonly activate?: boolean;
+  }): ReturnType<MatchingRepository['upsertRuleset']> {
+    return this.#matching.upsertRuleset({
+      id: input.id,
+      version: matchRulesetV2.version,
+      definition: matchRulesetV2,
+      definitionHash: contentHash(matchRulesetV2),
+      active: input.activate ?? true,
+      createdAt: this.#clock.now(),
+    });
+  }
+
+  /** 幂等登记并按调用方选择激活 v3，保留历史规则及其评分记录。 */
+  public ensureRulesetV3(input: {
+    readonly id: MatchRulesetId;
+    readonly activate?: boolean;
+  }): ReturnType<MatchingRepository['upsertRuleset']> {
+    return this.#matching.upsertRuleset({
+      id: input.id,
+      version: matchRulesetV3.version,
+      definition: matchRulesetV3,
+      definitionHash: contentHash(matchRulesetV3),
       active: input.activate ?? true,
       createdAt: this.#clock.now(),
     });
