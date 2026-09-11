@@ -1,0 +1,304 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1100 640"
+  width="1100"
+  height="640"
+  role="img"
+  font-family="Microsoft YaHei UI, Noto Sans SC, system-ui, sans-serif"
+>
+  <title>JobHunter · 求职流程</title>
+  <desc>
+    简历解析形成个人资料与项目经历，再用于匹配、简历制作和面试档案。额外文档与面经是可选补充，官网申请由本人完成。
+  </desc>
+  <defs>
+    <marker
+      id="arrow-flow"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="6"
+      markerHeight="6"
+      orient="auto-start-reverse"
+    >
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#596275" />
+    </marker>
+  </defs>
+  <rect width="1100" height="640" rx="12" fill="#f8f9fc" />
+  <text x="42" y="45" fill="#596275" font-size="14">收集输入</text>
+  <text x="312" y="45" fill="#596275" font-size="14">整理与核对</text>
+  <text x="582" y="45" fill="#596275" font-size="14">判断与制作</text>
+  <text x="852" y="45" fill="#596275" font-size="14">人工行动</text>
+  <g class="edge" data-from="resume-input" data-to="profile">
+    <path
+      d="M 250 328 H 265 V 328 H 300"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="275"
+      y="319"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      解析
+    </text>
+  </g>
+  <g class="edge" data-from="official-input" data-to="job-pool">
+    <path
+      d="M 250 518 H 275 V 518 H 300"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="275"
+      y="509"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      采集
+    </text>
+  </g>
+  <g class="edge" data-from="profile" data-to="studio">
+    <path
+      d="M 520 328 H 555 V 328 H 570"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="545"
+      y="319"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      派生草稿
+    </text>
+  </g>
+  <g class="edge" data-from="profile" data-to="match">
+    <path
+      d="M 520 328 H 535 V 518 H 570"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="535"
+      y="414"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      画像
+    </text>
+  </g>
+  <g class="edge" data-from="job-pool" data-to="match">
+    <path
+      d="M 520 518 H 545 V 518 H 570"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="545"
+      y="509"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      职位
+    </text>
+  </g>
+  <g class="edge" data-from="match" data-to="apply">
+    <path
+      d="M 790 518 H 825 V 518 H 840"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="815"
+      y="509"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      官网入口
+    </text>
+  </g>
+  <g class="edge" data-from="studio" data-to="apply">
+    <path
+      d="M 790 328 H 805 V 518 H 840"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="805"
+      y="414"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      投递文件
+    </text>
+  </g>
+  <g class="edge" data-from="profile" data-to="resume-projects">
+    <path
+      d="M 410 280 V 186"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="433"
+      y="233"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      经历信息
+    </text>
+  </g>
+  <g class="edge" data-from="resume-projects" data-to="interview">
+    <path
+      d="M 520 138 H 555 V 138 H 570"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="545"
+      y="129"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      建立档案
+    </text>
+  </g>
+  <g class="edge" data-from="interview" data-to="practice">
+    <path
+      d="M 790 138 H 805 V 138 H 840"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-flow)"
+    />
+    <text
+      x="815"
+      y="129"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      练习与回顾
+    </text>
+  </g>
+  <g>
+    <rect x="30" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 40 281 H 240" stroke="#316d8b" stroke-width="3" />
+    <text x="46" y="318" fill="#1c2130" font-size="18" font-weight="600">导入简历</text>
+    <text x="46" y="345" fill="#596275" font-size="10.5">PDF · DOCX · JPEG · PNG</text>
+  </g>
+  <g>
+    <rect x="30" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 40 471 H 240" stroke="#316d8b" stroke-width="3" />
+    <text x="46" y="508" fill="#1c2130" font-size="18" font-weight="600">同步企业官网</text>
+    <text x="46" y="535" fill="#596275" font-size="10.5">实习 · 校招 · 社招</text>
+  </g>
+  <g>
+    <rect x="300" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 310 281 H 510" stroke="#4e5fbb" stroke-width="3" />
+    <text x="316" y="318" fill="#1c2130" font-size="18" font-weight="600">个人资料</text>
+    <text x="316" y="345" fill="#596275" font-size="10.5">解析 · 校对 · 手动编辑</text>
+  </g>
+  <g>
+    <rect x="300" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 310 471 H 510" stroke="#4e5fbb" stroke-width="3" />
+    <text x="316" y="508" fill="#1c2130" font-size="18" font-weight="600">可追溯职位池</text>
+    <text x="316" y="535" fill="#596275" font-size="10.5">标准化 · 修订 · 状态维护</text>
+  </g>
+  <g>
+    <rect x="570" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 580 471 H 780" stroke="#6655a6" stroke-width="3" />
+    <text x="586" y="508" fill="#1c2130" font-size="18" font-weight="600">职位匹配与解释</text>
+    <text x="586" y="535" fill="#596275" font-size="10.5">确定性评分 + 可选 AI 建议</text>
+  </g>
+  <g>
+    <rect x="570" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 580 281 H 780" stroke="#6655a6" stroke-width="3" />
+    <text x="586" y="318" fill="#1c2130" font-size="18" font-weight="600">简历制作与导出</text>
+    <text x="586" y="345" fill="#596275" font-size="10.5">模板草稿 · 预览 · PDF / HTML</text>
+  </g>
+  <g>
+    <rect x="840" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 850 471 H 1050" stroke="#e06c5d" stroke-width="3" />
+    <text x="856" y="508" fill="#1c2130" font-size="18" font-weight="600">前往官网申请</text>
+    <text x="856" y="535" fill="#596275" font-size="10.5">由本人核对并提交</text>
+  </g>
+  <g>
+    <rect x="300" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 310 91 H 510" stroke="#4e5fbb" stroke-width="3" />
+    <text x="316" y="128" fill="#1c2130" font-size="18" font-weight="600">项目经历/工作经历</text>
+    <text x="316" y="155" fill="#596275" font-size="10.5">来自个人资料 · 经历整理</text>
+  </g>
+  <g>
+    <rect x="570" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 580 91 H 780" stroke="#6655a6" stroke-width="3" />
+    <text x="586" y="128" fill="#1c2130" font-size="18" font-weight="600">面试准备档案</text>
+    <text x="586" y="155" fill="#596275" font-size="10.5">基于项目建立 · 可补充文档</text>
+  </g>
+  <g>
+    <rect x="840" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 850 91 H 1050" stroke="#e06c5d" stroke-width="3" />
+    <text x="856" y="128" fill="#1c2130" font-size="18" font-weight="600">整理练习</text>
+    <text x="856" y="155" fill="#596275" font-size="10.5">问答记录 · Markdown 准备文档</text>
+  </g>
+  <text x="30" y="615" fill="#596275" font-size="12">
+    JobHunter · 求职流程 · 10 个节点 / 10 条关系
+  </text>
+</svg>

@@ -23,6 +23,11 @@
     "test:e2e": "vitest run --project e2e --passWithNoTests",
     "test:online": "vitest run --project online --passWithNoTests",
     "docs:check": "node scripts/check-docs.mjs",
+    "architecture:build": "tsx scripts/architecture/build.ts",
+    "architecture:check": "tsx scripts/architecture/run.ts check",
+    "architecture:serve": "tsx scripts/architecture/run.ts serve",
+    "architecture:test": "tsx --test scripts/architecture/model.test.ts",
+    "architecture:test:browser": "node scripts/architecture/browser.test.mjs",
     "check": "node scripts/run-checks.mjs"
   },
   "devDependencies": {

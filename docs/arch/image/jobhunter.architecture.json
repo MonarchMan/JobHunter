@@ -1,0 +1,343 @@
+{
+  "version": 1,
+  "title": "JobHunter 项目架构",
+  "views": [
+    {
+      "id": "system",
+      "title": "系统架构图",
+      "description": "三个入口协同运行，核心模块完成职位采集、简历解析和 AI 处理。箭头表示运行时调用与数据访问，不表示代码导入关系。",
+      "lanes": ["使用入口", "业务编排", "核心处理模块", "数据与外部服务"],
+      "nodes": [
+        {
+          "id": "web",
+          "kind": "entry",
+          "title": "Web 管理台",
+          "subtitle": "Next.js · React",
+          "path": "apps/web",
+          "x": 30,
+          "y": 90,
+          "description": "职位筛选、个人资料、简历制作和面试准备的可视化入口。启动器同时管理独立 Web 与 Worker 子进程。项目拷打单题生成可在 Web 请求内调用模型，但不进入数据库事务。"
+        },
+        {
+          "id": "cli",
+          "kind": "entry",
+          "title": "命令行 CLI",
+          "subtitle": "初始化 · 查询 · 诊断",
+          "path": "apps/cli",
+          "x": 30,
+          "y": 280,
+          "description": "通过应用用例完成初始化、导入、同步、匹配、查询与诊断，复用内核业务规则。"
+        },
+        {
+          "id": "worker",
+          "kind": "entry",
+          "title": "后台 Worker",
+          "subtitle": "任务 · 租约 · 重试",
+          "path": "apps/worker",
+          "x": 30,
+          "y": 470,
+          "description": "消费持久化任务，处理官网同步、画像提取、匹配重算、简历导出和面经研究。失败可退避重试，外部调用在短事务之外执行。"
+        },
+        {
+          "id": "application",
+          "kind": "core",
+          "title": "任务与业务编排",
+          "subtitle": "同步 · 画像 · 匹配 · 准备",
+          "path": "packages/application",
+          "x": 300,
+          "y": 280,
+          "description": "组织来源同步、简历画像、匹配与面试准备用例，并通过持久化任务协调后台执行。图中展示运行时协作；代码仍依赖应用端口，由入口装配具体实现，不直接导入数据库或模型供应商。"
+        },
+        {
+          "id": "capabilities",
+          "kind": "core",
+          "title": "面试准备与简历制作",
+          "subtitle": "项目拷打 · 模板编辑 · 导出",
+          "path": "packages",
+          "x": 300,
+          "y": 470,
+          "description": "基于结构化个人资料建立项目准备档案、组织面经审核和简历模板草稿。应用用例复用 resume-template 等共享能力，耗时导出由 Worker 执行。"
+        },
+        {
+          "id": "sync-engine",
+          "kind": "contract",
+          "title": "职位同步引擎",
+          "subtitle": "采集 · 标准化 · 去重 · 状态维护",
+          "path": "packages/source-core",
+          "x": 570,
+          "y": 90,
+          "description": "协调企业官网适配器读取岗位，统一字段、去重并维护新增、变更与下架状态。原始记录、修订和同步进度通过仓储写入 SQLite；来源限制与失败按规则处理。"
+        },
+        {
+          "id": "resume-matching",
+          "kind": "contract",
+          "title": "简历解析与职位匹配",
+          "subtitle": "文本 / OCR · 画像 · 评分",
+          "path": "packages/resume",
+          "x": 570,
+          "y": 280,
+          "description": "resume 提取 PDF、DOCX 和图片文本，形成可校对的经历、项目与技能；matching 将个人画像与职位进行确定性过滤、评分和解释。领域模型负责数据校验与业务规则，持久化由应用层通过仓储端口完成。"
+        },
+        {
+          "id": "ai-engine",
+          "kind": "contract",
+          "title": "AI 处理引擎",
+          "subtitle": "画像提取 · 语义分析 · 面试提问",
+          "path": "packages/agent-core",
+          "x": 570,
+          "y": 470,
+          "description": "组织模型请求、校验结构化结果并记录执行状态，用于画像提取、语义判断和面试问题等能力。模型请求通过 llm 适配器发出，不在数据库事务中执行；AI 不可用不应抹去确定性结果。"
+        },
+        {
+          "id": "persistence",
+          "kind": "infra",
+          "title": "数据库与本地文件",
+          "subtitle": "SQLite · 简历文件 · 日志",
+          "path": "packages/db",
+          "x": 840,
+          "y": 90,
+          "description": "SQLite 保存职位、画像版本、任务和面试记录；简历文件、导出产物及日志保存在配置的数据目录，默认 var/。应用通过仓储端口访问，网络与模型调用在短事务之外完成。"
+        },
+        {
+          "id": "sources",
+          "kind": "infra",
+          "title": "企业招聘官网",
+          "subtitle": "官网适配器 · HTTP / 浏览器",
+          "path": "packages/sources",
+          "x": 840,
+          "y": 280,
+          "description": "企业公开招聘页面与接口是职位事实来源。sources 适配器负责连接和读取，必要时使用隔离浏览器；遇到登录、验证码或访问限制安全停止。"
+        },
+        {
+          "id": "models",
+          "kind": "infra",
+          "title": "模型服务",
+          "subtitle": "OpenAI 兼容 / Anthropic · 可选",
+          "path": "packages/llm",
+          "x": 840,
+          "y": 470,
+          "description": "按用户配置提供模型推理能力，通过 llm 适配器接入。用于画像、语义分析与面试准备，系统不训练或部署自有大模型。"
+        }
+      ],
+      "edges": [
+        {
+          "from": "web",
+          "to": "application",
+          "label": "用户操作"
+        },
+        {
+          "from": "cli",
+          "to": "application",
+          "label": "命令调用"
+        },
+        {
+          "from": "worker",
+          "to": "application",
+          "label": "执行任务"
+        },
+        {
+          "from": "application",
+          "to": "sync-engine",
+          "label": "同步职位"
+        },
+        {
+          "from": "application",
+          "to": "resume-matching",
+          "label": "解析评分"
+        },
+        {
+          "from": "application",
+          "to": "ai-engine",
+          "label": "语义处理"
+        },
+        {
+          "from": "application",
+          "to": "capabilities",
+          "label": "准备制作"
+        },
+        {
+          "from": "sync-engine",
+          "to": "persistence",
+          "label": "保存职位"
+        },
+        {
+          "from": "sync-engine",
+          "to": "sources",
+          "label": "读取官网",
+          "labelDy": -22
+        },
+        {
+          "from": "resume-matching",
+          "to": "persistence",
+          "label": "读写资料",
+          "labelDy": 22
+        },
+        {
+          "from": "ai-engine",
+          "to": "models",
+          "label": "模型调用"
+        }
+      ]
+    },
+    {
+      "id": "flow",
+      "title": "求职流程",
+      "description": "简历解析形成个人资料与项目经历，再用于匹配、简历制作和面试档案。额外文档与面经是可选补充，官网申请由本人完成。",
+      "lanes": ["收集输入", "整理与核对", "判断与制作", "人工行动"],
+      "nodes": [
+        {
+          "id": "resume-input",
+          "kind": "entry",
+          "title": "导入简历",
+          "subtitle": "PDF · DOCX · JPEG · PNG",
+          "path": "packages/resume",
+          "x": 30,
+          "y": 280,
+          "description": "读取简历文件并提取文本，图片可通过 OCR 识别；后台画像提取完成后仍需要人工检查。"
+        },
+        {
+          "id": "official-input",
+          "kind": "entry",
+          "title": "同步企业官网",
+          "subtitle": "实习 · 校招 · 社招",
+          "path": "packages/sources",
+          "x": 30,
+          "y": 470,
+          "description": "对支持的官网渠道执行任务化采集，限速、去重并保留可追溯的来源信息。具体覆盖以来源支持矩阵为准。"
+        },
+        {
+          "id": "profile",
+          "kind": "core",
+          "title": "个人资料",
+          "subtitle": "解析 · 校对 · 手动编辑",
+          "path": "packages/application",
+          "x": 300,
+          "y": 280,
+          "description": "将简历转换为可编辑的经历、项目、技能等结构化信息，保存画像版本；人工锁定字段避免被后续解析覆盖。"
+        },
+        {
+          "id": "job-pool",
+          "kind": "core",
+          "title": "可追溯职位池",
+          "subtitle": "标准化 · 修订 · 状态维护",
+          "path": "packages/source-core",
+          "x": 300,
+          "y": 470,
+          "description": "统一公司、岗位、地点等字段，保存原始记录与修订。职位消失时按规则维护 stale/closed 状态，不把部分采集失败误判为下架。"
+        },
+        {
+          "id": "match",
+          "kind": "contract",
+          "title": "职位匹配与解释",
+          "subtitle": "确定性评分 + 可选 AI 建议",
+          "path": "packages/matching",
+          "x": 570,
+          "y": 470,
+          "description": "结合个人画像与职位，先做确定性过滤和评分，再按配置补充语义判断。结果保留版本、依据与风险，由用户做最终选择。"
+        },
+        {
+          "id": "studio",
+          "kind": "contract",
+          "title": "简历制作与导出",
+          "subtitle": "模板草稿 · 预览 · PDF / HTML",
+          "path": "packages/resume-template",
+          "x": 570,
+          "y": 280,
+          "description": "由公开投递字段派生模板草稿，编辑不会反向修改画像。Worker 使用共享模板和 Playwright 生成 PDF。"
+        },
+        {
+          "id": "apply",
+          "kind": "human",
+          "title": "前往官网申请",
+          "subtitle": "由本人核对并提交",
+          "path": "apps/web",
+          "x": 840,
+          "y": 470,
+          "description": "打开职位官网详情或申请入口，由用户自行完成投递。JobHunter 不自动填写或提交申请。"
+        },
+        {
+          "id": "resume-projects",
+          "kind": "core",
+          "title": "项目经历/工作经历",
+          "subtitle": "来自个人资料 · 经历整理",
+          "path": "packages/application",
+          "x": 300,
+          "y": 90,
+          "description": "项目经历与工作经历来自简历解析后的个人资料，也可由用户手动编辑。当前项目拷打从其中的项目条目建立准备档案，额外项目文档和面经可在后续补充。"
+        },
+        {
+          "id": "interview",
+          "kind": "contract",
+          "title": "面试准备档案",
+          "subtitle": "基于项目建立 · 可补充文档",
+          "path": "packages/application",
+          "x": 570,
+          "y": 90,
+          "description": "从个人资料中选择简历项目建立稳定档案，围绕项目快照开展拷打与练习。可另外上传项目 Markdown 资料、导入个人面经或审核公开面经；这些补充材料不是从简历自动生成的。"
+        },
+        {
+          "id": "practice",
+          "kind": "human",
+          "title": "整理练习",
+          "subtitle": "问答记录 · Markdown 准备文档",
+          "path": "apps/web",
+          "x": 840,
+          "y": 90,
+          "description": "回看项目问答与证据缺口，形成可继续修订的准备资料。AI 的建议需要用户核对，不替代真实项目经历。"
+        }
+      ],
+      "edges": [
+        {
+          "from": "resume-input",
+          "to": "profile",
+          "label": "解析"
+        },
+        {
+          "from": "official-input",
+          "to": "job-pool",
+          "label": "采集"
+        },
+        {
+          "from": "profile",
+          "to": "studio",
+          "label": "派生草稿"
+        },
+        {
+          "from": "profile",
+          "to": "match",
+          "label": "画像"
+        },
+        {
+          "from": "job-pool",
+          "to": "match",
+          "label": "职位"
+        },
+        {
+          "from": "match",
+          "to": "apply",
+          "label": "官网入口"
+        },
+        {
+          "from": "studio",
+          "to": "apply",
+          "label": "投递文件"
+        },
+        {
+          "from": "profile",
+          "to": "resume-projects",
+          "label": "经历信息"
+        },
+        {
+          "from": "resume-projects",
+          "to": "interview",
+          "label": "建立档案"
+        },
+        {
+          "from": "interview",
+          "to": "practice",
+          "label": "练习与回顾"
+        }
+      ]
+    }
+  ]
+}

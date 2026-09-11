@@ -31,4 +31,15 @@ export default tseslint.config(
       '@typescript-eslint/no-import-type-side-effects': 'error',
     },
   },
+  {
+    files: ['scripts/architecture/*.ts'],
+    languageOptions: {
+      parserOptions: { project: ['./scripts/architecture/tsconfig.json'] },
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+  {
+    files: ['scripts/architecture/browser.test.mjs'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+  },
 );

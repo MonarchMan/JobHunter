@@ -65,7 +65,7 @@ JobHunter 像一套正在整理中的个人求职档案：信息可信、分类�
 ### Product context and register
 
 - **Audience and primary job:** 在中文桌面环境中管理简历、官网职位、匹配和后台任务的个人求职者。
-- **Target market(s) and evidence:** 当前产品规格面向中文本地个人使用，见 `README.md` 与 `specs/011-web-console/spec.md`。
+- **Target market(s) and evidence:** 当前产品规格面向中文本地个人使用，见 `docs/guide.md` 与 `specs/011-web-console/spec.md`。
 - **Locale(s) and language policy:** `zh-CN`；产品文案使用直接、克制的中文，技术标识仅在诊断详情展示。
 - **Heading language:** 中文主标题和分区标题不附带纯装饰性英文眉题；英文只在公司名、文件格式、协议、模型或诊断标识具有实际含义时出现。
 - **Usage scene:** 以 1280px 以上桌面高频筛选和比较为主，同时支持 390px 移动端核心浏览与操作。
@@ -150,6 +150,8 @@ JobHunter 主品牌标记使用 `apps/web/public/assets/brand/jobhunter-logo.png
 ### Content and data visualization
 
 界面从用户可控制的对象出发命名，例如“来源同步”而不是 `source.sync`。按钮动词与反馈保持一致。错误说明发生了什么及下一步，空状态只给一个主要行动。
+
+公开架构文档使用独立的“技术图纸”展示变体：四列表示运行时职责或业务阶段，节点与详情联动，珊瑚色内侧线标记当前选择。`scripts/architecture/build.ts` 从应用 `tokens.css` 内联浅色令牌到 HTML，并读取同一令牌生成 SVG；`scripts/architecture/page.css` 仅拥有该静态文档的深色覆盖，不改变后台主题。系统运行时协作与业务信息流分视图展示，颜色始终配合文字图例。窄屏画布可滚动，节点仍是原生按钮，详情移至图下方。此页面属于公开技术内容，使用离线原生控件而不引入后台 React 运行时。
 
 ## Do's and Don'ts
 

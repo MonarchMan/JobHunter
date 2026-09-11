@@ -1,277 +1,103 @@
-# JobHunter
+<p align="center">
+  <img src="apps/web/public/assets/brand/jobhunter-logo.png" alt="JobHunter Logo" width="112">
+</p>
 
-JobHunter 是一个面向个人求职场景的本地招聘数据与岗位匹配工作台，包含：
+<h1 align="center">JobHunter</h1>
 
-- 企业官网招聘来源适配器与职位同步
-- 本地 SQLite 数据存储
-- 简历导入与候选人画像
-- 岗位查询、匹配与导出
-- CLI 命令行工具
-- Web 管理台
-- 可选的 OpenAI 兼容模型服务
+<p align="center">
+  本地管理简历、企业官网职位、匹配判断与后台任务的个人求职工作台。
+</p>
 
-项目默认只在本机运行，数据保存在 `./var`，不会自动部署到公网。
+<p align="center">
+  <img alt="Node.js 24" src="https://img.shields.io/badge/Node.js-24.x-4E5FBB?logo=nodedotjs&logoColor=white">
+  <img alt="pnpm 11" src="https://img.shields.io/badge/pnpm-11.x-E06C5D?logo=pnpm&logoColor=white">
+  <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-4E5FBB?logo=typescript&logoColor=white">
+  <img alt="Local first" src="https://img.shields.io/badge/data-local--first-596275">
+</p>
 
-## 环境要求
+<p align="center">
+  <a href="docs/guide.md"><strong>上手指南</strong></a> ·
+  <a href="docs/arch/overall-arch.md"><strong>总体架构</strong></a> ·
+  <a href="packages/sources/SUPPORT_MATRIX.md"><strong>来源支持矩阵</strong></a> ·
+  <a href="docs/cli.md"><strong>CLI 指南</strong></a>
+</p>
 
-- Node.js `24.x`
-- pnpm `11.x`
-- Windows、macOS 或 Linux
+JobHunter 帮助个人求职者减少重复搜索和信息整理：先从简历建立结构化资料，再同步企业官网职位，最后通过筛选和可追溯的匹配依据辅助判断。系统不会替你自动投递，最终申请仍由你在企业官网完成。
 
-检查版本：
+> [!IMPORTANT]
+> 项目默认只在本机运行，数据保存在 `var/`，Web 服务默认监听 `127.0.0.1`。不要把 `.env`、模型密钥、真实简历或运行数据提交到版本库。
 
-```shell
-node --version
-pnpm --version
-```
+## 核心能力
 
-## 安装与配置
+| 能力             | 说明                                                         |
+| ---------------- | ------------------------------------------------------------ |
+| 结构化个人资料   | 导入 PDF、DOCX、JPEG 或 PNG 简历，并检查、编辑解析结果       |
+| 企业官网职位同步 | 从已支持的企业招聘入口采集职位，保留来源与官网详情链接       |
+| 职位筛选与评分   | 按公司、类别、地点和状态筛选，并查看与个人资料相关的匹配依据 |
+| 简历制作与导出   | 编辑在线简历、预览版式并生成投递文件                         |
+| 面试准备         | 围绕简历项目建立准备档案，整理个人面经和公开面试资料         |
+| 任务诊断         | 跟踪同步、解析和匹配任务，查看失败原因与恢复入口             |
 
-在项目根目录执行：
+### 能力边界
 
-macOS / Linux（Terminal）：
+| 场景       | JobHunter 的处理方式                                             |
+| ---------- | ---------------------------------------------------------------- |
+| 职位来源   | 优先读取企业公开招聘入口；遇到登录、验证码或访问限制时安全停止   |
+| 浏览器采集 | 使用隔离的受控浏览器读取动态页面，不复用个人登录状态             |
+| 模型调用   | 仅在明确配置后用于画像、岗位理解、润色或建议，不代替用户作出决定 |
+| 职位申请   | 打开企业官网详情或投递入口，由用户自行核对并提交                 |
+| 本地数据   | SQLite、简历、日志和任务状态保存在配置的数据目录中               |
 
-```bash
-pnpm install
-cp .env.example .env
-```
+## 项目架构
 
-Windows（PowerShell）：
+[![JobHunter 系统架构图](docs/arch/image/jobhunter-system.svg)](docs/arch/image/README.md)
 
-```powershell
-pnpm install
-Copy-Item .env.example .env
-```
+**[打开交互版与使用说明](docs/arch/image/README.md)** · [可编辑 JSON](docs/arch/image/jobhunter.architecture.json) · [求职流程图](docs/arch/image/jobhunter-flow.svg)
 
-然后按需编辑 `.env`：
+支持节点详情、关联追踪、缩放平移、深浅主题和 SVG 导出。在仓库根目录运行 `pnpm architecture:serve`，然后打开 [本地交互版](http://127.0.0.1:4321/)；也可以下载生成的 HTML 离线浏览。
 
-```dotenv
-JOBHUNTER_DATA_ROOT=./var
-JOBHUNTER_LOG_LEVEL=info
+## 快速开始
 
-# OpenAI 兼容模型服务，三项也可以直接使用 BASE_URL/API_KEY/MODEL
-BASE_URL=https://your-model-endpoint/v1
-API_KEY=your-api-key
-MODEL=your-model-name
-```
-
-Anthropic 原生 Messages API 可以这样配置（`ANTHROPIC_BASE_URL` 不填时使用官方地址）：
-
-```dotenv
-JOBHUNTER_MODEL_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your-api-key
-ANTHROPIC_MODEL=your-claude-model
-```
-
-模型配置是可选的。只有执行简历画像、岗位理解或匹配建议等模型任务时才需要填写。
-
-### 浏览器运行时
-
-阿里、字节、得物、华为和美团实习等来源需要受控浏览器。项目会自动探测 Windows 与 macOS 标准位置中的 Chrome/Edge；如果未安装系统浏览器，也可以安装 Playwright 自带 Chromium：
-
-macOS / Linux（Terminal）：
-
-```bash
-pnpm exec playwright install chromium
-```
-
-Windows（PowerShell）：
-
-```powershell
-pnpm exec playwright install chromium
-```
-
-非标准安装位置可在 `.env` 中显式配置：
-
-```dotenv
-JOBHUNTER_BROWSER_EXECUTABLE="/absolute/path/to/browser"
-```
-
-macOS 默认依次探测系统及当前用户 `Applications` 目录中的 Microsoft Edge、Google Chrome；Windows 默认探测 `Program Files` 中的 Edge、Chrome。Linux 使用 Playwright Chromium，或通过上述变量指定可执行文件。浏览器启动失败时，任务页面只显示安全摘要；经过统一脱敏的底层错误链写入 `var/logs/jobhunter.log`，便于本机排查。
-
-初始化本地数据目录：
+| 环境                     | 版本或建议                     | 是否必需 |
+| ------------------------ | ------------------------------ | -------- |
+| Node.js                  | `24.x`                         | 必需     |
+| pnpm                     | `11.x`                         | 必需     |
+| Edge、Chrome 或 Chromium | 动态来源采集或浏览器测试时使用 | 可选     |
+| 模型服务                 | OpenAI 兼容接口或 Anthropic    | 可选     |
 
 ```shell
+pnpm install
 pnpm --filter @jobhunter/cli build
 node apps/cli/dist/main.js init
 node apps/cli/dist/main.js doctor
-```
-
-初始化会幂等执行以下后台准备工作：优先导入 `docs/resumes/nowcoder_1787802316450.jpeg`（缺失时兼容旧的 `agent简历 - 新.docx`）并创建画像提取任务；建立每周清理计划。只有已有画像已确认目标岗位大类时，初始化才会为启用的官网来源创建职位同步任务和每日刷新计划；否则请先在“个人资料”中确认，再从“招聘来源”显式同步。真正的 OCR、解析、官网请求和匹配由 Worker 异步执行。
-
-如果 `pnpm exec jh` 尚未建立命令链接，也可以先运行：
-
-```shell
-pnpm install
-pnpm --filter @jobhunter/cli build
-```
-
-## 启动项目
-
-开发时只需启动 Web 管理台；Web 启动器会自动拉起一个独立的 Worker 子进程。Worker 与 Next.js 使用相同的本地配置和数据库，但各自承担后台任务与页面服务。
-
-### 1. 启动 Web 管理台
-
-```shell
 pnpm --filter @jobhunter/web dev
 ```
 
-Web 管理台默认入口：
+然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。Web 启动器会同时启动独立 Worker，正常使用时不需要手动运行第二个 Worker。
 
-<http://127.0.0.1:3210/>
+不同系统的配置命令、模型接入、浏览器选择和首次使用流程见 **[完整上手指南](docs/guide.md)**。
 
-主要页面包括：
+## 文档导航
 
-- `/`：工作台首页
-- `/jobs`：职位列表
-- `/sources`：招聘来源与同步管理
-- `/profile`：简历画像
-- `/tasks`：后台任务
-- `/agent-runs`：模型运行记录
+| 文档                                                   | 内容                             |
+| ------------------------------------------------------ | -------------------------------- |
+| [完整上手指南](docs/guide.md)                          | 安装、初始化、首次使用和常见问题 |
+| [CLI 指南](docs/cli.md)                                | 命令参数、JSON 输出、备份和恢复  |
+| [总体架构](docs/arch/overall-arch.md)                  | 进程职责、模块边界和数据流       |
+| [SDD 开发流程](docs/sdd/README.md)                     | 规格、设计、任务与验收规则       |
+| [功能规格索引](specs/README.md)                        | 当前能力、依赖关系和实现状态     |
+| [招聘来源支持矩阵](packages/sources/SUPPORT_MATRIX.md) | 各企业来源的覆盖范围与限制       |
 
-可以通过环境变量修改本地监听端口：
-
-macOS / Linux（bash、zsh）：
-
-```bash
-PORT=3211 pnpm --filter @jobhunter/web dev
-```
-
-Windows（PowerShell）：
-
-```powershell
-$env:PORT='3211'
-pnpm --filter @jobhunter/web dev
-```
-
-Web 服务默认只允许绑定 loopback 地址；不建议将它直接暴露到局域网或公网。
-
-### 单独启动 Worker（可选）
-
-Worker 负责执行职位同步、简历画像、匹配等耗时任务：
+<details>
+<summary><strong>开发者验证命令</strong></summary>
 
 ```shell
-node apps/cli/dist/main.js worker start
-```
-
-正常使用 Web 时不需要手动执行这一步；只有在不启动 Web、需要单独运行后台队列，或进行 Worker 调试时，才使用 CLI 启动 Worker。不要在 Web 已运行时再启动第二个 Worker，以免多个进程同时领取任务。
-
-启动 Web 后，可以直接在 Web 的“来源”页面发起同步，任务会由自动拉起的 Worker 异步执行。
-
-Web 的“个人资料”页面也支持直接导入 PDF、DOCX 简历。上传后页面立即返回后台任务状态；请保持 Worker 运行，等待画像提取和岗位匹配完成。
-
-### 3. 手动同步招聘来源
-
-查看来源：
-
-```shell
-node apps/cli/dist/main.js source list
-```
-
-同步单个来源并等待结果：
-
-```shell
-node apps/cli/dist/main.js source sync tencent-social --wait
-```
-
-同步所有默认启用来源：
-
-```shell
-node apps/cli/dist/main.js source sync --all --wait
-```
-
-来源同步依赖官网匿名访问条件。遇到验证码、登录或访问阻断时，系统会安全停止本次同步，并保留已有职位数据。
-
-## 常用 CLI 操作
-
-```shell
-# 导入简历（支持 PDF、DOCX、JPEG、PNG）
-node apps/cli/dist/main.js resume import "docs/resumes/your-resume.jpeg"
-
-# 查看职位
-node apps/cli/dist/main.js job list --limit 20
-node apps/cli/dist/main.js job list --company baidu --location 北京 --limit 20
-
-# 查看任务
-node apps/cli/dist/main.js task list --status pending,running --limit 20
-
-# 运行匹配
-node apps/cli/dist/main.js match run <profileId> --wait
-node apps/cli/dist/main.js match list <profileId> --include-stale --limit 20
-
-# 导出职位
-node apps/cli/dist/main.js job export "exports/jobs.csv" --format csv --bom
-
-# 查看完整帮助
-node apps/cli/dist/main.js --help
-```
-
-更完整的 CLI 说明见 [docs/cli.md](docs/cli.md)。
-
-## 开发与验证
-
-```shell
-# 类型检查
+pnpm format:check
 pnpm typecheck
-
-# 单元测试
 pnpm test
-
-# 集成测试
-pnpm test:integration
-
-# Web 浏览器测试
-pnpm test:e2e
-
-# 文档检查
 pnpm docs:check
-
-# 常规检查集合
-pnpm check
 ```
 
-在线招聘来源测试默认关闭。需要显式启用时，使用：
+需要执行仓库常规检查集合时运行 `pnpm check`。
 
-macOS / Linux（bash、zsh）：
-
-```bash
-JOBHUNTER_ONLINE_SOURCES=1 \
-JOBHUNTER_BROWSER_ONLINE_SOURCE=dewu \
-pnpm test:online
-```
-
-Windows（PowerShell）：
-
-```powershell
-$env:JOBHUNTER_ONLINE_SOURCES='1'
-$env:JOBHUNTER_BROWSER_ONLINE_SOURCE='dewu'
-pnpm test:online
-```
-
-浏览器来源选择器支持 `alibaba`、`bytedance`、`dewu`、`huawei`；每次在线 Smoke 最多采集两页。在线测试可能受官网限流、验证码和网络状态影响，不属于默认离线测试。
-
-## 目录结构
-
-```text
-apps/
-  cli/       CLI 入口
-  worker/    后台任务与浏览器基础设施
-  web/       Web 管理台
-packages/
-  domain/    领域模型与规则
-  application/ 应用用例与端口
-  db/        SQLite 持久化
-  sources/   企业招聘来源适配器
-  source-core/ 来源契约、HTTP 与浏览器端口
-  llm/       OpenAI 兼容模型客户端
-specs/       SDD 规格、设计与任务
-docs/        架构、CLI 与 ADR 文档
-var/         本地运行数据，不提交版本库
-```
-
-## 数据与安全
-
-- `.env`、SQLite 数据库、简历和运行数据只保存在本地，不要提交到版本库。
-- 招聘来源适配器遵守来源访问限制，不伪造登录状态、验证码或风控参数。
-- Web 管理台默认绑定 `127.0.0.1`，仅供本机使用。
-- 执行备份和恢复前请先停止 Worker 与 Web，详细流程见 [docs/cli.md](docs/cli.md)。
+</details>

@@ -1,0 +1,332 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1100 640"
+  width="1100"
+  height="640"
+  role="img"
+  font-family="Microsoft YaHei UI, Noto Sans SC, system-ui, sans-serif"
+>
+  <title>JobHunter · 系统架构图</title>
+  <desc>
+    三个入口协同运行，核心模块完成职位采集、简历解析和 AI
+    处理。箭头表示运行时调用与数据访问，不表示代码导入关系。
+  </desc>
+  <defs>
+    <marker
+      id="arrow-system"
+      viewBox="0 0 10 10"
+      refX="9"
+      refY="5"
+      markerWidth="6"
+      markerHeight="6"
+      orient="auto-start-reverse"
+    >
+      <path d="M 0 0 L 10 5 L 0 10 Z" fill="#596275" />
+    </marker>
+  </defs>
+  <rect width="1100" height="640" rx="12" fill="#f8f9fc" />
+  <text x="42" y="45" fill="#596275" font-size="14">使用入口</text>
+  <text x="312" y="45" fill="#596275" font-size="14">业务编排</text>
+  <text x="582" y="45" fill="#596275" font-size="14">核心处理模块</text>
+  <text x="852" y="45" fill="#596275" font-size="14">数据与外部服务</text>
+  <g class="edge" data-from="web" data-to="application">
+    <path
+      d="M 250 138 H 265 V 328 H 300"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="265"
+      y="224"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      用户操作
+    </text>
+  </g>
+  <g class="edge" data-from="cli" data-to="application">
+    <path
+      d="M 250 328 H 275 V 328 H 300"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="275"
+      y="319"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      命令调用
+    </text>
+  </g>
+  <g class="edge" data-from="worker" data-to="application">
+    <path
+      d="M 250 518 H 285 V 328 H 300"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="285"
+      y="414"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      执行任务
+    </text>
+  </g>
+  <g class="edge" data-from="application" data-to="sync-engine">
+    <path
+      d="M 520 328 H 535 V 138 H 570"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="535"
+      y="224"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      同步职位
+    </text>
+  </g>
+  <g class="edge" data-from="application" data-to="resume-matching">
+    <path
+      d="M 520 328 H 545 V 328 H 570"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="545"
+      y="319"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      解析评分
+    </text>
+  </g>
+  <g class="edge" data-from="application" data-to="ai-engine">
+    <path
+      d="M 520 328 H 555 V 518 H 570"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="555"
+      y="414"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      语义处理
+    </text>
+  </g>
+  <g class="edge" data-from="application" data-to="capabilities">
+    <path
+      d="M 410 376 V 470"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="433"
+      y="423"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      准备制作
+    </text>
+  </g>
+  <g class="edge" data-from="sync-engine" data-to="persistence">
+    <path
+      d="M 790 138 H 815 V 138 H 840"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="815"
+      y="129"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      保存职位
+    </text>
+  </g>
+  <g class="edge" data-from="sync-engine" data-to="sources">
+    <path
+      d="M 790 138 H 825 V 328 H 840"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="825"
+      y="202"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      读取官网
+    </text>
+  </g>
+  <g class="edge" data-from="resume-matching" data-to="persistence">
+    <path
+      d="M 790 328 H 805 V 138 H 840"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="805"
+      y="246"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      读写资料
+    </text>
+  </g>
+  <g class="edge" data-from="ai-engine" data-to="models">
+    <path
+      d="M 790 518 H 815 V 518 H 840"
+      fill="none"
+      stroke="#596275"
+      stroke-width="1.4"
+      marker-end="url(#arrow-system)"
+    />
+    <text
+      x="815"
+      y="509"
+      text-anchor="middle"
+      fill="#596275"
+      font-size="12"
+      stroke="#ffffff"
+      stroke-width="7"
+      paint-order="stroke"
+    >
+      模型调用
+    </text>
+  </g>
+  <g>
+    <rect x="30" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 40 91 H 240" stroke="#316d8b" stroke-width="3" />
+    <text x="46" y="128" fill="#1c2130" font-size="18" font-weight="600">Web 管理台</text>
+    <text x="46" y="155" fill="#596275" font-size="10.5">Next.js · React</text>
+  </g>
+  <g>
+    <rect x="30" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 40 281 H 240" stroke="#316d8b" stroke-width="3" />
+    <text x="46" y="318" fill="#1c2130" font-size="18" font-weight="600">命令行 CLI</text>
+    <text x="46" y="345" fill="#596275" font-size="10.5">初始化 · 查询 · 诊断</text>
+  </g>
+  <g>
+    <rect x="30" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 40 471 H 240" stroke="#316d8b" stroke-width="3" />
+    <text x="46" y="508" fill="#1c2130" font-size="18" font-weight="600">后台 Worker</text>
+    <text x="46" y="535" fill="#596275" font-size="10.5">任务 · 租约 · 重试</text>
+  </g>
+  <g>
+    <rect x="300" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 310 281 H 510" stroke="#4e5fbb" stroke-width="3" />
+    <text x="316" y="318" fill="#1c2130" font-size="18" font-weight="600">任务与业务编排</text>
+    <text x="316" y="345" fill="#596275" font-size="10.5">同步 · 画像 · 匹配 · 准备</text>
+  </g>
+  <g>
+    <rect x="300" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 310 471 H 510" stroke="#4e5fbb" stroke-width="3" />
+    <text x="316" y="508" fill="#1c2130" font-size="18" font-weight="600">面试准备与简历制作</text>
+    <text x="316" y="535" fill="#596275" font-size="10.5">项目拷打 · 模板编辑 · 导出</text>
+  </g>
+  <g>
+    <rect x="570" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 580 91 H 780" stroke="#6655a6" stroke-width="3" />
+    <text x="586" y="128" fill="#1c2130" font-size="18" font-weight="600">职位同步引擎</text>
+    <text x="586" y="155" fill="#596275" font-size="10.5">采集 · 标准化 · 去重 · 状态维护</text>
+  </g>
+  <g>
+    <rect x="570" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 580 281 H 780" stroke="#6655a6" stroke-width="3" />
+    <text x="586" y="318" fill="#1c2130" font-size="18" font-weight="600">简历解析与职位匹配</text>
+    <text x="586" y="345" fill="#596275" font-size="10.5">文本 / OCR · 画像 · 评分</text>
+  </g>
+  <g>
+    <rect x="570" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 580 471 H 780" stroke="#6655a6" stroke-width="3" />
+    <text x="586" y="508" fill="#1c2130" font-size="18" font-weight="600">AI 处理引擎</text>
+    <text x="586" y="535" fill="#596275" font-size="10.5">画像提取 · 语义分析 · 面试提问</text>
+  </g>
+  <g>
+    <rect x="840" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 850 91 H 1050" stroke="#596275" stroke-width="3" />
+    <text x="856" y="128" fill="#1c2130" font-size="18" font-weight="600">数据库与本地文件</text>
+    <text x="856" y="155" fill="#596275" font-size="10.5">SQLite · 简历文件 · 日志</text>
+  </g>
+  <g>
+    <rect x="840" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 850 281 H 1050" stroke="#596275" stroke-width="3" />
+    <text x="856" y="318" fill="#1c2130" font-size="18" font-weight="600">企业招聘官网</text>
+    <text x="856" y="345" fill="#596275" font-size="10.5">官网适配器 · HTTP / 浏览器</text>
+  </g>
+  <g>
+    <rect x="840" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
+    <path d="M 850 471 H 1050" stroke="#596275" stroke-width="3" />
+    <text x="856" y="508" fill="#1c2130" font-size="18" font-weight="600">模型服务</text>
+    <text x="856" y="535" fill="#596275" font-size="10.5">OpenAI 兼容 / Anthropic · 可选</text>
+  </g>
+  <text x="30" y="615" fill="#596275" font-size="12">
+    JobHunter · 系统架构图 · 11 个节点 / 11 条关系
+  </text>
+</svg>
