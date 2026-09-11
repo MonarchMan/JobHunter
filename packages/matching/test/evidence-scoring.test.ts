@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateDeterministicMatch,
   matchRulesetV3,
+  matchRulesetV31,
   parseDeterministicMatchOutput,
   type DeterministicMatchOutput,
   type DeterministicMatchInput,
@@ -86,6 +87,41 @@ function component(
 }
 
 describe('v3 requirement meaning and evidence', () => {
+  it('isolates v3.1 recovery across eligibility, skills and practice from historical v3', () => {
+    const input: DeterministicMatchInput = {
+      profile: {
+        ...baseProfile,
+        projects: [
+          {
+            name: '接口服务',
+            role: null,
+            startDate: null,
+            endDate: null,
+            highlights: ['使用Java负责接口开发并上线接口服务'],
+            evidence: [],
+          },
+        ],
+      },
+      job: {
+        ...baseJob,
+        description: '团队介绍：使用Rust\n\n1、负责Java接口开发\n2、要求3年工作经验',
+      },
+      company: { sizeCategory: null, industry: null },
+      understanding: null,
+    };
+    const legacy = parseDeterministicMatchOutput(
+      calculateDeterministicMatch(input, matchRulesetV3),
+    );
+    const fixed = parseDeterministicMatchOutput(
+      calculateDeterministicMatch(input, matchRulesetV31),
+    );
+    expect(legacy.filterStatus).toBe('eligible');
+    expect(component(legacy, 'skills').score).toBe(0);
+    expect(fixed.filterStatus).toBe('excluded');
+    expect(component(fixed, 'skills').score).toBeGreaterThan(0);
+    expect(component(fixed, 'projects').score).toBeGreaterThan(0);
+    expect(calculateDeterministicMatch(input, matchRulesetV3)).toEqual(legacy);
+  });
   it.each([
     ['要求3年以下工作经验', 1, 'eligible'],
     ['要求3年以下工作经验', 4, 'excluded'],

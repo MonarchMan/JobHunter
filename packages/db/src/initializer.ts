@@ -1,6 +1,6 @@
 import type { InitializationResult, SystemInitializer } from '@jobhunter/application';
 import { contentHash, parseId, utcInstant } from '@jobhunter/domain';
-import { matchRulesetV3 } from '@jobhunter/matching';
+import { matchRulesetV31 } from '@jobhunter/matching';
 import { mkdir, open, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { openSqliteDatabase } from './connection.js';
@@ -9,7 +9,7 @@ import { SqliteMatchingRepository } from './repositories/matching-repository.js'
 
 /** 系统首次初始化时写入的默认匹配规则集 ID。 */
 export const defaultMatchRulesetId = parseId(
-  '018f0000-0000-7000-8000-000000000303',
+  '018f0000-0000-7000-8000-000000000304',
   'MatchRuleset',
 );
 
@@ -48,9 +48,9 @@ export class SqliteSystemInitializer implements SystemInitializer {
       seedSourceCatalog(database.client, this.#catalog);
       new SqliteMatchingRepository(database.client).upsertRuleset({
         id: defaultMatchRulesetId,
-        version: matchRulesetV3.version,
-        definition: matchRulesetV3,
-        definitionHash: contentHash(matchRulesetV3),
+        version: matchRulesetV31.version,
+        definition: matchRulesetV31,
+        definitionHash: contentHash(matchRulesetV31),
         active: true,
         createdAt: utcInstant(Date.now()),
       });

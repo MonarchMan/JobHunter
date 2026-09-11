@@ -436,7 +436,7 @@ export function createProductionWorkerApplication(input: {
     clock,
     ids,
   });
-  deterministicMatching.ensureRulesetV3({ id: defaultMatchRulesetId });
+  deterministicMatching.ensureRulesetV31({ id: defaultMatchRulesetId });
   const batches = new MatchingBatchService({
     calculator: deterministicMatching,
   });

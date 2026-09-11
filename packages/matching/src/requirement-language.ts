@@ -58,12 +58,27 @@ export function parseRequirement(text: string, path: string): RequirementNode {
 }
 
 /** 原文按段落保留来源；公司介绍等明确非要求章节不进入匹配。 */
-export function requirementStatements(job: NormalizedJob): RequirementNode[] {
+export function requirementStatements(
+  job: NormalizedJob,
+  recoverBoundary = false,
+): RequirementNode[] {
   // 1. 默认接受没有章节标题的职位正文；只有明确介绍标题才停止读取该章节。
   const result: RequirementNode[] = [];
   for (const field of ['description', 'experienceText', 'educationText'] as const) {
     let ignored = false;
+    let paragraphStart = false;
     for (const line of (job[field] ?? '').split(/\r?\n/u)) {
+      // 1.a. 新策略仅在段落边界接受编号职责/资格信号，空行本身不结束介绍。
+      if (recoverBoundary && !line.trim()) {
+        paragraphStart = true;
+        continue;
+      }
+      const numberedRequirement =
+        /^\s*(?:\d{1,2}[、.．)）]|[（(][一二三四五六七八九十\d]+[）)])\s*(?:参与|负责|协助|设计|开发|维护|掌握|熟悉|具备|要求|本科|硕士|博士|20\d{2}届|每周|至少)/u.test(
+          line,
+        );
+      if (recoverBoundary && ignored && paragraphStart && numberedRequirement) ignored = false;
+      paragraphStart = false;
       if (/^\s*(?:公司介绍|关于我们|团队介绍|福利待遇)\s*[:：]?/u.test(line)) {
         ignored = true;
         continue;

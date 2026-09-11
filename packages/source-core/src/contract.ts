@@ -12,6 +12,10 @@ export type SourcePageCollectionResponseShape =
   | 'meituan-jobs'
   | 'qihoo360-jobs'
   | 'xiaomi-jobs'
+  | 'bilibili-social'
+  | 'kuaishou-jobs'
+  | 'didi-moka'
+  | 'didi-moka-detail'
   | 'netease-jobs';
 
 /** 来源适配器使用的数据结构或契约。 */
@@ -28,6 +32,10 @@ export interface SourcePageCollectionRequest {
   readonly maximumResponseBytes: number;
   /** Adapter-configured JSON page capacity used after the browser initializes the session. */
   readonly pageSize?: number;
+  /** 显式采样只影响采集范围，必须由驱动报告 partial。 */
+  readonly pageSampling?: 'sequential' | 'first-last';
+  /** 同一采集会话的 JSON 请求最小间隔；浏览器初始化请求之后同样适用。 */
+  readonly minimumRequestIntervalMs?: number;
   /** Official list endpoint path observed from the rendered page session. */
   readonly listEndpointPath: string;
   readonly responseShape: SourcePageCollectionResponseShape;
@@ -81,7 +89,8 @@ export const sourceMetadataSchema = z
     officialHosts: z.array(z.string().min(1)).min(1),
     capabilities: z
       .object({
-        detail: z.enum(['inline', 'deferred']),
+        // required 必须取得正文才可入库；deferred 是已有列表正文后的异步补充。
+        detail: z.enum(['inline', 'deferred', 'required']),
         pagination: z.enum(['none', 'page', 'cursor']),
         transport: z.enum(['json', 'embedded_json', 'html', 'browser']),
       })

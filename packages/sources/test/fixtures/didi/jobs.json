@@ -1,0 +1,55 @@
+{
+  "socialList": {
+    "meta": { "code": 0 },
+    "data": {
+      "total": 1,
+      "page": 1,
+      "size": 16,
+      "items": [
+        {
+          "jdId": 65637,
+          "jdNo": "JR20260806007",
+          "jobName": "营销增长中台-会员商家策略 (JR20260806007)",
+          "workArea": "北京市",
+          "deptName": "Project X"
+        }
+      ]
+    }
+  },
+  "socialDetail": {
+    "meta": { "code": 0 },
+    "data": {
+      "jdNo": "JR20260806007",
+      "jobName": "营销增长中台-会员商家策略",
+      "recruitType": "1",
+      "jdStatus": 2,
+      "jobDesc": "合成测试职责",
+      "qualification": "合成测试要求",
+      "workArea": "北京市",
+      "deptName": "Project X",
+      "jobType": "运营"
+    }
+  },
+  "intern": {
+    "id": "97be8af8-1cec-4438-9197-69aff6aa72cd",
+    "orgId": "didiglobal",
+    "status": "open",
+    "hireMode": 1,
+    "commitment": "实习",
+    "title": "国际事业群IBG-（1）算法实习生",
+    "locations": [],
+    "education": "本科",
+    "publishedAt": "2026-09-11T11:18:33"
+  },
+  "campus": {
+    "id": "e9b38ef8-3a9a-4932-89a8-47513ae7f0a5",
+    "orgId": "didiglobal",
+    "status": "open",
+    "hireMode": 2,
+    "commitment": "全职",
+    "title": "27届秋招-网络工程师-系统部",
+    "locations": [{ "cityName": "北京市" }],
+    "jobDescription": "<p>合成测试职责</p><p>合成测试要求</p>",
+    "publishedAt": "2026-09-04T13:20:39"
+  }
+}

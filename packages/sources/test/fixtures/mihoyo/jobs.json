@@ -1,0 +1,44 @@
+{
+  "social": {
+    "id": "900001",
+    "title": "合成程序开发岗位",
+    "addressDetailList": [{ "addressDetail": "上海" }],
+    "competencyType": "程序&技术类",
+    "jobNature": "全职",
+    "jobNatureId": 1,
+    "projectName": "社会招聘",
+    "channelDetailIds": [1, 2],
+    "hireType": 0,
+    "status": 1,
+    "description": "合成职责：开发测试系统。",
+    "jobRequire": "合成要求：具备开发经验。"
+  },
+  "intern": {
+    "id": "900002",
+    "title": "合成开发岗位",
+    "addressDetailList": [{ "addressDetail": "上海" }],
+    "competencyType": "程序&技术类",
+    "jobNature": "实习",
+    "jobNatureId": 3,
+    "projectName": "实习生专项",
+    "channelDetailIds": [1, 2],
+    "hireType": 1,
+    "status": 1,
+    "description": "合成职责：开发测试系统。",
+    "jobRequire": "合成要求：在校学生。"
+  },
+  "campus": {
+    "id": "900003",
+    "title": "合成应届开发岗位",
+    "addressDetailList": [{ "addressDetail": "上海" }],
+    "competencyType": "程序&技术类",
+    "jobNature": "全职",
+    "jobNatureId": 1,
+    "projectName": "2027届秋招",
+    "channelDetailIds": [1, 2],
+    "hireType": 1,
+    "status": 1,
+    "description": "合成职责：开发测试系统。",
+    "jobRequire": "合成要求：应届毕业生。"
+  }
+}

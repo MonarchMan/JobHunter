@@ -1,6 +1,6 @@
 # 官网来源支持矩阵
 
-> 发布记录日期：2026-08-28
+> 发布记录日期：2026-09-11（既有来源验证日期见明细）
 
 ## 三渠道完整性
 
@@ -23,10 +23,27 @@
 | OPPO     | supported | supported | supported |
 | 360      | supported | supported | supported |
 | 网易     | supported | supported | supported |
+| 快手     | supported | supported | supported |
+| 哔哩哔哩 | blocked   | blocked   | supported |
+| 滴滴     | supported | supported | supported |
+| 携程     | supported | supported | supported |
+| 米哈游   | supported | supported | supported |
 
-网易校招逻辑渠道声明互联网、游戏和雷火三个独立物理官网入口，分别保留支持状态、健康和同步历史；三者均已通过两页边界 smoke。当前唯一 blocked 渠道为拼多多社招：官网原始 `anti_content` 模块已在最小 headful 和原生 headless Chrome 中分别完成三轮首页/末页/详情 smoke，普通 Chrome 完整页面 + Playwright CDP 保留为 fallback；纯 Node shim 因需要伪造浏览器指纹而停止。静态 bundle 抽取路径在第三轮触发 `54001`，同期完整官网也进入 0 职位异常，待风险窗口冷却后仍需补三轮复核；尚未工程化和注册，不能提前标记 supported。
+网易校招逻辑渠道声明互联网、游戏和雷火三个独立物理官网入口，分别保留支持状态、健康和同步历史；三者均已通过两页边界 smoke。原 15 家公司中唯一 blocked 渠道为拼多多社招：官网原始 `anti_content` 模块已在最小 headful 和原生 headless Chrome 中分别完成三轮首页/末页/详情 smoke，普通 Chrome 完整页面 + Playwright CDP 保留为 fallback；纯 Node shim 因需要伪造浏览器指纹而停止。静态 bundle 抽取路径在第三轮触发 `54001`，同期完整官网也进入 0 职位异常，待风险窗口冷却后仍需补三轮复核；尚未工程化和注册，不能提前标记 supported。
+
+2026-09-11 新增五家公司共 15 个逻辑渠道。B 站社招、快手三渠道、滴滴四个物理来源、携程三渠道及米哈游三渠道已工程化。滴滴实习与常规校招通过独立边界/详情 smoke；社招经用户手动确认官网分页缺陷后明确验收 supported，保留 partial 保护；未来精英无真实详情，仍 experimental/default off。其余 2 个新增逻辑渠道（B 站校园/实习）仍无适配器。blocked 表示待接入，不代表已确认官网拦截；详见 [第二批研究台账](../../specs/026-official-source-wave-two/research.md)。目录合计 20 家公司、60 个逻辑渠道、62 个物理来源。
 
 ## 已验证来源明细
+
+米哈游：`mihoyo.social`、`mihoyo.intern`、`mihoyo.campus` 均 `1.0.0 / supported`。2026-09-11 独立生产首尾页/一详情 smoke 通过：社招 662（1/67，10/2）、校园实习 144（1/15，10/4）、应届校招 118（1/12，10/8）。社招包括第三方编制，保留用工性质，不冒充直聘；校园按 hireType/jobNatures 拆分，不写死届次或项目 ID。匿名 HTTP 无需浏览器/凭据，required 详情失败不写占位。采样均 partial/sampled_pages，未运行全量在线门禁。物理来源默认开，逻辑渠道仍仅实习默认开；社招实习当前零岗位，不将未验证独立入口列入支持范围。
+
+携程：`ctrip.social`、`ctrip.intern`、`ctrip.campus` 均为 `1.0.0 / supported`，分别覆盖社会正式岗位、日常实习和应届校招。2026-09-11 15:55 CST 独立生产 smoke 3/3：社招 total=487（页 1/49，10/7 条）、实习 total=25（页 1/3，10/5 条）、校招 total=57（页 1/6，10/7 条），各独立验证一条详情。匿名 HTTP，仅固定中文展示偏好 `language=zh-CN`，无需浏览器、账号或签名；正文内联，所有采样均为 partial/sampled_pages，未执行全量采集。当前未开放留用实习不在支持范围，其他独立品牌/国际站未声明覆盖。物理来源默认启用，逻辑渠道仍仅实习默认开，既有运行开关不重置。
+
+滴滴三个逻辑渠道均 supported，`didi.social`、`didi.intern` 与 `didi.campus` 物理来源默认启用；既有运行开关不重置。未来精英仍为校招 supplemental 来源，experimental/default off。社招列表及详情可读取，用户手动确认官网第 65 页异常后明确验收 supported；已知上游缺陷为总数 1039 时末页应有 15 条、实际只有 1 条。支持状态不代表完整性通过：仍严格检查 page/size、保留 partial/invalid_page_boundary，不缩减总数、不执行缺失下线。社招/实习采用 required 详情，正文失败不写占位；空地点沿用应用未知地区跳过策略。不包含国际招聘站，详细证据见研究台账。
+
+快手：`kuaishou.social`、`kuaishou.intern`、`kuaishou.intern.campus`、`kuaishou.campus` 均为 `1.0.0 / supported`。2026-09-11 四项独立生产 smoke 通过：社招 1254（页 1/26）、日常实习 1113（页 1/23）、校园实习 225（页 1/5）、应届校招 266（页 1/6）。每页 50 条，各核对一条官方详情；均 `partial + sampled_pages`，不推断已采全量。普通匿名浏览器调用官网原始模块，每次调用间隔至少 5 秒，无小号、登录态或 CDP 常驻进程；校园届次动态发现。物理来源默认开，逻辑渠道沿用仅实习默认开的规则。
+
+B 站社招：`bilibili.social@1.0.0`，supported，物理来源默认启用。2026-09-11 生产配置每页 50 条、匿名会话 JSON 串行重放（至少间隔 5 秒），首页/末页和独立详情 smoke 通过；全样本归一化、官方深链、职责要求、ID 唯一性通过，采样明确为 `partial + sampled_pages`，没有运行全量在线遍历。
 
 | 来源           | 支持状态  | 默认启用 | 适配器                          | 当日在线门禁 | 说明                                                                                                                          |
 | -------------- | --------- | -------- | ------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------- |

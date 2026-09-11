@@ -17,6 +17,20 @@ const companyLogoPaths: Readonly<Record<string, string>> = {
   vivo: '/assets/company-logos/vivo.png',
   小米: '/assets/company-logos/xiaomi.ico',
   网易: '/assets/company-logos/netease.ico',
+  快手: '/assets/company-logos/kuaishou.ico',
+  Kuaishou: '/assets/company-logos/kuaishou.ico',
+  Kwai: '/assets/company-logos/kuaishou.ico',
+  哔哩哔哩: '/assets/company-logos/bilibili.ico',
+  B站: '/assets/company-logos/bilibili.ico',
+  Bilibili: '/assets/company-logos/bilibili.ico',
+  滴滴: '/assets/company-logos/didi.ico',
+  DiDi: '/assets/company-logos/didi.ico',
+  携程: '/assets/company-logos/ctrip.ico',
+  携程集团: '/assets/company-logos/ctrip.ico',
+  'Trip.com Group': '/assets/company-logos/ctrip.ico',
+  Ctrip: '/assets/company-logos/ctrip.ico',
+  米哈游: '/assets/company-logos/mihoyo.ico',
+  miHoYo: '/assets/company-logos/mihoyo.ico',
 };
 
 export function CompanyLogo({

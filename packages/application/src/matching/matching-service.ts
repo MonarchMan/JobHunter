@@ -14,6 +14,7 @@ import {
   matchRulesetV1,
   matchRulesetV2,
   matchRulesetV3,
+  matchRulesetV31,
 } from '@jobhunter/matching';
 import type { MatchingRepository, MatchResultRecord } from '../ports/matching.js';
 import type { CandidateProfileRepository } from '../ports/profiles.js';
@@ -86,6 +87,21 @@ export class DeterministicMatchingService {
       version: matchRulesetV3.version,
       definition: matchRulesetV3,
       definitionHash: contentHash(matchRulesetV3),
+      active: input.activate ?? true,
+      createdAt: this.#clock.now(),
+    });
+  }
+
+  /** 幂等登记并按调用方选择激活 v3.1，保留历史规则及其评分记录。 */
+  public ensureRulesetV31(input: {
+    readonly id: MatchRulesetId;
+    readonly activate?: boolean;
+  }): ReturnType<MatchingRepository['upsertRuleset']> {
+    return this.#matching.upsertRuleset({
+      id: input.id,
+      version: matchRulesetV31.version,
+      definition: matchRulesetV31,
+      definitionHash: contentHash(matchRulesetV31),
       active: input.activate ?? true,
       createdAt: this.#clock.now(),
     });

@@ -219,12 +219,26 @@ export class JobSyncService {
           )
         : null;
     const detailCacheIsCurrent = cachedDetail?.listContentHash === listContentHash;
-    const detail = cachedDetail?.detail ?? null;
-
-    const sourcePayloadHash = contentHash({ discovered: job.raw, detail });
+    let detail: unknown = cachedDetail?.detail ?? null;
 
     let normalized: NormalizedSourceJob;
     try {
+      // 1、无列表正文的来源先在事务外取得必需详情；失败复用条目隔离，绝不写占位正文。
+      if (input.adapter.metadata.capabilities.detail === 'required') {
+        if (!input.adapter.fetchDetail)
+          throw new SourceError('invalid_config', 'Required-detail adapter lacks fetchDetail.');
+        detail = await input.adapter.fetchDetail(job, {
+          sourceId: input.source.id,
+          companyId: input.source.companyId,
+          config: input.config,
+          requestId: `${input.runId}:${job.externalJobId}:required-detail`,
+          signal: input.signal,
+          timeoutMs: input.source.syncPolicy.requestTimeoutMs,
+          http: this.#http,
+          ...(this.#page ? { page: this.#page } : {}),
+        });
+      }
+      // 2、正文与身份验证通过后才允许后续归一化、过滤及短事务写入。
       const normalizedSourceJob = await input.adapter.normalize(
         { discovered: job, detail },
         { sourceId: input.source.id, companyId: input.source.companyId, config: input.config },
@@ -279,6 +293,7 @@ export class JobSyncService {
       return;
     }
 
+    const sourcePayloadHash = contentHash({ discovered: job.raw, detail });
     const region = classifyJobRegion(normalized.job.locations);
     if (region === 'non_domestic') {
       input.stats.skippedNonDomestic += 1;

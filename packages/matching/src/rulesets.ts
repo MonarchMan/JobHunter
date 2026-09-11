@@ -24,7 +24,7 @@ export const matchRulesetSchema = z
   .object({
     version: z.string().trim().min(1),
     weights: weightsSchema,
-    engine: z.literal('evidence-v3').optional(),
+    engine: z.enum(['evidence-v3', 'evidence-v3.1']).optional(),
     recruitmentWeights: z
       .object({ social: weightsSchema, campus: weightsSchema, internship: weightsSchema })
       .strict()
@@ -61,6 +61,13 @@ export const matchRulesetV3: MatchRuleset = parseMatchRuleset({
   ...matchRulesetV2,
   version: 'v3',
   engine: 'evidence-v3',
+});
+
+/** v3.1 仅修复介绍段落边界，旧 v3 定义与解释路径不变。 */
+export const matchRulesetV31: MatchRuleset = parseMatchRuleset({
+  ...matchRulesetV3,
+  version: 'v3.1',
+  engine: 'evidence-v3.1',
 });
 
 /** 校验并解析匹配规则集。 */

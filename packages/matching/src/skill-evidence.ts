@@ -161,7 +161,10 @@ export function candidateSkillFacts(
 }
 
 /** 解析技能组，语义增强只补充词汇与证据，原文明示的任选/豁免优先。 */
-export function jobSkillGroups(input: DeterministicMatchInput): SkillRequirementGroup[] {
+export function jobSkillGroups(
+  input: DeterministicMatchInput,
+  recoverBoundary = false,
+): SkillRequirementGroup[] {
   const enhanced = [
     ...(input.understanding?.requiredSkills ?? []),
     ...(input.understanding?.preferredSkills ?? []),
@@ -199,7 +202,7 @@ export function jobSkillGroups(input: DeterministicMatchInput): SkillRequirement
     else for (const skill of skills) groups.push({ skills: [skill], required, evidence });
   };
   // 1. 增强只补充有原文支撑的词汇；完整条款决定任选、优先和豁免，不相信模型标签。
-  for (const node of requirementStatements(input.job)) visit(node);
+  for (const node of requirementStatements(input.job, recoverBoundary)) visit(node);
   // 2. 去掉重复技能组，必需条件覆盖同组优先项，不累计正文重复次数。
   const unique = new Map<string, SkillRequirementGroup>();
   for (const group of groups) {

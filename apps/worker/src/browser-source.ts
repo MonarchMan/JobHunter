@@ -4,6 +4,8 @@ import {
   type BrowserSession,
   type BrowserSessionFactory,
   createPooledSourcePageClient,
+  parseBilibiliSocialPage,
+  parseBilibiliSocialRequest,
 } from '@jobhunter/sources';
 import {
   SourceError,
@@ -15,6 +17,9 @@ import {
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { collectKuaishouPages } from './kuaishou-browser.js';
+import { collectDidiMoka } from './didi-browser.js';
 
 /** Worker 运行时数据结构或执行契约。 */
 export interface BrowserSourceOptions {
@@ -154,6 +159,11 @@ export function buildBrowserPageRequest(
   const url = new URL(template.url);
   const body = { ...template.body };
   switch (responseShape) {
+    case 'didi-moka':
+    case 'didi-moka-detail':
+      throw new SourceError('parse_changed', 'Didi requires its official runtime driver.');
+    case 'kuaishou-jobs':
+      throw new SourceError('parse_changed', 'Kuaishou requires its official runtime driver.');
     case 'ats-job-posts':
       url.searchParams.set('offset', String(offset));
       body.offset = offset;
@@ -184,6 +194,11 @@ export function buildBrowserPageRequest(
       break;
     case 'netease-jobs':
       body.currentPage = pageNumber;
+      if (pageSize !== undefined) body.pageSize = pageSize;
+      break;
+    case 'bilibili-social':
+      // B 站容量必须来自适配器配置，响应 pages/size 在末页不可靠。
+      body.pageNum = pageNumber;
       if (pageSize !== undefined) body.pageSize = pageSize;
       break;
     case 'huawei-campus':
@@ -282,6 +297,11 @@ function readListResponse(
   let currentPage: number;
   let offset: number | null = null;
   switch (request.responseShape) {
+    case 'didi-moka':
+    case 'didi-moka-detail':
+      throw new SourceError('parse_changed', 'Didi requires its official runtime driver.');
+    case 'kuaishou-jobs':
+      throw new SourceError('parse_changed', 'Kuaishou requires its official runtime driver.');
     case 'ats-job-posts':
       limit = queryLimit;
       offset = queryOffset;
@@ -310,6 +330,12 @@ function readListResponse(
       limit = Number(requestBody.pageSize);
       currentPage = Number(requestBody.currentPage);
       break;
+    case 'bilibili-social': {
+      const pagination = parseBilibiliSocialRequest(requestBody);
+      limit = pagination.pageSize;
+      currentPage = pagination.pageNum;
+      break;
+    }
     case 'huawei-campus':
       limit = Number(requestBody.pageSize);
       currentPage = Number(requestBody.curPage);
@@ -378,6 +404,13 @@ function readListResponse(
       items = body.data.list;
       total = Number(body.data.total);
       break;
+    case 'bilibili-social': {
+      // 公司模块校验业务 code 与社招字段，Worker 只负责浏览器传输。
+      const parsed = parseBilibiliSocialPage(body);
+      items = parsed.records;
+      total = parsed.total;
+      break;
+    }
     case 'huawei-campus':
       if (!isRecord(body) || !isRecord(body.data) || !isRecord(body.data.pageVO)) {
         throw new SourceError('parse_changed', 'Huawei list response has no pageVO object.');
@@ -440,6 +473,11 @@ async function requestJsonPage(
   targetPage: number,
   expectedOffset: number,
 ): Promise<BrowserListPage> {
+  // 1、按来源指定间隔串行请求；取消信号结束等待，禁止失败后密集重放。
+  if (request.minimumRequestIntervalMs) {
+    await delay(request.minimumRequestIntervalMs, undefined, { signal: request.signal });
+  }
+  // 2、在当前匿名会话中更新页码和容量，不导出会话凭据。
   const target = buildBrowserPageRequest(
     template,
     request.responseShape,
@@ -614,7 +652,11 @@ function createSessionFactory(
           browser ??= await launchBrowser(options);
           context ??= await browser.newContext();
           const page = await context.newPage();
-          if (browserDebugEnabled) {
+          // 滴滴原始客户端直接返回白名单集合，调试模式也不记录其原始响应或会话参数。
+          if (request.responseShape === 'didi-moka' || request.responseShape === 'didi-moka-detail')
+            return collectDidiMoka(page, request, options);
+          // 快手原始请求可能携带匿名运行时参数，调试模式也不记录其完整请求 URL。
+          if (browserDebugEnabled && request.responseShape !== 'kuaishou-jobs') {
             page.on('request', (candidate) => {
               if (candidate.url().includes(request.listEndpointPath))
                 browserDebug('request', candidate.method(), candidate.url());
@@ -624,7 +666,9 @@ function createSessionFactory(
                 browserDebug('response', candidate.status(), candidate.url());
             });
           }
-          return collectJsonPages(page, request, options);
+          return request.responseShape === 'kuaishou-jobs'
+            ? collectKuaishouPages(page, request, options)
+            : collectJsonPages(page, request, options);
         },
       };
       return Promise.resolve({

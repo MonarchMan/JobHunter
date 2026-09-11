@@ -127,7 +127,10 @@ function evaluateNode(
 }
 
 /** v3 用条件树替换资格检查，用户明确偏好继续使用既有独立规则。 */
-export function evaluateEvidenceEligibility(input: DeterministicMatchInput): RuleOutcome[] {
+export function evaluateEvidenceEligibility(
+  input: DeterministicMatchInput,
+  recoverBoundary = false,
+): RuleOutcome[] {
   // 1. 保留地点/类型等偏好，不使用旧版最低年限规则。
   const results = evaluateEligibility(input).filter(
     (item) => item.ruleId !== 'qualification.minimum-experience',
@@ -141,7 +144,7 @@ export function evaluateEvidenceEligibility(input: DeterministicMatchInput): Rul
   });
   // 2. 同原文同路径去重，保存稳定序号方便详情与建议引用。
   const seen = new Set<string>();
-  for (const node of requirementStatements(input.job)) {
+  for (const node of requirementStatements(input.job, recoverBoundary)) {
     const key = `${node.path}:${node.text}`;
     if (seen.has(key)) continue;
     seen.add(key);

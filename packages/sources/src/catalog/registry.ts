@@ -1,10 +1,33 @@
 import type { AdapterRegistry } from '@jobhunter/source-core';
+import {
+  createMihoyoSocialAdapter,
+  createMihoyoInternAdapter,
+  createMihoyoCampusAdapter,
+} from '../companies/mihoyo/index.js';
+import {
+  createCtripSocialAdapter,
+  createCtripInternAdapter,
+  createCtripCampusAdapter,
+} from '../companies/ctrip/index.js';
 import { createInlineChannelViewAdapter } from '../shared/channel-view/index.js';
 import {
   createAlibabaAdapter,
   createAlibabaSocialAdapter,
 } from '../companies/alibaba/campus/index.js';
 import { createBaiduAdapter, createBaiduSocialAdapter } from '../companies/baidu/campus/index.js';
+import { createBilibiliSocialAdapter } from '../companies/bilibili/social/index.js';
+import {
+  createDidiSocialAdapter,
+  createDidiInternAdapter,
+  createDidiCampusAdapter,
+  createDidiCampusEliteAdapter,
+} from '../companies/didi/index.js';
+import {
+  createKuaishouSocialAdapter,
+  createKuaishouInternAdapter,
+  createKuaishouCampusInternAdapter,
+  createKuaishouCampusAdapter,
+} from '../companies/kuaishou/index.js';
 import { createByteDanceCampusAdapter } from '../companies/bytedance/intern/index.js';
 import { createByteDanceAdapter } from '../companies/bytedance/social/index.js';
 import { createDewuAdapter, createDewuSocialAdapter } from '../companies/dewu/campus/index.js';
@@ -74,6 +97,21 @@ export function registerFirstPartyAdapters(registry: AdapterRegistry): void {
   registry.register(createAlibabaSocialAdapter());
   registry.register(createDewuSocialAdapter());
   registry.register(createBaiduSocialAdapter());
+  registry.register(createBilibiliSocialAdapter());
+  registry.register(createDidiSocialAdapter());
+  registry.register(createCtripSocialAdapter());
+  registry.register(createMihoyoSocialAdapter());
+  registry.register(createMihoyoInternAdapter());
+  registry.register(createMihoyoCampusAdapter());
+  registry.register(createCtripInternAdapter());
+  registry.register(createCtripCampusAdapter());
+  registry.register(createDidiInternAdapter());
+  registry.register(createDidiCampusAdapter());
+  registry.register(createDidiCampusEliteAdapter());
+  registry.register(createKuaishouSocialAdapter());
+  registry.register(createKuaishouInternAdapter());
+  registry.register(createKuaishouCampusInternAdapter());
+  registry.register(createKuaishouCampusAdapter());
   registry.register(
     createInlineChannelViewAdapter({
       key: 'alibaba.intern',

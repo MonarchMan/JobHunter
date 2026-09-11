@@ -39,10 +39,11 @@ export function practiceEvidence(
   input: DeterministicMatchInput,
   groups: readonly SkillRequirementGroup[],
   kind: 'experience' | 'projects',
+  recoverBoundary = false,
 ): { ratio: number | null; evidence: MatchingEvidence[]; missing: string[] } {
   // 1. 从职位原文提取职责；识别不到职责时只给有证据的技能份额，不伪造满分。
   const duties = new Map<string, MatchingEvidence>();
-  for (const node of requirementStatements(input.job))
+  for (const node of requirementStatements(input.job, recoverBoundary))
     for (const sentence of evidenceSentences(node.text)) {
       if (isNonEvidence(sentence) || /不要求|无需/u.test(sentence)) continue;
       for (const key of dutyKeys(sentence))

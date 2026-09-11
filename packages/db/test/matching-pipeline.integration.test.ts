@@ -306,6 +306,14 @@ describe('matching persistence pipeline', () => {
     expect(service.compute({ ...input, rulesetId: nextId }).match).toEqual(next);
     expect(service.compute({ ...input, rulesetId }).match).toEqual(legacy);
     expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('evidence-v3');
+    // v3.1 边界修复采用独立版本，旧评分不被复用或覆盖。
+    const v31Id = parseId('018f0000-0000-7000-8000-00000000d010', 'MatchRuleset');
+    service.ensureRulesetV31({ id: v31Id });
+    const fixed = service.compute(input).match;
+    expect(fixed.rulesetId).toBe(v31Id);
+    expect(fixed.id).not.toBe(v3.id);
+    expect(service.compute(input)).toEqual({ match: fixed, created: false });
+    expect(service.compute({ ...input, rulesetId: v3Id }).match).toEqual(v3);
   });
 
   it('pre-filters job revisions by target roles and excluded terms before calculation', async () => {

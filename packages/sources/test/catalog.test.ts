@@ -129,11 +129,11 @@ describe('first-party source catalog', () => {
   });
 
   it('defines exactly three logical channels for every company with variable physical sources', () => {
-    expect(firstPartySourceCatalog).toHaveLength(45);
-    expect(new Set(firstPartySourceCatalog.map((record) => record.company.slug)).size).toBe(15);
-    expect(new Set(firstPartySourceCatalog.map((record) => record.channel.slug)).size).toBe(45);
-    expect(new Set(firstPartySourceCatalog.map((record) => record.company.id)).size).toBe(15);
-    expect(new Set(firstPartySourceCatalog.map((record) => record.channel.id)).size).toBe(45);
+    expect(firstPartySourceCatalog).toHaveLength(60);
+    expect(new Set(firstPartySourceCatalog.map((record) => record.company.slug)).size).toBe(20);
+    expect(new Set(firstPartySourceCatalog.map((record) => record.channel.slug)).size).toBe(60);
+    expect(new Set(firstPartySourceCatalog.map((record) => record.company.id)).size).toBe(20);
+    expect(new Set(firstPartySourceCatalog.map((record) => record.channel.id)).size).toBe(60);
     const channelsByCompany = new Map<string, Set<string>>();
     for (const record of firstPartySourceCatalog) {
       const channels = channelsByCompany.get(record.company.slug) ?? new Set<string>();
@@ -195,13 +195,27 @@ describe('first-party source catalog', () => {
       'netease',
       'netease',
       'tencent',
+      'bilibili',
+      'kuaishou',
+      'kuaishou',
+      'kuaishou',
+      'kuaishou',
+      'didi',
+      'didi',
+      'didi',
+      'ctrip',
+      'ctrip',
+      'ctrip',
+      'mihoyo',
+      'mihoyo',
+      'mihoyo',
     ]);
     for (const record of firstPartyPhysicalSourceCatalog) {
       expect(record.source.enabledByDefault).toBe(record.source.supportStatus === 'supported');
       expect(record.source.baseUrl).toMatch(/^https:\/\//);
     }
     expect(new Set(firstPartyPhysicalSourceCatalog.map((record) => record.source.id)).size).toBe(
-      47,
+      62,
     );
     expect(
       firstPartySourceCatalog
@@ -234,6 +248,61 @@ describe('first-party source catalog', () => {
     }
   });
 
+  it('only registers verified wave-two physical sources, without placeholders (SWT-006)', () => {
+    const targets = new Set(['kuaishou', 'bilibili', 'didi', 'ctrip', 'mihoyo']);
+    const channels = firstPartySourceCatalog.filter((record) => targets.has(record.company.slug));
+    expect(channels).toHaveLength(15);
+    for (const record of channels) {
+      if (record.company.slug === 'ctrip' || record.company.slug === 'mihoyo') {
+        expect(record.sources).toHaveLength(1);
+        expect(record.sources[0]).toMatchObject({
+          adapterKey: `${record.company.slug}.${record.channel.type}`,
+          supportStatus: 'supported',
+          coverageRole: 'required',
+          enabledByDefault: true,
+        });
+        expect(record.channel.enabledByDefault).toBe(record.channel.type === 'intern');
+        continue;
+      }
+      if (record.company.slug === 'kuaishou') {
+        expect(record.sources).toHaveLength(record.channel.type === 'intern' ? 2 : 1);
+        expect(
+          record.sources.every(
+            (source) => source.supportStatus === 'supported' && source.coverageRole === 'required',
+          ),
+        ).toBe(true);
+        expect(record.channel.enabledByDefault).toBe(record.channel.type === 'intern');
+        continue;
+      }
+      if (record.company.slug === 'didi') {
+        expect(record.sources).toHaveLength(record.channel.type === 'campus' ? 2 : 1);
+        for (const source of record.sources) {
+          expect(source.coverageRole).toBe(
+            source.adapterKey === 'didi.campus.elite' ? 'supplemental' : 'required',
+          );
+          expect(source.supportStatus).toBe(
+            source.adapterKey === 'didi.campus.elite' ? 'experimental' : 'supported',
+          );
+        }
+        continue;
+      }
+      if (record.channel.slug === 'bilibili-social') {
+        expect(record.sources).toHaveLength(1);
+        expect(record.sources[0]).toMatchObject({
+          id: '018f0000-0000-7000-8000-000000000249',
+          adapterKey: 'bilibili.social',
+          supportStatus: 'supported',
+          enabledByDefault: true,
+          config: { pageSize: 50 },
+        });
+        continue;
+      }
+      expect(record.sources).toEqual([]);
+      expect(record.channel.enabledByDefault).toBe(false);
+      expect(record.channel.supportNote).toBeTruthy();
+    }
+  });
+
   it('registers the verified Tencent campus source instead of a placeholder', () => {
     const registry = new AdapterRegistry();
     registerFirstPartyAdapters(registry);
@@ -251,7 +320,7 @@ describe('first-party source catalog', () => {
     const socialSources = firstPartyPhysicalSourceCatalog.filter(
       (record) => record.channel.type === 'social',
     );
-    expect(socialSources).toHaveLength(15);
+    expect(socialSources).toHaveLength(20);
     expect(socialSources.every((record) => record.source.recruitmentType === 'social')).toBe(true);
   });
 

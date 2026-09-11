@@ -78,6 +78,19 @@ describe('browser startup diagnostics', () => {
 });
 
 describe('browser JSON pagination', () => {
+  it('uses configured Bilibili pageNum/pageSize without changing channel filters', () => {
+    const template = {
+      url: 'https://jobs.bilibili.com/api/srs/position/positionList',
+      headers: {},
+      body: { pageNum: 1, pageSize: 10, recruitType: 0, workTypeList: ['3'], onlyHotRecruit: 0 },
+    };
+    expect(buildBrowserPageRequest(template, 'bilibili-social', 11, 500, 50)).toMatchObject({
+      method: 'POST',
+      body: { pageNum: 11, pageSize: 50, recruitType: 0, workTypeList: ['3'], onlyHotRecruit: 0 },
+    });
+    expect(template.body.pageNum).toBe(1);
+    expect(template.body.pageSize).toBe(10);
+  });
   it('overrides the NetEase UI page size with the adapter configuration', () => {
     const target = buildBrowserPageRequest(
       {

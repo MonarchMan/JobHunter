@@ -1,0 +1,37 @@
+{
+  "social": {
+    "fromId": "MJ900001",
+    "jobTitle": "合成后端开发岗位",
+    "category": "1",
+    "kind": "1",
+    "requirements": "<p>测试职责：开发系统。</p><p>测试要求：掌握 TypeScript。</p>",
+    "duty": null,
+    "cityName": "上海",
+    "buName": "测试部门",
+    "jobFamilyGroupName": "开发",
+    "publishDate": "2026-09-10"
+  },
+  "intern": {
+    "fromId": "MJ900002",
+    "jobTitle": "服务运营岗",
+    "category": "1",
+    "kind": "3",
+    "requirements": "<p>测试职责：分析服务数据。</p><p>测试要求：在校学生。</p>",
+    "cityName": "深圳",
+    "buName": "测试部门",
+    "jobFamilyGroupName": "服务运营",
+    "publishDate": "2026-09-10"
+  },
+  "campus": {
+    "fromId": "MJ900003",
+    "jobTitle": "合成应届开发岗位",
+    "category": "2",
+    "kind": "1",
+    "requirements": "<p>测试职责：开发系统。</p><p>测试要求：应届毕业生。</p>",
+    "duty": null,
+    "cityName": "上海",
+    "buName": "测试部门",
+    "jobFamilyGroupName": "开发",
+    "publishDate": "2026-09-10"
+  }
+}

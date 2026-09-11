@@ -2,6 +2,7 @@
 export * from './catalog/index.js';
 export * from './companies/alibaba/campus/index.js';
 export * from './companies/baidu/campus/index.js';
+export * from './companies/bilibili/social/index.js';
 export * from './companies/bytedance/index.js';
 export * from './companies/dewu/campus/index.js';
 export * from './companies/huawei/campus/index.js';
@@ -34,3 +35,7 @@ export * from './shared/normalization/recruitment-category.js';
 /** Public package identifier used by composition smoke tests. */
 /** 来源适配器使用的稳定配置或常量。 */
 export const packageId = '@jobhunter/sources' as const;
+export * from './companies/kuaishou/index.js';
+export * from './companies/didi/index.js';
+export * from './companies/ctrip/index.js';
+export * from './companies/mihoyo/index.js';

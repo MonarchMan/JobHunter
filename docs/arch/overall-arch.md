@@ -922,6 +922,8 @@ specs/
 后续实现满足以下条件时，视为符合本总体架构：
 
 - 新增官网来源不需要修改职位、画像或匹配领域规则。
+- 快手等经独立验证的来源可在 SourcePageClient 隔离会话内调用官网原始公开请求模块；公司协议归属 sources，浏览器生命周期归属 Worker，限制见 [ADR-0023](../adr/0023-official-runtime-source-driver.md)。
+- 无列表正文的来源使用 detail=required，同步在事务外先取得详情再归一化，失败按条目隔离；已有 inline/deferred 不变，见 [ADR-0024](../adr/0024-required-job-detail.md)。
 - CLI 和 Web 复用同一应用层用例。
 - 官网或 LLM 暂时不可用时，已有数据仍可查询和评分。
 - 重复执行同步和匹配不会生成重复事实或无意义版本。

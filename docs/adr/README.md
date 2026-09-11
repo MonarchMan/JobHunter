@@ -27,3 +27,5 @@ ADR 一经 Accepted 不直接改写历史结论；需要改变决策时新增 AD
 
 - [ADR-0020：SQLite 阈值维护与跨进程写入保护](./0020-sqlite-automatic-maintenance.md)
 - [ADR-0021：Agent 业务校验与评分阶段恢复](./0021-agent-output-validation-and-score-recovery.md)
+- [ADR-0023：官网原始请求运行时驱动](./0023-official-runtime-source-driver.md)
+- [ADR-0024：列表无正文时先取得必需详情再入库](./0024-required-job-detail.md)

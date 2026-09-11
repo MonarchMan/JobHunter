@@ -1,0 +1,39 @@
+[
+  {
+    "key": "kuaishou.social",
+    "id": 32022,
+    "name": "CRM 产品经理（售前方向）-【可灵AI】",
+    "positionNatureCode": "C001",
+    "recruitProjectCode": "socialr",
+    "workLocationsCode": ["beijing"]
+  },
+  {
+    "key": "kuaishou.intern",
+    "id": 32237,
+    "name": "产品实习生（基础产品）-【可灵AI】",
+    "positionNatureCode": "C002",
+    "recruitProjectCode": "socialr",
+    "workLocationsCode": ["beijing"]
+  },
+  {
+    "key": "kuaishou.intern.campus",
+    "id": 11301,
+    "name": "【留用实习】策略产品经理-商业化方向",
+    "positionNatureCode": "intern",
+    "recruitProjectCode": "schoolr",
+    "recruitSubProjectCode": "20271772783534",
+    "workLocationDicts": [{ "code": "beijing", "name": "北京" }]
+  },
+  {
+    "key": "kuaishou.campus",
+    "id": 13101,
+    "name": "推荐大模型算法工程师",
+    "positionNatureCode": "fulltime",
+    "recruitProjectCode": "schoolr",
+    "recruitSubProjectCode": "20271779425607",
+    "workLocationDicts": [
+      { "code": "beijing", "name": "北京" },
+      { "code": "Hangzhou", "name": "杭州" }
+    ]
+  }
+]

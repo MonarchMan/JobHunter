@@ -18,7 +18,8 @@ export function calculateEvidenceMatch(
 ): DeterministicMatchOutput {
   // 1. 资格与相关性独立：明确失败优先排除，缺失不能当作失败。
   const category = recruitmentCategory(input.job);
-  const outcomes = evaluateEvidenceEligibility(input);
+  const recoverBoundary = ruleset.engine === 'evidence-v3.1';
+  const outcomes = evaluateEvidenceEligibility(input, recoverBoundary);
   const filterStatus = outcomes.some((item) => item.status === 'fail')
     ? 'excluded'
     : outcomes.some((item) => item.status === 'unknown')
@@ -62,7 +63,7 @@ export function calculateEvidenceMatch(
       components: [score('skills', null, [], ['招聘类别待确认'])],
     };
   // 2. 技能要求组和候选来源共享语义；实际使用与自述不互相重复加分。
-  const groups = jobSkillGroups(input);
+  const groups = jobSkillGroups(input, recoverBoundary);
   const skills = skillCoverage(
     groups,
     candidateSkillFacts(
@@ -70,8 +71,8 @@ export function calculateEvidenceMatch(
       groups.flatMap((group) => group.skills),
     ),
   );
-  const work = practiceEvidence(input, groups, 'experience');
-  const projects = practiceEvidence(input, groups, 'projects');
+  const work = practiceEvidence(input, groups, 'experience', recoverBoundary);
+  const projects = practiceEvidence(input, groups, 'projects', recoverBoundary);
   const role = roleRatio(
     input.profile.targetRoles,
     input.profile.matchingConstraints?.targetSubfamily ?? null,

@@ -856,11 +856,322 @@ const missingChannelInputs: readonly CatalogInput[] = [
   },
 ];
 
-const canonicalInputs = [...inputs, ...missingChannelInputs] as const;
+/** 通过生产适配器定向门禁的第二批物理来源。 */
+const waveTwoInputs: readonly CatalogInput[] = [
+  {
+    companyId: '018f0000-0000-7000-8000-000000000117',
+    sourceId: '018f0000-0000-7000-8000-000000000249',
+    slug: 'bilibili',
+    sourceSlug: 'bilibili-social',
+    name: '哔哩哔哩',
+    aliases: ['B站', 'Bilibili'],
+    sizeTag: 'large',
+    entry: 'https://jobs.bilibili.com/social/positions',
+    adapterKey: 'bilibili.social',
+    channel: 'social',
+    recruitmentType: 'social',
+    supportStatus: 'supported',
+    config: { pageSize: 50 },
+    requestsPerMinute: 12,
+    supportNote:
+      '2026-09-11 生产适配器匿名浏览器首页/末页和详情 smoke 通过；按请求容量计算分页，列表内联职责要求，采样报告 partial。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000116',
+    sourceId: '018f0000-0000-7000-8000-000000000250',
+    slug: 'kuaishou',
+    sourceSlug: 'kuaishou-social',
+    name: '快手',
+    sizeTag: 'large',
+    entry: 'https://zhaopin.kuaishou.cn/#/official/social/',
+    adapterKey: 'kuaishou.social',
+    channel: 'social',
+    recruitmentType: 'social',
+    supportStatus: 'supported',
+    config: { pageSize: 50 },
+    requestsPerMinute: 12,
+    supportNote:
+      '2026-09-11 原始官网运行时 C001 + socialr 首页/末页及独立详情 smoke 通过；采样 partial，不运行全量门禁。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000116',
+    sourceId: '018f0000-0000-7000-8000-000000000251',
+    slug: 'kuaishou',
+    sourceSlug: 'kuaishou-intern',
+    name: '快手',
+    sizeTag: 'large',
+    entry: 'https://zhaopin.kuaishou.cn/#/official/trainee/',
+    adapterKey: 'kuaishou.intern',
+    channel: 'intern',
+    recruitmentType: 'mixed',
+    supportStatus: 'supported',
+    config: { pageSize: 50 },
+    requestsPerMinute: 12,
+    supportNote:
+      '2026-09-11 日常实习 C002 无地点过滤，首页/末页及独立详情 smoke 通过；实习逻辑渠道 required 来源之一。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000116',
+    sourceId: '018f0000-0000-7000-8000-000000000252',
+    slug: 'kuaishou',
+    sourceSlug: 'kuaishou-intern-campus',
+    name: '快手',
+    sizeTag: 'large',
+    entry: 'https://campus.kuaishou.cn/recruit/campus/e/#/campus/jobs',
+    adapterKey: 'kuaishou.intern.campus',
+    channel: 'intern',
+    recruitmentType: 'mixed',
+    supportStatus: 'supported',
+    config: { pageSize: 50 },
+    requestsPerMinute: 12,
+    supportNote:
+      '2026-09-11 校园官网当前 intern 项目首页/末页及独立详情 smoke 通过；动态发现届次，实习逻辑渠道第二个 required 来源。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000116',
+    sourceId: '018f0000-0000-7000-8000-000000000253',
+    slug: 'kuaishou',
+    sourceSlug: 'kuaishou-campus',
+    name: '快手',
+    sizeTag: 'large',
+    entry: 'https://campus.kuaishou.cn/recruit/campus/e/#/campus/jobs',
+    adapterKey: 'kuaishou.campus',
+    channel: 'campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    config: { pageSize: 50 },
+    requestsPerMinute: 12,
+    supportNote:
+      '2026-09-11 校园官网当前 fulltime 项目首页/末页及独立详情 smoke 通过；包含快 Star 岗位，不限制岗位类别。',
+  },
+];
+/** 滴滴各物理站独立登记；未通过边界或详情门禁的站点不可默认启用。 */
+const didiInputs: readonly CatalogInput[] = [
+  {
+    companyId: '018f0000-0000-7000-8000-000000000118',
+    sourceId: '018f0000-0000-7000-8000-000000000254',
+    slug: 'didi',
+    sourceSlug: 'didi-social',
+    name: '滴滴',
+    sizeTag: 'large',
+    entry: 'https://talent.didiglobal.com/social/list/1',
+    adapterKey: 'didi.social',
+    channel: 'social',
+    recruitmentType: 'social',
+    supportStatus: 'supported',
+    config: { pageSize: 16 },
+    requestsPerMinute: 12,
+    supportNote:
+      '匿名 HTTP 列表与详情可用；用户手动确认官网第 65 页计数/页长异常后明确验收 supported。已知上游分页缺陷仍报告 partial/invalid_page_boundary，禁止据此执行缺失下线，不代表全量完整性通过。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000118',
+    sourceId: '018f0000-0000-7000-8000-000000000255',
+    slug: 'didi',
+    sourceSlug: 'didi-intern',
+    name: '滴滴',
+    sizeTag: 'large',
+    entry: 'https://app.mokahr.com/apply/didiglobal/6222#/jobs',
+    adapterKey: 'didi.intern',
+    channel: 'intern',
+    recruitmentType: 'mixed',
+    supportStatus: 'supported',
+    config: { pageSize: 30 },
+    requestsPerMinute: 12,
+    supportNote:
+      '2026-09-11 Moka 原始客户端首页/末页及独立详情 smoke 通过；暂停记录参与分页计数但不作为在招岗位入库，采样 partial。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000118',
+    sourceId: '018f0000-0000-7000-8000-000000000256',
+    slug: 'didi',
+    sourceSlug: 'didi-campus',
+    name: '滴滴',
+    sizeTag: 'large',
+    entry: 'https://campus.didiglobal.com/campus_apply/didiglobal/96064#/jobs',
+    adapterKey: 'didi.campus',
+    channel: 'campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    config: { pageSize: 30 },
+    requestsPerMinute: 12,
+    supportNote:
+      '2026-09-11 常规校招 Moka 原始客户端首页/末页及独立详情 smoke 通过；校园渠道 required 来源之一，列表正文内联。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000118',
+    sourceId: '018f0000-0000-7000-8000-000000000257',
+    slug: 'didi',
+    sourceSlug: 'didi-campus-elite',
+    name: '滴滴',
+    sizeTag: 'large',
+    entry: 'https://app.mokahr.com/campus-recruitment/didiglobal/116021#/jobs',
+    adapterKey: 'didi.campus.elite',
+    channel: 'campus',
+    recruitmentType: 'campus',
+    supportStatus: 'experimental',
+    coverageRole: 'supplemental',
+    config: { pageSize: 30 },
+    requestsPerMinute: 12,
+    supportNote:
+      '未来精英归属校招，作为后续验证的 supplemental 来源；当前合法零岗位、无真实详情证据，保持 experimental 默认关闭，不阻断常规校招 supported。',
+  },
+];
+/** 携程统一官网的三个独立招聘分区，保留既有公司和逻辑渠道 ID。 */
+const ctripInputs: readonly CatalogInput[] = [
+  {
+    companyId: '018f0000-0000-7000-8000-000000000119',
+    sourceId: '018f0000-0000-7000-8000-000000000258',
+    slug: 'ctrip',
+    sourceSlug: 'ctrip-social',
+    name: '携程',
+    sizeTag: 'large',
+    entry: 'https://careers.ctrip.com/#/experienced/jobList?kind=1',
+    adapterKey: 'ctrip.social',
+    channel: 'social',
+    recruitmentType: 'social',
+    supportStatus: 'supported',
+    config: { pageSize: 10 },
+    supportNote:
+      '2026-09-11 匿名 HTTP 首页/末页及独立详情 smoke 通过；正文内联，category/kind 独立校验。仅当前官网分区，不含未开放留用实习或其他独立品牌站。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000119',
+    sourceId: '018f0000-0000-7000-8000-000000000259',
+    slug: 'ctrip',
+    sourceSlug: 'ctrip-intern',
+    name: '携程',
+    sizeTag: 'large',
+    entry: 'https://careers.ctrip.com/#/experienced/jobList?kind=3',
+    adapterKey: 'ctrip.intern',
+    channel: 'intern',
+    recruitmentType: 'mixed',
+    supportStatus: 'supported',
+    config: { pageSize: 10 },
+    supportNote:
+      '2026-09-11 匿名 HTTP 首页/末页及独立详情 smoke 通过；正文内联，category/kind 独立校验。仅当前官网分区，不含未开放留用实习或其他独立品牌站。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000119',
+    sourceId: '018f0000-0000-7000-8000-000000000260',
+    slug: 'ctrip',
+    sourceSlug: 'ctrip-campus',
+    name: '携程',
+    sizeTag: 'large',
+    entry: 'https://careers.ctrip.com/#/campus/jobList?kind=1',
+    adapterKey: 'ctrip.campus',
+    channel: 'campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    config: { pageSize: 10 },
+    supportNote:
+      '2026-09-11 匿名 HTTP 首页/末页及独立详情 smoke 通过；正文内联，category/kind 独立校验。仅当前官网分区，不含未开放留用实习或其他独立品牌站。',
+  },
+];
+/** 米哈游官方三个分区独立保存来源状态和岗位身份。 */
+const mihoyoInputs: readonly CatalogInput[] = [
+  {
+    companyId: '018f0000-0000-7000-8000-000000000120',
+    sourceId: '018f0000-0000-7000-8000-000000000261',
+    slug: 'mihoyo',
+    sourceSlug: 'mihoyo-social',
+    name: '米哈游',
+    sizeTag: 'large',
+    entry: 'https://jobs.mihoyo.com/#/position',
+    adapterKey: 'mihoyo.social',
+    channel: 'social',
+    recruitmentType: 'social',
+    supportStatus: 'supported',
+    config: { pageSize: 10 },
+    supportNote:
+      '2026-09-11 匿名 HTTP 首尾页/真实详情 smoke 通过；hireType 与职位性质分区，不固定项目年份。实习范围为校园实习专项；required 详情失败不写占位，采样保留 partial。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000120',
+    sourceId: '018f0000-0000-7000-8000-000000000262',
+    slug: 'mihoyo',
+    sourceSlug: 'mihoyo-intern',
+    name: '米哈游',
+    sizeTag: 'large',
+    entry: 'https://jobs.mihoyo.com/#/campus/position',
+    adapterKey: 'mihoyo.intern',
+    channel: 'intern',
+    recruitmentType: 'mixed',
+    supportStatus: 'supported',
+    config: { pageSize: 10 },
+    supportNote:
+      '2026-09-11 匿名 HTTP 首尾页/真实详情 smoke 通过；hireType 与职位性质分区，不固定项目年份。实习范围为校园实习专项；required 详情失败不写占位，采样保留 partial。',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000120',
+    sourceId: '018f0000-0000-7000-8000-000000000263',
+    slug: 'mihoyo',
+    sourceSlug: 'mihoyo-campus',
+    name: '米哈游',
+    sizeTag: 'large',
+    entry: 'https://jobs.mihoyo.com/#/campus/position',
+    adapterKey: 'mihoyo.campus',
+    channel: 'campus',
+    recruitmentType: 'campus',
+    supportStatus: 'supported',
+    config: { pageSize: 10 },
+    supportNote:
+      '2026-09-11 匿名 HTTP 首尾页/真实详情 smoke 通过；hireType 与职位性质分区，不固定项目年份。实习范围为校园实习专项；required 详情失败不写占位，采样保留 partial。',
+  },
+];
+const canonicalInputs = [
+  ...inputs,
+  ...missingChannelInputs,
+  ...waveTwoInputs,
+  ...didiInputs,
+  ...ctripInputs,
+  ...mihoyoInputs,
+] as const;
 const channelTypes = ['intern', 'campus', 'social'] as const;
-const companyInputs = Array.from(
-  new Map(canonicalInputs.map((input) => [input.companyId, input])).values(),
-);
+// 1、保留既有公司顺序与身份；2、追加尚无已验证物理来源的目标公司。
+const companyInputs: readonly Pick<
+  CatalogInput,
+  'companyId' | 'slug' | 'name' | 'aliases' | 'sizeTag'
+>[] = [
+  ...Array.from(
+    new Map([...inputs, ...missingChannelInputs].map((input) => [input.companyId, input])).values(),
+  ),
+  {
+    companyId: '018f0000-0000-7000-8000-000000000116',
+    slug: 'kuaishou',
+    name: '快手',
+    aliases: ['Kuaishou', 'Kwai'],
+    sizeTag: 'large',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000117',
+    slug: 'bilibili',
+    name: '哔哩哔哩',
+    aliases: ['B站', 'Bilibili'],
+    sizeTag: 'large',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000118',
+    slug: 'didi',
+    name: '滴滴',
+    aliases: ['DiDi'],
+    sizeTag: 'large',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000119',
+    slug: 'ctrip',
+    name: '携程',
+    aliases: ['携程集团', 'Trip.com Group', 'Ctrip'],
+    sizeTag: 'large',
+  },
+  {
+    companyId: '018f0000-0000-7000-8000-000000000120',
+    slug: 'mihoyo',
+    name: '米哈游',
+    aliases: ['miHoYo'],
+    sizeTag: 'large',
+  },
+];
 
 /** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function channelId(companyId: string, channel: SourceChannel): string {
