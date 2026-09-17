@@ -302,8 +302,8 @@ JobHunter 是面向个人求职者的本地工作台。它的核心价值不是�
 
 实施前应建立或规范以下共享所有者：
 
-- `DESIGN.md`：记录本报告批准后的视觉令牌、字体、密度、形状和动效。
-- `UX-CONTRACT.md`：记录导航结果、筛选恢复、异步状态、错误恢复、确认和焦点行为。
+- `docs/design/DESIGN.md`：记录本报告批准后的视觉令牌、字体、密度、形状和动效。
+- `docs/design/UX-CONTRACT.md`：记录导航结果、筛选恢复、异步状态、错误恢复、确认和焦点行为。
 - 全局语义令牌与单一 `:root`。
 - `Button`：emphasis 与 intent 两轴，覆盖 hover、active、focus、busy、disabled。
 - `Field`、`Select`、`SearchField` 和表单错误。
@@ -320,7 +320,7 @@ JobHunter 是面向个人求职者的本地工作台。它的核心价值不是�
 
 ### 阶段 0：冻结新增漂移
 
-- 创建 `DESIGN.md`、`UX-CONTRACT.md` 和迁移台账。
+- 创建 `docs/design/DESIGN.md`、`docs/design/UX-CONTRACT.md` 和迁移台账。
 - 记录现有页面截图、状态和响应式基线。
 - 禁止新增绿色品牌色、直接色值、页面局部动画常量和重复弹层。
 

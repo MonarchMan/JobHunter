@@ -204,6 +204,49 @@ describe('source.sync handler', () => {
       ),
     ).rejects.toMatchObject({ category: 'network_temporary' });
   });
+
+  it('preserves an internal synchronization cause for Worker infrastructure recovery', async () => {
+    const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
+    const cause = Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' });
+    const handler = createSourceSyncTaskHandler({
+      run: () =>
+        Promise.resolve({
+          kind: 'completed',
+          runId,
+          status: 'partial',
+          coverage: 'partial',
+          stats: {
+            discovered: 1,
+            created: 0,
+            unchanged: 0,
+            revised: 0,
+            restored: 0,
+            staled: 0,
+            closed: 0,
+            isolated: 0,
+            skippedNonDomestic: 0,
+            skippedUnknownRegion: 0,
+            skippedOutOfScope: 0,
+            followupEnqueued: 0,
+          },
+          errorCategory: 'internal',
+          errorSummary: 'Sync pipeline failed.',
+          failureCause: cause,
+        }),
+    });
+
+    await expect(
+      handler.execute(
+        {
+          signal: new AbortController().signal,
+          clock: { now: () => utcInstant(1) },
+          logger: silentLogger,
+          services: {},
+        },
+        { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'retry' },
+      ),
+    ).rejects.toMatchObject({ cause });
+  });
 });
 
 describe('HandlerRegistry', () => {

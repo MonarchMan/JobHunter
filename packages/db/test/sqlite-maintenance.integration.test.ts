@@ -10,6 +10,7 @@ import {
   SqliteTaskRepository,
   isSqliteMaintenanceActive,
   isSqliteMaintenanceError,
+  isSqliteUnavailableError,
 } from '../src/index.js';
 
 describe('SQLite automatic maintenance infrastructure', () => {
@@ -84,6 +85,7 @@ describe('SQLite automatic maintenance infrastructure', () => {
         throw new Error('Write unexpectedly succeeded');
       } catch (error) {
         expect(isSqliteMaintenanceError(error)).toBe(true);
+        expect(isSqliteUnavailableError(new Error('wrapped', { cause: error }))).toBe(true);
       }
       expect(other.client.prepare('SELECT count(*) FROM companies').pluck().get()).toBe(0);
       expect(
@@ -107,13 +109,24 @@ describe('SQLite automatic maintenance infrastructure', () => {
     }
   });
 
-  it('skips pending work and creates no maintenance task', async () => {
+  it('postpones routine checks while a business task is running', async () => {
     const root = await createTemporaryDataRoot('jobhunter-maintenance-busy-');
     const database = openSqliteDatabase({ dataRoot: root.path });
     const maintenance = new SqliteMaintenanceRepository(database.databasePath);
     try {
       database.client.exec(`INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,
-        max_attempts,available_at,created_at) VALUES('pending','test','{}','pending','pending',1,0,0)`);
+        max_attempts,available_at,created_at) VALUES('running','test','{}','running','running',1,0,0)`);
+      const nextCheckAt = database.client
+        .prepare('SELECT next_check_at FROM database_maintenance WHERE id = 1')
+        .pluck()
+        .get();
+      expect(await new SqliteMaintenanceService(maintenance).check()).toBeNull();
+      expect(
+        database.client
+          .prepare('SELECT next_check_at FROM database_maintenance WHERE id = 1')
+          .pluck()
+          .get(),
+      ).toBe(nextCheckAt);
       expect(await maintenance.maintain('vacuum', Date.now())).toBe('work_pending');
       expect(
         database.client

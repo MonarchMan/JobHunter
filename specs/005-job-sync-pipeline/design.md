@@ -37,11 +37,13 @@ Adapter 结束时提供 coverage，但应用层只在以下证据同时成立时
 
 健康状态根据列表采集完整性和运行级错误更新：complete 且无严重列表质量错误时清零 failures；分页 partial 或 failed 增加失败计数；少量且具有稳定 externalJobId 的隔离只进入数据质量诊断。详情补全、意向外、非境内和地域不明职位不改变 coverage 或来源健康。temporary/rate-limited partial 在保存本次运行后由任务队列退避重试。
 
+同步服务完成失败运行时同时返回仅供进程内使用的原始异常链。任务处理器把该 cause 挂到 `TaskExecutionError`，Worker 装配层因此仍能识别 SQLite 锁忙或维护写保护，并交给既有租约恢复路径；数据库只保存脱敏摘要，不保存驱动堆栈、路径或 SQL。非暂态内部错误继续按永久错误处理，避免约束或代码缺陷被无限重试掩盖。
+
 同一来源的运行互斥由 `sync_runs` 唯一索引保证。创建运行时，仓储先将早于 15 分钟恢复窗口的 running 记录结束为 cancelled/orphaned_run，再尝试插入新运行；窗口内的 running 记录仍返回 conflict。孤儿运行属于进程中断而非来源故障，因此不累计来源失败次数。恢复窗口大于来源同步任务的默认 10 分钟租约，既避免活跃任务被抢占，也防止进程崩溃留下永久锁。
 
 ## 后续任务顺序
 
-新 Revision 同时产生不依赖模型的基础匹配任务，以及可选的 `job.enrich` 任务。基础匹配使用 `jobEnrichmentIdOrNone = none`；enrichment 成功后以其不可变 ID 产生新的匹配任务。两类 MatchResult 均保留，当前查询优先选择与活动 enrichment 配置匹配的结果，模型不可用时回退基础结果。JobAdvice 只在选定 MatchResult 后运行并写入独立 MatchAdvice。
+同步不产生匹配、职位理解或建议任务；规则/LLM 评分只由用户在职位列表针对单条或勾选职位显式触发。详情补全是唯一允许由列表同步派生的职位级任务。
 
 ## 可观测性
 

@@ -1,7 +1,6 @@
 import {
   JobDetailService,
   JobSyncService,
-  manualJobScoreTaskPayloadSchema,
   sourceJobDetailTaskPayloadSchema,
   type JobDetailCommand,
   type JobSyncResult,
@@ -202,10 +201,6 @@ async function setup(
   options: {
     readonly rejectAllJobs?: boolean;
     readonly deferredDetails?: boolean;
-    readonly automaticMatching?: {
-      readonly scoreEnabled?: boolean;
-      readonly adviceEnabled: boolean;
-    };
   } = {},
 ): Promise<SyncFixture> {
   const root = await createTemporaryDataRoot('jobhunter-sync-');
@@ -262,7 +257,6 @@ async function setup(
   const registry = new AdapterRegistry();
   registry.register(fixtureAdapter(scenario, options.deferredDetails));
   const uow = new SqliteUnitOfWork(handle.client);
-  const automaticMatching = options.automaticMatching;
   const service = new JobSyncService({
     uow,
     registry,
@@ -275,17 +269,6 @@ async function setup(
             allowedJobFamilies: () => [],
             isReady: () => true,
             accepts: () => false,
-          },
-        }
-      : {}),
-    ...(automaticMatching
-      ? {
-          automaticMatching: {
-            settings: () => ({
-              scoreEnabled: automaticMatching.scoreEnabled ?? true,
-              adviceEnabled: automaticMatching.adviceEnabled,
-            }),
-            currentProfileVersionIds: () => ['018f0000-0000-7000-8000-000000009999'],
           },
         }
       : {}),
@@ -335,37 +318,6 @@ describe('JobSyncService', () => {
         .get(),
     ).toBe(0);
     expect(fixture.handle.client.prepare('SELECT count(*) FROM tasks').pluck().get()).toBe(0);
-  });
-
-  it('enqueues automatic scoring for each new revision when enabled', async () => {
-    const fixture = await setup({ automaticMatching: { adviceEnabled: false } });
-    const result = await run(fixture);
-    expect(result).toMatchObject({ stats: { created: 3, followupEnqueued: 3 } });
-    const rows = fixture.handle.client
-      .prepare("SELECT payload_json FROM tasks WHERE task_type = 'match.score-job'")
-      .all() as { readonly payload_json: string }[];
-    expect(rows).toHaveLength(3);
-    expect(
-      rows.every(
-        (row) =>
-          manualJobScoreTaskPayloadSchema.parse(JSON.parse(row.payload_json)).mode === 'rules',
-      ),
-    ).toBe(true);
-  });
-
-  it('does not enqueue automatic scoring for new revisions when disabled', async () => {
-    // 1. 显式关闭评分，验证新职位仍同步但不会创建评分任务。
-    const fixture = await setup({
-      automaticMatching: { scoreEnabled: false, adviceEnabled: false },
-    });
-    const result = await run(fixture);
-    expect(result).toMatchObject({ stats: { created: 3, followupEnqueued: 0 } });
-    expect(
-      fixture.handle.client
-        .prepare("SELECT count(*) FROM tasks WHERE task_type = 'match.score-job'")
-        .pluck()
-        .get(),
-    ).toBe(0);
   });
 
   it('keeps complete runs healthy when jobs are intentionally filtered out', async () => {

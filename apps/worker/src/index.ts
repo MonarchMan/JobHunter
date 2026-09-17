@@ -46,7 +46,7 @@ import { AgentRunner, ModelClientError, type ModelClient } from '@jobhunter/agen
 import {
   defaultMatchRulesetId,
   openSqliteDatabase,
-  isSqliteBusyError,
+  isSqliteUnavailableError,
   SqliteArtifactStore,
   DataRootCleanupFileStore,
   SqliteAgentRunStore,
@@ -322,14 +322,6 @@ export function createProductionWorkerApplication(input: {
     clock,
     ids,
     jobIntakePolicy: new ProfileJobIntakePolicy(profileRepository),
-    automaticMatching: {
-      settings: () => settings.get().matchingAutomation,
-      currentProfileVersionIds: () =>
-        profileRepository.listProfiles().flatMap((profile) => {
-          const current = profileRepository.getCurrentVersion(profile.id);
-          return current ? [current.id] : [];
-        }),
-    },
     options: { normalizerVersion: 'normalize-v1' },
   });
   const registry = new HandlerRegistry();
@@ -558,7 +550,7 @@ export function createProductionWorkerApplication(input: {
     retryPolicy: new RetryPolicy(systemRandom),
     scheduleService,
     periodicWork: createSqliteMaintenanceTick(database, input.logger, maintenanceAbort.signal),
-    isQueueBusy: isSqliteBusyError,
+    isQueueBusy: isSqliteUnavailableError,
     options: {
       workerId: input.workerId ?? `worker-${process.pid.toString()}`,
       emptyPollMinimumMs: input.pollIntervalMs ?? 1_000,

@@ -70,11 +70,14 @@ export function createSourceSyncTaskHandler(
       if (
         result.status === 'failed' ||
         (result.status === 'partial' &&
-          (result.errorCategory === 'temporary' || result.errorCategory === 'rate_limited'))
+          (result.errorCategory === 'temporary' ||
+            result.errorCategory === 'rate_limited' ||
+            result.failureCause !== undefined))
       ) {
         throw new TaskExecutionError(
           taskErrorCategory(result.errorCategory),
           result.errorSummary ?? 'Source synchronization failed.',
+          { cause: result.failureCause },
         );
       }
       if (result.status === 'cancelled') {

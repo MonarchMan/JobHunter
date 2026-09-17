@@ -25,26 +25,26 @@
 
 ## Visual contract
 
-- Project `DESIGN.md`: `DESIGN.md`。
-- Token ownership model: 现有运行时 CSS 为规范所有者，`DESIGN.md` 镜像批准值。
+- Project `docs/design/DESIGN.md`: `docs/design/DESIGN.md`。
+- Token ownership model: 现有运行时 CSS 为规范所有者，`docs/design/DESIGN.md` 镜像批准值。
 - Runtime design-system/token source: `apps/web/app/styles/tokens.css` 中唯一的 `:root`。
 - Mapping/export/adapters: `apps/web/app/styles.css` 按稳定顺序装配全局分片；CSS 变量直接供全局共享类和路由级 CSS Modules 消费，无生成适配器。
 - Token drift gate: DESIGN lint、旧绿色/原始色值搜索、代表页面视觉验证。
 - Supported themes: 仅亮色；强制颜色模式交给系统。
-- Design-context owner/review policy: 修改共享视觉令牌时必须同步更新 `DESIGN.md`。
+- Design-context owner/review policy: 修改共享视觉令牌时必须同步更新 `docs/design/DESIGN.md`。
 
 ## Canonical UI Map
 
-| Capability      | Canonical owner                    | Source of truth | Allowed variants          | Verification      |
-| --------------- | ---------------------------------- | --------------- | ------------------------- | ----------------- |
-| Table Selection | `jobs-table.tsx` 职位批量选择      | 014 规格        | 桌面表格 / 移动记录卡     | E2E               |
-| Select/Listbox  | 共享 `SelectField` / 原生 `select` | 本契约          | authored / native         | 键盘 + 弹层几何   |
-| Combobox        | 共享 `CompanyCombobox`             | 014 规格        | authored                  | 键盘 + 弹层 + IME |
-| Date            | ISO 显示层 + 原生 `date` 交互层    | 014 规格        | native-picker / ISO-shell | locale + E2E      |
-| Form            | 页面表单 + 共享全局字段状态        | Schema 与本契约 | edit/upload/filter        | validation E2E    |
-| Scrollbar       | 全局应用样式                       | DESIGN.md       | stable gutter 例外        | computed style    |
-| Toast           | 顶部居中、最多三条、不占布局空间   | 本契约          | success/warning/error     | live-region test  |
-| CRUD            | Route Handler + 应用服务           | 011/013 规格    | stay/queued               | full-flow E2E     |
+| Capability      | Canonical owner                    | Source of truth       | Allowed variants          | Verification      |
+| --------------- | ---------------------------------- | --------------------- | ------------------------- | ----------------- |
+| Table Selection | `jobs-table.tsx` 职位批量选择      | 014 规格              | 桌面表格 / 移动记录卡     | E2E               |
+| Select/Listbox  | 共享 `SelectField` / 原生 `select` | 本契约                | authored / native         | 键盘 + 弹层几何   |
+| Combobox        | 共享 `CompanyCombobox`             | 014 规格              | authored                  | 键盘 + 弹层 + IME |
+| Date            | ISO 显示层 + 原生 `date` 交互层    | 014 规格              | native-picker / ISO-shell | locale + E2E      |
+| Form            | 页面表单 + 共享全局字段状态        | Schema 与本契约       | edit/upload/filter        | validation E2E    |
+| Scrollbar       | 全局应用样式                       | docs/design/DESIGN.md | stable gutter 例外        | computed style    |
+| Toast           | 顶部居中、最多三条、不占布局空间   | 本契约                | success/warning/error     | live-region test  |
+| CRUD            | Route Handler + 应用服务           | 011/013 规格          | stay/queued               | full-flow E2E     |
 
 ## Component behavior
 
@@ -169,7 +169,7 @@
 ## Migration status
 
 - Migration ledger location: `specs/014-ui-redesign/tasks.md`。
-- Canonical primitives and owners: `DESIGN.md`、本契约、`styles/tokens.css`、全局样式分片、组件级 CSS Modules 和 `apps/web/app/components`。
+- Canonical primitives and owners: `docs/design/DESIGN.md`、本契约、`styles/tokens.css`、全局样式分片、组件级 CSS Modules 和 `apps/web/app/components`。
 - Current risk-prioritized slices: 页面级样式迁移已完成；后续新增页面必须复用现有共享所有者或使用就近 CSS Module。
 - Legacy import/token enforcement: 搜索旧绿色直接值、重复 `:root`、原生对话框和页面级反馈色。
 - Rollout/rollback and removal gates: 按完整页面工作流迁移，测试失败时可按页面回退，不保留双主题长期分支。

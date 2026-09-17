@@ -79,6 +79,8 @@ pnpm --filter @jobhunter/web dev
 
 ## 文档导航
 
+视觉规范见 [设计规范](docs/design/DESIGN.md)，跨页面交互规则见 [UX 契约](docs/design/UX-CONTRACT.md)，设计验收记录统一存放在 `docs/reports/`。临时审计输出放入 `var/audits/`，不提交版本库。
+
 | 文档                                                   | 内容                             |
 | ------------------------------------------------------ | -------------------------------- |
 | [完整上手指南](docs/guide.md)                          | 安装、初始化、首次使用和常见问题 |

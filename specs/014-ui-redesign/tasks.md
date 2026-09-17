@@ -4,7 +4,7 @@
 
 ## 契约与基础
 
-- [x] **UIR-T01**：建立 `DESIGN.md` 和 `UX-CONTRACT.md`。（UIR-001–010）
+- [x] **UIR-T01**：建立 `docs/design/DESIGN.md` 和 `docs/design/UX-CONTRACT.md`。（UIR-001–010）
 - [x] **UIR-T02**：统一运行时颜色、字体、空间、圆角、阴影和动效令牌。（UIR-001、UIR-003、UIR-009）
 - [x] **UIR-T03**：重构应用壳层、桌面侧边导航和移动导航。（UIR-002、UIR-003）
 - [x] **UIR-T04**：统一按钮、表单、状态、表格、反馈、滚动条和减少动态效果。（UIR-004、UIR-009、UIR-010）

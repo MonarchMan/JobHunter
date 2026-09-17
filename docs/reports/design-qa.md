@@ -28,7 +28,7 @@
 
 - Premium strict audit: 0 errors, 0 warnings, 0 unresolved findings.
 - Formatter, ESLint, TypeScript, production Web build, repository documentation check, and relevant package tests passed.
-- `designmd lint DESIGN.md`: 0 errors; 24 pre-existing orphan-token warnings caused by component-reference coverage in the design document.
+- `designmd lint docs/design/DESIGN.md`: 0 errors; 24 pre-existing orphan-token warnings caused by component-reference coverage in the design document.
 
 ## Final result
 

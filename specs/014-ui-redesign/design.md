@@ -6,22 +6,22 @@
 
 - 产品行为：`specs/011-web-console/spec.md` 与 `design.md`
 - 视觉与改造指导：`docs/reports/ui-redesign-guidance-2026-08-24.md`
-- 持久视觉契约：`DESIGN.md`
-- 跨页面行为契约：`UX-CONTRACT.md`
+- 持久视觉契约：`docs/design/DESIGN.md`
+- 跨页面行为契约：`docs/design/UX-CONTRACT.md`
 
 ## 运行时结构
 
 不引入第三方主题或成套 UI 框架。现有 Next.js App Router 和 Server Components 保持不变；对应用必须拥有弹层几何和键盘语义的复合控件，可引入聚焦的无样式可访问性原语，外观仍只由 JobHunter 令牌和 CSS Modules 拥有。
 
 ```text
-DESIGN.md（意图与规范值）
+docs/design/DESIGN.md（意图与规范值）
   ↔ apps/web/app/styles/tokens.css（运行时唯一令牌源）
       → apps/web/app/styles.css（全局装配入口）
           → styles/foundations.css、product-shell.css（迁移期跨路由基础与壳层）
       → 路由或组件旁的 *.module.css（局部样式）
 ```
 
-`styles/tokens.css` 中的 `:root` 作为唯一运行时令牌源；`styles.css` 只保留有序 `@import`。全局分片只承载基础元素、应用壳层与跨路由共享视觉；边界清晰的页面和组件使用就近 CSS Modules。所有样式只能消费语义变量，不新增独立主题表。`DESIGN.md` 镜像同一组已批准值，用设计 lint 和颜色搜索防止漂移。
+`styles/tokens.css` 中的 `:root` 作为唯一运行时令牌源；`styles.css` 只保留有序 `@import`。全局分片只承载基础元素、应用壳层与跨路由共享视觉；边界清晰的页面和组件使用就近 CSS Modules。所有样式只能消费语义变量，不新增独立主题表。`docs/design/DESIGN.md` 镜像同一组已批准值，用设计 lint 和颜色搜索防止漂移。
 
 迁移按完整页面或共享组件切片推进：先原样拆分并验证全局级联，再将单一路由或单一组件拥有的选择器移动到同目录 CSS Module，最后删除对应全局规则。设置页是首个路由样板；应用壳层、主导航与工作台已完成就近模块化并移除 `dashboard.css`；职位列表的筛选、结果工具栏、选择表格、移动卡片、评分操作与图标已归入页面或组件模块并移除 `jobs.css`，通用全元素表格规则也已由职位表格和共享诊断表格模块分别接管；职位详情的标题、操作区、详情网格、修订时间线、匹配证据与建议样式已归入路由模块；个人资料的页面布局、导入、在线简历、维护和删除样式已归入路由内模块并移除 `profile.css`，同时删除无消费者的旧只读简历选择器；招聘来源页、分类导航、公司来源卡和操作区已完成模块化并移除 `sources.css`，公司 Logo 的来源标题尺寸由显式 `source-heading` 业务变体拥有，不再依赖全局祖先选择器；来源同步复用同一客户端操作组件，卡片级与页面级按钮均使用共享线性刷新图标、固定尺寸 busy 状态和可聚焦提示，页面级按钮在分类工具栏右侧批量为全部启用来源入队；任务筛选、诊断表格、移动卡片、自动刷新、任务操作和诊断弹窗已归入任务路由及共享诊断表格模块，后台任务列表使用路由业务类统一水平、垂直居中，Agent 运行详情复用同一表格模块并在路由内约束长技术指纹换行；`CompanyCombobox`、`CompanyLogo`、`Pagination`、`TruncatedText`、`PageHeader`、`MetricCard`、`DashboardHero` 与 `DashboardSteps` 是首批共享组件样板。页面级迁移已完成，全局分片仅保留基础元素、壳层和具有多个跨路由消费者的共享语义类。
 

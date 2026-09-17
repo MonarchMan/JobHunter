@@ -144,7 +144,7 @@ Every change must pass:
 
 Run `pnpm check` to execute all gates.
 
-## Design System (DESIGN.md)
+## Design System (docs/design/DESIGN.md)
 
 The web interface follows a restrained "档案工作台" (archive workbench) design:
 
@@ -154,7 +154,7 @@ The web interface follows a restrained "档案工作台" (archive workbench) des
 - **Motion:** Restrained - 120ms feedback, 180ms content changes, 260ms overlays
 - **Desktop-first:** 1280px+ primary, 390px+ mobile support
 
-Key components use specific variants detailed in DESIGN.md (e.g., "准备档案工作台" for interview prep, "在线简历工作台" for profile editing).
+Key components use specific variants detailed in docs/design/DESIGN.md (e.g., "准备档案工作台" for interview prep, "在线简历工作台" for profile editing).
 
 ## Environment Configuration
 

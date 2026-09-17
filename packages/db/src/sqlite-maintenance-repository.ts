@@ -70,7 +70,18 @@ export class SqliteMaintenanceRepository implements MaintenancePort {
             )
             .run();
         }
-        // 2、到期只占用当前一次，避免恢复后追赶执行；调度写入与维护标记共用 SQLite 写锁。
+        // 2、业务任务活动时不推进检查时钟，避免 optimize 等轻维护与同步短事务争抢写锁。
+        if (
+          this.#client
+            .prepare(
+              `SELECT 1 FROM tasks
+               WHERE status = 'running' OR (status = 'pending' AND available_at <= ?)
+               LIMIT 1`,
+            )
+            .get(now)
+        )
+          return null;
+        // 3、到期只占用当前一次，避免恢复后追赶执行；调度写入与维护标记共用 SQLite 写锁。
         if (row.next_check_at > now) return null;
         this.#client
           .prepare('UPDATE database_maintenance SET next_check_at = ? WHERE id = 1')
