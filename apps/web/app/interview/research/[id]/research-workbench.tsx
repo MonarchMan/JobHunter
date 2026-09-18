@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../../src/client/csrf.js';
-import { SelectField } from '../../../components/select-field.js';
+import { SelectField } from '../../../components/forms/select-field.js';
 import { useToast } from '../../../components/toast-provider.js';
 import { CommunityExperienceRecord } from '../community-experience-record.js';
 import styles from '../research.module.css';

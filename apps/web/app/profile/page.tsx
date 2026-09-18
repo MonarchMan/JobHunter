@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../src/server/container.js';
-import { PageHeader } from '../components/page-header.js';
+import { PageHeader } from '../components/layout/page-header.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { ProfileEditor } from './profile-editor.js';
 import { ResumeDeletion } from './resume-deletion.js';
 import { ResumeImport } from './resume-import.js';
-import { Pagination } from '../components/pagination.js';
-import { SelectField } from '../components/select-field.js';
+import { Pagination } from '../components/lists/pagination.js';
+import { SelectField } from '../components/forms/select-field.js';
 import { webPagination } from '@jobhunter/application/web';
 import { ResumeEditor } from './resume-editor.js';
 import styles from './page.module.css';

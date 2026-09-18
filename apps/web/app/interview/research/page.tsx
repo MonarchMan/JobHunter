@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../../src/server/job-query.js';
-import { PageHeader } from '../../components/page-header.js';
+import { PageHeader } from '../../components/layout/page-header.js';
 import { InterviewSectionNav } from '../interview-section-nav.js';
 import { ResearchIndex } from './research-index.js';
 

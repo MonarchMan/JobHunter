@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation.js';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useRef, useState } from 'react';
 import { mutationHeaders } from '../../../src/client/csrf.js';
+import { DatePicker } from '../../components/forms/date-picker.js';
 import { CommunityExperienceRecord } from './community-experience-record.js';
 import styles from './research.module.css';
 
@@ -27,9 +28,6 @@ const requestStateLabels = {
 const taskStateLabels = {
   pending: '已排队',
   running: '执行中',
-  succeeded: '执行成功',
-  failed: '执行失败',
-  cancelled: '已取消',
 } as const;
 
 function splitList(value: FormDataEntryValue | null): string[] {
@@ -179,14 +177,8 @@ export function ResearchIndex({
               面试阶段
               <input name="stages" maxLength={800} placeholder="技术一面、系统设计" />
             </label>
-            <label>
-              最早发布日期
-              <input name="dateFrom" type="date" />
-            </label>
-            <label>
-              最晚发布日期
-              <input name="dateTo" type="date" />
-            </label>
+            <DatePicker label="最早发布日期" name="dateFrom" />
+            <DatePicker label="最晚发布日期" name="dateTo" />
             <label>
               结果语言
               <select name="language" defaultValue="zh-CN">
@@ -252,7 +244,10 @@ export function ResearchIndex({
                     </small>
                   </span>
                   <span className={styles.requestStatus}>
-                    {currentTask ? `${taskStateLabels[currentTask.status]} · ` : ''}
+                    {/* 旧任务的取消/失败结果不应盖过后续手动审核完成的请求状态。 */}
+                    {currentTask?.status === 'pending' || currentTask?.status === 'running'
+                      ? `${taskStateLabels[currentTask.status]} · `
+                      : ''}
                     {requestStateLabels[request.state]} · {formatTime(request.updatedAt)}
                   </span>
                 </a>

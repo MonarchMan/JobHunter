@@ -3,10 +3,10 @@ import { matchEvidenceCoverage } from '@jobhunter/matching';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
-import { JobStatus } from '../../components/job-status.js';
+import { JobStatus } from '../job-status.js';
 import { getWebContainer } from '../../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../../src/server/job-query.js';
-import { JobScoreAction } from '../../components/job-score-action.js';
+import { JobScoreAction } from '../job-score-action.js';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';

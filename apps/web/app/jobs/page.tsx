@@ -1,12 +1,12 @@
 import { canonicalJobSubfamilies } from '@jobhunter/domain';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
-import { Pagination } from '../components/pagination.js';
-import { SelectField } from '../components/select-field.js';
+import { Pagination } from '../components/lists/pagination.js';
+import { SelectField } from '../components/forms/select-field.js';
 import { JobsRefresh } from './jobs-refresh.js';
-import { PageHeader } from '../components/page-header.js';
+import { PageHeader } from '../components/layout/page-header.js';
 import { JobsTable } from './jobs-table.js';
-import { CompanyCombobox } from '../components/company-combobox.js';
+import { CompanyCombobox } from '../components/forms/company-combobox.js';
 import { getWebContainer } from '../../src/server/container.js';
 import {
   firstSearchParameter,

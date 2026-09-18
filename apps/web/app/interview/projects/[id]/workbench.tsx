@@ -180,7 +180,12 @@ export function DrillWorkbench({
   const historyTurns =
     session?.status === 'completed'
       ? sessionTurns
-      : sessionTurns.filter((turn) => turn.id !== currentTurn?.id);
+      : sessionTurns.filter((turn) => {
+          // 最近一题只有仍在生成、待回答或整理时才不属于问答记录；恢复会话不能藏起已完成题。
+          return (
+            turn.id !== currentTurn?.id || ['ready', 'skipped', 'cancelled'].includes(turn.status)
+          );
+        });
   const currentTaskId =
     currentTurn?.status === 'question_pending'
       ? currentTurn.questionTaskId
@@ -494,9 +499,9 @@ export function DrillWorkbench({
             {session ? `${session.profileKey}@${session.profileVersion}` : '尚未开始'}
           </span>
           {detail.dossier.latestNotebookArtifactId ? (
-            <a href={`/api/interview/projects/${detail.dossier.id}/notebook`}>下载 Markdown</a>
+            <a href={`/api/interview/projects/${detail.dossier.id}/notebook`}>下载拷打笔记</a>
           ) : (
-            <span>Markdown 正在准备</span>
+            <span>拷打笔记尚未生成</span>
           )}
         </div>
         {detail.snapshot.project.highlights.length ? (

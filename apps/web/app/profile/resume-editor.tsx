@@ -9,7 +9,7 @@ import type { ReactElement, ReactNode, SyntheticEvent } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
-import { SelectField } from '../components/select-field.js';
+import { SelectField } from '../components/forms/select-field.js';
 import { useToast } from '../components/toast-provider.js';
 import { ResumePolish } from './resume-polish.js';
 import { ResumeTemplateEntry } from './resume-template-entry.js';

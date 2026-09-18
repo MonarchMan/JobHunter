@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useRef } from 'react';
-import { Icon } from './ui-icon.js';
+import { Icon } from '../ui-icon.js';
 import styles from './site-nav.module.css';
 
 const primaryLinks = [

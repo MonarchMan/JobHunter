@@ -4,7 +4,7 @@ import { resumeTemplates, type ResumeTemplateKey } from '@jobhunter/resume-templ
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
-import { SelectField } from '../components/select-field.js';
+import { SelectField } from '../components/forms/select-field.js';
 import styles from './resume-template-entry.module.css';
 
 export function ResumeTemplateEntry({ profileId }: Readonly<{ profileId: string }>): ReactElement {

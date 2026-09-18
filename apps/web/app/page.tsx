@@ -1,10 +1,10 @@
 import type { ReactElement } from 'react';
-import { DashboardHero } from './components/dashboard-hero.js';
-import { DashboardNextAction } from './components/dashboard-next-action.js';
-import { DashboardHighlightJobs } from './components/dashboard-highlight-jobs.js';
-import { DashboardSteps } from './components/dashboard-steps.js';
-import { DashboardResources } from './components/dashboard-resources.js';
-import { MetricCard } from './components/metric-card.js';
+import { DashboardHero } from './_dashboard/dashboard-hero.js';
+import { DashboardNextAction } from './_dashboard/dashboard-next-action.js';
+import { DashboardHighlightJobs } from './_dashboard/dashboard-highlight-jobs.js';
+import { DashboardSteps } from './_dashboard/dashboard-steps.js';
+import { DashboardResources } from './_dashboard/dashboard-resources.js';
+import { MetricCard } from './_dashboard/metric-card.js';
 import { labelStatus, syncRunStatusLabels } from './components/status-labels.js';
 import { getWebContainer } from '../src/server/container.js';
 import panelStyles from './dashboard-panel.module.css';

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { jobStatusLabels } from './status-labels.js';
+import { jobStatusLabels } from '../components/status-labels.js';
 
 export function JobStatus({
   status,

@@ -10,8 +10,8 @@ import {
   taskStatusLabels,
 } from '../components/status-labels.js';
 import { TaskActions } from './task-actions.js';
-import { TruncatedText } from '../components/truncated-text.js';
-import dataTableStyles from '../components/data-table.module.css';
+import { TruncatedText } from '../components/lists/truncated-text.js';
+import dataTableStyles from '../components/lists/data-table.module.css';
 import styles from './diagnostic-details.module.css';
 
 function time(value: string | null): string {

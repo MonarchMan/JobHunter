@@ -3,7 +3,7 @@
 import * as SelectPrimitive from '@radix-ui/react-select';
 import type { ReactElement } from 'react';
 import { useEffect, useState } from 'react';
-import { Icon } from './ui-icon.js';
+import { Icon } from '../ui-icon.js';
 import styles from './select-field.module.css';
 
 const valuePrefix = 'jobhunter-select:';

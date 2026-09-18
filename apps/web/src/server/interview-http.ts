@@ -68,7 +68,7 @@ export function interviewErrorResponse(error: unknown): Response {
   }
   if (error instanceof TaskExecutionError) {
     if (error.category === 'validation_failed') {
-      return badRequestResponse('模型返回的问题未通过安全校验，请重新生成。');
+      return badRequestResponse('模型返回的问题未通过校验，可能重复或引用无效，请重新生成。');
     }
     if (error.category === 'cancelled') {
       return conflictResponse('QUESTION_CANCELLED', '问题生成已取消，可以重新生成。', {});

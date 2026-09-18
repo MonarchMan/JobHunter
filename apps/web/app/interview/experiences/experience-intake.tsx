@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation.js';
 import type { DragEvent, ReactElement, SyntheticEvent } from 'react';
 import { useRef, useState } from 'react';
 import { mutationHeaders } from '../../../src/client/csrf.js';
+import { DatePicker } from '../../components/forms/date-picker.js';
 import styles from './experience-intake.module.css';
 
 interface ApiEnvelope<T> {
@@ -266,10 +267,7 @@ export function ExperienceIntake({
               面试阶段
               <input name="stage" placeholder="例如：一面 / HR 面" maxLength={100} />
             </label>
-            <label>
-              面试日期
-              <input name="occurredOn" type="date" />
-            </label>
+            <DatePicker label="面试日期" name="occurredOn" />
             <label>
               结果
               <input name="outcome" placeholder="例如：待定 / 通过" maxLength={100} />

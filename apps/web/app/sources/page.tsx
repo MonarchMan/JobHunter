@@ -1,10 +1,10 @@
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
-import { PageHeader } from '../components/page-header.js';
+import { PageHeader } from '../components/layout/page-header.js';
 import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { SourceTabs, type SourceChannel } from './source-tabs.js';
-import { Pagination } from '../components/pagination.js';
+import { Pagination } from '../components/lists/pagination.js';
 import { webPagination, type WebSourceChannel } from '@jobhunter/application/web';
 import { CompanySourceCard } from './company-source-card.js';
 import { SourceChannelSyncAction } from './source-actions.js';

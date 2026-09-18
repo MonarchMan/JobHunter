@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactElement, ReactNode } from 'react';
-import { SiteNav } from './components/site-nav.js';
+import { SiteNav } from './components/layout/site-nav.js';
 import './styles.css';
 import styles from './app-shell.module.css';
 import { ToastProvider } from './components/toast-provider.js';

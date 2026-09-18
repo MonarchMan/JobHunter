@@ -6,9 +6,9 @@ import {
   taskTypeLabels,
   taskStatusLabels,
 } from '../components/status-labels.js';
-import { PageHeader } from '../components/page-header.js';
-import { TruncatedText } from '../components/truncated-text.js';
-import { Pagination } from '../components/pagination.js';
+import { PageHeader } from '../components/layout/page-header.js';
+import { TruncatedText } from '../components/lists/truncated-text.js';
+import { Pagination } from '../components/lists/pagination.js';
 import { getWebContainer } from '../../src/server/container.js';
 import {
   firstSearchParameter,
@@ -18,8 +18,8 @@ import {
 import { TaskActions } from './task-actions.js';
 import { TaskAutoRefresh } from './task-auto-refresh.js';
 import { AgentRunDetailsDialog, TaskDetailsDialog } from './diagnostic-details.js';
-import { SelectField } from '../components/select-field.js';
-import dataTableStyles from '../components/data-table.module.css';
+import { SelectField } from '../components/forms/select-field.js';
+import dataTableStyles from '../components/lists/data-table.module.css';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';

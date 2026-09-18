@@ -648,7 +648,10 @@ const modelServer = createServer((request, response) => {
         readonly allowedEvidenceRefs?: readonly { readonly kind: string; readonly id: string }[];
       };
     };
-    const evidence = agentRequest.input?.allowedEvidenceRefs?.[0];
+    // 深档必须引用已选资料；浅档仍使用简历项目引用。
+    const evidence =
+      agentRequest.input?.allowedEvidenceRefs?.find((item) => item.kind === 'project_material') ??
+      agentRequest.input?.allowedEvidenceRefs?.[0];
     setTimeout(() => {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(

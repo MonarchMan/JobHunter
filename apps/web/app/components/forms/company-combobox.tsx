@@ -2,7 +2,7 @@
 
 import type { ReactElement } from 'react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { CompanyLogo } from './company-logo.js';
+import { CompanyLogo } from '../company-logo.js';
 import styles from './company-combobox.module.css';
 
 export function CompanyCombobox({

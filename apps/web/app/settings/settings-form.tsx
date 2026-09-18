@@ -4,7 +4,7 @@ import type { SystemSettings } from '@jobhunter/application/web';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
-import { SelectField } from '../components/select-field.js';
+import { SelectField } from '../components/forms/select-field.js';
 import { useToast } from '../components/toast-provider.js';
 import styles from './settings.module.css';
 

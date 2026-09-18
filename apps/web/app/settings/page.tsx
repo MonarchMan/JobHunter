@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../src/server/container.js';
-import { PageHeader } from '../components/page-header.js';
+import { PageHeader } from '../components/layout/page-header.js';
 import { SettingsForm } from './settings-form.js';
 import styles from './settings.module.css';
 

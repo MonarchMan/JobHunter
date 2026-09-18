@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../../../src/server/container.js';
-import { PageHeader } from '../../../components/page-header.js';
+import { PageHeader } from '../../../components/layout/page-header.js';
 import { ExperienceReview } from './experience-review.js';
 
 export const dynamic = 'force-dynamic';

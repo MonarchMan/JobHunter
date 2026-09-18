@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation.js';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../../src/client/csrf.js';
+import { DatePicker } from '../../../components/forms/date-picker.js';
 import { useToast } from '../../../components/toast-provider.js';
 import styles from './experience-review.module.css';
 
@@ -278,19 +279,16 @@ export function ExperienceReview({
                   />
                 </label>
               ))}
-              <label>
-                面试日期
-                <input
-                  type="date"
-                  value={draft.occurredOn ?? ''}
-                  onChange={(event) => {
-                    updateExperience(experienceIndex, (current) => ({
-                      ...current,
-                      occurredOn: text(event.target.value),
-                    }));
-                  }}
-                />
-              </label>
+              <DatePicker
+                label="面试日期"
+                value={draft.occurredOn ?? ''}
+                onChange={(next) => {
+                  updateExperience(experienceIndex, (current) => ({
+                    ...current,
+                    occurredOn: text(next),
+                  }));
+                }}
+              />
               <label className={styles.fullField}>
                 标签
                 <input

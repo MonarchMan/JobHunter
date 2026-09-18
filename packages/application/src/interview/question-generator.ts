@@ -43,6 +43,14 @@ export interface ProjectQuestionGenerationResult {
   readonly cacheHit: boolean;
 }
 
+/** 比较问题核心文字，避免仅空格或标点不同的重复追问占用新题次。 */
+function questionKey(value: string): string {
+  return value
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[\s\p{P}\p{S}]/gu, '');
+}
+
 /** 统一执行项目问题 Agent、后置安全校验和乐观提交。 */
 export class ProjectQuestionGenerator {
   readonly #runner: AgentRunner;
@@ -98,6 +106,23 @@ export class ProjectQuestionGenerator {
         throw new DomainError(
           'INTERVIEW_EVIDENCE_INVALID',
           'Docs-grounded question must reference selected project material.',
+        );
+      }
+
+      // 3.a 已跳过的问题同样计入去重；只看带回答的模型上下文会把同题重新问一遍。
+      const priorTurns = this.#repository.getDossier(source.dossier.id)?.turns ?? [];
+      if (
+        priorTurns.some(
+          (turn) =>
+            turn.sessionId === source.session.id &&
+            turn.id !== source.turn.id &&
+            turn.question !== null &&
+            questionKey(turn.question) === questionKey(question.question),
+        )
+      ) {
+        throw new TaskExecutionError(
+          'validation_failed',
+          'Interview question repeats a prior turn.',
         );
       }
 

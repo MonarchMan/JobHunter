@@ -4,9 +4,9 @@ import type { ReactElement } from 'react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
-import { Icon } from './ui-icon.js';
+import { Icon } from '../components/ui-icon.js';
 import styles from './job-score-action.module.css';
-import { useToast } from './toast-provider.js';
+import { useToast } from '../components/toast-provider.js';
 
 export function JobScoreAction({
   jobIds,

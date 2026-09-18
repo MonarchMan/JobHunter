@@ -33,14 +33,14 @@
 
 ### 2. 前端组件
 
-**apps/web/app/components/dashboard-next-action.tsx**
+**`apps/web/app/_dashboard/dashboard-next-action.tsx`**
 
 - 决策光标组件，用 3px 珊瑚色边框突出显示
 - 根据不同 action 类型渲染不同内容
 - `review_matches` 类型会预览得分最高的职位
 - 响应式设计：移动端垂直布局
 
-**apps/web/app/components/dashboard-highlight-jobs.tsx**
+**`apps/web/app/_dashboard/dashboard-highlight-jobs.tsx`**
 
 - 值得关注的职位网格
 - 每个职位卡片显示：

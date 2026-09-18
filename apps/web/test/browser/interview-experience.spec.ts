@@ -19,7 +19,18 @@ test.describe('个人面经导入', () => {
     await online.getByLabel('公司', { exact: true }).fill('浏览器测试公司');
     await online.getByLabel('岗位', { exact: true }).fill('平台工程师');
     await online.getByLabel('面试阶段', { exact: true }).fill('技术一面');
-    await online.getByLabel('面试日期', { exact: true }).fill('2026-08-30');
+    await online.getByRole('button', { name: '选择面试日期' }).click();
+    const calendar = page.getByRole('dialog', { name: '面试日期日历' });
+    await expect(calendar).toBeVisible();
+    await expect
+      .poll(async () => {
+        const field = await online.getByLabel('面试日期', { exact: true }).boundingBox();
+        const popup = await calendar.boundingBox();
+        return Math.abs((field?.width ?? 0) - (popup?.width ?? 1));
+      })
+      .toBeLessThan(1);
+    await calendar.getByRole('button', { name: '今天' }).click();
+    await expect(online.getByLabel('面试日期', { exact: true })).not.toHaveValue('');
     await online.getByLabel('标签', { exact: true }).fill('TypeScript、数据库');
     await online.getByLabel('问题', { exact: true }).fill('如何保证任务重复执行时的数据一致性？');
     await online.getByLabel('当时的回答（可留空）').fill('使用内容哈希和事务内唯一约束。');

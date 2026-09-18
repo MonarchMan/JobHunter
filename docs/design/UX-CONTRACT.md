@@ -35,16 +35,16 @@
 
 ## Canonical UI Map
 
-| Capability      | Canonical owner                    | Source of truth       | Allowed variants          | Verification      |
-| --------------- | ---------------------------------- | --------------------- | ------------------------- | ----------------- |
-| Table Selection | `jobs-table.tsx` 职位批量选择      | 014 规格              | 桌面表格 / 移动记录卡     | E2E               |
-| Select/Listbox  | 共享 `SelectField` / 原生 `select` | 本契约                | authored / native         | 键盘 + 弹层几何   |
-| Combobox        | 共享 `CompanyCombobox`             | 014 规格              | authored                  | 键盘 + 弹层 + IME |
-| Date            | ISO 显示层 + 原生 `date` 交互层    | 014 规格              | native-picker / ISO-shell | locale + E2E      |
-| Form            | 页面表单 + 共享全局字段状态        | Schema 与本契约       | edit/upload/filter        | validation E2E    |
-| Scrollbar       | 全局应用样式                       | docs/design/DESIGN.md | stable gutter 例外        | computed style    |
-| Toast           | 顶部居中、最多三条、不占布局空间   | 本契约                | success/warning/error     | live-region test  |
-| CRUD            | Route Handler + 应用服务           | 011/013 规格          | stay/queued               | full-flow E2E     |
+| Capability      | Canonical owner                      | Source of truth       | Allowed variants              | Verification      |
+| --------------- | ------------------------------------ | --------------------- | ----------------------------- | ----------------- |
+| Table Selection | `jobs-table.tsx` 职位批量选择        | 014 规格              | 桌面表格 / 移动记录卡         | E2E               |
+| Select/Listbox  | 共享 `SelectField` / 原生 `select`   | 本契约                | authored / native             | 键盘 + 弹层几何   |
+| Combobox        | 共享 `CompanyCombobox`               | 014 规格              | authored                      | 键盘 + 弹层 + IME |
+| Date            | 共享 `DatePicker` / 原生日期时间输入 | 本契约与 014 规格     | authored / native / ISO-shell | locale + E2E      |
+| Form            | 页面表单 + 共享全局字段状态          | Schema 与本契约       | edit/upload/filter            | validation E2E    |
+| Scrollbar       | 全局应用样式                         | docs/design/DESIGN.md | stable gutter 例外            | computed style    |
+| Toast           | 顶部居中、最多三条、不占布局空间     | 本契约                | success/warning/error         | live-region test  |
+| CRUD            | Route Handler + 应用服务             | 011/013 规格          | stay/queued                   | full-flow E2E     |
 
 ## Component behavior
 
@@ -116,6 +116,7 @@
 - Profile resume polish: 在线简历只允许选择“项目经历”和“工作/实习经历”生成 AI 润色建议；目标岗位、章节选择和可润色内容在提交前校验。任务完成后先展示与来源条目逐项对应的建议，不自动改写草稿；用户点击“应用到草稿”后只替换所选条目的描述，再由现有“保存简历”显式创建版本。生成期间保持草稿可编辑，失败保留选择与输入并提供重试，普通任务诊断不展示润色正文。
 - Profile resume polish layout: 未生成建议时使用紧凑两行工具条，桌面端将标题上下文与事实边界、润色范围与生成操作分别同排；复选框保留原生语义但由组件拥有稳定尺寸，标签始终水平排版。窄屏按阅读顺序换行且保留全部说明与操作，建议生成后才扩展预览区域。
 - Profile date inputs: 经历、项目、竞赛和证书日期使用原生 `date`；接受 Edge/Chrome 平台弹层的本地化、月/年切换和键盘行为。起止时间额外使用应用拥有的只读 ISO 表面，透明原生输入仍是实际交互与无障碍所有者，应用不仿制日历弹层。
+- Date ownership: `premium-ui.json` 中的 `native` 表示仓库允许有明确场景的原生日期/时间输入，并不排斥本表列出的 authored 变体。个人资料的到岗、履历等日期沿用平台弹层；设置中的定时同步执行时间使用平台 `time` 输入；面试准备的历史面经日期与网友面经发布日期范围要求弹层与输入框等宽，统一复用共享 `DatePicker`，不回退到平台弹层。
 - Profile date ranges: 教育、工作和项目的开始/结束日期由同一字段组拥有；桌面端该组占一列（半行，外宽与普通字段一致），内部两个日期等宽同排，移动端扩为整行；应用表面固定显示 `YYYY-MM-DD`，旧的月份值载入时补齐为当月首日，保存值统一为完整 ISO 日期字符串。标题沿用普通字段的正常字重、行高和标签间距，日期控件顶边与同行普通输入框对齐。
 - Job title navigation: 职位列表的职位名称直接使用 `detailUrl` 在安全新标签页打开官网详情；站内 `/jobs/[id]` 是诊断详情而非列表默认落点，其历史修订读取必须兼容数组式和对象式 change set。
 - Job row navigation: 职位行/移动卡片的非交互区域进入站内详情，匹配分数区域提供不带重复“查看详情”文字的原生详情链接，作为键盘和新标签入口。桌面职位行的数据单元格统一垂直居中。复用共享 `openLinkedRow` 保护官网标题、投递、评分、勾选和 portal 控件，选中文字及修饰键点击不导航。站内详情携带画像与列表 returnTo，返回恢复筛选和页码；官网标题行为不变。依据 WEB-003 补充验收。
@@ -124,6 +125,7 @@
 - Target role family: 在线简历的“目标岗位”使用共享 authored `SelectField` 展示规范大类，空值表示尚未确认；保存时写入零或一个 `targetRoles` 值，不接受自由文本作为同步范围。
 - Recruitment matching facts: 求职意向可补充细分岗位、学籍/应届身份、毕业届别和实习可用时间，空值保持未知；单选复用 `SelectField`，到岗日期接受原生 date 平台弹层，整份显式保存及失败草稿保留沿用在线简历。职位详情对 v2 展示招聘类别、证据完整度和暂定标记，未知和不适用分项不伪装为普通零分，v1 不伪造新指标。依据 MCH-014～016。
 - Filter and profile selectors: 职位筛选的招聘类别、职位类别、状态、排序、个人资料版本，以及个人资料页的全部单选统一使用共享 authored `SelectField`，因为这些工作流的弹层宽度、边框、间距和定位属于应用契约；共享组件同时支持 URL 表单默认值和在线简历受控草稿值，弹层默认在触发框下方左对齐展开、与触发框等宽。来源设置中明确接受平台弹层的单选继续使用 native 变体。
+- Select ownership: `premium-ui.json` 中的 `native` 表示仓库允许明确选择平台弹层的简单单选，不替代共享 authored `SelectField`。来源公司渠道、项目拷打档位和网友面经研究语言使用原生 `select`；独立导出的可编辑简历 HTML 也用原生单选选择新增板块类型，以保持文件自包含。这些选项少且无需应用控制弹层几何，保留浏览器键盘与屏幕阅读器语义。
 
 ## Async and resilience
 

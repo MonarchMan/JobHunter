@@ -147,6 +147,7 @@ describe('project task handler cancellation fence', () => {
     const completeQuestion = vi.fn(() => true);
     const repository = {
       getQuestionContext: () => source,
+      getDossier: () => ({ turns: [] }),
       completeQuestion,
     } as unknown as InterviewProjectRepository;
     const runner = {
@@ -176,6 +177,80 @@ describe('project task handler cancellation fence', () => {
         contextHash,
       }),
     ).rejects.toMatchObject({ name: 'AbortError' });
+    expect(completeQuestion).not.toHaveBeenCalled();
+  });
+
+  it('rejects a repeated question even when the prior turn was skipped', async () => {
+    const common = commonContext();
+    const contextHash = questionContextHash(common.session, 2);
+    const source: ProjectQuestionContext = {
+      ...common,
+      turn: {
+        id: turnId,
+        sessionId,
+        turnNo: 2,
+        status: 'question_pending',
+        contextHash,
+        question: null,
+        intent: null,
+        primaryDimension: null,
+        guidanceSlots: [],
+        evidenceRefs: [],
+        questionTaskId: taskId,
+        questionAgentRunId: null,
+        digestTaskId: null,
+        digestAgentRunId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      history: [],
+      knowledgeItems: [],
+      coverage: [],
+      materials: [],
+    };
+    const completeQuestion = vi.fn(() => true);
+    const repository = {
+      getQuestionContext: () => source,
+      getDossier: () => ({
+        turns: [
+          {
+            ...source.turn,
+            id: parseId('018f0000-0000-7000-8000-000000000110', 'DrillTurn'),
+            turnNo: 1,
+            status: 'skipped',
+            question: '这个项目最初要解决的核心问题是什么？',
+          },
+        ],
+      }),
+      completeQuestion,
+    } as unknown as InterviewProjectRepository;
+    const runner = {
+      run: vi.fn(() =>
+        Promise.resolve({
+          run: { id: agentRunId },
+          output: {
+            question: '这个项目最初要解决的核心问题是什么?',
+            intent: '核实项目背景。',
+            primaryDimension: 'background_goal',
+            guidanceSlots: ['业务背景'],
+            evidenceRefs: [{ kind: 'resume_project', id: snapshotId }],
+          },
+          cacheHit: false,
+        }),
+      ),
+    } as unknown as AgentRunner;
+    const handler = createProjectQuestionTaskHandler({ runner, repository });
+
+    // 1、已跳过题不在模型回答历史中，仍必须通过会话全部问题防止同题重复入库。
+    await expect(
+      handler.execute(handlerContext(new AbortController()), {
+        dossierId,
+        sessionId,
+        turnId,
+        expectedContextRevision: 0,
+        contextHash,
+      }),
+    ).rejects.toMatchObject({ category: 'validation_failed' });
     expect(completeQuestion).not.toHaveBeenCalled();
   });
 
