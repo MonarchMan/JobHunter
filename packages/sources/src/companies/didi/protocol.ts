@@ -58,7 +58,7 @@ export interface DidiConfig {
 const jobSchema = z.object({
   id: z.string().min(1),
   channel: z.enum(['social', 'intern', 'campus']),
-  status: z.enum(['open', 'pause']),
+  status: z.enum(['open', 'pause', 'closed']),
   title: z.string().trim().min(1),
   description: z.string().trim().min(1).nullable(),
   locations: z.array(z.string().trim().min(1)),
@@ -67,6 +67,7 @@ const jobSchema = z.object({
   taxonomy: z.string().nullable(),
   publishedAt: z.number().int().nonnegative().nullable(),
   jdNo: z.string().nullable(),
+  excludedRecruitmentType: z.boolean().default(false),
 });
 /** 白名单公开职位，不包含招聘内部配置或会话字段。 */
 export type DidiJob = z.infer<typeof jobSchema>;
@@ -94,7 +95,7 @@ const socialDetailSchema = z.object({
 const mokaJobSchema = z.object({
   id: z.uuid(),
   orgId: z.literal('didiglobal'),
-  status: z.enum(['open', 'pause']),
+  status: z.enum(['open', 'pause', 'closed']),
   hireMode: z.number().int(),
   commitment: z.string(),
   title: z.string().trim().min(1),
@@ -145,7 +146,14 @@ function timestamp(value: string | undefined): number | null {
 /** 公司协议错误不输出原始业务消息。 */
 function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const parsed = schema.safeParse(value);
-  if (!parsed.success) throw new SourceError('parse_changed', 'Didi public job schema changed.');
+  // 1、仅暴露 Schema 定义的字段路径与错误代码，不包含上游值或内部业务消息。
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .slice(0, 3)
+      .map((issue) => `${issue.path.join('.') || '$'}:${issue.code}`)
+      .join(', ');
+    throw new SourceError('parse_changed', `Didi public job schema changed (${issues}).`);
+  }
   return parsed.data;
 }
 /** 社招成功 envelope；访问失败和登录失败不能被解释为零岗位。 */
@@ -175,10 +183,13 @@ export function parseDidiJob(value: unknown, key: DidiKey): DidiJob {
 /** Moka 原始客户端已完成业务解封；此处仍校验公开结构与站点所属公司/招聘性质。 */
 export function parseDidiMokaJob(value: unknown, key: DidiKey, detail = false): DidiJob {
   const job = parse(mokaJobSchema, value);
+  // 1、仅实习站已确认的全职组合可排除，原始记录仍参与分页完整性校验。
+  const excludedRecruitmentType =
+    key === 'didi.intern' && job.hireMode === 1 && job.commitment === '全职';
   if (
     key === 'didi.social' ||
     job.hireMode !== (key === 'didi.intern' ? 1 : 2) ||
-    job.commitment !== (key === 'didi.intern' ? '实习' : '全职')
+    (!excludedRecruitmentType && job.commitment !== (key === 'didi.intern' ? '实习' : '全职'))
   )
     throw new SourceError('parse_changed', 'Didi Moka recruitment type changed.');
   const description = job.jobDescription ? didiText(job.jobDescription) : null;
@@ -199,6 +210,7 @@ export function parseDidiMokaJob(value: unknown, key: DidiKey, detail = false): 
       taxonomy: job.zhineng?.name ?? null,
       publishedAt: timestamp(job.publishedAt),
       jdNo: null,
+      excludedRecruitmentType,
     },
     key,
   );

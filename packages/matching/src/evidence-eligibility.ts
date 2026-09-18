@@ -1,5 +1,6 @@
 import type { DeterministicMatchInput, RuleOutcome, RuleStatus } from './model.js';
 import { z } from 'zod';
+import { graduationCondition } from './graduation-eligibility.js';
 import { evaluateEligibility } from './rules.js';
 import { evaluateRecruitmentEligibility, recruitmentCategory } from './recruitment-requirements.js';
 import {
@@ -21,13 +22,41 @@ function evaluateNode(
   node: RequirementNode,
   input: DeterministicMatchInput,
   experienceContext = false,
+  graduationPolicy = false,
 ): RuleOutcome | null {
   const category = recruitmentCategory(input.job);
+  // 1.a. 新版先解释明确毕业片段；剩余资格仍须成立，不能以毕业命中覆盖学历/在读要求。
+  if (graduationPolicy && (category === 'internship' || category === 'campus')) {
+    if (node.kind === 'atom') {
+      const graduation = graduationCondition(node, input);
+      if (graduation) {
+        const hasRemainingQualification =
+          /学历|本科|硕士|博士|大专|专科|专业|资格证|证书|在校|在读|应届|届|年.*经验|经验.*年|每周.*天|实习.*月|月.*实习|到岗/u.test(
+            graduation.remainder,
+          );
+        const remaining = hasRemainingQualification
+          ? evaluateNode({ ...node, text: graduation.remainder }, input, experienceContext)
+          : null;
+        return remaining
+          ? {
+              ...graduation.outcome,
+              status: combine([graduation.outcome.status, remaining.status], 'all'),
+              explanation: `${graduation.outcome.explanation}；${remaining.explanation}`.slice(
+                0,
+                500,
+              ),
+              evidence: [...graduation.outcome.evidence, ...remaining.evidence],
+            }
+          : graduation.outcome;
+      }
+    }
+  }
   const yearsContext =
     experienceContext ||
     node.path === '/experienceText' ||
     /工作经验|年.*经验|经验.*年/u.test(node.text);
   const qualification =
+    (graduationPolicy && node.text.includes('毕业')) ||
     /学历|本科|硕士|博士|大专|专科|专业|资格证|证书|在校|在读|应届|届|年.*经验|经验.*年|每周.*天|实习.*月|月.*实习|到岗/u.test(
       node.text,
     ) ||
@@ -38,9 +67,15 @@ function evaluateNode(
   // 1. 保留无法确定优先级的复杂条件，不能利用一个可解析子句冒充整句成立。
   let status: RuleStatus = 'unknown';
   let reason = '资格条款未能可靠解释，请确认原文。';
-  if (/[()（）]/u.test(node.text)) reason = '括号或嵌套条件的作用范围待确认。';
+  if (
+    /[()（）]/u.test(node.text) &&
+    !(graduationPolicy && node.kind === 'all' && !node.text.includes('或'))
+  )
+    reason = '括号或嵌套条件的作用范围待确认。';
   else if (node.kind !== 'atom') {
-    const children = node.children.map((child) => evaluateNode(child, input, yearsContext));
+    const children = node.children.map((child) =>
+      evaluateNode(child, input, yearsContext, graduationPolicy),
+    );
     const relevant = children.filter((item) => item !== null);
     if (!relevant.length) return null;
     const values =
@@ -130,6 +165,7 @@ function evaluateNode(
 export function evaluateEvidenceEligibility(
   input: DeterministicMatchInput,
   recoverBoundary = false,
+  graduationPolicy = false,
 ): RuleOutcome[] {
   // 1. 保留地点/类型等偏好，不使用旧版最低年限规则。
   const results = evaluateEligibility(input).filter(
@@ -148,7 +184,7 @@ export function evaluateEvidenceEligibility(
     const key = `${node.path}:${node.text}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const outcome = evaluateNode(node, input);
+    const outcome = evaluateNode(node, input, false, graduationPolicy);
     if (outcome)
       results.push({ ...outcome, ruleId: `${outcome.ruleId}.${String(results.length)}` });
   }

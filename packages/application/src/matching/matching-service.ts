@@ -15,6 +15,7 @@ import {
   matchRulesetV2,
   matchRulesetV3,
   matchRulesetV31,
+  matchRulesetV32,
 } from '@jobhunter/matching';
 import type { MatchingRepository, MatchResultRecord } from '../ports/matching.js';
 import type { CandidateProfileRepository } from '../ports/profiles.js';
@@ -102,6 +103,21 @@ export class DeterministicMatchingService {
       version: matchRulesetV31.version,
       definition: matchRulesetV31,
       definitionHash: contentHash(matchRulesetV31),
+      active: input.activate ?? true,
+      createdAt: this.#clock.now(),
+    });
+  }
+
+  /** 幂等登记毕业资格修复版本，保留旧记录且不触发全量重算。 */
+  public ensureRulesetV32(input: {
+    readonly id: MatchRulesetId;
+    readonly activate?: boolean;
+  }): ReturnType<MatchingRepository['upsertRuleset']> {
+    return this.#matching.upsertRuleset({
+      id: input.id,
+      version: matchRulesetV32.version,
+      definition: matchRulesetV32,
+      definitionHash: contentHash(matchRulesetV32),
       active: input.activate ?? true,
       createdAt: this.#clock.now(),
     });

@@ -129,7 +129,7 @@ export function createDidiAdapter(key: DidiKey): JobSourceAdapter<DidiConfig, Di
   return {
     metadata: {
       key,
-      version: '1.0.0',
+      version: '1.0.1',
       company: { slug: 'didi', name: '滴滴' },
       recruitmentType: site.channel === 'intern' ? 'mixed' : site.channel,
       canonicalEntryUrl: site.entry,
@@ -147,13 +147,19 @@ export function createDidiAdapter(key: DidiKey): JobSourceAdapter<DidiConfig, Di
       // 1、先验证集合，才能输出发现事件；2、去重后透传 partial 原因。
       const value = await collect(context);
       const ids = new Set<string>();
-      let paused = 0;
+      let inactive = 0;
+      let skippedRecruitmentType = 0;
       for (const page of value.pages) {
         for (const raw of page.records) {
           const job = parseDidiJob(raw, key);
-          // 1.a、暂停记录参与原始分页校验，但不作为在招岗位入库；仅完整集合可推导在招总数。
-          if (job.status === 'pause') {
-            paused += 1;
+          // 1.a、集合已校验原始边界；排除已知非实习类型，不抓详情或作为实习入库。
+          if (job.excludedRecruitmentType) {
+            skippedRecruitmentType += 1;
+            continue;
+          }
+          // 1.b、暂停与关闭记录参与原始分页校验，但不作为在招岗位入库；仅完整集合可推导在招总数。
+          if (job.status !== 'open') {
+            inactive += 1;
             continue;
           }
           if (ids.has(job.id)) continue;
@@ -175,12 +181,14 @@ export function createDidiAdapter(key: DidiKey): JobSourceAdapter<DidiConfig, Di
           ? {
               diagnostics: {
                 ...value.diagnostics,
+                skippedRecruitmentType,
                 discoveredCount: ids.size,
-                expectedCount: paused
-                  ? value.coverage === 'complete'
-                    ? ids.size
-                    : null
-                  : (value.diagnostics.expectedCount ?? null),
+                expectedCount:
+                  inactive || skippedRecruitmentType
+                    ? value.coverage === 'complete'
+                      ? ids.size
+                      : null
+                    : (value.diagnostics.expectedCount ?? null),
               },
             }
           : {}),
@@ -225,6 +233,8 @@ export function createDidiAdapter(key: DidiKey): JobSourceAdapter<DidiConfig, Di
     normalize(input, context) {
       // 1、延迟正文缺失必须失败，不能用列表标题生成占位描述。
       const job = parseDidiJob(input.detail ?? input.discovered.raw, key);
+      if (job.excludedRecruitmentType)
+        throw new SourceError('parse_changed', 'Didi job is outside the recruitment channel.');
       if (job.status !== 'open') throw new SourceError('not_found', 'Didi job is paused.');
       if (job.id !== input.discovered.externalJobId || !job.description)
         throw new SourceError(
@@ -266,7 +276,10 @@ export function createDidiAdapter(key: DidiKey): JobSourceAdapter<DidiConfig, Di
       try {
         const value = await collect(context, true);
         const ok = value.pages.some((p) =>
-          p.records.some((r) => parseDidiJob(r, key).status === 'open'),
+          p.records.some((r) => {
+            const job = parseDidiJob(r, key);
+            return job.status === 'open' && !job.excludedRecruitmentType;
+          }),
         );
         return {
           status: ok ? 'healthy' : 'degraded',

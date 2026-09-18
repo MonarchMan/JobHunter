@@ -215,7 +215,11 @@ export function calculateDeterministicMatch(
   ruleset: MatchRuleset = matchRulesetV1,
 ): DeterministicMatchOutput {
   // v1 历史重放保持原算法；仅带分型权重的版本进入新引擎。
-  if (ruleset.engine === 'evidence-v3' || ruleset.engine === 'evidence-v3.1')
+  if (
+    ruleset.engine === 'evidence-v3' ||
+    ruleset.engine === 'evidence-v3.1' ||
+    ruleset.engine === 'evidence-v3.2'
+  )
     return calculateEvidenceMatch(input, ruleset);
   if (ruleset.recruitmentWeights) return calculateRecruitmentMatch(input, ruleset);
   const ruleOutcomes = [...evaluateEligibility(input)];

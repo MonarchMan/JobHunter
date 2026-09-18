@@ -314,6 +314,15 @@ describe('matching persistence pipeline', () => {
     expect(fixed.id).not.toBe(v3.id);
     expect(service.compute(input)).toEqual({ match: fixed, created: false });
     expect(service.compute({ ...input, rulesetId: v3Id }).match).toEqual(v3);
+    // v3.2 毕业资格独立登记，重复运行幂等且旧版仍可重放。
+    const v32Id = parseId('018f0000-0000-7000-8000-00000000d011', 'MatchRuleset');
+    service.ensureRulesetV32({ id: v32Id });
+    const graduationFixed = service.compute(input).match;
+    expect(graduationFixed.rulesetId).toBe(v32Id);
+    expect(graduationFixed.id).not.toBe(fixed.id);
+    expect(service.compute(input)).toEqual({ match: graduationFixed, created: false });
+    expect(service.compute({ ...input, rulesetId: v31Id }).match).toEqual(fixed);
+    expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('evidence-v3.2');
   });
 
   it('pre-filters job revisions by target roles and excluded terms before calculation', async () => {

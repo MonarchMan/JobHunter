@@ -95,6 +95,72 @@ function context(key: DidiKey, value?: SourcePageCollection): DiscoverContext<Di
   };
 }
 describe('Didi contracts and public schemas (SWT-013, SWT-014)', () => {
+  it('reports safe schema paths without raw values (SWT-014)', () => {
+    expect(() =>
+      parseDidiPage(
+        {
+          jobStats: { orgId: 'didiglobal', total: 1 },
+          jobs: [{ ...fixture.intern, status: 'private-unrecognized-status' }],
+        },
+        'didi.intern',
+      ),
+    ).toThrow('Didi public job schema changed (status:invalid_value).');
+  });
+  it.each(['complete', 'partial'] as const)(
+    'excludes known full-time rows after raw pagination validation: %s (SWT-014)',
+    async (coverage) => {
+      const key = 'didi.intern';
+      const records = parseDidiPage(
+        {
+          jobStats: { orgId: 'didiglobal', total: 1 },
+          jobs: [{ ...fixture.intern, commitment: '全职' }],
+        },
+        key,
+      ).records;
+      const collection: SourcePageCollection = {
+        coverage,
+        pages: [{ page: 1, url: didiSites[key].entry, total: 1, records, capturedAt: 0 }],
+      };
+      const result = await collectDiscovery(
+        createDidiAdapter(key).discover(context(key, collection)),
+      );
+      const page = collection.pages[0];
+      if (!page) throw new Error('Missing synthetic page.');
+      expect(result.completion).toMatchObject({
+        coverage,
+        discoveredCount: 0,
+        diagnostics: {
+          skippedRecruitmentType: 1,
+          expectedCount: coverage === 'complete' ? 0 : null,
+        },
+      });
+      expect(
+        validateDidiCollection({ ...collection, pages: [{ ...page, total: 2 }] }, key, 30).coverage,
+      ).toBe('partial');
+      expect(
+        validateDidiCollection(
+          {
+            ...collection,
+            pages: [{ ...page, total: 2, records: [...records, ...records] }],
+          },
+          key,
+          30,
+        ).diagnostics?.reason,
+      ).toBe('duplicate_job_ids');
+    },
+  );
+  it.each([
+    { hireMode: 1, commitment: '未知' },
+    { hireMode: 99, commitment: '全职' },
+    { hireMode: 2, commitment: '全职' },
+  ])('rejects unverified intern recruitment combinations: %j (SWT-014)', (fields) => {
+    expect(() =>
+      parseDidiPage(
+        { jobStats: { orgId: 'didiglobal', total: 1 }, jobs: [{ ...fixture.intern, ...fields }] },
+        'didi.intern',
+      ),
+    ).toThrow('Didi Moka recruitment type changed');
+  });
   it('validates actual social page/size echoes and never invents them (SWT-017)', () => {
     const raw = fixture.socialList as { meta: unknown; data: Record<string, unknown> };
     for (const data of [
@@ -120,14 +186,19 @@ describe('Didi contracts and public schemas (SWT-013, SWT-014)', () => {
       new AdapterRegistry().register(adapter);
     }).not.toThrow();
   });
-  it.each(['complete', 'partial'] as const)(
-    'counts paused rows for boundaries but excludes active discovery: %s',
-    async (coverage) => {
+  it.each([
+    ['complete', 'pause'],
+    ['partial', 'pause'],
+    ['complete', 'closed'],
+    ['partial', 'closed'],
+  ] as const)(
+    'counts inactive rows for boundaries but excludes active discovery: %s/%s',
+    async (coverage, status) => {
       const key = 'didi.intern';
       const paused = parseDidiPage(
         {
           jobStats: { orgId: 'didiglobal', total: 1 },
-          jobs: [{ ...fixture.intern, status: 'pause' }],
+          jobs: [{ ...fixture.intern, status }],
         },
         key,
       ).records[0];

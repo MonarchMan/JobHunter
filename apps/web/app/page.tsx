@@ -3,6 +3,7 @@ import { DashboardHero } from './components/dashboard-hero.js';
 import { DashboardNextAction } from './components/dashboard-next-action.js';
 import { DashboardHighlightJobs } from './components/dashboard-highlight-jobs.js';
 import { DashboardSteps } from './components/dashboard-steps.js';
+import { DashboardResources } from './components/dashboard-resources.js';
 import { MetricCard } from './components/metric-card.js';
 import { labelStatus, syncRunStatusLabels } from './components/status-labels.js';
 import { getWebContainer } from '../src/server/container.js';
@@ -127,6 +128,7 @@ export default async function DashboardPage(): Promise<ReactElement> {
           )}
         </section>
       </div>
+      <DashboardResources />
     </main>
   );
 }

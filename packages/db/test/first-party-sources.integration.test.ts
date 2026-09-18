@@ -474,10 +474,25 @@ describe('first-party source seed and sync', () => {
                 {
                   page: 1,
                   url: didiSites[key].entry,
-                  total: 1,
+                  total: partial && key === 'didi.intern' ? 3 : 1,
                   capturedAt: 0,
                   records: partial
-                    ? []
+                    ? key === 'didi.intern'
+                      ? parseDidiPage(
+                          {
+                            jobStats: { orgId: 'didiglobal', total: 3 },
+                            jobs: [
+                              { ...fixture.intern, commitment: '全职' },
+                              {
+                                ...fixture.intern,
+                                id: '7db6a753-9cb4-4da1-94fd-05aedc947893',
+                                status: 'closed',
+                              },
+                            ],
+                          },
+                          key,
+                        ).records
+                      : []
                     : [
                         request.responseShape === 'didi-moka-detail'
                           ? // 合成详情提供国内地点；真实空地点仍由既有区域策略跳过，不猜测城市。
@@ -526,6 +541,17 @@ describe('first-party source seed and sync', () => {
         status: 'active',
         missing_count: 0,
       });
+      if (key === 'didi.intern') {
+        // 3、排除计数随覆盖证据持久化，不影响 partial 的缺失保护。
+        const evidence = handle.client
+          .prepare('SELECT coverage_evidence_json FROM sync_runs WHERE status = ?')
+          .pluck()
+          .get('partial') as string;
+        expect(JSON.parse(evidence)).toMatchObject({
+          skippedRecruitmentType: 1,
+          reason: 'invalid_page_boundary',
+        });
+      }
     },
   );
 

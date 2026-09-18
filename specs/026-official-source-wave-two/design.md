@@ -75,3 +75,5 @@ POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、
 实习/校园采用官网 Moka 的原始 HTTP 模块 `0wyxq0`（webpack5），由官网客户端处理自己的响应封装，不抽取解密实现。固定 orgId=didiglobal，siteId 分别 6222/96064/116021；列表 `/api/outer/ats-apply/website/jobs/v2` 使用 limit=30/offset，无岗位过滤。实习校验 hireMode=1、commitment=实习；校招校验 hireMode=2、commitment=全职和校园入口。列表无正文时以 required 模式调用 fetchDetail，浏览器 detail collection 仅允许目标岗位的一条公开详情。校园列表内联正文，不额外逐岗请求。
 
 增加 didi-moka / didi-moka-detail 响应形态，但不增加进程、账号或领域依赖；Worker 持有匿名页面与生命周期，sources 拥有固定路径和方法。原始运行时驱动延续 ADR-0023，滴滴 Moka 适用范围补充在该 ADR；不开放任意模块或请求。配置允许显式设置采样页数与 first-last，采样永远 partial；默认顺序完整采集。社招请求和 Moka 分页均低频串行，health 一页。
+滴滴实习站先保留全部已知类型记录完成分页闭合校验，再在 discover 排除标记为非实习的记录，并在覆盖诊断中记录 skippedRecruitmentType。仅允许已观察到的 hireMode=1、commitment=全职组合，不扩大其他站点白名单；完整集合才可扣除排除数推导目标总数，partial 不升级。该计数独立于应用入库策略的 skippedOutOfScope，避免破坏 discovered 的统计恒等式。
+滴滴协议边界错误附带最多三个 Schema issue 的字段路径与代码，不记录整条响应、正文或内部配置。2026-09-16 实习站列表复现 status=closed；该状态与 pause 一起参与原始分页闭合，但 discover 不输出在招岗位，只有完整采集才允许处理缺失状态。适配器版本升为 1.0.1，便于区分新旧运行。

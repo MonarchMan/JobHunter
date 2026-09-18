@@ -18,8 +18,12 @@ export function calculateEvidenceMatch(
 ): DeterministicMatchOutput {
   // 1. 资格与相关性独立：明确失败优先排除，缺失不能当作失败。
   const category = recruitmentCategory(input.job);
-  const recoverBoundary = ruleset.engine === 'evidence-v3.1';
-  const outcomes = evaluateEvidenceEligibility(input, recoverBoundary);
+  const recoverBoundary = ruleset.engine === 'evidence-v3.1' || ruleset.engine === 'evidence-v3.2';
+  const outcomes = evaluateEvidenceEligibility(
+    input,
+    recoverBoundary,
+    ruleset.engine === 'evidence-v3.2',
+  );
   const filterStatus = outcomes.some((item) => item.status === 'fail')
     ? 'excluded'
     : outcomes.some((item) => item.status === 'unknown')

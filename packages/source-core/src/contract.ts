@@ -130,6 +130,8 @@ export interface DiscoveryDiagnostics {
   readonly fetchedPages?: number;
   readonly duplicateIds?: number;
   readonly totalChanged?: boolean;
+  /** 已知但不属于目标招聘类型的记录数，不计入目标职位发现数。 */
+  readonly skippedRecruitmentType?: number;
 }
 
 /** 来源适配器使用的类型约束。 */

@@ -91,6 +91,8 @@
 
 ## Navigation and responsive behavior
 
+- Dashboard resources: “面试充电站”固定展示八个外部资源，不需要画像或职位；原生链接在新标签页打开，设置 noopener/noreferrer，不携带用户数据。名称、方向与介绍始终可见，统一说明外部网站及可能付费；不做加载动画、点击成功通知或分类筛选。依据 WEB-001。
+
 - Route document title policy: `{页面} — JobHunter`；错误和不存在页面使用真实中文标题。
 - Visible heading policy: 中文页面标题与分区标题不叠加装饰性英文眉题；共享 `PageHeader` 不提供 eyebrow 插槽。
 - Route error / 403 page behavior: 保留应用壳层，提供返回工作台和相关列表的路径。

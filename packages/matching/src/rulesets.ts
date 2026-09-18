@@ -24,7 +24,7 @@ export const matchRulesetSchema = z
   .object({
     version: z.string().trim().min(1),
     weights: weightsSchema,
-    engine: z.enum(['evidence-v3', 'evidence-v3.1']).optional(),
+    engine: z.enum(['evidence-v3', 'evidence-v3.1', 'evidence-v3.2']).optional(),
     recruitmentWeights: z
       .object({ social: weightsSchema, campus: weightsSchema, internship: weightsSchema })
       .strict()
@@ -68,6 +68,13 @@ export const matchRulesetV31: MatchRuleset = parseMatchRuleset({
   ...matchRulesetV3,
   version: 'v3.1',
   engine: 'evidence-v3.1',
+});
+
+/** v3.2 隔离毕业资格修复，不修改旧版定义或评分权重。 */
+export const matchRulesetV32: MatchRuleset = parseMatchRuleset({
+  ...matchRulesetV31,
+  version: 'v3.2',
+  engine: 'evidence-v3.2',
 });
 
 /** 校验并解析匹配规则集。 */
