@@ -166,6 +166,7 @@ it('isolates four providers with identical external IDs, task keys and generatio
     await boss.service.execute({ action: 'disconnect', generation: 1 }, boss.taskId, signal);
     boss.service.initialize();
     expect(zhilian.disconnect).not.toHaveBeenCalled();
+    db.client.prepare("UPDATE tasks SET status='running' WHERE id=?").run(zhilian.taskId);
     expect(
       (await zhilian.service.execute({ action: 'next', generation: 1 }, zhilian.taskId, signal))
         .candidates,

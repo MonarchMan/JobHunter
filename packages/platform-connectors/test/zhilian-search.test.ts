@@ -65,7 +65,10 @@ function setup(responses: unknown[]): {
     }),
   };
 }
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 it('keeps the session after a Worker finishes its first task and honors the next delay', async () => {
   const fetcher = vi
@@ -223,7 +226,7 @@ it('waits five seconds and cancels queued work without extra request', async () 
   await session.readNext(signal);
   const controller = new AbortController();
   const pending = session.readDetail('CC_TEST', controller.signal);
-  const rejected = expect(pending).rejects.toThrow();
+  const rejected = expect(pending).rejects.toThrow('session_unavailable');
   await vi.advanceTimersByTimeAsync(4999);
   expect(fetcher).toHaveBeenCalledTimes(1);
   controller.abort();
@@ -239,4 +242,63 @@ it('distinguishes twenty-page cap from a true end', async () => {
   for (let i = 0; i < 20; i++) expect((await session.readNext(signal)).hasMore).toBe(true);
   await expect(session.readNext(signal)).rejects.toThrow('session_unavailable');
   expect(fetcher).toHaveBeenCalledTimes(20);
+});
+
+it.each([
+  ['ECONNRESET', 'connection_reset'],
+  ['ECONNREFUSED', 'connection_refused'],
+  ['ENOTFOUND', 'dns_error'],
+  ['EAI_AGAIN', 'dns_error'],
+  ['UND_ERR_SOCKET', 'socket_closed'],
+  ['UND_ERR_CONNECT_TIMEOUT', 'connect_timeout'],
+  ['UND_ERR_HEADERS_TIMEOUT', 'headers_timeout'],
+  ['UND_ERR_BODY_TIMEOUT', 'body_timeout'],
+  ['secret-token', 'unknown'],
+])('sanitizes transport %s and freezes without retry', async (code, reason) => {
+  // 1、故意把凭据放在异常消息与 cause 内，出边界后只能剩固定原因码。
+  const cause = Object.assign(new Error('https://private.invalid/?at=secret-token'), { code });
+  const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new TypeError('secret-token', { cause }));
+  const session = new ZhilianSearchHttpSession({ templates: fixture.templates, fetch: fetcher });
+  const pending = session.readNext(signal);
+  await expect(pending).rejects.toMatchObject({
+    category: 'network_error',
+    message: `Platform request failed: network_error [zhilian:${reason}]`,
+  });
+  await expect(pending).rejects.not.toHaveProperty('cause');
+  // 2、失败后的再次调用不能发出新请求。
+  await expect(session.readNext(signal)).rejects.toThrow('session_unavailable');
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it.each(['timeout', 'cancel'] as const)('distinguishes %s from a network reset', async (mode) => {
+  // 1、显式控制超时信号，避免测试等待真实二十秒。
+  const timeout = new AbortController();
+  const caller = new AbortController();
+  vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(() => {
+    timeout.abort();
+    if (mode === 'cancel') caller.abort();
+    return Promise.reject(Object.assign(new Error('secret-token'), { code: 'ECONNRESET' }));
+  });
+  const session = new ZhilianSearchHttpSession({ templates: fixture.templates, fetch: fetcher });
+  // 2、取消优先于同时发生的超时；超时不可误标为连接重置。
+  await expect(session.readNext(caller.signal)).rejects.toThrow(
+    mode === 'cancel' ? 'session_unavailable' : '[zhilian:request_timeout]',
+  );
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('classifies failures while reading response body without exposing the cause', async () => {
+  // 1、响应头已成功，但正文流断开；仍须保留固定传输诊断。
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.error(Object.assign(new Error('secret-token'), { code: 'ECONNRESET' }));
+    },
+  });
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(new Response(stream, { headers: { 'content-type': 'application/json' } }));
+  const session = new ZhilianSearchHttpSession({ templates: fixture.templates, fetch: fetcher });
+  await expect(session.readNext(signal)).rejects.toThrow('[zhilian:connection_reset]');
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });

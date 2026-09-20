@@ -14,7 +14,12 @@ export async function GET(
   context: { params: Promise<{ provider: string }> },
 ): Promise<Response> {
   const { provider } = await context.params;
-  if (provider !== 'boss' && provider !== 'zhilian' && provider !== '51job')
+  if (
+    provider !== 'boss' &&
+    provider !== 'zhilian' &&
+    provider !== '51job' &&
+    provider !== 'liepin'
+  )
     return new Response(null, { status: 404 });
   try {
     return dataResponse((await getWebContainer()).services[provider].snapshot(), {
@@ -32,7 +37,12 @@ export async function POST(
 ): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   const { provider } = await context.params;
-  if (provider !== 'boss' && provider !== 'zhilian' && provider !== '51job')
+  if (
+    provider !== 'boss' &&
+    provider !== 'zhilian' &&
+    provider !== '51job' &&
+    provider !== 'liepin'
+  )
     return new Response(null, { status: 404 });
   try {
     return dataResponse((await getWebContainer()).services[provider].mutate(await request.json()), {

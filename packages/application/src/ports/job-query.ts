@@ -14,8 +14,12 @@ export type RecruitmentCategory = 'internship' | 'campus' | 'social';
 
 /** 应用层数据结构或端口契约。 */
 export interface JobQueryFilter {
+  readonly sourceKind?: 'official' | 'platform';
+  readonly providerKey?: 'boss' | 'zhilian' | '51job' | 'liepin';
   readonly search?: string;
   readonly companyIds?: readonly CompanyId[];
+  /** 按来源筛选时在同一范围内匹配公司名称、别名或身份，不能预先取全库第一个同名公司。 */
+  readonly companySelectors?: readonly string[];
   readonly statuses?: readonly JobStatus[];
   readonly locations?: readonly string[];
   readonly jobFamilies?: readonly string[];

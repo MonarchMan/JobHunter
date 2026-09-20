@@ -92,6 +92,7 @@ export interface WebApplicationServices {
   readonly boss: WebBossService;
   readonly zhilian: WebPlatformService;
   readonly '51job': WebPlatformService;
+  readonly liepin: WebPlatformService;
   readonly dashboard: DashboardQueryService;
   readonly jobs: JobQueryService;
   readonly webJobs: WebJobQueryService;
@@ -150,7 +151,7 @@ export function createLocalWebContainer(
         },
       }),
     );
-    for (const provider of ['boss', 'zhilian', '51job'] as const)
+    for (const provider of ['boss', 'zhilian', '51job', 'liepin'] as const)
       registry.register(
         createPlatformTaskHandler(provider, {
           execute: () => Promise.reject(new Error('Web process cannot connect to platforms.')),
@@ -287,6 +288,11 @@ export function createLocalWebContainer(
     sourceSchedules.reconcile();
     const services: WebApplicationServices = {
       boss: new WebBossService(new SqlitePlatformRepository(database.client), tasks),
+      liepin: new WebPlatformService(
+        new SqlitePlatformRepository(database.client, 'liepin'),
+        tasks,
+        'liepin',
+      ),
       '51job': new WebPlatformService(
         new SqlitePlatformRepository(database.client, '51job'),
         tasks,

@@ -103,6 +103,41 @@ const queryKeys = [
   'x-zp-client-id',
 ];
 
+const transportCodes = {
+  ECONNRESET: 'connection_reset',
+  ECONNREFUSED: 'connection_refused',
+  ENOTFOUND: 'dns_error',
+  EAI_AGAIN: 'dns_error',
+  UND_ERR_SOCKET: 'socket_closed',
+  UND_ERR_CONNECT_TIMEOUT: 'connect_timeout',
+  UND_ERR_HEADERS_TIMEOUT: 'headers_timeout',
+  UND_ERR_BODY_TIMEOUT: 'body_timeout',
+} as const;
+
+/** 网络诊断只允许固定原因，不保留原始异常及其可能包含凭据的 cause。 */
+class ZhilianNetworkError extends PlatformError {
+  public constructor(
+    reason: (typeof transportCodes)[keyof typeof transportCodes] | 'request_timeout' | 'unknown',
+  ) {
+    super('network_error');
+    this.message = `${this.message} [zhilian:${reason}]`;
+  }
+}
+
+/** 只读取顶层和一层 cause 的代码；动态消息、URL 和任意异常对象均不出边界。 */
+function networkFailure(error: unknown): PlatformError {
+  // 1、fetch 常将系统错误包装在 cause 内；只对有限代码进行映射。
+  const shape = z.object({ code: z.unknown().optional(), cause: z.unknown().optional() });
+  const outer = shape.safeParse(error);
+  const inner = shape.safeParse(outer.success ? outer.data.cause : undefined);
+  for (const code of [outer.success && outer.data.code, inner.success && inner.data.code]) {
+    if (typeof code === 'string' && Object.hasOwn(transportCodes, code))
+      return new ZhilianNetworkError(transportCodes[code as keyof typeof transportCodes]);
+  }
+  // 2、未知原因显式保留 unknown，不能仅凭 TypeError 推断风控或断网。
+  return new ZhilianNetworkError('unknown');
+}
+
 /** 同一官网搜索页观察的双模板；仅驻留 Worker 内存，禁止持久化。 */
 export interface ZhilianSearchTemplates {
   readonly list: ZhilianCampusRequestTemplate;
@@ -341,8 +376,14 @@ export class ZhilianSearchHttpSession implements PlatformSession {
       signal.throwIfAborted();
       return result;
     } catch (error) {
+      // 2、先判定调用方取消，再冻结；不能把 disconnect 自身的 abort 当原始原因。
+      const failure = signal.aborted
+        ? new PlatformError('session_unavailable')
+        : error instanceof PlatformError
+          ? error
+          : networkFailure(error);
       this.disconnect();
-      throw error instanceof PlatformError ? error : new PlatformError('network_error');
+      throw failure;
     } finally {
       this.#busy = false;
     }
@@ -355,8 +396,26 @@ export class ZhilianSearchHttpSession implements PlatformSession {
     body: unknown,
     caller: AbortSignal,
   ): Promise<unknown> {
-    // 1、外部 IO 在事务之外；响应和异常不向日志暴露原始内容。
-    const signal = AbortSignal.any([caller, AbortSignal.timeout(20_000)]);
+    // 1、超时覆盖请求与正文读取；保留原分类，取消优先于超时，不自动重试。
+    const timeout = AbortSignal.timeout(20_000);
+    const signal = AbortSignal.any([caller, timeout]);
+    try {
+      return await this.#readResponse(url, headers, body, signal);
+    } catch (error) {
+      if (caller.aborted) throw new PlatformError('session_unavailable');
+      if (timeout.aborted) throw new ZhilianNetworkError('request_timeout');
+      throw error instanceof PlatformError ? error : networkFailure(error);
+    }
+  }
+
+  /** 外部 IO 在事务之外；请求、正文与异常原文不进入持久化诊断。 */
+  async #readResponse(
+    url: URL,
+    headers: Record<string, string>,
+    body: unknown,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    // 1、固定端点执行一次请求，流式读取仍受同一取消信号和大小上限约束。
     this.#lastAt = this.#now();
     const response = await this.#fetch(url.href, {
       method: body === undefined ? 'GET' : 'POST',

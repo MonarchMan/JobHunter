@@ -57,6 +57,38 @@ const allowedQuery = new Set([
   '_',
 ]);
 
+/** 浏览器当前的最小认证上下文；不包含签名生成器或任意请求头。 */
+interface BossRequestContext {
+  readonly cookies: readonly BrowserCookie[];
+  readonly token?: string;
+}
+
+/** 安全检查的脱敏现场；不持有上游正文、凭据或服务端未公开的根因判断。 */
+class BossSecurityCheckError extends PlatformError {
+  public constructor(input: {
+    readonly transport: 'http' | 'browser';
+    readonly endpoint: 'list' | 'detail';
+    readonly request: number;
+    readonly successes: number;
+    readonly data: unknown;
+  }) {
+    super('access_blocked', 37);
+    // 1、只输出固定字段存在性，禁止拼接任意上游键、message 或检查参数值。
+    const fields = ['seed', 'name', 'ts'].filter(
+      (key) =>
+        input.data !== null && typeof input.data === 'object' && Object.hasOwn(input.data, key),
+    );
+    this.message += ` [boss:${input.transport}:${input.endpoint};request=${String(input.request)};priorCode0=${String(input.successes)};check=${fields.join('+') || 'none'};browserState=unknown]`;
+  }
+}
+
+/** 认证头只接受有界可见 ASCII，拒绝换行注入，错误不包含凭据。 */
+function authToken(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (!/^[\x21-\x7e]{1,8192}$/.test(value)) throw new PlatformError('session_unavailable');
+  return value;
+}
+
 /** 内存候选访问上下文，不能通过公共结果泄露临时访问令牌。 */
 interface DetailContext {
   readonly candidate: PlatformCandidate;
@@ -64,12 +96,16 @@ interface DetailContext {
   readonly lid: string;
 }
 
-/** BOSS 受限 HTTP 会话；不连接浏览器、不持久化凭据，失败后冻结以避免继续访问。 */
+/** BOSS 受限 HTTP 会话；不创建浏览器连接或持久化凭据，失败后冻结以避免继续访问。 */
 export class BossHttpSession {
   #cookies: readonly BrowserCookie[];
+  #token: string | undefined;
+  #readContext: ((signal: AbortSignal) => Promise<BossRequestContext>) | undefined;
   readonly #template: URL;
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
+  readonly #browserResponse:
+    ((url: URL, signal: AbortSignal, jobId?: string) => Promise<Response>) | undefined;
   readonly #abort = new AbortController();
   readonly #details = new Map<string, DetailContext>();
   readonly #seen = new Set<string>();
@@ -77,12 +113,18 @@ export class BossHttpSession {
   #hasMore = true;
   #busy = false;
   #lastRequestAt: number | null = null;
+  #requestCount = 0;
+  #successfulResponses = 0;
 
   public constructor(input: {
     readonly cookies: readonly BrowserCookie[];
     readonly observedListUrl: string;
     readonly fetch?: typeof fetch;
     readonly now?: () => number;
+    readonly token?: string;
+    readonly readContext?: (signal: AbortSignal) => Promise<BossRequestContext>;
+    /** 显式浏览器模式只提供实际 JSON 响应；不走认证同步或 Node HTTP。 */
+    readonly browserResponse?: (url: URL, signal: AbortSignal, jobId?: string) => Promise<Response>;
   }) {
     // 1、仅接受已经观察到的固定列表端点和已知查询字段，不允许任意网络代理。
     let url: URL;
@@ -103,14 +145,19 @@ export class BossHttpSession {
     // 2、复制会话数据，调用方后续修改不能扩大本会话授权范围。
     this.#template = url;
     this.#cookies = input.cookies.map((cookie) => ({ ...cookie }));
+    this.#token = authToken(input.token);
+    this.#readContext = input.readContext;
     this.#fetch = input.fetch ?? fetch;
     this.#now = input.now ?? Date.now;
+    this.#browserResponse = input.browserResponse;
   }
 
   /** 断开会话中止在途请求并释放凭据，已返回业务事实不受影响。 */
   public disconnect(): void {
     this.#abort.abort();
     this.#cookies = [];
+    this.#token = undefined;
+    this.#readContext = undefined;
     this.#details.clear();
     this.#seen.clear();
   }
@@ -182,7 +229,7 @@ export class BossHttpSession {
       url.searchParams.set('lid', context.lid);
       url.searchParams.set('_', String(this.#now()));
       // 2、身份、标题、正文均通过后才返回可用于入库的事实。
-      const result = detailSchema.safeParse(await this.#request(url, signal));
+      const result = detailSchema.safeParse(await this.#request(url, signal, externalJobId));
       if (
         !result.success ||
         result.data.jobInfo.encryptId !== externalJobId ||
@@ -208,25 +255,71 @@ export class BossHttpSession {
   }
 
   /** 有界只读请求；不跟随重定向，不输出上游错误原文。 */
-  async #request(url: URL, callerSignal: AbortSignal): Promise<unknown> {
+  async #request(url: URL, callerSignal: AbortSignal, jobId?: string): Promise<unknown> {
     // 1、同会话至少间隔五秒，等待和网络均响应取消。
     const signal = AbortSignal.any([callerSignal, this.#abort.signal, AbortSignal.timeout(20_000)]);
     signal.throwIfAborted();
-    const delay =
+    let delay =
       this.#lastRequestAt === null ? 0 : Math.max(0, 5_000 - (this.#now() - this.#lastRequestAt));
-    if (delay > 0) {
+    while (delay > 0) {
       const { setTimeout } = await import('node:timers/promises');
       await setTimeout(delay, undefined, { signal });
+      // 1.a、计时器可能提前唤醒；再次检查时钟，未满五秒不得发送。
+      delay =
+        this.#lastRequestAt === null ? 0 : Math.max(0, 5_000 - (this.#now() - this.#lastRequestAt));
     }
-    this.#lastRequestAt = this.#now();
-    const cookie = cookieHeaderForUrl(this.#cookies, url, this.#now());
-    if (!cookie) throw new PlatformError('session_unavailable');
-    const response = await this.#fetch(url, {
-      method: 'GET',
-      redirect: 'manual',
-      signal,
-      headers: { Cookie: cookie, Accept: 'application/json', Referer: `${origin}/web/geek/jobs` },
-    });
+    // 1.a、模式在连接时固定；浏览器响应复用相同解析，不经过 Cookie 或 HTTP。
+    let response: Response;
+    if (this.#browserResponse) {
+      this.#lastRequestAt = this.#now();
+      this.#requestCount += 1;
+      response = await this.#browserResponse(url, signal, jobId);
+    } else {
+      // 1.b、只同步浏览器已有上下文；失败或取消不允许沿用旧凭据继续访问。
+      if (this.#readContext) {
+        try {
+          const context = await this.#readContext(signal);
+          signal.throwIfAborted();
+          this.#cookies = context.cookies.map((value) => ({ ...value }));
+          this.#token = authToken(context.token);
+        } catch {
+          throw new PlatformError('session_unavailable');
+        }
+      }
+      const cookie = cookieHeaderForUrl(this.#cookies, url, this.#now());
+      if (!cookie) throw new PlatformError('session_unavailable');
+      const headers: Record<string, string> = {
+        Cookie: cookie,
+        Accept: 'application/json',
+        Referer: `${origin}/web/geek/jobs`,
+        'X-Requested-With': 'XMLHttpRequest',
+      };
+      // 1.b、bst 必须来自适用 Cookie，不能使用其他域或已过期的认证字段。
+      const bst = cookie
+        .split('; ')
+        .find((part) => part.startsWith('bst='))
+        ?.slice(4);
+      if (bst) {
+        try {
+          const value = authToken(decodeURIComponent(bst));
+          if (value) headers.zp_token = value;
+        } catch {
+          throw new PlatformError('session_unavailable');
+        }
+      }
+      if (this.#token) headers.token = this.#token;
+      signal.throwIfAborted();
+      this.#lastRequestAt = this.#now();
+      // 1.c、等待和上下文读取完成后再生成普通缓存时间戳，与官网发送边界一致。
+      url.searchParams.set('_', String(this.#lastRequestAt));
+      this.#requestCount += 1;
+      response = await this.#fetch(url, {
+        method: 'GET',
+        redirect: 'manual',
+        signal,
+        headers,
+      });
+    }
     // 2、状态异常立即取消正文；最大两 MiB，避免任意响应占满内存。
     if (response.status !== 200) {
       await response.body?.cancel();
@@ -255,7 +348,7 @@ export class BossHttpSession {
       await reader.cancel();
       reader.releaseLock();
     }
-    // 3、37 已经真实观察为“环境异常”，不能误判未登录，也不切换浏览器继续。
+    // 3、37 表示 SECURITY_CHECK，不等于未登录或某条已知触发规则，也不切换传输继续。
     let raw: unknown;
     try {
       raw = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
@@ -264,12 +357,18 @@ export class BossHttpSession {
     }
     const parsed = envelope.safeParse(raw);
     if (!parsed.success) throw new PlatformError('parse_changed');
-    if (parsed.data.code !== 0)
-      throw new PlatformError(
-        parsed.data.code === 37 ? 'access_blocked' : 'upstream_error',
-        parsed.data.code,
-      );
+    if (parsed.data.code === 37)
+      throw new BossSecurityCheckError({
+        transport: this.#browserResponse ? 'browser' : 'http',
+        endpoint: url.pathname === listPath ? 'list' : 'detail',
+        request: this.#requestCount,
+        successes: this.#successfulResponses,
+        data: parsed.data.zpData,
+      });
+    if (parsed.data.code !== 0) throw new PlatformError('upstream_error', parsed.data.code);
     signal.throwIfAborted();
+    // 4、记录业务码成功，不冒充后续职位结构及身份校验也已通过。
+    this.#successfulResponses += 1;
     return parsed.data.zpData;
   }
 }

@@ -209,6 +209,8 @@ export function webPagination(total: number, current: number, pageSize: number):
 /** 职位列表查询参数 Schema。 */
 export const webJobQuerySchema = z
   .object({
+    sourceKind: z.enum(['official', 'platform']).default('official'),
+    providerKey: z.enum(['boss', 'zhilian', '51job', 'liepin']).optional(),
     search: z.string().trim().min(1).max(200).optional(),
     companies: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
     statuses: z
@@ -217,7 +219,7 @@ export const webJobQuerySchema = z
       .optional(),
     locations: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
     jobSubfamilies: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
-    recruitmentCategory: z.enum(['internship', 'campus', 'social']).default('internship'),
+    recruitmentCategory: z.enum(['all', 'internship', 'campus', 'social']).optional(),
     minimumScore: z.number().min(0).max(100).optional(),
     profileVersionId: z.uuid().optional(),
     sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('updated_desc'),
@@ -226,7 +228,14 @@ export const webJobQuerySchema = z
     cursor: z.string().max(1_000).optional(),
     limit: z.number().int().min(1).max(100).optional(),
   })
-  .strict();
+  .strict()
+  .transform((query) => ({
+    ...query,
+    // 1、平台默认包含未知类别；官网保留原有实习默认值。
+    recruitmentCategory:
+      query.recruitmentCategory ??
+      (query.sourceKind === 'platform' ? ('all' as const) : ('internship' as const)),
+  }));
 
 /** 应用层使用的类型约束。 */
 export type WebJobQuery = z.infer<typeof webJobQuerySchema>;

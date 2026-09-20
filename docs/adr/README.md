@@ -1,5 +1,7 @@
 # 架构决策记录索引
 
+- [ADR-0030：平台批次自动补齐详情并统一职位列表](./0030-platform-batch-ingestion-and-job-list.md)
+
 - [ADR-0028：智联校园使用已观察请求模板初始化 HTTP 会话](./0028-zhilian-observed-request-template.md)
 
 - [ADR-0022：简历编辑画布的 WebKit 事件边界](./0022-resume-studio-webkit-event-boundary.md)
@@ -35,3 +37,4 @@ ADR 一经 Accepted 不直接改写历史结论；需要改变决策时新增 AD
 - [ADR-0026：平台 CDP 连接与用户活动会话同寿命](./0026-platform-cdp-session-lifetime.md)
 - [ADR-0027：平台实例隔离与显式浏览活动](./0027-platform-isolation-and-view-activity.md)
 - [ADR-0029：前程无忧按官网已观察批次执行独立 HTTP](./0029-job51-observed-batch-session.md)
+- [ADR-0031：BOSS 显式浏览器辅助传输](./0031-boss-explicit-browser-assisted-transport.md)

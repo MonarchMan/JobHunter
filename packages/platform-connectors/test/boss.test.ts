@@ -69,6 +69,145 @@ function session(responses: unknown[]): {
 }
 
 describe('BOSS HTTP 会话', () => {
+  it('计时器提前唤醒后继续核对五秒边界，不提前发送下一页', async () => {
+    // 1、第二次调用的前几次时钟读取仍停在 4999ms，模拟提前唤醒后边界未到。
+    const base = 1_800_000_000_000;
+    let second = false;
+    let reads = 0;
+    const timestamps: number[] = [];
+    const client = new BossHttpSession({
+      cookies: [cookie],
+      observedListUrl,
+      now: () => base + (second ? (++reads <= 4 ? 4_999 : 5_000) : 0),
+      fetch: (input) => {
+        timestamps.push(
+          Number(new URL(input instanceof Request ? input.url : input).searchParams.get('_')),
+        );
+        return Promise.resolve(Response.json(page([String(timestamps.length)])));
+      },
+    });
+    // 2、只模拟本地响应；时钟真正跨过边界后才允许第二次 HTTP。
+    await client.readNext(new AbortController().signal);
+    second = true;
+    await client.readNext(new AbortController().signal);
+    expect(timestamps).toEqual([base, base + 5_000]);
+    client.disconnect();
+  });
+
+  it('列表和详情的时间戳在读取认证上下文后按实际发送时刻生成', async () => {
+    // 1、模拟读取上下文耗时，离线重现排队前构造 URL 导致的陈旧时间戳。
+    let now = 1_800_000_000_000;
+    const requests: { timestamp: string | null; sentAt: number }[] = [];
+    const responses = [page(['a']), detail('a')];
+    const client = new BossHttpSession({
+      cookies: [cookie],
+      observedListUrl,
+      now: () => now,
+      readContext: () => {
+        now += 1_000;
+        return Promise.resolve({ cookies: [cookie] });
+      },
+      fetch: (input) => {
+        requests.push({
+          timestamp: new URL(input instanceof Request ? input.url : input).searchParams.get('_'),
+          sentAt: now,
+        });
+        return Promise.resolve(Response.json(responses.shift()));
+      },
+    });
+    // 2、覆盖两个端点；显式推进时钟避免测试向真实网站请求或等待节流。
+    await client.readNext(new AbortController().signal);
+    now += 5_000;
+    await client.readDetail('a', new AbortController().signal);
+    expect(requests).toHaveLength(2);
+    for (const request of requests) expect(request.timestamp).toBe(String(request.sentAt));
+    client.disconnect();
+  });
+
+  it('每次请求只读新认证上下文，不发送浏览器特征或保留旧 token', async () => {
+    let now = Date.now();
+    const readContext = vi
+      .fn()
+      .mockResolvedValueOnce({
+        cookies: [{ ...cookie, name: 'bst', value: 'auth-one' }],
+        token: 'page-one',
+      })
+      .mockResolvedValueOnce({ cookies: [{ ...cookie, name: 'bst', value: 'auth-two' }] });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(page(['a'])))
+      .mockResolvedValueOnce(Response.json(detail('a')));
+    const client = new BossHttpSession({
+      cookies: [cookie],
+      observedListUrl,
+      readContext,
+      fetch: fetcher,
+      now: () => (now += 6_000),
+    });
+    await client.readNext(new AbortController().signal);
+    await client.readDetail('a', new AbortController().signal);
+    const first = new Headers(fetcher.mock.calls[0]?.[1]?.headers);
+    const second = new Headers(fetcher.mock.calls[1]?.[1]?.headers);
+    expect(first.get('token')).toBe('page-one');
+    expect(first.get('zp_token')).toBe('auth-one');
+    expect(second.get('token')).toBeNull();
+    expect(second.get('zp_token')).toBe('auth-two');
+    expect(second.get('cookie')).toBe('bst=auth-two');
+    expect([...first.keys()].sort()).toEqual([
+      'accept',
+      'cookie',
+      'referer',
+      'token',
+      'x-requested-with',
+      'zp_token',
+    ]);
+    expect(readContext).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['failure', 'cancel'] as const)(
+    '上下文同步 %s 后不得使用旧 Cookie 请求',
+    async (mode) => {
+      const controller = new AbortController();
+      const fetcher = vi.fn();
+      const client = new BossHttpSession({
+        cookies: [cookie],
+        observedListUrl,
+        fetch: fetcher,
+        readContext: () => {
+          if (mode === 'failure') return Promise.reject(new Error('private-context'));
+          controller.abort();
+          return Promise.resolve({ cookies: [cookie], token: 'new-token' });
+        },
+      });
+      await expect(client.readNext(controller.signal)).rejects.toMatchObject({
+        category: 'session_unavailable',
+      });
+      await expect(client.readNext(new AbortController().signal)).rejects.toMatchObject({
+        category: 'session_unavailable',
+      });
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+
+  it('认证头拒绝注入且不使用其他域的 bst', async () => {
+    expect(
+      () =>
+        new BossHttpSession({
+          cookies: [cookie],
+          observedListUrl,
+          token: 'secret\r\nInjected: yes',
+        }),
+    ).toThrow('session_unavailable');
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(page(['a'])));
+    const client = new BossHttpSession({
+      cookies: [cookie, { ...cookie, name: 'bst', domain: '.example.com' }],
+      observedListUrl,
+      fetch: fetcher,
+    });
+    await client.readNext(new AbortController().signal);
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).has('zp_token')).toBe(false);
+  });
+
   it('排除空公司 ID 并计数，全被排除的一批不冒充末页', async () => {
     const { client } = session([
       {
@@ -139,6 +278,37 @@ describe('BOSS HTTP 会话', () => {
       category: 'upstream_error',
       businessCode: 99999,
     });
+  });
+
+  it('后续页 37 保留本会话现场，检查字段值不泄露且禁止继续请求', async () => {
+    // 1、首批成功后模拟安全检查，不把不同会话的历史成功混入计数。
+    const { client, requests } = session([
+      page(['a']),
+      {
+        code: 37,
+        zpData: {
+          seed: 'private-seed',
+          name: 'private-name',
+          ts: 'private-ts',
+          secret: 'private-value',
+        },
+      },
+    ]);
+    await client.readNext(new AbortController().signal);
+    const error: unknown = await client
+      .readNext(new AbortController().signal)
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({ category: 'access_blocked', businessCode: 37 });
+    const message = error instanceof Error ? error.message : '';
+    expect(message).toContain(
+      'boss:http:list;request=2;priorCode0=1;check=seed+name+ts;browserState=unknown',
+    );
+    expect(message).not.toMatch(/private|secret/);
+    // 2、安全检查不是空末页，后续调用冻结而非使用旧参数重试。
+    await expect(client.readNext(new AbortController().signal)).rejects.toMatchObject({
+      category: 'session_unavailable',
+    });
+    expect(requests).toHaveLength(2);
   });
 
   it.each([page(['a', 'a']), page([])])('拒绝重复 ID 或矛盾空页', async (response) => {

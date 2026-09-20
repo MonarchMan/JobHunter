@@ -3,6 +3,7 @@ import {
   BossCdpSessionProvider,
   ZhilianCdpSessionProvider,
   Job51CdpSessionProvider,
+  LiepinCdpSessionProvider,
 } from '../src/cdp.js';
 import type { PlatformSession } from '@jobhunter/platform-core';
 import { readFileSync } from 'node:fs';
@@ -34,7 +35,11 @@ class FakeSocket extends EventTarget {
   }
   /** 对初始化只读命令返回合成结构。 */
   send(data: string): void {
-    const request = JSON.parse(data) as { id: number; method: string };
+    const request = JSON.parse(data) as {
+      id: number;
+      method: string;
+      params?: { expression?: string };
+    };
     this.methods.push(request.method);
     if (FakeSocket.silent) return;
     const responses: Record<string, unknown> = {
@@ -44,9 +49,11 @@ class FakeSocket extends EventTarget {
       'Target.attachToTarget': { sessionId: 'attached' },
       'Runtime.evaluate': {
         result: {
-          value: JSON.stringify([
-            'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1',
-          ]),
+          value: request.params?.expression?.includes('window._PAGE')
+            ? 'page-token'
+            : JSON.stringify([
+                'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1',
+              ]),
         },
       },
       'Network.getCookies': {
@@ -54,7 +61,7 @@ class FakeSocket extends EventTarget {
           {
             name: 'session',
             value: 'test-only',
-            domain: '.zhipin.com',
+            domain: FakeSocket.targetUrl.includes('liepin.com') ? '.liepin.com' : '.zhipin.com',
             path: '/',
             secure: true,
             expires: -1,
@@ -105,6 +112,103 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
+});
+
+it('猎聘只观察初始化请求，后续 HTTP 每次借用所选页适用 Cookie', async () => {
+  FakeSocket.targetUrl = 'https://c.liepin.com/';
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(
+      Response.json({ flag: 1, data: { data: [], addData: [], hasNextPage: false } }),
+    );
+  vi.stubGlobal('fetch', fetcher);
+  const pending = new LiepinCdpSessionProvider().connect(
+    { portFile: '/fixture/DevToolsActivePort', targetId: 'valid' },
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(1);
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  const event = {
+    method: 'Network.requestWillBeSent',
+    sessionId: 'attached',
+    params: {
+      request: {
+        method: 'POST',
+        url: 'https://api-c.liepin.com/api/com.liepin.csearch.home-recommend-job-new',
+        headers: { Accept: 'application/json', Cookie: 'do-not-reuse' },
+        postData: JSON.stringify({
+          data: {
+            operateKind: 'LOGIN',
+            sortType: 'PC_STU_HP_NEW',
+            selectedExpect: '{}',
+            existFallbackResult: false,
+          },
+        }),
+      },
+    },
+  };
+  // 1、无关标签事件不能初始化，正常事件之后停止页面观察但保留授权 Socket。
+  socket.dispatchEvent(
+    new MessageEvent('message', { data: JSON.stringify({ ...event, sessionId: 'other' }) }),
+  );
+  expect(fetcher).not.toHaveBeenCalled();
+  socket.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(event) }));
+  const session = await pending;
+  expect(socket.methods).toEqual([
+    'Target.getTargets',
+    'Target.attachToTarget',
+    'Network.enable',
+    'Target.detachFromTarget',
+  ]);
+  await vi.advanceTimersByTimeAsync(130000);
+  expect(socket.readyState).toBe(1);
+  // 2、显式 next 使用当前 Cookie，既不刷新也不执行页面脚本。
+  expect(await session.readNext(new AbortController().signal)).toMatchObject({
+    candidates: [],
+    hasMore: false,
+  });
+  expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({ cookie: 'session=test-only' });
+  expect(socket.methods.slice(-4)).toEqual([
+    'Target.getTargets',
+    'Target.attachToTarget',
+    'Network.getCookies',
+    'Target.detachFromTarget',
+  ]);
+  expect(FakeSocket.instances).toHaveLength(1);
+  session.disconnect();
+  expect(socket.readyState).toBe(3);
+});
+
+it('BOSS 显式浏览器模式不读取凭据、不刷新且保持同一授权连接', async () => {
+  const pending = new BossCdpSessionProvider().connect(
+    { portFile: '/fixture/DevToolsActivePort', targetId: 'valid', acquisitionMode: 'browser' },
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  const socket = FakeSocket.instances[0];
+  expect(socket?.methods).toEqual([
+    'Target.getTargets',
+    'Target.attachToTarget',
+    'Page.enable',
+    'Network.enable',
+  ]);
+  await vi.advanceTimersByTimeAsync(130_000);
+  expect(socket?.readyState).toBe(1);
+  expect(FakeSocket.instances).toHaveLength(1);
+  session.disconnect();
+  expect(socket?.readyState).toBe(3);
+});
+
+it('不将 BOSS 新模式隐式应用于其他平台', async () => {
+  await expect(
+    new Job51CdpSessionProvider().connect(
+      { portFile: '/fixture/DevToolsActivePort', targetId: 'valid', acquisitionMode: 'browser' },
+      new AbortController().signal,
+    ),
+  ).rejects.toMatchObject({ category: 'session_unavailable' });
+  expect(FakeSocket.instances).toHaveLength(0);
 });
 
 it('retains the selected 51job observer beyond initialization without another authorization', async () => {
@@ -231,9 +335,9 @@ it('keeps one authorized socket across HTTP actions and ignores completed connec
   const socket = FakeSocket.instances[0];
   if (!socket) throw new Error('missing fixture socket');
   const methods = [...socket.methods];
-  // 1、连接任务完成后，新的列表／详情任务复用同一连接，不新增 CDP 命令。
+  // 1、请求前只读同步上下文；超过初始化期限后仍复用同一授权 Socket。
   expect((await session.readNext(new AbortController().signal)).candidates).toHaveLength(1);
-  await vi.advanceTimersByTimeAsync(5_000);
+  await vi.advanceTimersByTimeAsync(130_000);
   expect((await session.readDetail('job1', new AbortController().signal)).description).toBe(
     '测试正文',
   );
@@ -242,7 +346,7 @@ it('keeps one authorized socket across HTTP actions and ignores completed connec
   expect(methods.at(-1)).toBe('Target.detachFromTarget');
   await vi.advanceTimersByTimeAsync(130_000);
   expect(socket.readyState).toBe(1);
-  expect(socket.methods).toEqual(methods);
+  expect(socket.methods).toEqual([...methods, ...methods, ...methods]);
   expect(FakeSocket.instances).toHaveLength(1);
   session.disconnect();
   expect(socket.readyState).toBe(3);
@@ -260,6 +364,39 @@ it('freezes HTTP failure without closing or reconnecting CDP', async () => {
   });
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect(FakeSocket.instances).toHaveLength(1);
+  expect(FakeSocket.instances[0]?.readyState).toBe(1);
+  session.disconnect();
+});
+
+it.each(['cross-origin', 'read-failed'] as const)(
+  'refresh context %s never sends stale credentials',
+  async (mode) => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const session = await connected();
+    if (mode === 'cross-origin') FakeSocket.targetUrl = 'https://example.com/jobs';
+    else FakeSocket.failMethod = 'Runtime.evaluate';
+    await expect(session.readNext(new AbortController().signal)).rejects.toMatchObject({
+      category: 'session_unavailable',
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(FakeSocket.instances).toHaveLength(1);
+    expect(FakeSocket.instances[0]?.readyState).toBe(1);
+    session.disconnect();
+  },
+);
+
+it('cancels an in-flight context read without upstream access or closing the authorized socket', async () => {
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  const session = await connected();
+  FakeSocket.silent = true;
+  const controller = new AbortController();
+  const reading = session.readNext(controller.signal);
+  const assertion = expect(reading).rejects.toMatchObject({ category: 'session_unavailable' });
+  controller.abort();
+  await assertion;
+  expect(fetcher).not.toHaveBeenCalled();
   expect(FakeSocket.instances[0]?.readyState).toBe(1);
   session.disconnect();
 });

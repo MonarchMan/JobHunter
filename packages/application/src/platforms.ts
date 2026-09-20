@@ -16,6 +16,7 @@ export const bossCommandSchema = z.discriminatedUnion('action', [
       action: z.literal('connect'),
       portFile: z.string().min(1),
       targetId: z.string().min(1),
+      acquisitionMode: z.enum(['http', 'browser']).optional(),
     })
     .strict(),
   z.object({ action: z.literal('next'), generation: z.number().int().positive() }).strict(),
@@ -38,6 +39,7 @@ export const bossResultSchema = z
     hasMore: z.boolean().optional(),
     skippedMissingCompanyId: z.number().int().nonnegative().optional(),
     jobId: z.string().optional(),
+    savedCount: z.number().int().nonnegative().optional(),
     candidates: z
       .array(
         z
@@ -145,17 +147,32 @@ export class PlatformBrowsingService {
       }
       if (!this.#session || this.#generation !== generation || this.#failed)
         throw new PlatformError('session_unavailable');
-      // 2、下一批只返回摘要，不编造正文；用户读取详情后自动入库。
+      // 2、每批串行补齐正文并逐条提交；失败即停止，已提交职位不回滚。
       if (command.action === 'next') {
         const result = await this.#session.readNext(signal);
         signal.throwIfAborted();
         if (this.repository.generation() !== generation)
           throw new PlatformError('session_unavailable');
+        let savedCount = 0;
+        for (const candidate of result.candidates) {
+          // 2.a、网络前后复核取消和代次，旧会话不得继续请求或提交。
+          signal.throwIfAborted();
+          if (this.repository.generation() !== generation)
+            throw new PlatformError('session_unavailable');
+          const detail = await this.#session.readDetail(candidate.externalJobId, signal);
+          signal.throwIfAborted();
+          if (this.repository.generation() !== generation)
+            throw new PlatformError('session_unavailable');
+          // 2.b、完整事实才入库；仓储短事务复核租约，不包裹任何网络请求。
+          this.repository.save(detail, generation, taskId, this.now());
+          savedCount += 1;
+        }
         this.repository.setStatus(generation, 'available', this.now());
         return {
           generation,
           status: 'available',
           hasMore: result.hasMore,
+          savedCount,
           candidates: [...result.candidates],
           skippedMissingCompanyId: result.skippedMissingCompanyId,
         };

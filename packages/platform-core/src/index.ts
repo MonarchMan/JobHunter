@@ -73,7 +73,12 @@ export interface PlatformSession {
 /** 用户明确选择本机浏览器实例和页面后，才能借用会话。 */
 export interface PlatformSessionProvider {
   connect(
-    input: { readonly portFile: string; readonly targetId: string },
+    input: {
+      readonly portFile: string;
+      readonly targetId: string;
+      /** 仅 BOSS 支持显式浏览器辅助；省略时保持原平台行为。 */
+      readonly acquisitionMode?: 'http' | 'browser' | undefined;
+    },
     signal: AbortSignal,
   ): Promise<PlatformSession>;
 }

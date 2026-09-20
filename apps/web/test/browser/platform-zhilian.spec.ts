@@ -96,12 +96,11 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
         batch: {
           generation: 2,
           candidates: [candidate],
+          savedCount: 1,
           hasMore: false,
           skippedMissingCompanyId: 0,
         },
       };
-    else if (input.command.action === 'detail')
-      state = { ...state, saved: { CC_TEST: 'saved-campus-job' } };
     await route.fulfill({ status: 202, json: { data: { taskId: 'task', kind: 'enqueued' } } });
   });
   await page.route('**/api/platforms/boss', (route) =>
@@ -124,17 +123,17 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
   });
   expect(commands[0]?.idempotencyToken).toBe(commands[1]?.idempotencyToken);
   await page.getByRole('button', { name: '读取下一批职位' }).click();
-  await expect(page.getByRole('heading', { name: candidate.title })).toBeVisible({
+  await expect(page.getByText('最近成功批次已入库 1 条职位。', { exact: false })).toBeVisible({
     timeout: 10000,
   });
   await expect(page.getByRole('button', { name: '读取下一批职位' })).toBeDisabled();
-  await page.getByRole('button', { name: '读取详情并保存' }).click();
-  await expect(page.getByRole('link', { name: '查看已保存职位' })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: '读取详情并保存' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '查看平台职位' })).toHaveAttribute(
     'href',
-    '/jobs/saved-campus-job',
+    '/jobs?source=platform&provider=zhilian',
     { timeout: 10000 },
   );
-  expect(commands.map((x) => x.command.action)).toEqual(['connect', 'connect', 'next', 'detail']);
+  expect(commands.map((x) => x.command.action)).toEqual(['connect', 'connect', 'next']);
   for (const width of [1280, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => {
@@ -162,5 +161,5 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
   await page.getByRole('link', { name: 'BOSS 直聘', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'BOSS 直聘' })).toBeVisible();
   await expect(page.getByRole('heading', { name: candidate.title })).toHaveCount(0);
-  expect(commands).toHaveLength(4);
+  expect(commands).toHaveLength(3);
 });

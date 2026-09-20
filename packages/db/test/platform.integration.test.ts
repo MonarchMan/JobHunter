@@ -83,7 +83,7 @@ it('connects, reads and saves into permanent jobs without official synchronizati
     expect(
       (await service.execute({ action: 'next', generation }, task(), signal)).candidates,
     ).toHaveLength(1);
-    expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(0);
+    expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(1);
     const first = await service.execute(
       { action: 'detail', generation, externalJobId: 'job1' },
       task(),
@@ -104,7 +104,7 @@ it('connects, reads and saves into permanent jobs without official synchronizati
         )
         .pluck()
         .get(),
-    ).toBe(2);
+    ).toBe(3);
     expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
     expect(db.client.prepare('SELECT missing_count FROM jobs').pluck().get()).toBe(0);
     // 2、取消、租约过期与重启均不能写入或复用内存会话。

@@ -223,7 +223,7 @@ it.each(['campus', 'search', '51job'] as const)(
       return bossResultSchema.parse(task?.result);
     };
     try {
-      // 1、独立连接与推荐；摘要不提前写成正式职位。
+      // 1、独立连接与批次获取；同一任务补齐完整正文才写入正式职位。
       const beforeBoss = boss.snapshot();
       const { generation } = await run([
         'connect',
@@ -235,14 +235,17 @@ it.each(['campus', 'search', '51job'] as const)(
       const batch = await run(['next', '--generation', String(generation)]);
       expect(batch.candidates).toHaveLength(1);
       expect(web.snapshot().batch?.candidates).toHaveLength(1);
-      expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(0);
-      // 2、CLI 详情保存后，统一查询和 Web 投影定位同一个正式职位。
-      const saved = await run(['detail', externalId, '--generation', String(generation)]);
-      if (!saved.jobId) throw new Error('Missing saved job');
+      expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(1);
+      expect(batch.savedCount).toBe(1);
+      // 2、无需单条详情命令，统一查询直接读取自动入库的职位。
+      const savedJobId = db.client
+        .prepare('SELECT id FROM jobs WHERE external_job_id=?')
+        .pluck()
+        .get(externalId) as string;
       expect(
-        new SqliteJobQueryRepository(db.client).get(parseId(saved.jobId, 'Job')),
+        new SqliteJobQueryRepository(db.client).get(parseId(savedJobId, 'Job')),
       ).not.toBeNull();
-      expect(web.snapshot().saved[externalId]).toBe(saved.jobId);
+      expect(web.snapshot().batch?.savedCount).toBe(1);
       expect(boss.snapshot()).toEqual(beforeBoss);
       expect(connect).toHaveBeenCalledTimes(1);
       expect(fetcher).toHaveBeenCalledTimes(mode === '51job' ? 1 : 2);

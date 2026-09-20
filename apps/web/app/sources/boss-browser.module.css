@@ -9,12 +9,10 @@
   gap: 1rem;
   flex-wrap: wrap;
 }
-.header h2,
-.jobs h3 {
+.header h2 {
   margin: 0;
 }
 .header p,
-.jobs p,
 .note {
   color: var(--muted-ink);
 }
@@ -57,19 +55,6 @@
 }
 .actions {
   justify-content: start;
-}
-.jobs {
-  list-style: none;
-  padding: 0;
-}
-.jobs li {
-  padding: 1.25rem 0;
-  border-bottom: 1px solid var(--line);
-  overflow-wrap: anywhere;
-}
-.empty {
-  padding: 2rem 0;
-  color: var(--muted-ink);
 }
 .note {
   margin-top: 2rem;

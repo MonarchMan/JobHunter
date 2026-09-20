@@ -4,12 +4,20 @@ import { createTemporaryDataRoot, makeCandidateProfile } from '@jobhunter/testki
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 import { nextPageHref, parseWebJobQuery } from '../src/server/job-query.js';
+import { seedPlatformJobs } from './fixtures/platform-jobs.js';
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 function seedJobs(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });
   const profile = JSON.stringify(makeCandidateProfile({ targetRoles: ['研发'] }));
   try {
+    seedPlatformJobs(database);
+    // 同名平台公司先于官网写入，确保查询不依赖全库 LIMIT 1 的偶然顺序。
+    database.client
+      .prepare(
+        "UPDATE companies SET name='腾讯' WHERE id IN (SELECT company_id FROM company_external_identities)",
+      )
+      .run();
     database.client
       .prepare(
         `INSERT INTO companies
@@ -186,6 +194,44 @@ describe('Web job listing', () => {
         expect(closed.items).toMatchObject([{ title: '历史算法工程师', status: 'closed' }]);
         const located = container.services.webJobs.list(parseWebJobQuery({ location: '北京' }));
         expect(located.items.map((item) => item.title)).toEqual(['Agent 开发工程师']);
+        // 1、未知招聘类别的平台职位默认可见，官网默认视图不混入平台。
+        expect(container.services.webJobs.list(parseWebJobQuery({})).page.total).toBe(2);
+        const allPlatforms = container.services.webJobs.list(
+          parseWebJobQuery({ source: 'platform' }),
+        );
+        expect(allPlatforms.page.total).toBe(3);
+        expect(allPlatforms.items.every((item) => item.recruitmentCategory === null)).toBe(true);
+        // 2、provider 与关键词筛选共同作用于计数和数字分页。
+        const platformFilter = {
+          source: 'platform',
+          provider: 'boss',
+          company: '腾讯',
+          q: '平台工程师',
+          limit: '1',
+        };
+        const platformFirst = container.services.webJobs.list(parseWebJobQuery(platformFilter));
+        const platformSecond = container.services.webJobs.list(
+          parseWebJobQuery({ ...platformFilter, page: '2' }),
+        );
+        expect(platformFirst.page.total).toBe(2);
+        expect(platformSecond.page.total).toBe(2);
+        expect(platformSecond.items[0]?.id).not.toBe(platformFirst.items[0]?.id);
+        expect(platformFirst.items[0]?.title).toContain('BOSS');
+        expect(platformSecond.items[0]?.title).toContain('BOSS');
+        expect(
+          container.services.webJobs.list(
+            parseWebJobQuery({ source: 'platform', provider: 'zhilian', company: '腾讯' }),
+          ).page.total,
+        ).toBe(1);
+        expect(
+          container.services.webJobs.list(parseWebJobQuery({ source: 'platform', company: '腾讯' }))
+            .page.total,
+        ).toBe(3);
+        expect(
+          container.services.webJobs.list(
+            parseWebJobQuery({ source: 'platform', category: 'internship' }),
+          ).page.total,
+        ).toBe(0);
 
         const detail = container.services.webJobDetails.get(
           '018f0000-0000-7000-8000-000000000401',
@@ -215,5 +261,7 @@ describe('Web job listing', () => {
   it('rejects malformed score and status filters at the HTTP boundary parser', () => {
     expect(() => parseWebJobQuery({ minScore: 'NaN' })).toThrow();
     expect(() => parseWebJobQuery({ status: 'unknown' })).toThrow();
+    expect(() => parseWebJobQuery({ source: 'invalid' })).toThrow();
+    expect(() => parseWebJobQuery({ source: 'platform', provider: 'invalid' })).toThrow();
   });
 });

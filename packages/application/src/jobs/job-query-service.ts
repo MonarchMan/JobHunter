@@ -28,6 +28,8 @@ export class CompanyNotFoundError extends Error {
 
 /** 应用层数据结构或端口契约。 */
 export interface JobSearchInput {
+  readonly sourceKind?: JobQueryFilter['sourceKind'];
+  readonly providerKey?: JobQueryFilter['providerKey'];
   readonly search?: string;
   readonly companies?: readonly string[];
   readonly statuses?: readonly JobStatus[];
@@ -77,14 +79,19 @@ export class JobQueryService {
   }
 
   #filter(input: JobSearchInput): JobQueryFilter {
-    const companyIds = input.companies?.map((selector) => {
-      const company = this.#companies.findBySelector(selector);
-      if (!company) throw new CompanyNotFoundError(selector);
-      return company.id;
-    });
+    const companyIds = input.sourceKind
+      ? undefined
+      : input.companies?.map((selector) => {
+          const company = this.#companies.findBySelector(selector);
+          if (!company) throw new CompanyNotFoundError(selector);
+          return company.id;
+        });
     return {
+      ...(input.sourceKind ? { sourceKind: input.sourceKind } : {}),
+      ...(input.providerKey ? { providerKey: input.providerKey } : {}),
       ...(input.search ? { search: input.search } : {}),
       ...(companyIds ? { companyIds } : {}),
+      ...(input.sourceKind && input.companies ? { companySelectors: input.companies } : {}),
       // Closed jobs are historical and must only appear through an explicit status filter.
       statuses: input.statuses ?? ['active', 'stale'],
       ...(input.locations ? { locations: input.locations } : {}),

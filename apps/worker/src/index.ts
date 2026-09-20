@@ -85,6 +85,7 @@ import {
   BossCdpSessionProvider,
   ZhilianCdpSessionProvider,
   Job51CdpSessionProvider,
+  LiepinCdpSessionProvider,
 } from '@jobhunter/platform-connectors';
 import { TesseractResumeOcrEngine } from '@jobhunter/resume';
 import {
@@ -352,12 +353,18 @@ export function createProductionWorkerApplication(input: {
     new SqlitePlatformRepository(database.client, '51job'),
   );
   registry.register(createPlatformTaskHandler('51job', job51));
+  const liepin = new PlatformBrowsingService(
+    new LiepinCdpSessionProvider(),
+    new SqlitePlatformRepository(database.client, 'liepin'),
+  );
+  registry.register(createPlatformTaskHandler('liepin', liepin));
   registry.register(
     createPlatformRetentionTaskHandler(new SqlitePlatformRetentionRepository(database.client)),
   );
   boss.initialize();
   zhilian.initialize();
   job51.initialize();
+  liepin.initialize();
   const interviewRepository = new SqliteInterviewProjectRepository(database.client);
   const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
   const interviewArtifacts = new SqliteArtifactStore(database.client, input.dataRoot);
@@ -616,6 +623,7 @@ export function createProductionWorkerApplication(input: {
       boss.close();
       zhilian.close();
       job51.close();
+      liepin.close();
       if (runtimeMetrics) clearInterval(runtimeMetrics);
       eventLoopDelay?.disable();
       await engine.shutdown();

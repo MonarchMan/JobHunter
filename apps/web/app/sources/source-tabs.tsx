@@ -27,7 +27,7 @@ export function SourceTabs({
         aria-current={active === 'platform' ? 'page' : undefined}
       >
         <span>招聘平台来源</span>
-        <span className={styles.count}>3 · 实验中</span>
+        <span className={styles.count}>4 · 实验中</span>
       </a>
     </nav>
   );

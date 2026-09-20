@@ -22,8 +22,12 @@ import {
 import { SystemIdGenerator, utcInstant, parseId } from '@jobhunter/domain';
 import { createProductionWorkerApplication } from '../src/index.js';
 
-/** 恢复复核默认一批一详情，显式选择才测两批；不刷新页面，失败立即停止。 */
-it.skipIf(!process.env.BOSS_CDP_PORT_FILE || !process.env.BOSS_CDP_TARGET_ID)(
+/** 批次现在自动补齐本页全部详情，必须额外显式选择新语义，避免复用旧环境意外扩大请求量。 */
+it.skipIf(
+  !process.env.BOSS_CDP_PORT_FILE ||
+    !process.env.BOSS_CDP_TARGET_ID ||
+    process.env.BOSS_SMOKE_AUTO_BATCH !== '1',
+)(
   'BOSS production wiring saves bounded HTTP details with one browser session',
   async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'boss-production-smoke-'));
@@ -74,17 +78,16 @@ it.skipIf(!process.env.BOSS_CDP_PORT_FILE || !process.env.BOSS_CDP_TARGET_ID)(
           kept: batch.candidates?.length ?? 0,
           skipped: batch.skippedMissingCompanyId ?? 0,
         });
-        const first = batch.candidates?.[0];
-        if (!first) throw new Error('Smoke needs a non-anonymous candidate.');
-        const saved = await run({
-          action: 'detail',
-          generation,
-          externalJobId: first.externalJobId,
+        if (!batch.candidates?.length) throw new Error('Smoke needs a non-anonymous candidate.');
+        expect(batch.savedCount).toBe(batch.candidates.length);
+        const saved = new SqliteJobQueryRepository(database.client).query({
+          sourceKind: 'platform',
+          providerKey: 'boss',
         });
-        if (!saved.jobId) throw new Error('Missing saved job.');
-        expect(
-          new SqliteJobQueryRepository(database.client).get(parseId(saved.jobId, 'Job')),
-        ).not.toBeNull();
+        for (const job of saved.items)
+          expect(
+            new SqliteJobQueryRepository(database.client).get(job.id)?.description,
+          ).toBeTruthy();
         if (!batch.hasMore) break;
       }
       expect(database.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
@@ -92,12 +95,13 @@ it.skipIf(!process.env.BOSS_CDP_PORT_FILE || !process.env.BOSS_CDP_TARGET_ID)(
         database.client.prepare('SELECT count(*) FROM jobs WHERE missing_count <> 0').pluck().get(),
       ).toBe(0);
       expect(database.client.pragma('foreign_key_check')).toEqual([]);
-      expect(Object.keys(web.snapshot().saved).length).toBe(counts.length);
+      const savedCount = database.client.prepare('SELECT count(*) FROM jobs').pluck().get();
+      expect(savedCount).toBe(counts.reduce((sum, batch) => sum + batch.kept, 0));
       console.log(
         JSON.stringify({
           smoke: 'boss-production',
           pages: counts,
-          saved: Object.keys(web.snapshot().saved).length,
+          saved: savedCount,
         }),
       );
       await run({ action: 'disconnect', generation });
@@ -108,5 +112,5 @@ it.skipIf(!process.env.BOSS_CDP_PORT_FILE || !process.env.BOSS_CDP_TARGET_ID)(
       await rm(dataRoot, { recursive: true, force: true });
     }
   },
-  300_000,
+  600_000,
 );

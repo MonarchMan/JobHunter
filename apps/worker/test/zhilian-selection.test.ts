@@ -146,14 +146,14 @@ it.each(['selection', 'recommendation'] as const)(
       return bossResultSchema.parse(task?.result);
     };
     try {
-      // 1、候选阶段不入库，只有显式详情消费才保存正式职位。
+      // 1、批次自动消费详情并入库；显式 detail 仍兼容且不新增职位身份。
       const { generation } = await run({
         action: 'connect',
         portFile: '/test/DevToolsActivePort',
         targetId: 'synthetic',
       });
-      await run({ action: 'next', generation });
-      expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(0);
+      expect((await run({ action: 'next', generation })).savedCount).toBe(1);
+      expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(1);
       const saved = await run({
         action: 'detail',
         generation,
@@ -169,7 +169,7 @@ it.each(['selection', 'recommendation'] as const)(
         externalJobId: selection.externalJobId,
       });
       expect(repeated.jobId).toBe(saved.jobId);
-      expect(reads).toBe(mode === 'selection' ? 1 : 3);
+      expect(reads).toBe(mode === 'selection' ? 1 : 4);
       // 2、共享持久化不触发官网缺失标记，也不能污染 BOSS 的工作集。
       expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(1);
       expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);

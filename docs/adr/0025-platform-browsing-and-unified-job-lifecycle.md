@@ -1,6 +1,7 @@
 # ADR-0025：招聘平台按需读取与统一职位生命周期
 
 - 状态：Accepted
+- 部分替代：摘要展示与单条详情触发入库交互由 [ADR-0030](./0030-platform-batch-ingestion-and-job-list.md) 取代；其他决策不变。
 - 日期：2026-09-19
 - 关联规格：[028 招聘平台来源](../../specs/028-recruitment-platforms/spec.md)
 

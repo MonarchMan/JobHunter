@@ -22,14 +22,14 @@ async function run(): Promise<void> {
     .addOption(
       new Option(
         '--provider <provider>',
-        '招聘平台（智联：校园／主站；51job：先在官网搜索或翻页，再 next 读取该批）',
+        '招聘平台（智联：校园／主站；51job：官网辅助；猎聘：学生推荐，连接时切换一次排序）',
       )
-        .choices(['boss', 'zhilian', '51job'])
+        .choices(['boss', 'zhilian', '51job', 'liepin'])
         .default('boss'),
     );
   /** Commander 白名单校验后的平台键；默认兼容旧 BOSS 命令。 */
-  const provider = (): 'boss' | 'zhilian' | '51job' =>
-    program.opts<{ provider: 'boss' | 'zhilian' | '51job' }>().provider;
+  const provider = (): 'boss' | 'zhilian' | '51job' | 'liepin' =>
+    program.opts<{ provider: 'boss' | 'zhilian' | '51job' | 'liepin' }>().provider;
   const submit = async (payload: unknown, taskType = `platform.${provider()}`): Promise<void> => {
     // 1、先校验输入，再使用统一配置打开数据库。
     const parsed =
@@ -86,9 +86,24 @@ async function run(): Promise<void> {
     )
     .requiredOption('--port-file <path>')
     .requiredOption('--target-id <id>')
-    .action(async (options: { portFile: string; targetId: string }) => {
-      await submit({ action: 'connect', portFile: options.portFile, targetId: options.targetId });
-    });
+    .addOption(
+      new Option(
+        '--acquisition-mode <mode>',
+        '仅 BOSS：browser 观察官网新列表并点击该批职位详情；不刷新',
+      ).choices(['http', 'browser']),
+    )
+    .action(
+      async (options: {
+        portFile: string;
+        targetId: string;
+        acquisitionMode?: 'http' | 'browser';
+      }) => {
+        // 1、浏览器辅助必须显式选择，不改变其他平台原有连接方式。
+        if (options.acquisitionMode && provider() !== 'boss')
+          throw new Error('acquisition-mode is only available for BOSS');
+        await submit({ action: 'connect', ...options });
+      },
+    );
   program
     .command('retention-preview')
     .option('--days <number>', '保留天数', '30')

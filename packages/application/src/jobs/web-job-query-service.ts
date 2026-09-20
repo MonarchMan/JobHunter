@@ -19,6 +19,10 @@ export class WebJobQueryService {
   public list(input: WebJobQuery): WebJobPage {
     const query = webJobQuerySchema.parse(input);
     const page = this.#jobs.list({
+      sourceKind: query.sourceKind,
+      ...(query.sourceKind === 'platform' && query.providerKey
+        ? { providerKey: query.providerKey }
+        : {}),
       sort: query.sort,
       page: query.page,
       pageSize: query.limit ?? query.pageSize,
@@ -27,7 +31,9 @@ export class WebJobQueryService {
       ...(query.statuses ? { statuses: query.statuses } : {}),
       ...(query.locations ? { locations: query.locations } : {}),
       ...(query.jobSubfamilies ? { jobSubfamilies: query.jobSubfamilies } : {}),
-      recruitmentCategory: query.recruitmentCategory,
+      ...(query.recruitmentCategory === 'all'
+        ? {}
+        : { recruitmentCategory: query.recruitmentCategory }),
       ...(query.minimumScore === undefined ? {} : { minimumScore: query.minimumScore }),
       ...(query.profileVersionId ? { profileVersionId: query.profileVersionId } : {}),
       ...(query.cursor ? { cursor: query.cursor } : {}),

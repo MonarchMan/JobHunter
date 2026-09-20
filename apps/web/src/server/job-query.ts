@@ -30,6 +30,12 @@ export function parseWebJobQuery(source: SearchParameterSource): WebJobQuery {
   const limitText = firstSearchParameter(source, 'limit');
   const pageText = firstSearchParameter(source, 'page');
   return webJobQuerySchema.parse({
+    ...(firstSearchParameter(source, 'source')
+      ? { sourceKind: firstSearchParameter(source, 'source') }
+      : {}),
+    ...(firstSearchParameter(source, 'provider')
+      ? { providerKey: firstSearchParameter(source, 'provider') }
+      : {}),
     ...(firstSearchParameter(source, 'q') ? { search: firstSearchParameter(source, 'q') } : {}),
     ...(commaValues(firstSearchParameter(source, 'company'))
       ? { companies: commaValues(firstSearchParameter(source, 'company')) }

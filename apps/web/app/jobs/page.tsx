@@ -16,6 +16,7 @@ import {
 } from '../../src/server/job-query.js';
 import styles from './page.module.css';
 import { JobsFilterMemory } from './jobs-filter-memory.js';
+import { JobSourceFilter } from './job-source-filter.js';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '职位' };
@@ -55,11 +56,16 @@ export default async function JobsPage({
       <JobsFilterMemory enabled={jobListPreferences.rememberFilters} />
       <PageHeader
         title="职位列表"
-        description="默认隐藏已关闭职位。筛选条件会保存在当前 URL 中。"
+        description="默认显示官网来源，隐藏已关闭职位。可切换招聘平台，筛选与分页只查询本地职位库。"
+      />
+      <JobSourceFilter
+        sourceKind={query.sourceKind}
+        {...(query.providerKey ? { providerKey: query.providerKey } : {})}
       />
       <details className={styles.filterPanel} open={hasFilters}>
         <summary>筛选职位{hasFilters ? ' · 已设置条件' : ''}</summary>
         <form
+          key={`${query.sourceKind}:${query.providerKey ?? ''}`}
           className={styles.filters}
           action="/jobs"
           method="get"
@@ -67,13 +73,18 @@ export default async function JobsPage({
           noValidate
           data-job-filters
         >
+          <input type="hidden" name="source" value={query.sourceKind} />
+          {query.sourceKind === 'platform' && query.providerKey && (
+            <input type="hidden" name="provider" value={query.providerKey} />
+          )}
           <label>
             招聘类别
             <SelectField
               name="category"
               label="招聘类别"
-              defaultValue={fieldValue(parameters, 'category') || 'internship'}
+              defaultValue={query.recruitmentCategory}
               options={[
+                { value: 'all', label: '全部招聘类别' },
                 { value: 'internship', label: '实习' },
                 { value: 'campus', label: '校招' },
                 { value: 'social', label: '社招' },
@@ -91,7 +102,11 @@ export default async function JobsPage({
           <label>
             公司
             <CompanyCombobox
-              companies={companies.map((company) => company.companyName)}
+              companies={
+                query.sourceKind === 'platform'
+                  ? page.items.map((job) => job.companyName)
+                  : companies.map((company) => company.companyName)
+              }
               defaultValue={fieldValue(parameters, 'company')}
             />
           </label>
@@ -178,7 +193,10 @@ export default async function JobsPage({
             />
           </label>
           <button type="submit">应用筛选</button>
-          <a className="button-secondary" href="/jobs">
+          <a
+            className="button-secondary"
+            href={query.sourceKind === 'platform' ? '/jobs?source=platform' : '/jobs'}
+          >
             清除
           </a>
         </form>
@@ -186,11 +204,13 @@ export default async function JobsPage({
       <div className={styles.resultToolbar}>
         <p className={styles.resultSummary} aria-live="polite">
           当前类别：
-          {fieldValue(parameters, 'category') === 'campus'
-            ? '校招'
-            : fieldValue(parameters, 'category') === 'social'
-              ? '社招'
-              : '实习'}{' '}
+          {query.recruitmentCategory === 'all'
+            ? '全部招聘类别'
+            : query.recruitmentCategory === 'campus'
+              ? '校招'
+              : query.recruitmentCategory === 'social'
+                ? '社招'
+                : '实习'}{' '}
           · 共 {page.page.total} 个职位
         </p>
         <JobsRefresh />
@@ -201,12 +221,22 @@ export default async function JobsPage({
             ⌕
           </span>
           <h2 id="jobs-empty-title">没有符合条件的职位</h2>
-          <p>尝试减少筛选条件，或先同步官网来源。</p>
+          <p>
+            {query.sourceKind === 'platform'
+              ? '尝试减少筛选条件，或在来源页连接平台并获取一批职位；详情将自动补齐后入库。'
+              : '尝试减少筛选条件，或先同步官网来源。'}
+          </p>
           <div className="inline-actions">
-            <a className="button-secondary" href="/jobs">
+            <a
+              className="button-secondary"
+              href={query.sourceKind === 'platform' ? '/jobs?source=platform' : '/jobs'}
+            >
               清除筛选
             </a>
-            <a className="button-primary" href="/sources">
+            <a
+              className="button-primary"
+              href={query.sourceKind === 'platform' ? '/sources?channel=platform' : '/sources'}
+            >
               管理招聘来源
             </a>
           </div>

@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { makeCandidateProfile, FakeModel } from '@jobhunter/testkit';
 import { openSqliteDatabase } from '@jobhunter/db';
+import { seedPlatformJobs } from '../fixtures/platform-jobs.js';
 import { calculateDeterministicMatch, matchRulesetV2 } from '@jobhunter/matching';
 import {
   contentHash,
@@ -211,6 +212,7 @@ function insertJob(
 /** 构造测试输入或执行断言的辅助逻辑。 */
 async function seedFixture(dataRoot: string): Promise<void> {
   const database = openSqliteDatabase({ dataRoot });
+  seedPlatformJobs(database);
   const adapter = new FakeAdapter();
   const profile = await loadProfileFromFakeModel();
   const interviewProfile = makeCandidateProfile({

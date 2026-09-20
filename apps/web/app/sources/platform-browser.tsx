@@ -21,14 +21,16 @@ export function PlatformBrowser({
   provider,
 }: {
   readonly initial: WebBossSnapshot;
-  readonly provider: 'boss' | 'zhilian' | '51job';
+  readonly provider: 'boss' | 'zhilian' | '51job' | 'liepin';
 }): ReactElement {
   const label =
     provider === 'boss'
       ? 'BOSS 直聘'
       : provider === '51job'
         ? '前程无忧 · 官网辅助'
-        : '智联招聘 · 校园／社招';
+        : provider === 'liepin'
+          ? '猎聘 · 学生推荐'
+          : '智联招聘 · 校园／社招';
   const batchLabel = provider === 'boss' ? '推荐' : '职位';
   const endpoint = `/api/platforms/${provider}`;
   const [state, setState] = useState(initial);
@@ -160,7 +162,7 @@ export function PlatformBrowser({
       <header className={styles.header}>
         <div>
           <h2 id={`${provider}-title`}>{label}</h2>
-          <p>按需浏览{batchLabel}，读取详情后自动保存为正式职位。不自动翻页、投递或发消息。</p>
+          <p>每次只读取一批，后台串行补齐本批详情并自动入库。不自动翻页、投递或发消息。</p>
         </div>
         <span role="status">
           {statusLabels[state.connection?.status ?? 'disconnected'] ?? '状态未知'}
@@ -174,7 +176,9 @@ export function PlatformBrowser({
             ? ' BOSS 推荐页'
             : provider === '51job'
               ? '前程无忧搜索页'
-              : '智联校园推荐页或主站搜索页'}
+              : provider === 'liepin'
+                ? '猎聘学生身份首页（c.liepin.com）'
+                : '智联校园推荐页或主站搜索页'}
           并完成登录。填写启用远程调试后产生的描述文件路径和目标标签页 ID；连接时请在 Chrome
           确认授权。同一活动连接内不会逐次授权，重启 Worker 后需要重新连接。
           {provider === 'zhilian'
@@ -182,6 +186,9 @@ export function PlatformBrowser({
             : ''}
           {provider === '51job'
             ? '连接后在官网正常搜索或翻页，再读取官网批次。只观察所选页的职位请求，不自动操作浏览器；最多等待新批次 90 秒，不自行生成签名。更换查询请重新连接。'
+            : ''}
+          {provider === 'liepin'
+            ? '授权后请正常切换一次综合／最新排序，初始化最多等待 120 秒，不需要刷新。后续批次和详情通过 HTTP 获取，每次只取一批。查询条件和排序随连接固定，改动后请重新连接；暂不支持社招身份推荐或搜索。'
             : ''}
         </p>
         <form
@@ -240,7 +247,13 @@ export function PlatformBrowser({
               disabled={busy || active}
             />
             允许读取所选
-            {provider === 'boss' ? ' BOSS ' : provider === '51job' ? '前程无忧搜索' : '智联'}
+            {provider === 'boss'
+              ? ' BOSS '
+              : provider === '51job'
+                ? '前程无忧搜索'
+                : provider === 'liepin'
+                  ? '猎聘'
+                  : '智联'}
             页的最小登录上下文，仅在 Worker 内存使用；不保存 Cookie。
             {provider === '51job' ? '允许在活动连接期间持续观察该页的职位请求，直到断开。' : ''}
           </label>
@@ -271,6 +284,11 @@ export function PlatformBrowser({
           断开连接
         </button>
       </div>
+      <p>
+        获取前请在官网设置搜索条件及支持的排序；本次仅处理一页，不遍历全部结果。
+        {provider === 'boss' ? 'BOSS 当前仅接入推荐流，不提供搜索排序。' : ''}
+        详情失败或取消会停止后续请求，已入库职位保留；每次网络请求沿用平台连接器的间隔限制。
+      </p>
       {provider === '51job' && (
         <p>
           先在官网搜索或翻页，再读取该批。详情使用该批 JSON
@@ -309,64 +327,18 @@ export function PlatformBrowser({
           )}
         </p>
       )}
-      {!state.batch ? (
-        <p className={styles.empty}>
-          尚未读取{batchLabel}。连接成功后，点击“读取下一批{batchLabel}”。
+      {state.batch && (
+        <p>
+          {state.batch.savedCount === undefined
+            ? '历史批次未记录自动入库数量，请到职位页查看实际结果。'
+            : `最近成功批次已入库 ${String(state.batch.savedCount)} 条职位。`}
+          排除缺少公司身份的记录 {state.batch.skippedMissingCompanyId ?? 0} 条。
+          {state.batch.hasMore === false ? `已无更多${batchLabel}。` : ''}
         </p>
-      ) : (
-        <>
-          <p>
-            最近一批共 {state.batch.candidates?.length ?? 0} 条，排除缺少公司身份的记录{' '}
-            {state.batch.skippedMissingCompanyId ?? 0} 条。
-            {state.batch.hasMore === false ? `已无更多${batchLabel}。` : ''}
-          </p>
-          <ul className={styles.jobs} aria-label={`最近一批${batchLabel}`}>
-            {state.batch.candidates?.map((job) => (
-              <li key={job.externalJobId}>
-                <div>
-                  <h3>{job.title}</h3>
-                  <p>
-                    {job.company} · {job.city}
-                  </p>
-                  <p>{[job.salary, job.experience, job.education].filter(Boolean).join(' · ')}</p>
-                </div>
-                <div className={styles.actions}>
-                  {Object.hasOwn(state.saved, job.externalJobId) ? (
-                    <a
-                      className="button-primary"
-                      href={`/jobs/${String(state.saved[job.externalJobId])}`}
-                    >
-                      查看已保存职位
-                    </a>
-                  ) : (
-                    <>
-                      <span>仅摘要 · 尚未保存</span>
-                      <button
-                        type="button"
-                        className="button-secondary"
-                        disabled={disabled || !usable}
-                        onClick={() => {
-                          if (generation)
-                            void submit({
-                              action: 'detail',
-                              generation,
-                              externalJobId: job.externalJobId,
-                            });
-                        }}
-                      >
-                        读取详情并保存
-                      </button>
-                    </>
-                  )}
-                  <a href={job.sourceUrl} target="_blank" rel="noreferrer">
-                    官网原文（新标签页）
-                  </a>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </>
       )}
+      <a className="button-secondary" href={`/jobs?source=platform&provider=${provider}`}>
+        查看平台职位
+      </a>
       <p className={styles.note}>
         已保存职位进入统一职位库，可继续使用现有详情和匹配功能。不会因本次结果未出现而标记职位下架。
       </p>

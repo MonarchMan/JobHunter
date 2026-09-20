@@ -24,7 +24,9 @@ export default async function SourcesPage({
   const parameters = await searchParams;
   const selectedProvider = firstSearchParameter(parameters, 'provider');
   const provider =
-    selectedProvider === 'zhilian' || selectedProvider === '51job' ? selectedProvider : 'boss';
+    selectedProvider === 'zhilian' || selectedProvider === '51job' || selectedProvider === 'liepin'
+      ? selectedProvider
+      : 'boss';
   const channel: SourceChannel =
     firstSearchParameter(parameters, 'channel') === 'platform' ? 'platform' : 'official';
   const requestedPage = Number(firstSearchParameter(parameters, 'page') ?? '1');
@@ -101,6 +103,12 @@ export default async function SourcesPage({
               aria-current={provider === '51job' ? 'page' : undefined}
             >
               前程无忧 · 官网辅助
+            </a>
+            <a
+              href="/sources?channel=platform&provider=liepin"
+              aria-current={provider === 'liepin' ? 'page' : undefined}
+            >
+              猎聘 · 学生推荐
             </a>
           </nav>
           <PlatformBrowser

@@ -14,8 +14,11 @@ import { z } from 'zod';
 const id = z.uuidv7();
 const filterSchema = z
   .object({
+    sourceKind: z.enum(['official', 'platform']).optional(),
+    providerKey: z.enum(['boss', 'zhilian', '51job', 'liepin']).optional(),
     search: z.string().trim().min(1).max(200).optional(),
     companyIds: z.array(id).max(100).optional(),
+    companySelectors: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
     statuses: z
       .array(z.enum(['active', 'stale', 'closed']))
       .max(3)
@@ -125,6 +128,16 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       : 'NULL';
     const selectParameters: unknown[] = filter.profileVersionId ? [filter.profileVersionId] : [];
 
+    // 1、来源范围进入共同查询基表，确保列表、计数和分页不会串入其他渠道。
+    if (filter.sourceKind) {
+      innerConditions.push('source.source_kind = ?');
+      innerParameters.push(filter.sourceKind);
+    }
+    if (filter.providerKey) {
+      innerConditions.push('source.provider_key = ?');
+      innerParameters.push(filter.providerKey);
+    }
+
     if (filter.search) {
       innerConditions.push(
         `(j.title LIKE ? ESCAPE '!'
@@ -137,6 +150,14 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     if (filter.companyIds && filter.companyIds.length > 0) {
       innerConditions.push(`j.company_id IN (${placeholders(filter.companyIds.length)})`);
       innerParameters.push(...filter.companyIds);
+    }
+    if (filter.companySelectors?.length) {
+      // 1.a、名称匹配与来源条件共同过滤，允许同名但不同身份的公司，不做跨来源合并。
+      innerConditions.push(
+        `(${filter.companySelectors.map(() => `(company.id = ? OR lower(company.slug) = lower(?) OR lower(company.name) = lower(?) OR EXISTS (SELECT 1 FROM json_each(company.aliases_json) alias WHERE lower(alias.value) = lower(?)))`).join(' OR ')})`,
+      );
+      for (const selector of filter.companySelectors)
+        innerParameters.push(selector, selector, selector, selector);
     }
     if (filter.statuses && filter.statuses.length > 0) {
       innerConditions.push(`j.status IN (${placeholders(filter.statuses.length)})`);
@@ -193,6 +214,7 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
                ${scoreExpression} AS score
         FROM jobs j
         JOIN companies company ON company.id = j.company_id
+        JOIN job_sources source ON source.id = j.source_id
         ${innerConditions.length > 0 ? `WHERE ${innerConditions.join(' AND ')}` : ''}
       ) query
       ${outerConditions.length > 0 ? `WHERE ${outerConditions.join(' AND ')}` : ''}`;
