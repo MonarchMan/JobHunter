@@ -9,6 +9,7 @@
   "references": [
     { "path": "../agent-core" },
     { "path": "../domain" },
+    { "path": "../platform-core" },
     { "path": "../resume-template" },
     { "path": "../matching" },
     { "path": "../resume" },

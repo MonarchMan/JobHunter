@@ -22,6 +22,7 @@
     "@jobhunter/agent-core": "workspace:*",
     "@jobhunter/application": "workspace:*",
     "@jobhunter/domain": "workspace:*",
+    "@jobhunter/platform-core": "workspace:*",
     "@jobhunter/resume-template": "workspace:*",
     "@jobhunter/matching": "workspace:*",
     "@jobhunter/resume": "workspace:*",

@@ -1,0 +1,44 @@
+{
+  "templates": {
+    "list": {
+      "url": "https://fe-api.zhaopin.com/c/i/search/positions?at=fixture-at&rt=fixture-rt&platform=13&version=0.0.0&_v=0.1&x-zp-page-request-id=one&x-zp-page-request-id=two",
+      "headers": {
+        "x-zp-platform": "13",
+        "x-zp-business-system": "1",
+        "x-zp-page-code": "4089",
+        "Cookie": "fixture-cookie"
+      },
+      "body": "{\"S_SOU_FULL_INDEX\":\"Java\",\"S_SOU_WORK_CITY\":\"801\",\"S_SOU_WORK_EXPERIENCE\":\"0305\",\"order\":0,\"actionid\":\"fixture-action\",\"pageSize\":20,\"pageIndex\":1,\"cvNumber\":\"fixture-resume\",\"at\":\"fixture-at\",\"rt\":\"fixture-rt\",\"eventScenario\":\"pcSearchedSouSearch\",\"anonymous\":0,\"resumeNumber\":\"fixture-resume\",\"clickFilterBlackCompany\":false,\"platform\":13,\"version\":\"0.0.0\",\"sortType\":\"DEFAULT\"}"
+    },
+    "detail": {
+      "url": "https://fe-api.zhaopin.com/c/i/jobs/position-detailv3?number=CC_TEST&at=fixture-at&rt=fixture-rt&cvNumber=fixture-resume&resumeNumber=fixture-resume&identity=1&platform=13&version=0.0.0&_v=0.2",
+      "headers": { "x-zp-platform": "13", "x-zp-business-system": "1", "x-zp-page-code": "4089" }
+    }
+  },
+  "row": {
+    "number": "CC_TEST",
+    "name": "开发工程师",
+    "companyNumber": "CZ_TEST",
+    "companyName": "测试公司",
+    "workCity": "成都",
+    "salary60": "8000-14000元",
+    "education": "本科",
+    "workingExp": "3-5年"
+  },
+  "detail": {
+    "code": 200,
+    "apiCode": 200,
+    "data": {
+      "detailedPosition": {
+        "positionNumber": "CC_TEST",
+        "positionName": "开发工程师",
+        "positionWorkCity": "成都",
+        "positionWorkingExp": "3-5年",
+        "salary": "8000-14000元",
+        "education": "本科",
+        "jobDesc": "<div>负责研发。<br><div>完成测试。</div></div>"
+      },
+      "detailedCompany": { "companyNumber": "CZ_TEST", "companyName": "测试公司" }
+    }
+  }
+}

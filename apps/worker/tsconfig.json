@@ -7,6 +7,7 @@
   },
   "include": ["src/**/*.ts"],
   "references": [
+    { "path": "../../packages/platform-connectors" },
     { "path": "../../packages/agent-core" },
     { "path": "../../packages/domain" },
     { "path": "../../packages/application" },

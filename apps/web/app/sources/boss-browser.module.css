@@ -1,0 +1,82 @@
+.workspace {
+  margin-top: 1.5rem;
+}
+.header,
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.header h2,
+.jobs h3 {
+  margin: 0;
+}
+.header p,
+.jobs p,
+.note {
+  color: var(--muted-ink);
+}
+.connection {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+}
+.connection summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.form {
+  display: grid;
+  gap: 1rem;
+  max-width: 48rem;
+}
+.form label {
+  display: grid;
+  gap: 0.5rem;
+}
+.form input:not([type='checkbox']) {
+  width: 100%;
+  min-width: 0;
+}
+.form .consent {
+  display: flex;
+  align-items: start;
+}
+.consent input {
+  width: 1.125rem;
+  height: 1.125rem;
+  min-height: 0;
+  flex: 0 0 auto;
+  margin-top: 0.25rem;
+}
+.form button {
+  justify-self: start;
+}
+.actions {
+  justify-content: start;
+}
+.jobs {
+  list-style: none;
+  padding: 0;
+}
+.jobs li {
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.empty {
+  padding: 2rem 0;
+  color: var(--muted-ink);
+}
+.note {
+  margin-top: 2rem;
+}
+@media (max-width: 600px) {
+  .header {
+    align-items: start;
+    flex-direction: column;
+  }
+}

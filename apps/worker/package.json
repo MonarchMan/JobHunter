@@ -14,6 +14,7 @@
     "dist"
   ],
   "dependencies": {
+    "@jobhunter/platform-connectors": "workspace:*",
     "@jobhunter/agent-core": "workspace:*",
     "@jobhunter/application": "workspace:*",
     "@jobhunter/db": "workspace:*",

@@ -9,6 +9,14 @@
 
 本文档定义 JobHunter 的目标 SQLite 数据模型，是 Drizzle Schema、迁移、Repository、清理、备份和集成测试的共同依据。本文只描述业务表；SQLite 自身的 `sqlite_*`、Drizzle 迁移表等内部对象不属于业务数据模型。
 
+### 招聘平台目标模型增量（设计已确定，尚未迁移）
+
+[ADR-0025](../adr/0025-platform-browsing-and-unified-job-lifecycle.md) 与 [028 设计](../../specs/028-recruitment-platforms/design.md) 扩展下文官网基线约束：job_sources 新增 official/platform 类别，官网 company_id、channel_id 非空，平台两者为空且不适用 coverage_role；用 CHECK 限制分支，不放松既有官网不变量。平台招聘公司由职位解析，经 provider_key + external_company_id 的唯一身份映射关联 companies，不把平台当公司。
+
+新增 platform_connections 仅存非敏感配置、generation 和脱敏连接状态；凭据、私有游标、推荐上下文不入库。jobs、job_revisions 与匹配沿用正式事实模型，不建平台职位缓存表；jobs 增加核验及用户交互时间供保留策略使用。job_observations 归属为 sync_run_id 或 platform_task_id，外键与 CHECK 保证恰有一种；平台不写 sync_seen_jobs 或伪同步运行。首次职位写入在同一短事务内保存修订、相应观察与状态事件，已见标记只适用于官网同步。
+
+平台清理使用更短的可配置保留期限和独立检查频率，不以来源缺失推导下架。收藏、投递、面试准备、笔记及当前任务引用优先保护；删除前事务内重检，观察对任务的引用也须纳入清理排序。正式职位清理不是缓存淘汰，物理压缩仍遵守 ADR-0020。以下表中尚未扩展的非空及同步归属约束描述官网现有基线，平台迁移以本增量和 028 设计为准。
+
 设计优先级如下：
 
 1. 只保存产品确实读取、约束或无法合理重建的数据。

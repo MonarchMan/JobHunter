@@ -24,3 +24,5 @@ export * from './repositories/resume-draft-repository.js';
 export * from './settings.js';
 export * from './maintenance-gate.js';
 export * from './seeding/source-catalog.js';
+export * from './platform-repository.js';
+export * from './platform-activity-repository.js';

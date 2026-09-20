@@ -10,6 +10,8 @@
     "pnpm": ">=11 <12"
   },
   "scripts": {
+    "boss": "tsx apps/cli/src/platform-main.ts",
+    "platform": "tsx apps/cli/src/platform-main.ts",
     "preinstall": "node scripts/check-node-version.mjs",
     "build": "tsc -b",
     "clean": "node scripts/clean.mjs",

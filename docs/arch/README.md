@@ -1,6 +1,7 @@
 # 架构文档索引
 
 - [总体架构](./overall-arch.md)：系统范围、模块、运行时和演进基线。
+- [招聘平台来源与按需浏览](./recruitment-platforms.md)：最小会话借用、HTTP 优先、统一正式职位库与差异化保留清理（设计已确定，尚未实现）。
 - [数据模型与 SQLite 表设计](./data-model.md)：表、约束、索引、事务、保留和迁移。
 - [Worker、任务队列与并发设计](./worker-and-concurrency.md)：任务状态、领取、租约、调度、重试和恢复。
 - [Agent、画像与匹配设计](./agent-and-matching.md)：Agent 协议、版本、缓存、画像合并、评分和评测。

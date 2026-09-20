@@ -8,6 +8,8 @@ const packageNames = [
   'observability',
   'resume',
   'source-core',
+  'platform-core',
+  'platform-connectors',
   'sources',
   'testkit',
 ];
@@ -46,7 +48,7 @@ module.exports = {
       comment: 'Infrastructure implements application ports and is composed by apps.',
       severity: 'error',
       from: { path: '^packages/application/' },
-      to: { path: '^packages/(db|sources|llm|observability)/' },
+      to: { path: '^packages/(db|sources|platform-connectors|llm|observability)/' },
     },
     {
       name: 'apps-use-package-exports',

@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { JobStatus } from '../job-status.js';
+import { JobViewActivity } from '../job-view-activity.js';
 import { getWebContainer } from '../../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../../src/server/job-query.js';
 import { JobScoreAction } from '../job-score-action.js';
@@ -58,6 +59,7 @@ export default async function JobDetailPage({
   }
   return (
     <main id="main-content" tabIndex={-1}>
+      <JobViewActivity key={job.id} jobId={job.id} />
       <a className={styles.backLink} href={returnHref}>
         ← 返回职位列表
       </a>

@@ -38,3 +38,6 @@ export * from './maintenance-gate.js';
 export * from './busy-error.js';
 export * from './sqlite-maintenance-repository.js';
 export * from './unit-of-work.js';
+export { SqlitePlatformRepository } from './platform-repository.js';
+export * from './platform-retention-repository.js';
+export * from './platform-activity-repository.js';

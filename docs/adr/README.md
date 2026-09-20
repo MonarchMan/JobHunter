@@ -1,5 +1,7 @@
 # 架构决策记录索引
 
+- [ADR-0028：智联校园使用已观察请求模板初始化 HTTP 会话](./0028-zhilian-observed-request-template.md)
+
 - [ADR-0022：简历编辑画布的 WebKit 事件边界](./0022-resume-studio-webkit-event-boundary.md)
 
 - [ADR-0001：TypeScript 模块化单体（已被 ADR-0007 替代）](./0001-typescript-modular-monolith.md)
@@ -29,3 +31,7 @@ ADR 一经 Accepted 不直接改写历史结论；需要改变决策时新增 AD
 - [ADR-0021：Agent 业务校验与评分阶段恢复](./0021-agent-output-validation-and-score-recovery.md)
 - [ADR-0023：官网原始请求运行时驱动](./0023-official-runtime-source-driver.md)
 - [ADR-0024：列表无正文时先取得必需详情再入库](./0024-required-job-detail.md)
+- [ADR-0025：招聘平台按需读取与统一职位生命周期](./0025-platform-browsing-and-unified-job-lifecycle.md)
+- [ADR-0026：平台 CDP 连接与用户活动会话同寿命](./0026-platform-cdp-session-lifetime.md)
+- [ADR-0027：平台实例隔离与显式浏览活动](./0027-platform-isolation-and-view-activity.md)
+- [ADR-0029：前程无忧按官网已观察批次执行独立 HTTP](./0029-job51-observed-batch-session.md)

@@ -3,6 +3,8 @@
   "references": [
     { "path": "./packages/domain" },
     { "path": "./packages/source-core" },
+    { "path": "./packages/platform-core" },
+    { "path": "./packages/platform-connectors" },
     { "path": "./packages/agent-core" },
     { "path": "./packages/resume" },
     { "path": "./packages/resume-template" },

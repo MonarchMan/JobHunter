@@ -56,3 +56,7 @@ export * from './tasks/task-service.js';
 export * from './tasks/web-diagnostics-service.js';
 export * from './settings/index.js';
 export { ResumeMediaError } from '@jobhunter/resume';
+export * from './platforms.js';
+export * from './web-platforms.js';
+export * from './platform-retention.js';
+export * from './platform-activity.js';

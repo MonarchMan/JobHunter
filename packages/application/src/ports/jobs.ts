@@ -21,7 +21,8 @@ export interface PersistJobMutation {
   readonly sourcePayloadHash: ContentHash;
   readonly sourceUrl: string;
   readonly normalizerVersion: string;
-  readonly syncRunId: SyncRunId;
+  readonly syncRunId: SyncRunId | null;
+  readonly platformTaskId?: string;
   readonly observedAt: UtcInstant;
 }
 
@@ -62,7 +63,8 @@ export interface JobRepository {
   }): void;
   recordObservation(input: {
     readonly jobId: JobId;
-    readonly syncRunId: SyncRunId;
+    readonly syncRunId: SyncRunId | null;
+    readonly platformTaskId?: string;
     readonly jobRevisionId: JobRevisionId;
     readonly observedAt: UtcInstant;
   }): void;

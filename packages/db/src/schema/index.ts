@@ -64,15 +64,13 @@ export const jobSources = sqliteTable(
   'job_sources',
   {
     id: text().primaryKey(),
-    companyId: text('company_id')
-      .notNull()
-      .references(() => companies.id, { onDelete: 'restrict' }),
-    channelId: text('channel_id')
-      .notNull()
-      .references(() => sourceChannels.id, { onDelete: 'restrict' }),
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'restrict' }),
+    channelId: text('channel_id').references(() => sourceChannels.id, { onDelete: 'restrict' }),
     slug: text().notNull().unique(),
     adapterKey: text('adapter_key').notNull().unique(),
-    coverageRole: text('coverage_role').notNull().default('required'),
+    coverageRole: text('coverage_role').default('required'),
+    sourceKind: text('source_kind').notNull().default('official'),
+    providerKey: text('provider_key'),
     baseUrl: text('base_url').notNull(),
     configJson: jsonText('config_json').notNull().default('{}'),
     syncPolicyVersion: text('sync_policy_version').notNull(),
@@ -93,6 +91,11 @@ export const jobSources = sqliteTable(
   },
   (table) => [
     check('job_sources_enabled_check', sql`${table.enabled} in (0, 1)`),
+    check('job_sources_kind_check', sql`${table.sourceKind} in ('official', 'platform')`),
+    check(
+      'job_sources_owner_check',
+      sql`(${table.sourceKind} = 'official' and ${table.companyId} is not null and ${table.channelId} is not null and ${table.coverageRole} is not null and ${table.providerKey} is null) or (${table.sourceKind} = 'platform' and ${table.companyId} is null and ${table.channelId} is null and ${table.coverageRole} is null and ${table.providerKey} is not null)`,
+    ),
     check(
       'job_sources_coverage_role_check',
       sql`${table.coverageRole} in ('required', 'supplemental')`,
@@ -106,6 +109,27 @@ export const jobSources = sqliteTable(
       sql`${table.healthStatus} in ('unknown', 'healthy', 'degraded', 'unhealthy')`,
     ),
   ],
+);
+
+/** 平台连接仅持久化代次与脱敏状态，不保存认证上下文。 */
+export const platformConnections = sqliteTable('platform_connections', {
+  providerKey: text('provider_key').primaryKey(),
+  generation: integer().notNull(),
+  status: text().notNull(),
+  updatedAt: epoch('updated_at').notNull(),
+});
+
+/** 平台外部公司身份不依赖公司名称，也不隐式合并官网身份。 */
+export const companyExternalIdentities = sqliteTable(
+  'company_external_identities',
+  {
+    providerKey: text('provider_key').notNull(),
+    externalCompanyId: text('external_company_id').notNull(),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'restrict' }),
+  },
+  (table) => [primaryKey({ columns: [table.providerKey, table.externalCompanyId] })],
 );
 
 /** 一次职位来源同步运行及覆盖统计。 */
@@ -298,6 +322,7 @@ export const jobs = sqliteTable(
     contentHash: text('content_hash').notNull(),
     firstSeenAt: epoch('first_seen_at').notNull(),
     lastSeenAt: epoch('last_seen_at').notNull(),
+    lastInteractedAt: epoch('last_interacted_at'),
     closedAt: epoch('closed_at'),
     createdAt: epoch('created_at').notNull(),
     updatedAt: epoch('updated_at').notNull(),
@@ -345,16 +370,20 @@ export const jobObservations = sqliteTable(
     jobId: text('job_id')
       .notNull()
       .references(() => jobs.id, { onDelete: 'cascade' }),
-    syncRunId: text('sync_run_id')
-      .notNull()
-      .references(() => syncRuns.id, { onDelete: 'restrict' }),
+    syncRunId: text('sync_run_id').references(() => syncRuns.id, { onDelete: 'restrict' }),
+    platformTaskId: text('platform_task_id').references(() => tasks.id, { onDelete: 'restrict' }),
     jobRevisionId: text('job_revision_id')
       .notNull()
       .references(() => jobRevisions.id, { onDelete: 'restrict' }),
     observedAt: epoch('observed_at').notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.jobId, table.syncRunId] }),
+    unique('job_observations_sync_unique').on(table.jobId, table.syncRunId),
+    unique('job_observations_platform_unique').on(table.jobId, table.platformTaskId),
+    check(
+      'job_observations_owner_check',
+      sql`(${table.syncRunId} is not null and ${table.platformTaskId} is null) or (${table.syncRunId} is null and ${table.platformTaskId} is not null)`,
+    ),
     index('job_observations_revision_idx').on(table.jobRevisionId, table.observedAt),
   ],
 );

@@ -1,4 +1,9 @@
 import {
+  WebBossService,
+  WebPlatformService,
+  PlatformActivityService,
+  createPlatformTaskHandler,
+  createPlatformRetentionTaskHandler,
   CandidateProfileService,
   DashboardQueryService,
   createJobAdviceTaskHandler,
@@ -48,6 +53,8 @@ import {
 import { AgentRunner, type ModelClient } from '@jobhunter/agent-core';
 import {
   openSqliteDatabase,
+  SqlitePlatformRepository,
+  SqlitePlatformActivityRepository,
   SqliteAgentRunStore,
   SqliteCandidateProfileRepository,
   SqliteCompanyLookupRepository,
@@ -81,6 +88,10 @@ import { createRetryableSingleton } from './retryable-singleton.js';
 
 /** 模块数据结构或契约。 */
 export interface WebApplicationServices {
+  readonly platformActivity: PlatformActivityService;
+  readonly boss: WebBossService;
+  readonly zhilian: WebPlatformService;
+  readonly '51job': WebPlatformService;
   readonly dashboard: DashboardQueryService;
   readonly jobs: JobQueryService;
   readonly webJobs: WebJobQueryService;
@@ -132,6 +143,19 @@ export function createLocalWebContainer(
     });
     settings.applySourceSyncChannelSelection();
     const registry = new HandlerRegistry();
+    registry.register(
+      createPlatformRetentionTaskHandler({
+        execute: () => {
+          throw new Error('Worker required.');
+        },
+      }),
+    );
+    for (const provider of ['boss', 'zhilian', '51job'] as const)
+      registry.register(
+        createPlatformTaskHandler(provider, {
+          execute: () => Promise.reject(new Error('Web process cannot connect to platforms.')),
+        }),
+      );
     const artifacts = new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value);
     const interviewRepository = new SqliteInterviewProjectRepository(database.client);
     const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
@@ -262,6 +286,20 @@ export function createLocalWebContainer(
     });
     sourceSchedules.reconcile();
     const services: WebApplicationServices = {
+      boss: new WebBossService(new SqlitePlatformRepository(database.client), tasks),
+      '51job': new WebPlatformService(
+        new SqlitePlatformRepository(database.client, '51job'),
+        tasks,
+        '51job',
+      ),
+      zhilian: new WebPlatformService(
+        new SqlitePlatformRepository(database.client, 'zhilian'),
+        tasks,
+        'zhilian',
+      ),
+      platformActivity: new PlatformActivityService(
+        new SqlitePlatformActivityRepository(database.client),
+      ),
       dashboard: new DashboardQueryService(new SqliteDashboardReadModel(database.client)),
       jobs,
       webJobs: new WebJobQueryService(jobs),

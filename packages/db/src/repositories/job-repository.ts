@@ -189,6 +189,7 @@ export class SqliteJobRepository implements JobRepository {
     this.recordObservation({
       jobId: input.jobId,
       syncRunId: input.syncRunId,
+      ...(input.platformTaskId ? { platformTaskId: input.platformTaskId } : {}),
       jobRevisionId: parseId(input.revisionId, 'JobRevision'),
       observedAt: input.observedAt,
     });
@@ -248,17 +249,25 @@ export class SqliteJobRepository implements JobRepository {
   /** 执行数据库组件对外暴露的操作。 */
   public recordObservation(input: {
     readonly jobId: JobId;
-    readonly syncRunId: SyncRunId;
+    readonly syncRunId: SyncRunId | null;
+    readonly platformTaskId?: string;
     readonly jobRevisionId: Parameters<JobRepository['recordObservation']>[0]['jobRevisionId'];
     readonly observedAt: UtcInstant;
   }): void {
     this.#client
       .prepare(
-        `INSERT INTO job_observations (job_id, sync_run_id, job_revision_id, observed_at)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(job_id, sync_run_id) DO NOTHING`,
+        `INSERT INTO job_observations (job_id, sync_run_id, job_revision_id, observed_at, platform_task_id)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT DO NOTHING`,
       )
-      .run(input.jobId, input.syncRunId, input.jobRevisionId, input.observedAt);
+      .run(
+        input.jobId,
+        input.syncRunId,
+        input.jobRevisionId,
+        input.observedAt,
+        input.platformTaskId ?? null,
+      );
+    if (input.syncRunId === null) return;
     this.#client
       .prepare(
         'INSERT INTO sync_seen_jobs (sync_run_id, job_id) VALUES (?, ?) ON CONFLICT DO NOTHING',

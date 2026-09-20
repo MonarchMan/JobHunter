@@ -1,4 +1,9 @@
 import {
+  createPlatformRetentionTaskHandler,
+  BossPlatformService,
+  PlatformBrowsingService,
+  createPlatformTaskHandler,
+  createBossPlatformTaskHandler,
   CandidateProfileService,
   AsyncSemaphore,
   AsyncSemaphoreCancelledError,
@@ -45,6 +50,8 @@ import {
 import { AgentRunner, ModelClientError, type ModelClient } from '@jobhunter/agent-core';
 import {
   defaultMatchRulesetId,
+  SqlitePlatformRepository,
+  SqlitePlatformRetentionRepository,
   openSqliteDatabase,
   isSqliteUnavailableError,
   SqliteArtifactStore,
@@ -74,6 +81,11 @@ import {
   type IdGenerator,
 } from '@jobhunter/domain';
 import { createConfiguredModelClient } from '@jobhunter/llm';
+import {
+  BossCdpSessionProvider,
+  ZhilianCdpSessionProvider,
+  Job51CdpSessionProvider,
+} from '@jobhunter/platform-connectors';
 import { TesseractResumeOcrEngine } from '@jobhunter/resume';
 import {
   AdapterRegistry,
@@ -325,6 +337,27 @@ export function createProductionWorkerApplication(input: {
     options: { normalizerVersion: 'normalize-v1' },
   });
   const registry = new HandlerRegistry();
+  const boss = new BossPlatformService(
+    new BossCdpSessionProvider(),
+    new SqlitePlatformRepository(database.client),
+  );
+  registry.register(createBossPlatformTaskHandler(boss));
+  const zhilian = new PlatformBrowsingService(
+    new ZhilianCdpSessionProvider(),
+    new SqlitePlatformRepository(database.client, 'zhilian'),
+  );
+  registry.register(createPlatformTaskHandler('zhilian', zhilian));
+  const job51 = new PlatformBrowsingService(
+    new Job51CdpSessionProvider(),
+    new SqlitePlatformRepository(database.client, '51job'),
+  );
+  registry.register(createPlatformTaskHandler('51job', job51));
+  registry.register(
+    createPlatformRetentionTaskHandler(new SqlitePlatformRetentionRepository(database.client)),
+  );
+  boss.initialize();
+  zhilian.initialize();
+  job51.initialize();
   const interviewRepository = new SqliteInterviewProjectRepository(database.client);
   const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
   const interviewArtifacts = new SqliteArtifactStore(database.client, input.dataRoot);
@@ -526,6 +559,14 @@ export function createProductionWorkerApplication(input: {
   const scheduleService = new ScheduleService({ queue, clock, ids }, registry);
   scheduleService.upsert({
     id: ids.generate(),
+    scheduleKey: 'platform-retention-hourly',
+    taskType: 'platform.retention',
+    payload: { action: 'run' },
+    cronExpression: '35 * * * *',
+    timezone: 'Asia/Shanghai',
+  });
+  scheduleService.upsert({
+    id: ids.generate(),
     scheduleKey: 'resume-export-cleanup-hourly',
     taskType: 'resume.export.cleanup@v1',
     payload: {},
@@ -572,6 +613,9 @@ export function createProductionWorkerApplication(input: {
       if (closed) return;
       closed = true;
       maintenanceAbort.abort();
+      boss.close();
+      zhilian.close();
+      job51.close();
       if (runtimeMetrics) clearInterval(runtimeMetrics);
       eventLoopDelay?.disable();
       await engine.shutdown();

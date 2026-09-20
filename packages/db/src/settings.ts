@@ -1,6 +1,7 @@
 import { canonicalJson, type UtcInstant } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
+import { platformRetentionStateSchema } from '@jobhunter/application';
 import { PersistenceError } from './errors.js';
 
 /** 数据库查询结果对应的行结构。 */
@@ -45,6 +46,7 @@ export class SettingsRegistry {
 
 /** 系统默认设置注册表。 */
 export const defaultSettingsRegistry = new SettingsRegistry([
+  { key: 'platform.retention', schemaVersion: '1', schema: platformRetentionStateSchema },
   {
     key: 'ui.jobList',
     schemaVersion: '1',

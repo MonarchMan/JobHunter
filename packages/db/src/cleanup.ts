@@ -29,7 +29,7 @@ export class SqliteCleanupRepository implements CleanupRepository {
       .prepare(
         `SELECT json_array(job_id, sync_run_id) AS id, NULL AS relative_path,
                 NULL AS byte_size, observed_at AS created_at
-         FROM job_observations WHERE observed_at < ?`,
+         FROM job_observations WHERE observed_at < ? AND sync_run_id IS NOT NULL`,
       )
       .all(cutoffs.observationsBefore) as CandidateRow[];
     const sourceDetails = this.#client

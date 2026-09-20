@@ -198,8 +198,34 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      34,
+      36,
     );
+  });
+
+  it('expands provider isolation without changing the existing BOSS connection', async () => {
+    const root = await createTemporaryDataRoot('platform-provider-upgrade-');
+    dataRoots.push(root);
+    const folder = await migrationsBefore(root.path, 'before-provider-isolation', 35);
+    const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+    legacy.client
+      .prepare("INSERT INTO platform_connections VALUES ('boss',7,'available',123)")
+      .run();
+    legacy.close();
+    const upgraded = openSqliteDatabase({ dataRoot: root.path });
+    handles.push(upgraded);
+    expect(
+      upgraded.client.prepare("SELECT * FROM platform_connections WHERE provider_key='boss'").get(),
+    ).toEqual({ provider_key: 'boss', generation: 7, status: 'available', updated_at: 123 });
+    for (const key of ['zhilian', '51job', 'liepin'])
+      upgraded.client
+        .prepare("INSERT INTO platform_connections VALUES (?,1,'disconnected',123)")
+        .run(key);
+    expect(() =>
+      upgraded.client
+        .prepare("INSERT INTO platform_connections VALUES ('unknown',1,'disconnected',123)")
+        .run(),
+    ).toThrow();
+    expect(upgraded.client.pragma('foreign_key_check')).toEqual([]);
   });
 
   it('destructively resets legacy cleanup schedule payloads to current defaults', async () => {

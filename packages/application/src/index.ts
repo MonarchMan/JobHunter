@@ -10,3 +10,7 @@ export * from './tasks/index.js';
 export * from './contracts/index.js';
 export * from './dashboard/index.js';
 export * from './settings/index.js';
+export * from './platforms.js';
+export * from './web-platforms.js';
+export * from './platform-retention.js';
+export * from './platform-activity.js';

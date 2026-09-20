@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./platform-contracts": {
+      "types": "./dist/contracts/platform-retention.d.ts",
+      "import": "./dist/contracts/platform-retention.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
@@ -18,6 +22,7 @@
     "dist"
   ],
   "dependencies": {
+    "@jobhunter/platform-core": "workspace:*",
     "@jobhunter/agent-core": "workspace:*",
     "@jobhunter/domain": "workspace:*",
     "@jobhunter/matching": "workspace:*",

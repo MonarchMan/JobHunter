@@ -21,6 +21,10 @@ Worker 内部包含：
 
 ## 2. 任务状态机
 
+招聘平台新增连接、单批浏览和详情短任务，见 [平台架构](./recruitment-platforms.md) 与 [028 设计](../../specs/028-recruitment-platforms/design.md)。首版单 Worker；Cookie 与私有游标只留内存，持久任务仅含非敏感 ID。连接代次、查询版本和取消状态在写入前核验；同浏览会话串行推进，每次用户请求最多一批，不后台遍历。重启后要求重新连接或重新开始浏览，不将内存凭据写进持久队列以便恢复。
+
+平台正常职位保留清理复用现有 Worker 运维任务与 SQLite 维护保护；自动删除须显式启用，执行前重检业务引用。平台按需任务不启动官网缺失下架流程。
+
 ```mermaid
 stateDiagram-v2
     [*] --> pending: enqueue

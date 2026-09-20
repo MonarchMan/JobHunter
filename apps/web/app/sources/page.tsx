@@ -9,6 +9,7 @@ import { webPagination, type WebSourceChannel } from '@jobhunter/application/web
 import { CompanySourceCard } from './company-source-card.js';
 import { SourceChannelSyncAction } from './source-actions.js';
 import styles from './page.module.css';
+import { PlatformBrowser } from './platform-browser.js';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '招聘来源' };
@@ -21,6 +22,9 @@ export default async function SourcesPage({
   searchParams,
 }: SourcesPageProperties): Promise<ReactElement> {
   const parameters = await searchParams;
+  const selectedProvider = firstSearchParameter(parameters, 'provider');
+  const provider =
+    selectedProvider === 'zhilian' || selectedProvider === '51job' ? selectedProvider : 'boss';
   const channel: SourceChannel =
     firstSearchParameter(parameters, 'channel') === 'platform' ? 'platform' : 'official';
   const requestedPage = Number(firstSearchParameter(parameters, 'page') ?? '1');
@@ -78,16 +82,33 @@ export default async function SourcesPage({
         </section>
       ) : null}
       {channel === 'platform' ? (
-        <section className="empty-state page-empty-state" aria-labelledby="platform-empty-title">
-          <span className="empty-state-icon" aria-hidden="true">
-            ✦
-          </span>
-          <h2 id="platform-empty-title">招聘平台来源暂未接入</h2>
-          <p>当前先支持企业官网来源。后续接入招聘平台后，相关来源会集中展示在这里。</p>
-          <a className="button-secondary" href="/sources">
-            查看官网来源
-          </a>
-        </section>
+        <>
+          <nav aria-label="招聘平台选择" className={styles.toolbar}>
+            <a
+              href="/sources?channel=platform&provider=boss"
+              aria-current={provider === 'boss' ? 'page' : undefined}
+            >
+              BOSS 直聘
+            </a>
+            <a
+              href="/sources?channel=platform&provider=zhilian"
+              aria-current={provider === 'zhilian' ? 'page' : undefined}
+            >
+              智联招聘 · 校园／社招
+            </a>
+            <a
+              href="/sources?channel=platform&provider=51job"
+              aria-current={provider === '51job' ? 'page' : undefined}
+            >
+              前程无忧 · 官网辅助
+            </a>
+          </nav>
+          <PlatformBrowser
+            key={provider}
+            provider={provider}
+            initial={container.services[provider].snapshot()}
+          />
+        </>
       ) : officialCompanies.length === 0 ? (
         <section className="empty-state page-empty-state" aria-labelledby="sources-empty-title">
           <span className="empty-state-icon" aria-hidden="true">

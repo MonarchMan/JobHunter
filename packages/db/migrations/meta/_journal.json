@@ -239,6 +239,20 @@
       "when": 1788580000000,
       "tag": "0033_sqlite_maintenance",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789830000000,
+      "tag": "0034_platform_sources",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1789837200000,
+      "tag": "0035_platform_provider_isolation",
+      "breakpoints": true
     }
   ]
 }
