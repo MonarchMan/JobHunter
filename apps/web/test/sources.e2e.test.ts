@@ -2,12 +2,24 @@ import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application
 import { openSqliteDatabase } from '@jobhunter/db';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { parseId } from '@jobhunter/domain';
+import { firstPartySourceCatalog } from '@jobhunter/sources';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 
 const companyId = '018f0000-0000-7000-8f00-00000000f901';
 const channelId = '018f0000-0000-7000-8f00-00000000f902';
 const sourceId = '018f0000-0000-7000-8f00-00000000f903';
+
+/** 目录增长不改变启动幂等契约；数量按逻辑渠道与物理来源各自核对。 */
+const catalogCounts = {
+  companies: new Set(firstPartySourceCatalog.map((entry) => entry.company.id)).size,
+  channels: firstPartySourceCatalog.length,
+  sources: firstPartySourceCatalog.flatMap((entry) => entry.sources).length,
+  enabled: firstPartySourceCatalog
+    .filter((entry) => entry.channel.enabledByDefault)
+    .flatMap((entry) => entry.sources)
+    .filter((source) => source.enabledByDefault).length,
+};
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 function seedSource(dataRoot: string): void {
@@ -291,7 +303,9 @@ describe('Web source management', () => {
 
       const initial = openSqliteDatabase({ dataRoot: root.path });
       try {
-        expect(initial.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(47);
+        expect(initial.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(
+          catalogCounts.sources,
+        );
         expect(
           initial.client
             .prepare(
@@ -330,12 +344,18 @@ describe('Web source management', () => {
 
       const database = openSqliteDatabase({ dataRoot: root.path });
       try {
-        expect(database.client.prepare('SELECT count(*) FROM companies').pluck().get()).toBe(15);
-        expect(database.client.prepare('SELECT count(*) FROM source_channels').pluck().get()).toBe(
-          45,
+        expect(database.client.prepare('SELECT count(*) FROM companies').pluck().get()).toBe(
+          catalogCounts.companies,
         );
-        expect(database.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(47);
-        expect(database.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(47);
+        expect(database.client.prepare('SELECT count(*) FROM source_channels').pluck().get()).toBe(
+          catalogCounts.channels,
+        );
+        expect(database.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(
+          catalogCounts.sources,
+        );
+        expect(database.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(
+          catalogCounts.sources,
+        );
         expect(
           database.client
             .prepare('SELECT DISTINCT channel FROM source_channels WHERE enabled = 1')
@@ -382,7 +402,9 @@ describe('Web source management', () => {
       try {
         const schedules = openSqliteDatabase({ dataRoot: root.path });
         try {
-          expect(schedules.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(48);
+          expect(schedules.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(
+            catalogCounts.sources + 1,
+          );
           expect(
             schedules.client
               .prepare(
@@ -390,7 +412,7 @@ describe('Web source management', () => {
               )
               .pluck()
               .get(),
-          ).toBe(16);
+          ).toBe(catalogCounts.enabled + 1);
         } finally {
           schedules.close();
         }

@@ -53,6 +53,26 @@
   color: var(--primary-hover);
 }
 
+/* 四平台属于第二级导航，窄屏使用两列，避免长名称碎片化。 */
+.platformTabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 1.25rem;
+}
+
+.platformTabs .tab {
+  justify-content: center;
+  min-width: 0;
+  padding: 0.65rem 0.5rem;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .platformTabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 600px) {
   .tabs {
     display: flex;
@@ -65,5 +85,10 @@
   .tab {
     flex: 1 0 auto;
     justify-content: center;
+  }
+
+  .platformTabs {
+    display: grid;
+    overflow: visible;
   }
 }

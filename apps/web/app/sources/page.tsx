@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { PageHeader } from '../components/layout/page-header.js';
 import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
-import { SourceTabs, type SourceChannel } from './source-tabs.js';
+import { PlatformTabs, SourceTabs, type SourceChannel } from './source-tabs.js';
 import { Pagination } from '../components/lists/pagination.js';
 import { webPagination, type WebSourceChannel } from '@jobhunter/application/web';
 import { CompanySourceCard } from './company-source-card.js';
@@ -85,32 +85,7 @@ export default async function SourcesPage({
       ) : null}
       {channel === 'platform' ? (
         <>
-          <nav aria-label="招聘平台选择" className={styles.toolbar}>
-            <a
-              href="/sources?channel=platform&provider=boss"
-              aria-current={provider === 'boss' ? 'page' : undefined}
-            >
-              BOSS 直聘
-            </a>
-            <a
-              href="/sources?channel=platform&provider=zhilian"
-              aria-current={provider === 'zhilian' ? 'page' : undefined}
-            >
-              智联招聘 · 校园／社招
-            </a>
-            <a
-              href="/sources?channel=platform&provider=51job"
-              aria-current={provider === '51job' ? 'page' : undefined}
-            >
-              前程无忧 · 官网辅助
-            </a>
-            <a
-              href="/sources?channel=platform&provider=liepin"
-              aria-current={provider === 'liepin' ? 'page' : undefined}
-            >
-              猎聘 · 学生推荐
-            </a>
-          </nav>
+          <PlatformTabs active={provider} />
           <PlatformBrowser
             key={provider}
             provider={provider}

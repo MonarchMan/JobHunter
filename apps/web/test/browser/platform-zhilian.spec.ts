@@ -48,7 +48,7 @@ test('Zhilian API enforces CSRF, rejects private fields and isolates identical t
   expect(data.data.task.id).toBe(first.taskId);
   expect(JSON.stringify(rawSnapshot)).not.toContain('/fixture');
   expect((await request.get('/api/platforms/51job')).status()).toBe(200);
-  expect((await request.get('/api/platforms/liepin')).status()).toBe(404);
+  expect((await request.get('/api/platforms/liepin')).status()).toBe(200);
 });
 
 /** 共享组件覆盖校园／社招入口、保存反馈、失败恢复与平台切换。 */
@@ -90,7 +90,7 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
         saved: {},
         task: { id: 'task', status: 'succeeded', error: null },
       };
-    else if (input.command.action === 'next')
+    else if (input.command.action === 'acquire')
       state = {
         ...state,
         batch: {
@@ -107,33 +107,33 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
     route.fulfill({ json: { data: { connection: null, batch: null, saved: {}, task: null } } }),
   );
   await page.goto('/sources?channel=platform&provider=zhilian');
+  await page.getByText('高级连接设置', { exact: true }).click();
   await expect(page.getByRole('heading', { name: '智联招聘 · 校园／社招' })).toBeVisible();
   await expect(page.getByText('查询随连接固定', { exact: false })).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();
   await page.getByLabel('调试描述文件绝对路径').fill('/fixture/DevToolsActivePort');
-  await page.getByLabel('目标标签页 ID').fill('fixture');
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByRole('button', { name: '确认上次提交' })).toBeVisible();
   await page.getByRole('button', { name: '确认上次提交' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: '读取下一批职位' })).toBeEnabled({
+  await expect(page.getByRole('button', { name: '获取职位' })).toBeEnabled({
     timeout: 10000,
   });
   expect(commands[0]?.idempotencyToken).toBe(commands[1]?.idempotencyToken);
-  await page.getByRole('button', { name: '读取下一批职位' }).click();
+  await page.getByRole('button', { name: '获取职位' }).click();
   await expect(page.getByText('最近成功批次已入库 1 条职位。', { exact: false })).toBeVisible({
     timeout: 10000,
   });
-  await expect(page.getByRole('button', { name: '读取下一批职位' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '获取职位' })).toBeDisabled();
   await expect(page.getByRole('button', { name: '读取详情并保存' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: '查看平台职位' })).toHaveAttribute(
     'href',
     '/jobs?source=platform&provider=zhilian',
     { timeout: 10000 },
   );
-  expect(commands.map((x) => x.command.action)).toEqual(['connect', 'connect', 'next']);
+  expect(commands.map((x) => x.command.action)).toEqual(['connect', 'connect', 'acquire']);
   for (const width of [1280, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => {

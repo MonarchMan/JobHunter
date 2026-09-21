@@ -123,7 +123,7 @@ export interface LiepinRecommendationTemplate {
 /** 固定阶段码不含上游原文或私有查询参数。 */
 class LiepinParseError extends PlatformError {
   public constructor(stage: 'template' | 'list' | 'identity' | 'detail' | 'body') {
-    super('parse_changed');
+    super('parse_changed', null, stage);
     this.message += ` [liepin:${stage}]`;
   }
 }

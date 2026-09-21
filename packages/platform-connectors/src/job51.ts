@@ -61,7 +61,7 @@ type Job51ParseStage =
 /** 保持统一失败类别，同时让任务记录可区分具体校验阶段。 */
 class Job51ParseError extends PlatformError {
   public constructor(public readonly stage: Job51ParseStage) {
-    super('parse_changed');
+    super('parse_changed', null, stage);
     this.message = `${this.message} [51job:${stage}]`;
   }
 }

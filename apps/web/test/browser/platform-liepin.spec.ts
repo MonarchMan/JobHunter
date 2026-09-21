@@ -61,7 +61,7 @@ test('Liepin UI keeps explicit batches and uses unified jobs', async ({ page }) 
       saved: {},
       task: { id: 'task', status: 'succeeded', error: null },
       batch:
-        input.command.action === 'next'
+        input.command.action === 'acquire'
           ? {
               generation: 1,
               candidates: [],
@@ -74,17 +74,17 @@ test('Liepin UI keeps explicit batches and uses unified jobs', async ({ page }) 
     return route.fulfill({ status: 202, json: { data: { taskId: 'task', kind: 'enqueued' } } });
   });
   await page.goto('/sources?channel=platform&provider=liepin');
+  await page.getByText('高级连接设置', { exact: true }).click();
   await expect(page.getByRole('heading', { name: '猎聘 · 学生推荐' })).toBeVisible();
   await expect(page.getByText('后续批次和详情通过 HTTP 获取', { exact: false })).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();
   await page.getByLabel('调试描述文件绝对路径').fill('/fixture/DevToolsActivePort');
-  await page.getByLabel('目标标签页 ID').fill('fixture');
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await page.getByRole('button', { name: '确认上次提交' }).focus();
   await page.keyboard.press('Enter');
-  const next = page.getByRole('button', { name: '读取下一批职位' });
+  const next = page.getByRole('button', { name: '获取职位' });
   await expect(next).toBeEnabled({ timeout: 10000 });
   expect(commands[0]?.idempotencyToken).toBe(commands[1]?.idempotencyToken);
   await next.click();
@@ -97,7 +97,7 @@ test('Liepin UI keeps explicit batches and uses unified jobs', async ({ page }) 
     '/jobs?source=platform&provider=liepin',
   );
   await expect(page.getByRole('button', { name: '读取详情并保存' })).toHaveCount(0);
-  expect(commands.map((c) => c.command.action)).toEqual(['connect', 'connect', 'next']);
+  expect(commands.map((c) => c.command.action)).toEqual(['connect', 'connect', 'acquire']);
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(

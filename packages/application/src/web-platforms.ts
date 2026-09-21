@@ -3,13 +3,20 @@ import type { PlatformProviderKey } from '@jobhunter/platform-core';
 import { bossCommandSchema, bossResultSchema, type BossResult } from './platforms.js';
 import type { TaskService } from './tasks/task-service.js';
 import type { TaskStatus, EnqueueTaskResult } from './tasks/model.js';
+import { platformFailureMessage, type PlatformProgress } from './platform-progress.js';
 
 /** 页面状态仅含非敏感连接信息及受验证的推荐结果。 */
 export interface WebBossSnapshot {
   connection: { generation: number; status: string } | null;
   batch: BossResult | null;
+  targets?: BossResult['targets'];
   saved: Record<string, string>;
-  task: { id: string; status: TaskStatus; error: string | null } | null;
+  task: {
+    id: string;
+    status: TaskStatus;
+    error: string | null;
+    progress?: PlatformProgress | null;
+  } | null;
 }
 
 /** 页面只读取非敏感状态；不触碰 Worker 持有的认证上下文。 */
@@ -61,17 +68,32 @@ export class WebPlatformService {
       limit: 1,
     })[0];
     const latest = active ?? recent[0];
+    const current = bossResultSchema.safeParse(latest?.result);
+    const progress =
+      current.success && current.data.generation === connection?.generation
+        ? (current.data.progress ?? null)
+        : null;
     return {
       connection,
+      ...(current.success &&
+      current.data.generation === connection?.generation &&
+      current.data.status === 'selection_required'
+        ? { targets: current.data.targets }
+        : {}),
       batch,
       saved: Object.fromEntries(saved),
       task: latest
         ? {
             id: String(latest.id),
             status: latest.status,
+            progress,
             error:
-              latest.status === 'failed'
-                ? '操作失败，已停止自动请求。请检查 Chrome 登录和验证状态，再显式重新连接。'
+              latest.status === 'failed' || latest.status === 'cancelled'
+                ? progress?.failure
+                  ? platformFailureMessage(progress.failure)
+                  : latest.status === 'cancelled'
+                    ? '任务已取消，已入库职位保留。'
+                    : '操作失败，已停止请求。历史任务没有结构化诊断，请查看任务记录。'
                 : null,
           }
         : null,

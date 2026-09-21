@@ -20,9 +20,14 @@ class FakeSocket extends EventTarget {
   static openDelay = 0;
   static silent = false;
   static failMethod: string | undefined;
+  static onCreate: (() => void) | undefined;
+  static emptyResourceReads = 0;
   static targetUrl = 'https://www.zhipin.com/web/geek/jobs';
+  static extraTargets: { targetId: string; type: string; url: string }[] = [];
   readyState = 0;
   methods: string[] = [];
+  commands: { method: string; params?: { targetId?: string; url?: string } }[] = [];
+  ownedUrl: string | undefined;
   constructor() {
     super();
     FakeSocket.instances.push(this);
@@ -38,22 +43,36 @@ class FakeSocket extends EventTarget {
     const request = JSON.parse(data) as {
       id: number;
       method: string;
-      params?: { expression?: string };
+      params?: { expression?: string; targetId?: string; url?: string };
     };
     this.methods.push(request.method);
+    this.commands.push(request);
     if (FakeSocket.silent) return;
+    if (request.method === 'Target.createTarget') FakeSocket.onCreate?.();
+    if (request.method === 'Page.navigate') this.ownedUrl = request.params?.url;
     const responses: Record<string, unknown> = {
       'Target.getTargets': {
-        targetInfos: [{ targetId: 'valid', type: 'page', url: FakeSocket.targetUrl }],
+        targetInfos: [
+          { targetId: 'valid', type: 'page', url: FakeSocket.targetUrl },
+          ...FakeSocket.extraTargets,
+          ...(this.ownedUrl
+            ? [{ targetId: 'worker-owned', type: 'page', url: this.ownedUrl }]
+            : []),
+        ],
       },
       'Target.attachToTarget': { sessionId: 'attached' },
+      'Target.createTarget': { targetId: 'worker-owned' },
+      'Target.closeTarget': { success: true },
+      'Page.navigate': {},
       'Runtime.evaluate': {
         result: {
           value: request.params?.expression?.includes('window._PAGE')
             ? 'page-token'
-            : JSON.stringify([
-                'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1',
-              ]),
+            : request.method === 'Runtime.evaluate' && FakeSocket.emptyResourceReads-- > 0
+              ? '[]'
+              : JSON.stringify([
+                  'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1',
+                ]),
         },
       },
       'Network.getCookies': {
@@ -105,7 +124,10 @@ beforeEach(() => {
   FakeSocket.openDelay = 0;
   FakeSocket.silent = false;
   FakeSocket.failMethod = undefined;
+  FakeSocket.onCreate = undefined;
+  FakeSocket.emptyResourceReads = 0;
   FakeSocket.targetUrl = 'https://www.zhipin.com/web/geek/jobs';
+  FakeSocket.extraTargets = [];
   vi.stubGlobal('WebSocket', FakeSocket);
 });
 afterEach(() => {
@@ -114,7 +136,164 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('猎聘只观察初始化请求，后续 HTTP 每次借用所选页适用 Cookie', async () => {
+it('日常连接新建默认上下文专用页，HTTP 使用自己的页且不刷新', async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(
+      Response.json({ code: 0, zpData: { hasMore: false, lid: 'fixture', jobList: [] } }),
+    );
+  vi.stubGlobal('fetch', fetcher);
+  FakeSocket.extraTargets = [
+    { targetId: 'other', type: 'page', url: 'https://example.com/?secret=never-expose' },
+  ];
+  const pending = new BossCdpSessionProvider().connect({}, new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  await expect(session.readNext(new AbortController().signal)).resolves.toMatchObject({
+    hasMore: false,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(FakeSocket.instances).toHaveLength(1);
+  expect(FakeSocket.instances[0]?.methods).toContain('Target.getTargets');
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  expect(socket.commands.filter((command) => command.method === 'Target.createTarget')).toEqual([
+    { id: 1, method: 'Target.createTarget', params: { url: 'about:blank' } },
+  ]);
+  expect(socket.methods.filter((method) => method === 'Page.navigate')).toHaveLength(1);
+  expect(
+    socket.commands
+      .filter((command) => command.method === 'Target.attachToTarget')
+      .every((command) => command.params?.targetId === 'worker-owned'),
+  ).toBe(true);
+  expect(FakeSocket.instances[0]?.methods).not.toContain('Page.reload');
+  session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(
+    socket.commands.find((command) => command.method === 'Target.closeTarget')?.params,
+  ).toEqual({ targetId: 'worker-owned' });
+});
+
+it('已有多个平台页面仍只新建专用页，不返回选择、不枚举用户页面', async () => {
+  FakeSocket.extraTargets = [
+    { targetId: 'second', type: 'page', url: `${FakeSocket.targetUrl}?secret=never-expose` },
+  ];
+  const pending = new BossCdpSessionProvider().connect({}, new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  expect(FakeSocket.instances[0]?.methods).not.toContain('Target.getTargets');
+  session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
+});
+
+it('没有已有平台页仍可创建，初始化失败仅关闭自己的页', async () => {
+  FakeSocket.targetUrl = 'https://example.com/';
+  FakeSocket.failMethod = 'Network.getCookies';
+  const pending = new BossCdpSessionProvider()
+    .connect({}, new AbortController().signal)
+    .catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await pending).toMatchObject({ category: 'session_unavailable' });
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  expect(socket.methods).not.toContain('Target.getTargets');
+  expect(
+    socket.commands.find((command) => command.method === 'Target.closeTarget')?.params,
+  ).toEqual({ targetId: 'worker-owned' });
+  expect(socket.readyState).toBe(3);
+});
+
+it('前程无忧专用页先安装监听再导航，重复断开只清理一次', async () => {
+  const pending = new Job51CdpSessionProvider().connect({}, new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  expect(socket.methods.indexOf('Network.enable')).toBeLessThan(
+    socket.methods.indexOf('Page.navigate'),
+  );
+  expect(socket.commands.find((command) => command.method === 'Page.navigate')?.params).toEqual({
+    url: 'https://we.51job.com/pc/search',
+  });
+  session.disconnect();
+  session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(socket.methods.filter((method) => method === 'Target.closeTarget')).toHaveLength(1);
+});
+
+it('新页自然加载前只等待本地资源时间线，不重复导航', async () => {
+  FakeSocket.emptyResourceReads = 3;
+  const pending = new BossCdpSessionProvider().connect({}, new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1600);
+  const session = await pending;
+  const socket = FakeSocket.instances[0];
+  expect(socket?.methods.filter((method) => method === 'Page.navigate')).toHaveLength(1);
+  expect(socket?.methods.filter((method) => method === 'Runtime.evaluate')).toHaveLength(4);
+  expect(socket?.methods).not.toContain('Page.reload');
+  session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
+});
+
+it('创建过程中取消仍接收新页 ID 并清理，不导航到官网', async () => {
+  const controller = new AbortController();
+  FakeSocket.onCreate = () => {
+    controller.abort();
+  };
+  const pending = new BossCdpSessionProvider()
+    .connect({}, controller.signal)
+    .catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await pending).toMatchObject({ category: 'session_unavailable' });
+  const socket = FakeSocket.instances[0];
+  expect(socket?.methods).toEqual(['Target.createTarget', 'Target.closeTarget']);
+  expect(socket?.readyState).toBe(3);
+});
+
+it.each(['zhilian', 'liepin'] as const)('%s 专用页初始化取消只关闭自己的页', async (provider) => {
+  const controller = new AbortController();
+  const connector =
+    provider === 'zhilian' ? new ZhilianCdpSessionProvider() : new LiepinCdpSessionProvider();
+  const pending = connector.connect({}, controller.signal).catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(1);
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  expect(socket.methods.indexOf('Network.enable')).toBeLessThan(
+    socket.methods.indexOf('Page.navigate'),
+  );
+  controller.abort();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(await pending).toMatchObject({ category: 'session_unavailable' });
+  expect(
+    socket.commands.find((command) => command.method === 'Target.closeTarget')?.params,
+  ).toEqual({ targetId: 'worker-owned' });
+  expect(socket.readyState).toBe(3);
+});
+
+it('底层断线通知可以退订，晚订阅立即通知且不重连或访问官网', async () => {
+  const pending = new BossCdpSessionProvider().connect(
+    { portFile: '/fixture/DevToolsActivePort', targetId: 'valid' },
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  const removed = vi.fn(),
+    listener = vi.fn(),
+    late = vi.fn();
+  session.onDisconnected?.(removed)();
+  session.onDisconnected?.(listener);
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  const methods = [...socket.methods];
+  socket.close();
+  session.onDisconnected?.(late);
+  expect(removed).not.toHaveBeenCalled();
+  expect(listener).toHaveBeenCalledTimes(1);
+  expect(late).toHaveBeenCalledTimes(1);
+  expect(socket.methods).toEqual(methods);
+  expect(FakeSocket.instances).toHaveLength(1);
+});
+
+it.each([false, true])('猎聘初始化后通过 HTTP 获取，专用页模式=%s', async (owned) => {
   FakeSocket.targetUrl = 'https://c.liepin.com/';
   const fetcher = vi
     .fn<typeof fetch>()
@@ -123,7 +302,7 @@ it('猎聘只观察初始化请求，后续 HTTP 每次借用所选页适用 Coo
     );
   vi.stubGlobal('fetch', fetcher);
   const pending = new LiepinCdpSessionProvider().connect(
-    { portFile: '/fixture/DevToolsActivePort', targetId: 'valid' },
+    owned ? {} : { portFile: '/fixture/DevToolsActivePort', targetId: 'valid' },
     new AbortController().signal,
   );
   await vi.advanceTimersByTimeAsync(1);
@@ -156,9 +335,10 @@ it('猎聘只观察初始化请求，后续 HTTP 每次借用所选页适用 Coo
   socket.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(event) }));
   const session = await pending;
   expect(socket.methods).toEqual([
-    'Target.getTargets',
+    owned ? 'Target.createTarget' : 'Target.getTargets',
     'Target.attachToTarget',
     'Network.enable',
+    ...(owned ? ['Page.navigate'] : []),
     'Target.detachFromTarget',
   ]);
   await vi.advanceTimersByTimeAsync(130000);
@@ -177,7 +357,9 @@ it('猎聘只观察初始化请求，后续 HTTP 每次借用所选页适用 Coo
   ]);
   expect(FakeSocket.instances).toHaveLength(1);
   session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
   expect(socket.readyState).toBe(3);
+  expect(socket.methods.includes('Target.closeTarget')).toBe(owned);
 });
 
 it('BOSS 显式浏览器模式不读取凭据、不刷新且保持同一授权连接', async () => {
@@ -517,9 +699,14 @@ function emitCampus(request = campusRequest, sessionId = 'attached'): void {
   );
 }
 
-it.each(['list-first', 'detail-first'] as const)(
-  'initializes main-site %s templates on one authorized socket',
-  async (order) => {
+it.each([
+  ['list-first', false],
+  ['detail-first', false],
+  ['list-first', true],
+  ['detail-first', true],
+] as const)(
+  'initializes main-site %s templates on one authorized socket, owned=%s',
+  async (order, owned) => {
     const fixture = JSON.parse(
       readFileSync(
         new URL('../../../fixtures/platforms/zhilian-search.json', import.meta.url),
@@ -536,7 +723,7 @@ it.each(['list-first', 'detail-first'] as const)(
     );
     vi.stubGlobal('fetch', fetcher);
     const pending = new ZhilianCdpSessionProvider().connect(
-      { portFile: '/profile/DevToolsActivePort', targetId: 'valid' },
+      owned ? {} : { portFile: '/profile/DevToolsActivePort', targetId: 'valid' },
       new AbortController().signal,
     );
     await vi.advanceTimersByTimeAsync(1);
@@ -556,7 +743,9 @@ it.each(['list-first', 'detail-first'] as const)(
     emitCampus(list, 'foreign');
     emitCampus(order === 'list-first' ? list : detail);
     await vi.advanceTimersByTimeAsync(1);
-    expect(FakeSocket.instances[0]?.methods.at(-1)).toBe('Network.enable');
+    expect(FakeSocket.instances[0]?.methods.at(-1)).toBe(
+      owned ? 'Page.navigate' : 'Network.enable',
+    );
     emitCampus(order === 'list-first' ? detail : list);
     const session = await pending;
     expect(await session.readNext(new AbortController().signal)).toMatchObject({ hasMore: false });
@@ -567,6 +756,7 @@ it.each(['list-first', 'detail-first'] as const)(
       'Target.detachFromTarget',
     ]);
     session.disconnect();
+    await vi.advanceTimersByTimeAsync(1);
   },
 );
 

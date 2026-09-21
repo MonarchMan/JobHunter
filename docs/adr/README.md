@@ -38,3 +38,8 @@ ADR 一经 Accepted 不直接改写历史结论；需要改变决策时新增 AD
 - [ADR-0027：平台实例隔离与显式浏览活动](./0027-platform-isolation-and-view-activity.md)
 - [ADR-0029：前程无忧按官网已观察批次执行独立 HTTP](./0029-job51-observed-batch-session.md)
 - [ADR-0031：BOSS 显式浏览器辅助传输](./0031-boss-explicit-browser-assisted-transport.md)
+- [ADR-0032：BOSS 当前进程内显式恢复未完成批次](./0032-boss-explicit-batch-resume.md)
+- [ADR-0033：BOSS 同批次有界显式恢复链](./0033-boss-bounded-resume-chain.md)
+- [ADR-0034：BOSS 网络重试与安全上下文恢复独立计数](./0034-boss-transport-retries.md)
+- [ADR-0035：招聘平台日常获取与自动连接](./0035-platform-daily-acquisition.md)
+- [ADR-0036：招聘平台使用 Worker 专用标签页](./0036-platform-worker-owned-tabs.md)

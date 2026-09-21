@@ -152,6 +152,23 @@ async function run(): Promise<void> {
     .action(async (externalJobId: string, options: { generation: string }) => {
       await submit({ action: 'detail', externalJobId, generation: Number(options.generation) });
     });
+  program
+    .command('resume')
+    .description('仅 BOSS HTTP：确认官网正常后，恢复原进程内未完成批次，不重抓已保存详情')
+    .requiredOption('--generation <number>')
+    .requiredOption('--source-task-id <id>')
+    .requiredOption('--browser-recovered', '明确确认官网已经恢复正常')
+    .action(
+      async (options: { generation: string; sourceTaskId: string; browserRecovered: boolean }) => {
+        if (provider() !== 'boss') throw new Error('resume is only available for BOSS');
+        await submit({
+          action: 'resume',
+          generation: Number(options.generation),
+          sourceTaskId: options.sourceTaskId,
+          browserRecovered: options.browserRecovered,
+        });
+      },
+    );
   program.command('result <taskId>').action(async (taskId: string) => {
     const config = await loadRuntimeConfig({
       argv: process.argv.slice(2),

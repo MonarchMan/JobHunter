@@ -17,6 +17,7 @@ import {
 import styles from './page.module.css';
 import { JobsFilterMemory } from './jobs-filter-memory.js';
 import { JobSourceFilter } from './job-source-filter.js';
+import { PlatformBrowser } from '../sources/platform-browser.js';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '职位' };
@@ -51,6 +52,17 @@ export default async function JobsPage({
       : { ...effectiveParameters, profile: defaultProfileId },
   );
   const page = container.services.webJobs.list(query);
+  // 1、普通筛选的清除和空状态恢复保持平台范围，不能隐式跳到另一个平台。
+  const scope = new URLSearchParams();
+  if (query.sourceKind === 'platform') {
+    scope.set('source', 'platform');
+    if (query.providerKey) scope.set('provider', query.providerKey);
+  }
+  const clearHref = scope.size ? `/jobs?${scope.toString()}` : '/jobs';
+  const sourcesHref =
+    query.sourceKind === 'platform'
+      ? `/sources?channel=platform${query.providerKey ? `&provider=${query.providerKey}` : ''}`
+      : '/sources';
   return (
     <main id="main-content" tabIndex={-1}>
       <JobsFilterMemory enabled={jobListPreferences.rememberFilters} />
@@ -62,6 +74,14 @@ export default async function JobsPage({
         sourceKind={query.sourceKind}
         {...(query.providerKey ? { providerKey: query.providerKey } : {})}
       />
+      {query.sourceKind === 'platform' && query.providerKey && (
+        <PlatformBrowser
+          key={query.providerKey}
+          provider={query.providerKey}
+          initial={container.services[query.providerKey].snapshot()}
+          placement="jobs"
+        />
+      )}
       <details className={styles.filterPanel} open={hasFilters}>
         <summary>筛选职位{hasFilters ? ' · 已设置条件' : ''}</summary>
         <form
@@ -193,10 +213,7 @@ export default async function JobsPage({
             />
           </label>
           <button type="submit">应用筛选</button>
-          <a
-            className="button-secondary"
-            href={query.sourceKind === 'platform' ? '/jobs?source=platform' : '/jobs'}
-          >
+          <a className="button-secondary" href={clearHref}>
             清除
           </a>
         </form>
@@ -223,20 +240,14 @@ export default async function JobsPage({
           <h2 id="jobs-empty-title">没有符合条件的职位</h2>
           <p>
             {query.sourceKind === 'platform'
-              ? '尝试减少筛选条件，或在来源页连接平台并获取一批职位；详情将自动补齐后入库。'
+              ? '尝试减少筛选条件，或在本页选择具体平台并获取一批职位；详情将自动补齐后入库。'
               : '尝试减少筛选条件，或先同步官网来源。'}
           </p>
           <div className="inline-actions">
-            <a
-              className="button-secondary"
-              href={query.sourceKind === 'platform' ? '/jobs?source=platform' : '/jobs'}
-            >
+            <a className="button-secondary" href={clearHref}>
               清除筛选
             </a>
-            <a
-              className="button-primary"
-              href={query.sourceKind === 'platform' ? '/sources?channel=platform' : '/sources'}
-            >
+            <a className="button-primary" href={sourcesHref}>
               管理招聘来源
             </a>
           </div>

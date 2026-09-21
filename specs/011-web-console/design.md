@@ -12,6 +12,8 @@
 
 ## 技术结构
 
+浏览器测试使用本轮 UUID 贯穿 Playwright metadata、夹具子进程环境和仅开发夹具启用的响应头。Next 仅在数据目录位于系统临时目录、具有夹具前缀且 UUID 合法时返回标识；globalSetup 通过只读 GET 验证标识后才允许测试执行。reuseExistingServer 固定 false，端口／baseURL 一致性在配置加载时校验；独立构建目录防止旧标识残留。
+
 `apps/web` 使用 Next.js App Router。Server Components 负责初始查询，Route Handlers 调用应用层 command/query；浏览器端不直接访问 SQLite。耗时 command 返回 202 + task DTO。
 
 ```text

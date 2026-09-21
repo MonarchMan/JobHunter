@@ -119,7 +119,7 @@ class ZhilianNetworkError extends PlatformError {
   public constructor(
     reason: (typeof transportCodes)[keyof typeof transportCodes] | 'request_timeout' | 'unknown',
   ) {
-    super('network_error');
+    super('network_error', null, reason);
     this.message = `${this.message} [zhilian:${reason}]`;
   }
 }

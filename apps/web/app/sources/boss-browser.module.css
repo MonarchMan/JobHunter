@@ -1,5 +1,10 @@
 .workspace {
-  margin-top: 1.5rem;
+  margin-top: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  overflow-wrap: anywhere;
 }
 .header,
 .actions {
@@ -13,8 +18,38 @@
   margin: 0;
 }
 .header p,
-.note {
+.note,
+.guidance {
   color: var(--muted-ink);
+}
+.header {
+  align-items: start;
+}
+.header > div {
+  flex: 1 1 24rem;
+  min-width: 0;
+}
+.header p {
+  margin-bottom: 0;
+}
+.status {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--radius-control);
+  background: var(--neutral-soft);
+  color: var(--muted-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.status[data-state='available'] {
+  color: var(--success);
+  background: var(--success-soft);
+}
+.status[data-state='unavailable'],
+.status[data-state='access_blocked'],
+.status[data-state='rate_limited'] {
+  color: var(--warning);
+  background: var(--warning-soft);
 }
 .connection {
   margin: 1.5rem 0;
@@ -53,15 +88,48 @@
 .form button {
   justify-self: start;
 }
+.guidance,
+.note {
+  font-size: 0.875rem;
+}
+.taskStatus,
+.progress,
+.error {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-control);
+  background: var(--canvas);
+}
+.progress {
+  border-inline-start: 3px solid var(--primary);
+  margin-block: 1rem;
+}
+.progress p {
+  margin: 0;
+}
+.progress .diagnostic {
+  margin-top: 0.65rem;
+  color: var(--muted-ink);
+  font-size: 0.875rem;
+}
+.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
 .actions {
   justify-content: start;
 }
 .note {
-  margin-top: 2rem;
+  margin-top: 1rem;
 }
 @media (max-width: 600px) {
+  .workspace {
+    padding: 1rem;
+  }
   .header {
     align-items: start;
     flex-direction: column;
+  }
+  .header > div {
+    flex-basis: auto;
   }
 }

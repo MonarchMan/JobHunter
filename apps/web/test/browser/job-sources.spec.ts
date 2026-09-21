@@ -73,3 +73,25 @@ test('jobs default to official and isolate platform provider, categories and pag
   });
   expect(mutations).toBe(0);
 });
+
+/** 清除普通过滤条件与空状态恢复不得丢失已选择的平台。 */
+test('platform empty recovery and filter clearing preserve the selected provider', async ({
+  page,
+}) => {
+  // 1、每个平台都从空结果恢复，验证两个清除入口和管理来源使用相同范围。
+  for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
+    await page.goto(`/jobs?source=platform&provider=${provider}&q=not-a-real-job`);
+    await expect(page.getByRole('heading', { name: '没有符合条件的职位' })).toBeVisible();
+    for (const name of ['清除', '清除筛选']) {
+      await expect(page.getByRole('link', { name, exact: true })).toHaveAttribute(
+        'href',
+        `/jobs?source=platform&provider=${provider}`,
+      );
+    }
+    await page.getByRole('link', { name: '管理招聘来源', exact: true }).click();
+    await expect(page).toHaveURL(`/sources?channel=platform&provider=${provider}`);
+    await expect(
+      page.getByRole('navigation', { name: '招聘平台选择' }).locator('[aria-current="page"]'),
+    ).toHaveAttribute('href', `/sources?channel=platform&provider=${provider}`);
+  }
+});

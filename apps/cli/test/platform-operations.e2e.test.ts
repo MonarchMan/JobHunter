@@ -5,10 +5,113 @@ import { expect, it } from 'vitest';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { createProductionWorkerApplication } from '@jobhunter/worker';
 import { openSqliteDatabase, SqliteTaskRepository, SqlitePlatformRepository } from '@jobhunter/db';
-import { parseId } from '@jobhunter/domain';
+import { parseId, SystemIdGenerator } from '@jobhunter/domain';
 import { platformRetentionResultSchema } from '@jobhunter/application';
 
 const execute = promisify(execFile);
+
+it('BOSS 恢复 CLI 必须显式确认并保留原失败任务引用，其他平台不得发布', async () => {
+  const root = await createTemporaryDataRoot('platform-resume-cli-');
+  const db = openSqliteDatabase({ dataRoot: root.path });
+  const sourceTaskId = new SystemIdGenerator().generate();
+  const args = [
+    path.resolve(import.meta.dirname, '../dist/platform-main.js'),
+    '--data-root',
+    root.path,
+    '--provider',
+    'boss',
+    'resume',
+    '--generation',
+    '1',
+    '--source-task-id',
+    sourceTaskId,
+  ];
+  try {
+    // 1、未确认官网恢复或平台不支持时，不得发布后台请求。
+    await expect(execute(process.execPath, args)).rejects.toThrow();
+    await expect(
+      execute(
+        process.execPath,
+        args.map((value) => (value === 'boss' ? 'zhilian' : value)).concat('--browser-recovered'),
+      ),
+    ).rejects.toThrow();
+    expect(db.client.prepare('SELECT count(*) FROM tasks').pluck().get()).toBe(0);
+    // 2、显式确认仅发布任务，不在 CLI 内连接浏览器或请求职位。
+    const { stdout } = await execute(process.execPath, [...args, '--browser-recovered']);
+    const submitted = JSON.parse(stdout) as { task: { id: string } };
+    const task = new SqliteTaskRepository(db.client).get(parseId(submitted.task.id, 'Task'));
+    expect(task).toMatchObject({
+      status: 'pending',
+      payload: { action: 'resume', generation: 1, sourceTaskId, browserRecovered: true },
+    });
+  } finally {
+    db.close();
+    await root.cleanup();
+  }
+});
+
+it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一平台失败', async () => {
+  const root = await createTemporaryDataRoot('platform-observation-isolated-');
+  const db = openSqliteDatabase({ dataRoot: root.path });
+  try {
+    for (const provider of ['boss', 'zhilian', '51job', 'liepin'] as const) {
+      const repository = new SqlitePlatformRepository(db.client, provider);
+      repository.reset(Date.now());
+      repository.setStatus(1, 'available', Date.now());
+      const id = new SystemIdGenerator().generate();
+      db.client
+        .prepare(
+          `INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at,result_json)
+        VALUES (?,?,?,'succeeded',?,1,0,0,?)`,
+        )
+        .run(
+          id,
+          `platform.${provider}`,
+          JSON.stringify({ action: 'next', generation: 1 }),
+          `${provider}:stability:1:0:next`,
+          JSON.stringify({
+            generation: 1,
+            status: 'available',
+            candidates: [],
+            savedCount: 0,
+            hasMore: false,
+          }),
+        );
+    }
+    db.client
+      .prepare(
+        `INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at)
+      VALUES (?,'platform.boss','{}','failed',?,1,0,1)`,
+      )
+      .run(new SystemIdGenerator().generate(), crypto.randomUUID());
+    for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
+      const result = await execute(process.execPath, [
+        path.resolve(import.meta.dirname, '../dist/platform-stability-main.js'),
+        '--provider',
+        provider,
+        '--data-root',
+        root.path,
+        '--generation',
+        '1',
+        '--round',
+        '1',
+        '--not-before',
+        new Date(Date.now() - 1000).toISOString(),
+        '--deadline',
+        new Date(Date.now() + 60000).toISOString(),
+      ]);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        provider,
+        status: 'exhausted',
+        detailVerified: false,
+      });
+    }
+    expect(db.client.prepare('SELECT count(*) FROM tasks').pluck().get()).toBe(5);
+  } finally {
+    db.close();
+    await root.cleanup();
+  }
+});
 
 it('publishes preview, confirms and disables retention through real CLI and production Worker', async () => {
   const root = await createTemporaryDataRoot('platform-cli-');

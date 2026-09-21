@@ -69,12 +69,7 @@ export function JobSourceFilter({
               ]}
             />
           </label>
-          <a
-            className="button-secondary"
-            href={`/sources?channel=platform${providerKey ? `&provider=${providerKey}` : ''}`}
-          >
-            连接平台／获取职位
-          </a>
+          {!providerKey && <p>请选择一个招聘平台，再获取一批职位。</p>}
         </>
       )}
     </section>

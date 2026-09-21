@@ -29,11 +29,19 @@ export class PlatformError extends Error {
   public constructor(
     public readonly category: PlatformErrorCategory,
     public readonly businessCode: number | null = null,
+    public readonly reason: string | null = null,
   ) {
     super(
       `Platform request failed: ${category}${businessCode === null ? '' : ` (${String(businessCode)})`}`,
     );
     this.name = 'PlatformError';
+  }
+}
+
+/** 页面歧义只返回非敏感 ID 与固定标签，不暴露页面 URL、标题或登录上下文。 */
+export class PlatformTargetSelectionRequired extends PlatformError {
+  public constructor(public readonly targets: readonly { id: string; label: string }[]) {
+    super('session_unavailable', null, 'target_selection_required');
   }
 }
 
@@ -65,6 +73,10 @@ export interface PlatformBatch {
 
 /** 连接基础设施对应用暴露的能力，不携带任何凭据。 */
 export interface PlatformSession {
+  /** 显式确认官网恢复后，只校验当前上下文；不自动刷新或发职位请求。 */
+  resume?(signal: AbortSignal): Promise<void>;
+  /** 仅通知底层连接关闭；订阅时已关闭须立即通知，返回函数用于释放监听。 */
+  onDisconnected?(listener: () => void): () => void;
   readNext(signal: AbortSignal): Promise<PlatformBatch>;
   readDetail(externalJobId: string, signal: AbortSignal): Promise<PlatformJobDetail>;
   disconnect(): void;
@@ -74,8 +86,8 @@ export interface PlatformSession {
 export interface PlatformSessionProvider {
   connect(
     input: {
-      readonly portFile: string;
-      readonly targetId: string;
+      readonly portFile?: string | undefined;
+      readonly targetId?: string | undefined;
       /** 仅 BOSS 支持显式浏览器辅助；省略时保持原平台行为。 */
       readonly acquisitionMode?: 'http' | 'browser' | undefined;
     },

@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { makeCandidateProfile, FakeModel } from '@jobhunter/testkit';
 import { openSqliteDatabase } from '@jobhunter/db';
 import { seedPlatformJobs } from '../fixtures/platform-jobs.js';
+import { browserFixtureAddress } from '../../src/server/browser-test-isolation.js';
 import { calculateDeterministicMatch, matchRulesetV2 } from '@jobhunter/matching';
 import {
   contentHash,
@@ -629,6 +630,8 @@ async function seedFixture(dataRoot: string): Promise<void> {
   }
 }
 
+// 1、在创建夹具数据前核验地址，直接启动也不能回退到日常 Web 端口。
+const fixtureAddress = browserFixtureAddress(process.env);
 const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'jobhunter-web-browser-'));
 await seedFixture(dataRoot);
 
@@ -690,7 +693,7 @@ if (!modelAddress || typeof modelAddress === 'string') {
 const require = createRequire(import.meta.url);
 const nextBin = require.resolve('next/dist/bin/next');
 const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
-const port = process.env.PLAYWRIGHT_FIXTURE_PORT ?? '3210';
+const port = fixtureAddress.port;
 const child = spawn(process.execPath, [nextBin, 'dev', '--hostname', '127.0.0.1', '--port', port], {
   stdio: 'inherit',
   env: {
@@ -701,7 +704,7 @@ const child = spawn(process.execPath, [nextBin, 'dev', '--hostname', '127.0.0.1'
     JOBHUNTER_MODEL_BASE_URL: `http://127.0.0.1:${String(modelAddress.port)}/v1`,
     JOBHUNTER_MODEL_NAME: 'browser-fixture',
     JOBHUNTER_MODEL_API_KEY: 'browser-fixture-key',
-    NEXT_DIST_DIR: '.next-browser-fixture',
+    NEXT_DIST_DIR: process.env.NEXT_DIST_DIR ?? '.next-browser-fixture',
   },
 });
 

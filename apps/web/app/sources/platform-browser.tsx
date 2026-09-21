@@ -2,6 +2,7 @@
 import { PlatformRetentionStatus } from './platform-retention-status.js';
 
 import { useEffect, useRef, useState, type ReactElement, type SyntheticEvent } from 'react';
+import { useRouter } from 'next/navigation.js';
 import type { BossCommand, WebBossSnapshot } from '@jobhunter/application/web';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './boss-browser.module.css';
@@ -19,10 +20,13 @@ const statusLabels: Record<string, string> = {
 export function PlatformBrowser({
   initial,
   provider,
+  placement = 'sources',
 }: {
   readonly initial: WebBossSnapshot;
   readonly provider: 'boss' | 'zhilian' | '51job' | 'liepin';
+  readonly placement?: 'sources' | 'jobs';
 }): ReactElement {
+  const router = useRouter();
   const label =
     provider === 'boss'
       ? 'BOSS 直聘'
@@ -35,22 +39,50 @@ export function PlatformBrowser({
   const endpoint = `/api/platforms/${provider}`;
   const [state, setState] = useState(initial);
   const [portFile, setPortFile] = useState('');
-  const [targetId, setTargetId] = useState('');
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState(false);
-  const [fieldError, setFieldError] = useState<'portFile' | 'targetId' | null>(null);
+  const [fieldError, setFieldError] = useState<'portFile' | null>(null);
   const portInput = useRef<HTMLInputElement>(null);
-  const targetInput = useRef<HTMLInputElement>(null);
   const intent = useRef<{ command: BossCommand; idempotencyToken: string } | null>(null);
   const submitting = useRef(false);
   const lifetime = useRef<AbortController | null>(null);
+  const mutationVersion = useRef(0);
+  const refreshedTask = useRef(initial.task?.id);
   const generation = state.connection?.generation;
+  const progress = state.task?.progress;
+  const stageLabels = {
+    connect: '连接初始化',
+    list: '读取列表',
+    detail: '校验详情',
+    save: '保存职位',
+    complete: '批次完成',
+  };
   const active = state.task?.status === 'pending' || state.task?.status === 'running';
   const usable =
     state.connection?.status === 'connected' || state.connection?.status === 'available';
   const disabled = busy || active || readError || intent.current !== null;
+  const frozen =
+    !usable &&
+    !!generation &&
+    (state.connection?.status === 'access_blocked' ||
+      state.connection?.status === 'rate_limited' ||
+      (state.connection?.status === 'unavailable' && progress?.stage !== 'connect'));
+  const website = {
+    boss: 'https://www.zhipin.com/web/geek/jobs',
+    zhilian: 'https://www.zhaopin.com/jobs',
+    '51job': 'https://we.51job.com/pc/search',
+    liepin: 'https://c.liepin.com/',
+  }[provider];
+
+  useEffect(() => {
+    // 1、只在新任务终态刷新本地职位列表，失败已入库部分同样可见；绝不自动采集。
+    if (placement !== 'jobs' || !state.task || active || state.task.id === refreshedTask.current)
+      return;
+    refreshedTask.current = state.task.id;
+    router.refresh();
+  }, [placement, state.task, active, router]);
 
   useEffect(() => {
     // 1、串行轮询本地数据库；卸载中止请求，不自动触发采集或连接。
@@ -64,6 +96,7 @@ export function PlatformBrowser({
       if (hidden() || cancelled() || refreshing) return;
       clearTimeout(timer);
       refreshing = true;
+      const version = mutationVersion.current;
       try {
         const response = await fetch(endpoint, {
           cache: 'no-store',
@@ -71,7 +104,7 @@ export function PlatformBrowser({
         });
         if (!response.ok) throw new Error('state unavailable');
         const result = (await response.json()) as { data: WebBossSnapshot };
-        if (!cancelled()) {
+        if (!cancelled() && version === mutationVersion.current && !submitting.current) {
           setState(result.data);
           setReadError(false);
         }
@@ -102,6 +135,7 @@ export function PlatformBrowser({
     if (!signal || signal.aborted) return;
     const cancelled = (): boolean => signal.aborted;
     submitting.current = true;
+    mutationVersion.current++;
     setBusy(true);
     setError('');
     // 2、只有新的明确操作才生成令牌；网络失败后的确认复用旧输入。
@@ -126,6 +160,7 @@ export function PlatformBrowser({
       if (!response.ok || !result.data) throw new Error(result.error?.message ?? '提交结果未知。');
       intent.current = null;
       const taskId = result.data.taskId;
+      mutationVersion.current++;
       setState((previous) => ({
         ...previous,
         task: { id: taskId, status: 'pending', error: null },
@@ -147,14 +182,8 @@ export function PlatformBrowser({
       portInput.current?.focus();
       return;
     }
-    if (!/^[\w-]{1,128}$/.test(targetId.trim())) {
-      setFieldError('targetId');
-      targetInput.current?.focus();
-      return;
-    }
     setFieldError(null);
-    if (consent && !disabled)
-      void submit({ action: 'connect', portFile: portFile.trim(), targetId: targetId.trim() });
+    if (consent && !disabled) void submit({ action: 'connect', portFile: portFile.trim() });
   };
 
   return (
@@ -164,31 +193,78 @@ export function PlatformBrowser({
           <h2 id={`${provider}-title`}>{label}</h2>
           <p>每次只读取一批，后台串行补齐本批详情并自动入库。不自动翻页、投递或发消息。</p>
         </div>
-        <span role="status">
+        <span
+          role="status"
+          className={styles.status}
+          data-state={usable ? 'available' : (state.connection?.status ?? 'disconnected')}
+        >
           {statusLabels[state.connection?.status ?? 'disconnected'] ?? '状态未知'}
         </span>
       </header>
-      <details open={!usable} className={styles.connection}>
-        <summary>连接已登录的 Chrome</summary>
+      <p className={styles.guidance}>
+        在本机 Chrome 打开并登录{' '}
+        <a href={website} target="_blank" rel="noreferrer noopener">
+          {label}官网
+        </a>
+        ，启用远程调试。获取时由 Worker
+        新建专用标签页，共享当前配置的登录态，不接管已有页面；后续复用专用页。Chrome
+        如提示授权，请点击允许，不需要刷新。
+      </p>
+      {
+        <label className={styles.consent}>
+          <input
+            type="checkbox"
+            checked={consent}
+            disabled={disabled}
+            onChange={(event) => {
+              setConsent(event.target.checked);
+            }}
+          />
+          允许自动连接 Chrome 并创建平台专用页，读取最小登录上下文，仅在 Worker 内存使用，不保存
+          Cookie。
+          {provider === '51job' ? '连接期间持续观察该页的职位请求，直到断开。' : ''}
+        </label>
+      }
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className="button-primary"
+          disabled={disabled || (!usable && !consent) || (usable && state.batch?.hasMore === false)}
+          onClick={() =>
+            void submit(
+              frozen
+                ? { action: 'connect' }
+                : {
+                    action: 'acquire',
+                    generation: generation ?? null,
+                  },
+            )
+          }
+        >
+          {frozen ? '重新连接' : '获取职位'}
+        </button>
+        {usable && <span>复用当前连接，仅获取一批</span>}
+      </div>
+      {frozen && (
+        <p className={styles.guidance}>
+          当前连接已暂停，不会自动重试。请先确认官网状态；重新连接会开始新的查询，已入库职位保留。
+        </p>
+      )}
+      {/* 4、技术参数仅用于自动发现失败时的高级备用，不再是日常获取前置条件。 */}
+      <details className={styles.connection}>
+        <summary>高级连接设置</summary>
         <p id={`${provider}-help`}>
-          先在 Chrome 打开
-          {provider === 'boss'
-            ? ' BOSS 推荐页'
-            : provider === '51job'
-              ? '前程无忧搜索页'
-              : provider === 'liepin'
-                ? '猎聘学生身份首页（c.liepin.com）'
-                : '智联校园推荐页或主站搜索页'}
-          并完成登录。填写启用远程调试后产生的描述文件路径和目标标签页 ID；连接时请在 Chrome
-          确认授权。同一活动连接内不会逐次授权，重启 Worker 后需要重新连接。
+          默认无需填写。仅在无法自动找到 Chrome 时填写调试描述文件路径；仍由 Worker
+          新建专用页，不需要标签页 ID。连接时请在 Chrome 确认授权。同一活动连接内不会逐次授权，重启
+          Worker 后需要重新连接。断开连接只关闭 Worker 自己创建的页，不关闭你的其他页面。
           {provider === 'zhilian'
-            ? '授权后请在校园页切换一次分类，或在主站搜索页执行一次搜索并打开一条职位详情；初始化最多等待 120 秒，不需要刷新。主站目前支持关键词、城市、经验筛选及默认排序，其他筛选尚未支持。查询随连接固定；官网改动不会同步，切换查询请重新连接。'
+            ? '授权后请在新建的主站搜索页执行一次搜索并打开一条职位详情；初始化最多等待 120 秒，不需要刷新。主站目前支持关键词、城市、经验筛选及默认排序，其他筛选尚未支持。查询随连接固定；官网改动不会同步，切换查询请重新连接。'
             : ''}
           {provider === '51job'
-            ? '连接后在官网正常搜索或翻页，再读取官网批次。只观察所选页的职位请求，不自动操作浏览器；最多等待新批次 90 秒，不自行生成签名。更换查询请重新连接。'
+            ? '连接后在专用页正常搜索或翻页，再读取官网批次。只观察专用页的职位请求，不自动翻页；最多等待新批次 90 秒，不自行生成签名。更换查询请重新连接。'
             : ''}
           {provider === 'liepin'
-            ? '授权后请正常切换一次综合／最新排序，初始化最多等待 120 秒，不需要刷新。后续批次和详情通过 HTTP 获取，每次只取一批。查询条件和排序随连接固定，改动后请重新连接；暂不支持社招身份推荐或搜索。'
+            ? '若新页未产生推荐请求，请在专用页正常切换一次综合／最新排序，初始化最多等待 120 秒，不需要刷新。后续批次和详情通过 HTTP 获取，每次只取一批。查询条件和排序随连接固定，改动后请重新连接；暂不支持社招身份推荐或搜索。'
             : ''}
         </p>
         <form
@@ -217,62 +293,12 @@ export function PlatformBrowser({
               请输入以 DevToolsActivePort 结尾的绝对文件路径。
             </p>
           )}
-          <label>
-            目标标签页 ID
-            <input
-              ref={targetInput}
-              aria-invalid={fieldError === 'targetId'}
-              aria-describedby={fieldError === 'targetId' ? `${provider}-target-error` : undefined}
-              required
-              value={targetId}
-              onChange={(event) => {
-                setTargetId(event.target.value);
-              }}
-              autoComplete="off"
-              disabled={busy || active}
-            />
-          </label>
-          {fieldError === 'targetId' && (
-            <p id={`${provider}-target-error`} role="alert">
-              请输入有效目标页 ID（字母、数字、下划线或连字符，最多 128 字符）。
-            </p>
-          )}
-          <label className={styles.consent}>
-            <input
-              type="checkbox"
-              checked={consent}
-              onChange={(event) => {
-                setConsent(event.target.checked);
-              }}
-              disabled={busy || active}
-            />
-            允许读取所选
-            {provider === 'boss'
-              ? ' BOSS '
-              : provider === '51job'
-                ? '前程无忧搜索'
-                : provider === 'liepin'
-                  ? '猎聘'
-                  : '智联'}
-            页的最小登录上下文，仅在 Worker 内存使用；不保存 Cookie。
-            {provider === '51job' ? '允许在活动连接期间持续观察该页的职位请求，直到断开。' : ''}
-          </label>
           <button className="button-primary" disabled={disabled || !consent} type="submit">
             {usable ? '重新连接' : '连接 Chrome'}
           </button>
         </form>
       </details>
       <div className={styles.actions}>
-        <button
-          type="button"
-          className="button-primary"
-          disabled={disabled || !usable || state.batch?.hasMore === false}
-          onClick={() => {
-            if (generation) void submit({ action: 'next', generation });
-          }}
-        >
-          {provider === '51job' ? '读取官网批次' : `读取下一批${batchLabel}`}
-        </button>
         <button
           type="button"
           className="button-secondary"
@@ -284,23 +310,37 @@ export function PlatformBrowser({
           断开连接
         </button>
       </div>
-      <p>
-        获取前请在官网设置搜索条件及支持的排序；本次仅处理一页，不遍历全部结果。
-        {provider === 'boss' ? 'BOSS 当前仅接入推荐流，不提供搜索排序。' : ''}
+      <p className={styles.guidance}>
+        {provider === 'boss'
+          ? 'BOSS 当前仅接入推荐流，不提供搜索排序；本次仅处理一批，不遍历全部结果。'
+          : '请在 Worker 专用页设置支持的查询条件，不沿用你原页面的筛选；本次仅处理一页，不遍历全部结果。'}
         详情失败或取消会停止后续请求，已入库职位保留；每次网络请求沿用平台连接器的间隔限制。
       </p>
+      {provider === 'zhilian' && (
+        <p className={styles.guidance}>
+          首次连接后请在新建的主站搜索页执行搜索并打开一条详情；初始化最多等待 120 秒。
+        </p>
+      )}
+      {provider === 'liepin' && (
+        <p className={styles.guidance}>
+          若新页未产生推荐请求，请在 Worker 专用的学生首页切换一次综合／最新排序；初始化最多等待 120
+          秒。目前不支持社招首页。
+        </p>
+      )}
       {provider === '51job' && (
-        <p>
-          先在官网搜索或翻页，再读取该批。详情使用该批 JSON
+        <p className={styles.guidance}>
+          先在 Worker 专用页搜索或翻页，再读取该批。详情使用该批 JSON
           中的完整正文，不额外请求详情接口；自动翻页和长期稳定性尚未验证。
         </p>
       )}
       {state.task && (
-        <p role="status">
+        <p role="status" className={styles.taskStatus}>
           {active
-            ? provider === 'zhilian'
-              ? '后台任务执行中；若为连接任务，请允许 Chrome 授权，并在所选页切换校园分类或执行主站搜索、打开职位详情。'
-              : '后台任务执行中；连接任务可能正在等待 Chrome 授权。'
+            ? progress && progress.stage !== 'connect'
+              ? '后台正在处理本批职位，无需刷新官网页面。'
+              : provider === 'zhilian'
+                ? '后台任务执行中；若为连接任务，请允许 Chrome 授权，并在新建专用页执行主站搜索、打开职位详情。'
+                : '后台任务执行中；连接任务可能正在等待 Chrome 授权。'
             : state.task.status === 'succeeded'
               ? '上次操作已完成。'
               : state.task.status === 'cancelled'
@@ -309,11 +349,32 @@ export function PlatformBrowser({
           <a href={`/tasks?type=platform.${provider}`}>查看任务{active ? '或取消' : ''}</a>
         </p>
       )}
+      {progress && (
+        <div className={styles.progress} role="status" aria-live="polite">
+          <p>
+            本次任务：{stageLabels[progress.stage]}。有效候选 {progress.total ?? '待确定'}{' '}
+            条，已处理 {progress.processed} 条，已入库 {progress.saved} 条，排除缺少公司身份{' '}
+            {progress.skipped} 条。
+          </p>
+          {progress.failure && (
+            <p className={styles.diagnostic}>
+              停止阶段：{stageLabels[progress.stage]}；类别：{progress.failure.category}
+              {progress.failure.businessCode !== null
+                ? `；业务码：${String(progress.failure.businessCode)}`
+                : ''}
+              {progress.failure.reason ? `；原因码：${progress.failure.reason}` : ''}
+              。已入库职位保留，可在职位页查看。任务编号：<code>{state.task?.id}</code>。
+            </p>
+          )}
+        </div>
+      )}
       {readError && (
-        <p role="alert">本地状态读取失败，操作暂时禁用；正在重新读取，不会请求招聘平台。</p>
+        <p className={styles.error} role="alert">
+          本地状态读取失败，操作暂时禁用；正在重新读取，不会请求招聘平台。
+        </p>
       )}
       {error && (
-        <p role="alert">
+        <p className={styles.error} role="alert">
           {error}{' '}
           {intent.current && (
             <button
@@ -328,7 +389,7 @@ export function PlatformBrowser({
         </p>
       )}
       {state.batch && (
-        <p>
+        <p className={styles.taskStatus}>
           {state.batch.savedCount === undefined
             ? '历史批次未记录自动入库数量，请到职位页查看实际结果。'
             : `最近成功批次已入库 ${String(state.batch.savedCount)} 条职位。`}
@@ -336,13 +397,15 @@ export function PlatformBrowser({
           {state.batch.hasMore === false ? `已无更多${batchLabel}。` : ''}
         </p>
       )}
-      <a className="button-secondary" href={`/jobs?source=platform&provider=${provider}`}>
-        查看平台职位
-      </a>
+      {placement !== 'jobs' && (
+        <a className="button-secondary" href={`/jobs?source=platform&provider=${provider}`}>
+          查看平台职位
+        </a>
+      )}
       <p className={styles.note}>
         已保存职位进入统一职位库，可继续使用现有详情和匹配功能。不会因本次结果未出现而标记职位下架。
       </p>
-      <PlatformRetentionStatus />
+      {placement !== 'jobs' && <PlatformRetentionStatus />}
     </section>
   );
 }

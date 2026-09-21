@@ -1,4 +1,8 @@
-import type { PlatformRepository } from '@jobhunter/application';
+import {
+  platformProgressSchema,
+  type PlatformRepository,
+  type PlatformProgress,
+} from '@jobhunter/application';
 import { platformDefinitions, type PlatformProviderKey } from '@jobhunter/platform-core';
 import {
   contentHash,
@@ -51,6 +55,30 @@ export class SqlitePlatformRepository implements PlatformRepository {
     );
   }
 
+  /** 任务结果承载白名单进度；租约丢失或旧代次不能覆盖新状态。 */
+  public recordProgress(
+    taskId: string,
+    generation: number,
+    progress: PlatformProgress,
+    now: number,
+  ): void {
+    // 1、只允许本平台运行中的当前任务；不保存原始异常和访问上下文。
+    const safe = platformProgressSchema.parse(progress);
+    this.client
+      .prepare(
+        `UPDATE tasks SET result_json=? WHERE id=? AND task_type=? AND status='running'
+      AND lease_expires_at>? AND EXISTS (SELECT 1 FROM platform_connections WHERE provider_key=? AND generation=?)`,
+      )
+      .run(
+        JSON.stringify({ generation, status: 'connected', progress: safe }),
+        taskId,
+        `platform.${this.providerKey}`,
+        now,
+        this.providerKey,
+        generation,
+      );
+  }
+
   /** 旧代次不能覆盖新连接状态。 */
   public setStatus(
     generation: number,
@@ -62,6 +90,20 @@ export class SqlitePlatformRepository implements PlatformRepository {
         'UPDATE platform_connections SET status=?,updated_at=? WHERE provider_key=? AND generation=?',
       )
       .run(status, now, this.providerKey, generation);
+  }
+
+  /** 独立观察只核对本平台本任务的已提交事实，不扫描其他平台或官网数据。 */
+  public verifyObservedBatch(taskId: string, expected: number): boolean {
+    // 1、保留正常观察／职位外键关联；重复保存和缺失下架语义分别检查。
+    const counts = this.client
+      .prepare(
+        `SELECT count(*) AS count,
+      coalesce(sum(CASE WHEN length(trim(j.description))=0 OR j.missing_count<>0 THEN 1 ELSE 0 END),0) AS invalid
+      FROM job_observations o JOIN jobs j ON j.id=o.job_id JOIN job_sources s ON s.id=j.source_id
+      WHERE o.platform_task_id=? AND s.source_kind='platform' AND s.provider_key=?`,
+      )
+      .get(taskId, this.providerKey) as { count: number; invalid: number };
+    return counts.count === expected && counts.invalid === 0;
   }
 
   /** 网络完成后原子保存公司身份、正式职位、修订和本次任务观察。 */
@@ -185,6 +227,15 @@ export class SqlitePlatformRepository implements PlatformRepository {
         this.client
           .prepare('UPDATE jobs SET last_seen_at=max(last_seen_at,?) WHERE id=?')
           .run(now, jobId);
+        // 4、与职位事务一起提交计数并清除当前身份，避免提交后退出仍标记该条未完成。
+        this.client
+          .prepare(
+            `UPDATE tasks SET result_json=json_set(json_remove(result_json,'$.progress.currentExternalJobId'),
+          '$.progress.saved',coalesce(json_extract(result_json,'$.progress.saved'),0)+1,
+          '$.progress.processed',coalesce(json_extract(result_json,'$.progress.processed'),0)+1)
+          WHERE id=? AND json_type(result_json,'$.progress')='object'`,
+          )
+          .run(taskId);
         this.setStatus(generation, 'available', now);
         return jobId;
       })

@@ -91,7 +91,7 @@ test('Job51 UI completes explicit browsing, preserves idempotency and separates 
         saved: {},
         task: { id: 'task', status: 'succeeded', error: null },
       };
-    else if (input.command.action === 'next')
+    else if (input.command.action === 'acquire')
       state = {
         ...state,
         batch: {
@@ -108,33 +108,33 @@ test('Job51 UI completes explicit browsing, preserves idempotency and separates 
     route.fulfill({ json: { data: { connection: null, batch: null, saved: {}, task: null } } }),
   );
   await page.goto('/sources?channel=platform&provider=51job');
+  await page.getByText('高级连接设置', { exact: true }).click();
   await expect(page.getByRole('heading', { name: '前程无忧 · 官网辅助' })).toBeVisible();
-  await expect(page.getByText('连接后在官网正常搜索或翻页', { exact: false })).toBeVisible();
+  await expect(page.getByText('连接后在专用页正常搜索或翻页', { exact: false })).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();
   await page.getByLabel('调试描述文件绝对路径').fill('/fixture/DevToolsActivePort');
-  await page.getByLabel('目标标签页 ID').fill('fixture');
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByRole('button', { name: '确认上次提交' })).toBeVisible();
   await page.getByRole('button', { name: '确认上次提交' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: '读取官网批次' })).toBeEnabled({
+  await expect(page.getByRole('button', { name: '获取职位' })).toBeEnabled({
     timeout: 10000,
   });
   expect(commands[0]?.idempotencyToken).toBe(commands[1]?.idempotencyToken);
-  await page.getByRole('button', { name: '读取官网批次' }).click();
+  await page.getByRole('button', { name: '获取职位' }).click();
   await expect(page.getByText('最近成功批次已入库 1 条职位。', { exact: false })).toBeVisible({
     timeout: 10000,
   });
-  await expect(page.getByRole('button', { name: '读取官网批次' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '获取职位' })).toBeDisabled();
   await expect(page.getByRole('button', { name: '读取详情并保存' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: '查看平台职位' })).toHaveAttribute(
     'href',
     '/jobs?source=platform&provider=51job',
     { timeout: 10000 },
   );
-  expect(commands.map((x) => x.command.action)).toEqual(['connect', 'connect', 'next']);
+  expect(commands.map((x) => x.command.action)).toEqual(['connect', 'connect', 'acquire']);
   for (const width of [1280, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => {

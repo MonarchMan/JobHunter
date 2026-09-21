@@ -60,7 +60,40 @@ const allowedQuery = new Set([
 /** 浏览器当前的最小认证上下文；不包含签名生成器或任意请求头。 */
 interface BossRequestContext {
   readonly cookies: readonly BrowserCookie[];
-  readonly token?: string;
+  readonly token?: string | undefined;
+}
+
+/** 仅标识可重试的 HTTP 状态；不保存响应正文或 URL。 */
+class BossRetryableResponse extends PlatformError {
+  public constructor(
+    status: number,
+    public readonly retryAfterMs: number,
+  ) {
+    super(status === 429 ? 'rate_limited' : 'upstream_error');
+  }
+}
+
+/** 从有界异常链识别临时传输故障，不把任意 TypeError 当作网络波动。 */
+function transientReason(error: unknown): string | undefined {
+  const codes: Record<string, string> = {
+    ECONNRESET: 'connection_reset',
+    ETIMEDOUT: 'request_timeout',
+    EAI_AGAIN: 'dns_error',
+    UND_ERR_SOCKET: 'socket_closed',
+    UND_ERR_CONNECT_TIMEOUT: 'connect_timeout',
+    UND_ERR_HEADERS_TIMEOUT: 'headers_timeout',
+    UND_ERR_BODY_TIMEOUT: 'body_timeout',
+  };
+  let current: unknown = error;
+  // 1、仅遍历三层原始异常 cause，输出固定原因码，不输出异常文本。
+  for (let i = 0; i < 3; i++) {
+    if (!(current instanceof Error)) return undefined;
+    if (current.name === 'TimeoutError') return 'request_timeout';
+    if ('code' in current && typeof current.code === 'string' && Object.hasOwn(codes, current.code))
+      return codes[current.code];
+    current = current.cause;
+  }
+  return undefined;
 }
 
 /** 安全检查的脱敏现场；不持有上游正文、凭据或服务端未公开的根因判断。 */
@@ -72,7 +105,7 @@ class BossSecurityCheckError extends PlatformError {
     readonly successes: number;
     readonly data: unknown;
   }) {
-    super('access_blocked', 37);
+    super('access_blocked', 37, 'security_check');
     // 1、只输出固定字段存在性，禁止拼接任意上游键、message 或检查参数值。
     const fields = ['seed', 'name', 'ts'].filter(
       (key) =>
@@ -115,6 +148,11 @@ export class BossHttpSession {
   #lastRequestAt: number | null = null;
   #requestCount = 0;
   #successfulResponses = 0;
+  #paused: { expiresAt: number; binding: string; securityToken: string } | undefined;
+  #resumeCount = 0;
+  #networkRetries = 0;
+  #batchExpiresAt = 0;
+  #pauseTimer: ReturnType<typeof setTimeout> | undefined;
 
   public constructor(input: {
     readonly cookies: readonly BrowserCookie[];
@@ -160,6 +198,79 @@ export class BossHttpSession {
     this.#readContext = undefined;
     this.#details.clear();
     this.#seen.clear();
+    this.#paused = undefined;
+    clearTimeout(this.#pauseTimer);
+  }
+
+  /** 每段只在原认证绑定不变且官网已更新安全上下文时解冻，不请求职位。 */
+  public async resume(signal: AbortSignal): Promise<void> {
+    const paused = this.#paused;
+    if (
+      !paused ||
+      this.#resumeCount >= 5 ||
+      this.#busy ||
+      this.#abort.signal.aborted ||
+      !this.#readContext
+    )
+      throw new PlatformError('session_unavailable');
+    if (this.#now() >= paused.expiresAt) {
+      this.disconnect();
+      throw new PlatformError('session_unavailable', null, 'resume_expired');
+    }
+    this.#busy = true;
+    try {
+      // 1、只读官网正常浏览后的上下文；不向浏览器回灌挑战参数或操作验证。
+      const context = await this.#readContext(signal).catch(() => {
+        throw new PlatformError('session_unavailable', null, 'context_read_failed');
+      });
+      signal.throwIfAborted();
+      this.#abort.signal.throwIfAborted();
+      const identity = this.#contextIdentity(context);
+      if (identity?.binding !== paused.binding) {
+        this.disconnect();
+        throw new PlatformError(
+          'session_unavailable',
+          null,
+          identity ? 'auth_binding_changed' : 'auth_context_missing',
+        );
+      }
+      if (identity.securityToken === paused.securityToken)
+        throw new PlatformError('session_unavailable', null, 'context_unchanged');
+      // 2、校验通过才恢复发送上下文；同一批最多五次，未更新上下文不消耗次数。
+      this.#cookies = context.cookies.map((value) => ({ ...value }));
+      this.#token = authToken(context.token);
+      this.#paused = undefined;
+      clearTimeout(this.#pauseTimer);
+      this.#resumeCount += 1;
+    } catch (error) {
+      // 3、只有上下文尚未更新允许稍后确认；取消、读取失败或身份变化立即释放待办。
+      if (!(error instanceof PlatformError) || error.reason !== 'context_unchanged')
+        this.disconnect();
+      throw error;
+    } finally {
+      this.#busy = false;
+    }
+  }
+
+  /** 仅在内存比较当前详情域适用的认证绑定；缺失或歧义 Cookie 不允许恢复。 */
+  #contextIdentity(
+    context: BossRequestContext,
+  ): { binding: string; securityToken: string } | undefined {
+    const parts = cookieHeaderForUrl(
+      context.cookies,
+      new URL(detailPath, origin),
+      this.#now(),
+    ).split('; ');
+    const values = ['wt2', 'bst', '__zp_stoken__'].map((name) =>
+      parts.filter((part) => part.startsWith(`${name}=`)),
+    );
+    const [wt2, bst, security] = values;
+    if (!context.token || wt2?.length !== 1 || bst?.length !== 1 || security?.length !== 1)
+      return undefined;
+    const securityToken = security[0]?.slice('__zp_stoken__='.length);
+    if (!securityToken || wt2[0] === 'wt2=' || bst[0] === 'bst=') return undefined;
+    // 1、bst 会在正常浏览时轮换，只验证存在性；稳定认证绑定变化仍拒绝沿用旧候选。
+    return { binding: JSON.stringify([wt2[0], authToken(context.token)]), securityToken };
   }
 
   /** 用户每次调用只读一页，检查身份增量，绝不后台遍历。 */
@@ -168,6 +279,9 @@ export class BossHttpSession {
       // 1、工作集上限要求重新开始浏览，不能让私有上下文无界增长。
       if (this.#page >= 20) throw new PlatformError('session_unavailable');
       if (!this.#hasMore) return { candidates: [], hasMore: false };
+      this.#resumeCount = 0;
+      this.#networkRetries = 0;
+      this.#batchExpiresAt = this.#now() + 600_000;
       const url = new URL(this.#template);
       url.searchParams.set('page', String(this.#page + 1));
       url.searchParams.set('pageSize', '15');
@@ -240,22 +354,67 @@ export class BossHttpSession {
     });
   }
 
+  /** 请求内部可能设置暂停标记，跨异步边界重新读取实际状态。 */
+  #isPaused(): boolean {
+    return this.#paused !== undefined;
+  }
+
   /** 每个会话一次仅执行一个操作，访问受限或协议失败后禁止继续重试。 */
   async #exclusive<T>(work: () => Promise<T>): Promise<T> {
-    if (this.#abort.signal.aborted || this.#busy) throw new PlatformError('session_unavailable');
+    if (this.#abort.signal.aborted || this.#busy || this.#paused)
+      throw new PlatformError('session_unavailable');
     this.#busy = true;
     try {
       return await work();
     } catch (error) {
-      this.disconnect();
+      // 1、仅可恢复的详情安全检查保留原工作集，其余错误释放全部私有上下文。
+      if (!this.#isPaused()) this.disconnect();
       throw error instanceof PlatformError ? error : new PlatformError('network_error');
     } finally {
       this.#busy = false;
     }
   }
 
-  /** 有界只读请求；不跟随重定向，不输出上游错误原文。 */
+  /** 临时传输故障在当前 GET 内重试，独立于安全上下文恢复，不返回半成品。 */
   async #request(url: URL, callerSignal: AbortSignal, jobId?: string): Promise<unknown> {
+    for (;;) {
+      try {
+        return await this.#requestAttempt(url, callerSignal, jobId);
+      } catch (error) {
+        // 1、37／解析／认证错误不属于传输重试；取消和底层关闭始终优先。
+        const reason = transientReason(error);
+        const retryable = error instanceof BossRetryableResponse;
+        if (
+          this.#browserResponse ||
+          callerSignal.aborted ||
+          this.#abort.signal.aborted ||
+          (!reason && !retryable)
+        )
+          throw error;
+        const terminal =
+          error instanceof PlatformError ? error : new PlatformError('network_error', null, reason);
+        const delay = Math.max(
+          5000 * 2 ** this.#networkRetries,
+          retryable ? error.retryAfterMs : 0,
+        );
+        if (this.#networkRetries >= 3 || this.#now() + delay >= this.#batchExpiresAt)
+          throw terminal;
+        this.#networkRetries++;
+        // 2、退避受原批次期限、取消和连接关闭约束；不刷新或操作浏览器。
+        const signal = AbortSignal.any([
+          callerSignal,
+          this.#abort.signal,
+          AbortSignal.timeout(Math.max(1, this.#batchExpiresAt - this.#now())),
+        ]);
+        const { setTimeout } = await import('node:timers/promises');
+        await setTimeout(delay, undefined, { signal });
+        if (this.#now() >= this.#batchExpiresAt) throw terminal;
+      }
+    }
+  }
+
+  /** 单次只读请求；不跟随重定向，不输出上游错误原文。 */
+  async #requestAttempt(url: URL, callerSignal: AbortSignal, jobId?: string): Promise<unknown> {
     // 1、同会话至少间隔五秒，等待和网络均响应取消。
     const signal = AbortSignal.any([callerSignal, this.#abort.signal, AbortSignal.timeout(20_000)]);
     signal.throwIfAborted();
@@ -323,6 +482,20 @@ export class BossHttpSession {
     // 2、状态异常立即取消正文；最大两 MiB，避免任意响应占满内存。
     if (response.status !== 200) {
       await response.body?.cancel();
+      // 2.a、只对白名单状态解析服务器等待时间；过长等待由外层批次期限拒绝。
+      if ([429, 500, 502, 503, 504].includes(response.status)) {
+        const value = response.headers.get('retry-after');
+        const after =
+          value && /^\d+$/.test(value)
+            ? Number(value) * 1000
+            : value
+              ? Date.parse(value) - this.#now()
+              : 0;
+        throw new BossRetryableResponse(
+          response.status,
+          Number.isNaN(after) ? 0 : Math.max(0, after),
+        );
+      }
       throw new PlatformError(
         response.status === 429
           ? 'rate_limited'
@@ -357,7 +530,28 @@ export class BossHttpSession {
     }
     const parsed = envelope.safeParse(raw);
     if (!parsed.success) throw new PlatformError('parse_changed');
-    if (parsed.data.code === 37)
+    if (parsed.data.code === 37) {
+      // 3.a、仅 HTTP 详情允许有界暂停；列表错误、浏览器模式及恢复次数耗尽仍终止。
+      const identity = this.#contextIdentity({ cookies: this.#cookies, token: this.#token });
+      if (
+        jobId &&
+        this.#readContext &&
+        !this.#browserResponse &&
+        this.#resumeCount < 5 &&
+        identity
+      ) {
+        this.#paused = { ...identity, expiresAt: this.#batchExpiresAt };
+        // 3.a.i、私有工作集的释放期限同样固定在原批次，不随暂停次数延长。
+        this.#pauseTimer = setTimeout(
+          () => {
+            this.disconnect();
+          },
+          Math.max(0, this.#batchExpiresAt - this.#now()),
+        );
+        this.#pauseTimer.unref();
+        this.#cookies = [];
+        this.#token = undefined;
+      }
       throw new BossSecurityCheckError({
         transport: this.#browserResponse ? 'browser' : 'http',
         endpoint: url.pathname === listPath ? 'list' : 'detail',
@@ -365,6 +559,7 @@ export class BossHttpSession {
         successes: this.#successfulResponses,
         data: parsed.data.zpData,
       });
+    }
     if (parsed.data.code !== 0) throw new PlatformError('upstream_error', parsed.data.code);
     signal.throwIfAborted();
     // 4、记录业务码成功，不冒充后续职位结构及身份校验也已通过。

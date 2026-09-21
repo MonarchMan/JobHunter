@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as timers from 'node:timers/promises';
 import { BossHttpSession, cookieHeaderForUrl, type BrowserCookie } from '../src/index.js';
+
+vi.mock('node:timers/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof timers>();
+  return { ...actual, setTimeout: vi.fn(actual.setTimeout) };
+});
 
 const cookie: BrowserCookie = {
   name: 'session',
@@ -69,6 +75,243 @@ function session(responses: unknown[]): {
 }
 
 describe('BOSS HTTP 会话', () => {
+  it.each(['unknown', 'identity', 'long_wait', 'cancel'] as const)(
+    '传输重试边界 %s 不继续请求',
+    async (mode) => {
+      let now = 1_800_000_000_000;
+      const controller = new AbortController();
+      const wait = vi.spyOn(timers, 'setTimeout').mockImplementation(() => {
+        controller.abort();
+        return Promise.reject(new DOMException('cancelled', 'AbortError'));
+      });
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(page(['a'])));
+      if (mode === 'unknown') fetcher.mockRejectedValueOnce(new TypeError('private'));
+      else if (mode === 'cancel')
+        fetcher.mockRejectedValueOnce(Object.assign(new Error('private'), { code: 'ECONNRESET' }));
+      else
+        fetcher.mockResolvedValueOnce(
+          mode === 'identity'
+            ? Response.json(detail('other'))
+            : new Response('', {
+                status: 429,
+                headers: { 'retry-after': '99999999999999999999999999999' },
+              }),
+        );
+      const client = new BossHttpSession({
+        cookies: [cookie],
+        observedListUrl,
+        fetch: fetcher,
+        now: () => (now += 5000),
+      });
+      try {
+        await client.readNext(controller.signal);
+        await expect(client.readDetail('a', controller.signal)).rejects.toThrow();
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        expect(wait).toHaveBeenCalledTimes(mode === 'cancel' ? 1 : 0);
+      } finally {
+        client.disconnect();
+        wait.mockRestore();
+      }
+    },
+  );
+  it('网络预算跨 37 恢复保留，退避独立计数且不重抓列表', async () => {
+    let now = 1_800_000_000_000;
+    let version = 0;
+    const wait = vi.spyOn(timers, 'setTimeout').mockImplementation((delay) => {
+      now += Number(delay);
+      return Promise.resolve(undefined);
+    });
+    const context = (): { token: string; cookies: BrowserCookie[] } => ({
+      token: 'ordinary',
+      cookies: [
+        { ...cookie, name: 'wt2', value: 'account' },
+        { ...cookie, name: 'bst', value: 'bst' },
+        { ...cookie, name: '__zp_stoken__', value: `security-${String(version)}` },
+      ],
+    });
+    const network = (): TypeError =>
+      new TypeError('private', {
+        cause: Object.assign(new Error('private'), { code: 'ECONNRESET' }),
+      });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(Response.json(page(['a'])));
+    for (let i = 0; i < 3; i++)
+      fetcher.mockRejectedValueOnce(network()).mockResolvedValueOnce(Response.json({ code: 37 }));
+    fetcher.mockRejectedValueOnce(network());
+    const client = new BossHttpSession({
+      ...context(),
+      observedListUrl,
+      fetch: fetcher,
+      readContext: () => Promise.resolve(context()),
+      now: () => (now += 5000),
+    });
+    const signal = new AbortController().signal;
+    try {
+      await client.readNext(signal);
+      for (let i = 0; i < 3; i++) {
+        await expect(client.readDetail('a', signal)).rejects.toMatchObject({ businessCode: 37 });
+        version++;
+        await client.resume(signal);
+      }
+      await expect(client.readDetail('a', signal)).rejects.toMatchObject({
+        category: 'network_error',
+        reason: 'connection_reset',
+      });
+      expect(wait.mock.calls.map(([delay]) => delay)).toEqual([5000, 10000, 20000]);
+      expect(fetcher).toHaveBeenCalledTimes(8);
+    } finally {
+      client.disconnect();
+      wait.mockRestore();
+    }
+  });
+
+  it.each([429, 503])('HTTP %s 遵守 Retry-After，成功后返回同一完整详情', async (status) => {
+    let now = 1_800_000_000_000;
+    const wait = vi.spyOn(timers, 'setTimeout').mockImplementation((delay) => {
+      now += Number(delay);
+      return Promise.resolve(undefined);
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(page(['a'])))
+      .mockResolvedValueOnce(new Response('', { status, headers: { 'retry-after': '12' } }))
+      .mockResolvedValueOnce(Response.json(detail('a')));
+    const client = new BossHttpSession({
+      cookies: [cookie],
+      observedListUrl,
+      fetch: fetcher,
+      now: () => (now += 5000),
+    });
+    try {
+      const signal = new AbortController().signal;
+      await client.readNext(signal);
+      await expect(client.readDetail('a', signal)).resolves.toMatchObject({ externalJobId: 'a' });
+      expect(wait).toHaveBeenCalledWith(12000, undefined, expect.anything());
+      expect(fetcher).toHaveBeenCalledTimes(3);
+    } finally {
+      client.disconnect();
+      wait.mockRestore();
+    }
+  });
+  it('每段必须更新安全上下文，五次有效恢复后终止', async () => {
+    let now = 1_800_000_000_000;
+    let version = 0;
+    const context = (): { token: string; cookies: BrowserCookie[] } => ({
+      token: 'ordinary',
+      cookies: [
+        { ...cookie, name: 'wt2', value: 'account' },
+        { ...cookie, name: 'bst', value: `bst-${String(version)}` },
+        { ...cookie, name: '__zp_stoken__', value: `security-${String(version)}` },
+      ],
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(page(['a'])))
+      .mockImplementation(() => Promise.resolve(Response.json({ code: 37 })));
+    const client = new BossHttpSession({
+      ...context(),
+      observedListUrl,
+      fetch: fetcher,
+      readContext: () => Promise.resolve(context()),
+      now: () => (now += 6000),
+    });
+    const signal = new AbortController().signal;
+    await client.readNext(signal);
+    await expect(client.readDetail('a', signal)).rejects.toThrow();
+    for (let i = 1; i <= 5; i++) {
+      await expect(client.resume(signal)).rejects.toMatchObject({ reason: 'context_unchanged' });
+      version = i;
+      await client.resume(signal);
+      await expect(client.readDetail('a', signal)).rejects.toMatchObject({ businessCode: 37 });
+    }
+    version++;
+    await expect(client.resume(signal)).rejects.toMatchObject({ category: 'session_unavailable' });
+    expect(fetcher).toHaveBeenCalledTimes(7);
+    client.disconnect();
+  });
+  it.each(['success', 'again', 'account', 'expired', 'cancel', 'missing', 'read_failure'] as const)(
+    '显式恢复 %s：只接受官网更新上下文，保留原详情参数并限制一次续跑',
+    async (mode) => {
+      let now = 1_800_000_000_000;
+      let security = 'old-security';
+      let account = 'account-a';
+      let bst = 'ordinary-bst';
+      let readFailure = false;
+      let missing = false;
+      const context = (): { token: string; cookies: BrowserCookie[] } => ({
+        token: missing ? '' : 'ordinary-token',
+        cookies: [
+          { ...cookie, name: 'wt2', value: account },
+          { ...cookie, name: 'bst', value: bst },
+          { ...cookie, name: '__zp_stoken__', value: security },
+        ],
+      });
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(Response.json(page(['a'])))
+        .mockResolvedValueOnce(Response.json({ code: 37, zpData: { seed: 'private' } }))
+        .mockResolvedValueOnce(Response.json(mode === 'again' ? { code: 37 } : detail('a')));
+      const client = new BossHttpSession({
+        ...context(),
+        observedListUrl,
+        fetch: fetcher,
+        readContext: () =>
+          readFailure ? Promise.reject(new Error('private-data')) : Promise.resolve(context()),
+        now: () => (now += 6000),
+      });
+      const signal = new AbortController().signal;
+      await client.readNext(signal);
+      await expect(client.readDetail('a', signal)).rejects.toMatchObject({ businessCode: 37 });
+      await expect(client.readDetail('a', signal)).rejects.toMatchObject({
+        category: 'session_unavailable',
+      });
+      await expect(client.resume(signal)).rejects.toMatchObject({ reason: 'context_unchanged' });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      security = 'updated-by-normal-browser';
+      bst = 'rotated-by-normal-browser';
+      if (mode === 'account') account = 'account-b';
+      if (mode === 'expired') now += 600_000;
+      if (mode === 'missing') missing = true;
+      if (mode === 'read_failure') readFailure = true;
+      const controller = new AbortController();
+      if (mode === 'cancel') controller.abort();
+      if (['account', 'expired', 'cancel', 'missing', 'read_failure'].includes(mode)) {
+        if (mode === 'cancel') await expect(client.resume(controller.signal)).rejects.toThrow();
+        else
+          await expect(client.resume(controller.signal)).rejects.toMatchObject({
+            reason:
+              mode === 'account'
+                ? 'auth_binding_changed'
+                : mode === 'expired'
+                  ? 'resume_expired'
+                  : mode === 'missing'
+                    ? 'auth_context_missing'
+                    : 'context_read_failed',
+          });
+        await expect(client.resume(signal)).rejects.toMatchObject({
+          category: 'session_unavailable',
+        });
+        expect(fetcher).toHaveBeenCalledTimes(2);
+      } else {
+        await client.resume(signal);
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        if (mode === 'again') {
+          await expect(client.readDetail('a', signal)).rejects.toMatchObject({ businessCode: 37 });
+          await expect(client.resume(signal)).rejects.toMatchObject({
+            category: 'session_unavailable',
+          });
+        } else
+          await expect(client.readDetail('a', signal)).resolves.toMatchObject({
+            externalJobId: 'a',
+          });
+        expect(fetcher).toHaveBeenCalledTimes(3);
+        expect(new Headers(fetcher.mock.calls[2]?.[1]?.headers).get('zp_token')).toBe(bst);
+        expect((fetcher.mock.calls[2]?.[0] as URL).searchParams.get('securityId')).toBe(
+          'private-a',
+        );
+      }
+      client.disconnect();
+    },
+  );
   it('计时器提前唤醒后继续核对五秒边界，不提前发送下一页', async () => {
     // 1、第二次调用的前几次时钟读取仍停在 4999ms，模拟提前唤醒后边界未到。
     const base = 1_800_000_000_000;

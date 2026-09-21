@@ -57,10 +57,10 @@ test('BOSS browsing preserves results on failure and exposes saved jobs at narro
     await route.fulfill({ status: 202, json: { data: { taskId: 'test', kind: 'enqueued' } } });
   });
   await page.goto('/sources?channel=platform');
+  await page.getByText('高级连接设置', { exact: true }).click();
   await expect(page.getByText('每次只读取一批', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: '连接 Chrome' })).toBeDisabled();
   await page.getByLabel('调试描述文件绝对路径').fill('/fixture/DevToolsActivePort');
-  await page.getByLabel('目标标签页 ID').fill('fixture');
   await page.getByRole('checkbox').check();
   await page.getByLabel('调试描述文件绝对路径').fill('relative');
   await page.getByRole('button', { name: '连接 Chrome' }).click();
@@ -69,7 +69,7 @@ test('BOSS browsing preserves results on failure and exposes saved jobs at narro
   expect(commands).toHaveLength(0);
   await page.getByLabel('调试描述文件绝对路径').fill('/fixture/DevToolsActivePort');
   await page.getByRole('button', { name: '连接 Chrome' }).click();
-  await expect(page.getByRole('button', { name: '读取下一批推荐' })).toBeEnabled({
+  await expect(page.getByRole('button', { name: '获取职位' })).toBeEnabled({
     timeout: 10000,
   });
   expect(commands).toHaveLength(1);
@@ -112,7 +112,7 @@ test('BOSS browsing preserves results on failure and exposes saved jobs at narro
     '/jobs?source=platform&provider=boss',
     { timeout: 10000 },
   );
-  await expect(page.getByRole('button', { name: '读取下一批推荐' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '重新连接', exact: true }).first()).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(() => {
     window.scrollTo(0, 0);
