@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi, type Mock } from 'vitest';
 import { BossBrowserSession } from '../src/boss-browser.js';
+import type { BossPageState } from '../src/boss-page-state.js';
 
 const listUrl = 'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1&city=1';
 const detailUrl = 'https://www.zhipin.com/wapi/zpgeek/job/detail.json?securityId=private-a';
@@ -21,8 +22,39 @@ const detail = {
 };
 const signal = (): AbortSignal => new AbortController().signal;
 
+it('专用页首次预期导航允许采集，第二次主框架导航冻结旧批次', async () => {
+  const url = 'https://www.zhipin.com/web/geek/jobs';
+  const f = fixture(detail, url);
+  f.event('Page.frameNavigated', { frame: { url } });
+  await f.emit(listUrl, list);
+  await expect(f.session.readNext(signal())).resolves.toMatchObject({
+    candidates: [{ externalJobId: 'a' }],
+  });
+  f.event('Page.frameNavigated', { frame: { url } });
+  await expect(f.session.readDetail('a', signal())).rejects.toMatchObject({
+    category: 'session_unavailable',
+  });
+  expect(f.clickJob).not.toHaveBeenCalled();
+  f.session.disconnect();
+});
+
+it('专用页首次跳往非预期页面仍冻结，不操作登录或验证', async () => {
+  const f = fixture(detail, 'https://www.zhipin.com/web/geek/jobs');
+  f.event('Page.frameNavigated', { frame: { url: 'https://example.com/login' } });
+  await expect(f.session.readNext(signal())).rejects.toMatchObject({
+    category: 'session_unavailable',
+  });
+  expect(f.clickJob).not.toHaveBeenCalled();
+});
+
 /** 合成所选页面网络事件，不连接真实站点；仅正文读取可调用 CDP。 */
-function fixture(detailBody: unknown = detail): {
+function fixture(
+  detailBody: unknown = detail,
+  initialNavigationUrl?: string,
+  inspectPage?: (signal: AbortSignal) => Promise<BossPageState>,
+  loadNext?: (lastJobId: string, signal: AbortSignal) => Promise<void>,
+  activateForNext = true,
+): {
   session: BossBrowserSession;
   emit: (url: string, body: unknown, status?: number, sessionId?: string) => Promise<void>;
   event: (method: string, params: unknown, sessionId?: string) => void;
@@ -45,7 +77,15 @@ function fixture(detailBody: unknown = detail): {
   const clickJob = vi.fn(async () => {
     await emit(detailUrl, detailBody);
   });
-  const session = new BossBrowserSession({ sessionId: 'selected', call, clickJob });
+  const session = new BossBrowserSession({
+    sessionId: 'selected',
+    call,
+    clickJob,
+    ...(initialNavigationUrl ? { initialNavigationUrl } : {}),
+    ...(inspectPage ? { inspectPage } : {}),
+    ...(loadNext ? { loadNext } : {}),
+    activateForNext,
+  });
   const event = (method: string, params: unknown, sessionId = 'selected'): void => {
     session.accept({ sessionId, method, params });
   };
@@ -68,8 +108,165 @@ function fixture(detailBody: unknown = detail): {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it.each([true, false])('用户再次获取只加载一次下一批，激活策略=%s', async (activateForNext) => {
+  // 1、下一批只在显式 readNext 时由官网模拟返回，禁止后台循环加载。
+  const loadNext = vi.fn(async () => {
+    await f.emit(listUrl.replace('page=1', 'page=2'), {
+      code: 0,
+      zpData: {
+        hasMore: false,
+        lid: 'test',
+        jobList: [{ ...row, encryptJobId: 'b', securityId: 'private-b' }],
+      },
+    });
+  });
+  const f = fixture(detail, undefined, undefined, loadNext, activateForNext);
+  await f.emit(listUrl, { ...list, zpData: { ...list.zpData, hasMore: true } });
+  await f.session.readNext(signal());
+  expect(loadNext).not.toHaveBeenCalled();
+  await f.session.readDetail('a', signal());
+  // 2、校验真实页序，不因滚动成功就认定采集成功。
+  await expect(f.session.readNext(signal())).resolves.toMatchObject({
+    candidates: [{ externalJobId: 'b' }],
+    hasMore: false,
+  });
+  expect(loadNext).toHaveBeenCalledOnce();
+  expect(f.call.mock.calls.some(([method]) => method === 'Page.bringToFront')).toBe(
+    activateForNext,
+  );
+  expect(loadNext).toHaveBeenCalledWith('a', expect.any(AbortSignal));
+  f.session.disconnect();
+});
+
+it('列表响应后立即串行点击详情，不等待固定五秒', async () => {
+  // 1、固定时钟，任何残留的五秒门槛都会阻止本测试完成。
+  vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000);
+  const f = fixture();
+  await f.emit(listUrl, list);
+  await f.session.readNext(signal());
+  // 2、使用合成官网响应验证点击与正文解析，不连接真实平台。
+  await expect(f.session.readDetail('a', signal())).resolves.toMatchObject({
+    externalJobId: 'a',
+    description: '负责开发与维护。',
+  });
+  expect(f.clickJob).toHaveBeenCalledOnce();
+  f.session.disconnect();
+});
+
+it('激活期间到达的下一批直接消费，不再次滚动', async () => {
+  const loadNext = vi.fn();
+  const f = fixture(detail, undefined, undefined, loadNext);
+  await f.emit(listUrl, { ...list, zpData: { ...list.zpData, hasMore: true } });
+  await f.session.readNext(signal());
+  await f.session.readDetail('a', signal());
+  // 1、模拟激活页唤醒原在后台延迟的官网列表，正文仍走原观察通道。
+  f.call.mockImplementationOnce(async (method) => {
+    expect(method).toBe('Page.bringToFront');
+    await f.emit(listUrl.replace('page=1', 'page=2'), {
+      code: 0,
+      zpData: {
+        hasMore: false,
+        lid: 'test',
+        jobList: [{ ...row, encryptJobId: 'b', securityId: 'private-b' }],
+      },
+    });
+    return { body: '{}', base64Encoded: false };
+  });
+  // 2、已有数据不得再触发额外一批。
+  await expect(f.session.readNext(signal())).resolves.toMatchObject({
+    candidates: [{ externalJobId: 'b' }],
+  });
+  expect(loadNext).not.toHaveBeenCalled();
+  f.session.disconnect();
+});
+
+/** 将截止计时器一起纳入虚拟时钟，测试不等待真实一分钟。 */
+function fakeClock(): void {
+  vi.useFakeTimers();
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(() => {
+      controller.abort();
+    }, ms);
+    return controller.signal;
+  });
+}
+
+it('初始化正常同源跳转后页面恢复，保留观察并消费新文档列表', async () => {
+  fakeClock();
+  const inspect = vi
+    .fn<() => Promise<BossPageState>>()
+    .mockResolvedValueOnce('loading')
+    .mockResolvedValue('ready');
+  const f = fixture(detail, 'https://www.zhipin.com/web/geek/jobs', inspect);
+  const batch = f.session.readNext(signal());
+  f.event('Page.frameNavigated', { frame: { url: 'https://www.zhipin.com/web/geek/jobs' } });
+  await f.emit(listUrl, list);
+  f.event('Page.frameNavigated', {
+    frame: { url: 'https://www.zhipin.com/web/geek/jobs?_security_check=synthetic' },
+  });
+  await f.emit(listUrl, list);
+  await vi.advanceTimersByTimeAsync(1100);
+  await expect(batch).resolves.toMatchObject({ candidates: [{ externalJobId: 'a' }] });
+  expect(f.clickJob).not.toHaveBeenCalled();
+  f.session.disconnect();
+});
+
+it.each(['login_required', 'verification_required', 'access_blocked', 'rate_limited'] as const)(
+  '连续两次确认 %s 才停止且不点击职位',
+  async (state) => {
+    fakeClock();
+    const inspect = vi.fn(() => Promise.resolve(state));
+    const f = fixture(detail, undefined, inspect);
+    const assertion = expect(f.session.readNext(signal())).rejects.toMatchObject({ reason: state });
+    await vi.advanceTimersByTimeAsync(1100);
+    await assertion;
+    expect(inspect).toHaveBeenCalledTimes(2);
+    expect(f.clickJob).not.toHaveBeenCalled();
+  },
+);
+
+it.each(['loading', 'ready'] as const)(
+  '首批等待 %s 到期有明确诊断，不发职位探测',
+  async (state) => {
+    fakeClock();
+    const f = fixture(detail, undefined, () => Promise.resolve(state));
+    const assertion = expect(f.session.readNext(signal())).rejects.toMatchObject({
+      reason: state === 'ready' ? 'list_response_timeout' : 'page_not_ready',
+    });
+    await vi.advanceTimersByTimeAsync(60001);
+    await assertion;
+    expect(f.call).not.toHaveBeenCalled();
+    expect(f.clickJob).not.toHaveBeenCalled();
+  },
+);
+
+it('旧文档正文迟到不能污染新页或冻结新观察', async () => {
+  fakeClock();
+  const f = fixture(detail, 'https://www.zhipin.com/web/geek/jobs');
+  let complete!: (value: { body: string; base64Encoded: boolean }) => void;
+  f.call.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
+  await f.emit(listUrl, list);
+  f.event('Page.frameNavigated', {
+    frame: { url: 'https://www.zhipin.com/web/geek/jobs?_security_check=synthetic' },
+  });
+  await f.emit(listUrl, list);
+  complete({ body: JSON.stringify({ code: 37 }), base64Encoded: false });
+  await vi.advanceTimersByTimeAsync(1100);
+  await expect(f.session.readNext(signal())).resolves.toMatchObject({
+    candidates: [{ externalJobId: 'a' }],
+  });
+  f.session.disconnect();
 });
 
 it('观察列表和正常详情，复用校验且不发独立 HTTP，不读取 Cookie', async () => {
@@ -221,7 +418,9 @@ it('正文获取失败、超大响应和 HTTP 限流保持脱敏分类', async (
   const f = fixture();
   f.call.mockRejectedValueOnce(new Error('secret-url'));
   await f.emit(listUrl, list);
-  await expect(f.session.readNext(signal())).rejects.toThrow('parse_changed');
+  await expect(f.session.readNext(signal())).rejects.toMatchObject({
+    reason: 'response_body_unavailable',
+  });
   const g = fixture();
   await g.emit(listUrl, list, 429);
   await expect(g.session.readNext(signal())).rejects.toMatchObject({ category: 'rate_limited' });

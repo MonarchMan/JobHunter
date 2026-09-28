@@ -421,7 +421,7 @@ describe('persistent task queue', () => {
     expect(tasks.cancel(succeeded.task.id).kind).toBe('not_cancellable');
   });
 
-  it('creates a linked task when a failed task is manually retried', async () => {
+  it('requeues the same task and atomically logs the previous failure', async () => {
     const input = await setup();
     const registry = registryWith({ execute: () => undefined });
     const { tasks } = services(input, registry);
@@ -441,8 +441,53 @@ describe('persistent task queue', () => {
     });
 
     const retry = tasks.retryFailed(failed.task.id, 'user-1');
-    expect(retry).toMatchObject({ kind: 'enqueued', task: { retryOfTaskId: failed.task.id } });
+    expect(retry).toMatchObject({
+      kind: 'enqueued',
+      task: { id: failed.task.id, status: 'pending', attemptCount: 0, errorSummary: null },
+    });
+    expect(tasks.count({})).toBe(1);
+    expect(
+      input.handle.client
+        .prepare('SELECT error_summary FROM task_retry_logs WHERE task_id = ?')
+        .all(failed.task.id),
+    ).toEqual([{ error_summary: 'Non-retryable.' }]);
     expect(tasks.retryFailed(failed.task.id, 'user-1').kind).toBe('idempotent');
+    expect(() => tasks.retryFailed(failed.task.id, 'user-2')).toThrow('Only failed tasks');
+    // 1、第二轮再次失败后，旧令牌不能误触发第三轮。
+    input.queue.claim({
+      taskType: 'source.sync',
+      workerId: 'worker-a',
+      now: input.clock.now(),
+      leaseDurationMsFor: () => 1_000,
+    });
+    input.queue.fail({
+      taskId: failed.task.id,
+      workerId: 'worker-a',
+      finishedAt: input.clock.now(),
+      category: 'permanent',
+      summary: 'Second failure.',
+    });
+    expect(tasks.retryFailed(failed.task.id, 'user-1')).toMatchObject({
+      kind: 'idempotent',
+      task: { status: 'failed' },
+    });
+    // 2、同并发域有其他任务时不记录重试或覆盖原失败状态。
+    const active = enqueueSync(tasks, 'competing');
+    expect(tasks.retryFailed(failed.task.id, 'user-2')).toMatchObject({
+      kind: 'concurrency_conflict',
+      task: { id: active.task.id },
+    });
+    expect(input.handle.client.prepare('SELECT count(*) FROM task_retry_logs').pluck().get()).toBe(
+      1,
+    );
+    tasks.cancel(active.task.id);
+    expect(tasks.retryFailed(failed.task.id, 'user-2')).toMatchObject({
+      kind: 'enqueued',
+      task: { id: failed.task.id },
+    });
+    expect(input.handle.client.prepare('SELECT count(*) FROM task_retry_logs').pluck().get()).toBe(
+      2,
+    );
   });
 });
 

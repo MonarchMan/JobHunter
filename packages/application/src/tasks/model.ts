@@ -67,6 +67,8 @@ export interface TaskHandler<TPayload, TOutput> {
   readonly concurrencyKey?: (payload: TPayload) => string | null;
   /** 根据已保存的部分结果构造恢复输入，返回值仍须通过 payloadSchema。 */
   readonly retryPayload?: (payload: unknown, result: unknown) => unknown;
+  /** 仅用户手动重试调用，不用于 Worker 正常领取或自动恢复。 */
+  readonly manualRetryPayload?: (payload: unknown, result: unknown) => unknown;
   execute(context: TaskHandlerContext, payload: TPayload): Promise<TOutput>;
 }
 
@@ -197,6 +199,8 @@ export interface PersistedScheduleInput {
 /** 应用层数据结构或端口契约。 */
 export interface TaskQueue {
   enqueue(input: PersistedTaskInput): EnqueueTaskResult;
+  /** 原子归档失败摘要并以同一身份重新入队，input.idempotencyKey 为本次操作令牌。 */
+  retry(input: PersistedTaskInput): EnqueueTaskResult;
   get(taskId: TaskId): TaskRecord | null;
   list(filter: TaskListFilter): readonly TaskRecord[];
   count(filter: Omit<TaskListFilter, 'limit' | 'offset'>): number;

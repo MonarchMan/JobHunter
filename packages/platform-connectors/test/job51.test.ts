@@ -55,7 +55,7 @@ it('fetches the exact observed URL and consumes full JSON detail without another
   });
 });
 
-it('reads observed first and last pages with a five-second gap and no invented signature', async () => {
+it('reads observed first and last pages with a configured gap and no invented signature', async () => {
   const fetcher = vi
     .fn<typeof fetch>()
     .mockResolvedValueOnce(
@@ -65,7 +65,7 @@ it('reads observed first and last pages with a five-second gap and no invented s
       ),
     )
     .mockResolvedValueOnce(response([row('140'), row('141')], 42));
-  const s = new Job51HttpSession({ fetch: fetcher });
+  const s = new Job51HttpSession({ fetch: fetcher, requestIntervalMs: 50 });
   s.offer(template());
   expect((await s.readNext(new AbortController().signal)).hasMore).toBe(true);
   s.offer(template(3));
@@ -73,7 +73,7 @@ it('reads observed first and last pages with a five-second gap and no invented s
   const pending = s.readNext(new AbortController().signal);
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect((await pending).hasMore).toBe(false);
-  expect(Date.now() - started).toBeGreaterThanOrEqual(4900);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(40);
   expect(fetcher.mock.calls[1]?.[0]).toBe(template(3).url);
 }, 10_000);
 

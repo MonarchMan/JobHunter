@@ -197,6 +197,48 @@ export class SqliteTaskRepository implements TaskQueue {
     this.#scheduleTransaction = (input) => scheduleTransaction.immediate(input);
   }
 
+  /** 手动重试在同一事务记录失败日志、校验并发并重置执行状态。 */
+  public retry(input: PersistedTaskInput): EnqueueTaskResult {
+    return this.#client
+      .transaction((): EnqueueTaskResult => {
+        // 1、先去重操作令牌，完成后的重复提交也不得再运行。
+        const current = this.get(input.id);
+        if (!current) throw new TypeError('Task was not found.');
+        if (
+          this.#client
+            .prepare('SELECT 1 FROM task_retry_logs WHERE task_id = ? AND retry_token = ?')
+            .get(input.id, input.idempotencyKey)
+        )
+          return { kind: 'idempotent', task: current };
+        if (current.status !== 'failed') throw new TypeError('Only failed tasks can be retried.');
+        if (current.concurrencyKey) {
+          const active = this.#findActiveByConcurrencyKey(current.concurrencyKey);
+          if (active) return { kind: 'concurrency_conflict', task: active };
+        }
+        // 2、只保存已有脱敏诊断，不复制载荷、原始响应或认证字段。
+        this.#client
+          .prepare(
+            `INSERT INTO task_retry_logs
+        (task_id, retry_token, error_category, error_summary, attempt_count, started_at, finished_at, retried_at)
+        SELECT id, ?, error_category, error_summary, attempt_count, started_at, finished_at, ? FROM tasks WHERE id = ?`,
+          )
+          .run(input.idempotencyKey, input.createdAt, input.id);
+        // 3、保留业务身份及原始幂等键，每轮重新获得自动尝试预算。
+        this.#client
+          .prepare(
+            `UPDATE tasks SET status = 'pending', payload_json = ?, attempt_count = 0,
+        max_attempts = ?, available_at = ?, lease_owner = NULL, lease_expires_at = NULL,
+        last_heartbeat_at = NULL, cancel_requested_at = NULL, error_category = NULL,
+        error_summary = NULL, result_json = NULL, started_at = NULL, finished_at = NULL WHERE id = ?`,
+          )
+          .run(canonicalJson(input.payload), input.maxAttempts, input.availableAt, input.id);
+        const task = this.get(input.id);
+        if (!task) throw new TypeError('Retried task was not found.');
+        return { kind: 'enqueued', task };
+      })
+      .immediate();
+  }
+
   /** 处理数据库类内部的辅助逻辑。 */
   #insert(input: PersistedTaskInput): TaskRecord {
     const row = this.#client

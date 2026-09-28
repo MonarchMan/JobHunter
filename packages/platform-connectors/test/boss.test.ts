@@ -75,6 +75,135 @@ function session(responses: unknown[]): {
 }
 
 describe('BOSS HTTP 会话', () => {
+  it('详情 37 后只调用一次普通会话更新，确认上下文变化才重发 HTTP', async () => {
+    let now = 1_800_000_000_000;
+    let security = 'old';
+    const context = (): { token: string; cookies: BrowserCookie[] } => ({
+      token: 'ordinary',
+      cookies: [
+        { ...cookie, name: 'wt2', value: 'account' },
+        { ...cookie, name: 'bst', value: 'bst' },
+        { ...cookie, name: '__zp_stoken__', value: security },
+      ],
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(page(['a'])))
+      .mockResolvedValueOnce(Response.json({ code: 37 }))
+      .mockResolvedValueOnce(Response.json(detail('a')));
+    const renewContext = vi.fn((jobId: string): Promise<void> => {
+      expect(jobId).toBe('a');
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      security = 'new';
+      return Promise.resolve();
+    });
+    const client = new BossHttpSession({
+      ...context(),
+      observedListUrl,
+      fetch: fetcher,
+      readContext: () => Promise.resolve(context()),
+      renewContext,
+      now: () => now,
+    });
+    const signal = new AbortController().signal;
+    try {
+      // 1、HTTP 仍负责列表、失败详情及恢复后的完整正文。
+      await client.readNext(signal);
+      now += 1_000;
+      await expect(client.readDetail('a', signal)).rejects.toMatchObject({ businessCode: 37 });
+      await client.resume(signal, { waitForChange: true });
+      expect(renewContext).toHaveBeenCalledTimes(1);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      await expect(client.readDetail('a', signal)).resolves.toMatchObject({ externalJobId: 'a' });
+      expect(fetcher).toHaveBeenCalledTimes(3);
+    } finally {
+      client.disconnect();
+    }
+  });
+
+  it('显式只读恢复不自动点击，自动恢复无更新也不重复点击或发送职位 HTTP', async () => {
+    let now = 1_800_000_000_000;
+    const context = (): { token: string; cookies: BrowserCookie[] } => ({
+      token: 'ordinary',
+      cookies: [
+        { ...cookie, name: 'wt2', value: 'account' },
+        { ...cookie, name: 'bst', value: 'bst' },
+        { ...cookie, name: '__zp_stoken__', value: 'old' },
+      ],
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(page(['a'])))
+      .mockResolvedValueOnce(Response.json({ code: 37 }));
+    const renewContext = vi.fn().mockResolvedValue(undefined);
+    const wait = vi.spyOn(timers, 'setTimeout').mockImplementation((delay) => {
+      now += Number(delay);
+      return Promise.resolve(undefined);
+    });
+    const client = new BossHttpSession({
+      ...context(),
+      observedListUrl,
+      fetch: fetcher,
+      readContext: () => Promise.resolve(context()),
+      renewContext,
+      now: () => now,
+    });
+    const signal = new AbortController().signal;
+    try {
+      // 1、人工显式恢复保持只读；自动路径执行一次后最多观察三十秒。
+      await client.readNext(signal);
+      await expect(client.readDetail('a', signal)).rejects.toMatchObject({ businessCode: 37 });
+      await expect(client.resume(signal)).rejects.toMatchObject({ reason: 'context_unchanged' });
+      expect(renewContext).not.toHaveBeenCalled();
+      await expect(client.resume(signal, { waitForChange: true })).rejects.toMatchObject({
+        reason: 'context_unchanged',
+      });
+      expect(renewContext).toHaveBeenCalledTimes(1);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      await expect(client.resume(signal)).rejects.toMatchObject({ reason: 'context_unchanged' });
+      expect(renewContext).toHaveBeenCalledTimes(1);
+    } finally {
+      client.disconnect();
+      wait.mockRestore();
+    }
+  });
+
+  it('恢复普通点击期间取消后不重发失败详情', async () => {
+    const controller = new AbortController();
+    const context = {
+      token: 'ordinary',
+      cookies: [
+        { ...cookie, name: 'wt2', value: 'account' },
+        { ...cookie, name: 'bst', value: 'bst' },
+        { ...cookie, name: '__zp_stoken__', value: 'old' },
+      ],
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(page(['a'])))
+      .mockResolvedValueOnce(Response.json({ code: 37 }));
+    const client = new BossHttpSession({
+      ...context,
+      observedListUrl,
+      fetch: fetcher,
+      readContext: () => Promise.resolve(context),
+      renewContext: () => {
+        controller.abort();
+        return Promise.resolve();
+      },
+    });
+    try {
+      // 1、用户取消优先于点击后等待和 HTTP 重试，已完成请求数保持不变。
+      await client.readNext(controller.signal);
+      await expect(client.readDetail('a', controller.signal)).rejects.toMatchObject({
+        businessCode: 37,
+      });
+      await expect(client.resume(controller.signal, { waitForChange: true })).rejects.toThrow();
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      client.disconnect();
+    }
+  });
   it.each(['unknown', 'identity', 'long_wait', 'cancel'] as const)(
     '传输重试边界 %s 不继续请求',
     async (mode) => {
@@ -192,6 +321,88 @@ describe('BOSS HTTP 会话', () => {
       wait.mockRestore();
     }
   });
+  it.each([
+    'updated',
+    'expired',
+    'cancelled',
+    'disconnected',
+    'account_changed',
+    'read_failed',
+  ] as const)('自动观察 %s：上下文检查不发 HTTP，更新后才解冻', async (mode) => {
+    let now = 1_800_000_000_000;
+    let checks = 0;
+    const controller = new AbortController();
+    const context = (
+      security: string,
+      account = 'account',
+    ): { token: string; cookies: BrowserCookie[] } => ({
+      token: 'ordinary',
+      cookies: [
+        { ...cookie, name: 'wt2', value: account },
+        { ...cookie, name: 'bst', value: 'bst' },
+        { ...cookie, name: '__zp_stoken__', value: security },
+      ],
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(Response.json(page(['a'])))
+      .mockResolvedValueOnce(Response.json({ code: 37 }))
+      .mockResolvedValueOnce(Response.json(detail('a')));
+    const client = new BossHttpSession({
+      ...context('old'),
+      observedListUrl,
+      fetch: fetcher,
+      now: () => now,
+      readContext: () => {
+        // 请求前的正常认证同步不计入 37 后恢复检查。
+        if (fetcher.mock.calls.length < 2) return Promise.resolve(context('old'));
+        checks++;
+        if (checks === 1 || mode === 'expired') return Promise.resolve(context('old'));
+        if (mode === 'read_failed') return Promise.reject(new Error('private'));
+        return Promise.resolve(context('new', mode === 'account_changed' ? 'other' : 'account'));
+      },
+    });
+    // 1、用合成时钟推进检查，不等待真实时间；期间 HTTP 次数必须固定。
+    const wait = vi.spyOn(timers, 'setTimeout').mockImplementation((delay, _value, options) => {
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      now += Number(delay);
+      if (mode === 'cancelled') controller.abort();
+      if (mode === 'disconnected') client.disconnect();
+      if (options?.signal?.aborted)
+        return Promise.reject(new DOMException('Aborted', 'AbortError'));
+      return Promise.resolve(undefined);
+    });
+    const onContextCheck = vi.fn();
+    try {
+      await client.readNext(controller.signal);
+      now += 6000;
+      await expect(client.readDetail('a', controller.signal)).rejects.toMatchObject({
+        businessCode: 37,
+      });
+      const recovery = client.resume(controller.signal, { waitForChange: true, onContextCheck });
+      if (mode === 'updated') {
+        await recovery;
+        expect(onContextCheck.mock.calls).toEqual([['unchanged'], ['updated']]);
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        now += 6000;
+        await expect(client.readDetail('a', controller.signal)).resolves.toMatchObject({
+          externalJobId: 'a',
+        });
+        expect(fetcher).toHaveBeenCalledTimes(3);
+      } else {
+        await expect(recovery).rejects.toThrow();
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        if (mode === 'expired') expect(checks).toBeLessThanOrEqual(120);
+        await expect(client.resume(new AbortController().signal)).rejects.toMatchObject({
+          category: 'session_unavailable',
+        });
+      }
+    } finally {
+      client.disconnect();
+      wait.mockRestore();
+    }
+  });
+
   it('每段必须更新安全上下文，五次有效恢复后终止', async () => {
     let now = 1_800_000_000_000;
     let version = 0;
@@ -312,16 +523,14 @@ describe('BOSS HTTP 会话', () => {
       client.disconnect();
     },
   );
-  it('计时器提前唤醒后继续核对五秒边界，不提前发送下一页', async () => {
-    // 1、第二次调用的前几次时钟读取仍停在 4999ms，模拟提前唤醒后边界未到。
+  it('正常串行请求不要求时钟跨过五秒边界', async () => {
+    // 1、固定时钟模拟连续完成的响应，不应等待实验节流计时器。
     const base = 1_800_000_000_000;
-    let second = false;
-    let reads = 0;
     const timestamps: number[] = [];
     const client = new BossHttpSession({
       cookies: [cookie],
       observedListUrl,
-      now: () => base + (second ? (++reads <= 4 ? 4_999 : 5_000) : 0),
+      now: () => base,
       fetch: (input) => {
         timestamps.push(
           Number(new URL(input instanceof Request ? input.url : input).searchParams.get('_')),
@@ -329,11 +538,10 @@ describe('BOSS HTTP 会话', () => {
         return Promise.resolve(Response.json(page([String(timestamps.length)])));
       },
     });
-    // 2、只模拟本地响应；时钟真正跨过边界后才允许第二次 HTTP。
+    // 2、只模拟本地响应；同一时刻可串行完成下一次 HTTP。
     await client.readNext(new AbortController().signal);
-    second = true;
     await client.readNext(new AbortController().signal);
-    expect(timestamps).toEqual([base, base + 5_000]);
+    expect(timestamps).toEqual([base, base]);
     client.disconnect();
   });
 
@@ -509,6 +717,7 @@ describe('BOSS HTTP 会话', () => {
       .catch((e: unknown) => e);
     expect(error).toMatchObject({ category: 'access_blocked', businessCode: 37 });
     expect(error instanceof Error ? error.message : '').not.toContain('test-secret');
+    expect(error instanceof Error ? error.message : '').toMatch(/bytes=\d+;sha256=[0-9a-f]{16}/);
     await expect(client.readNext(new AbortController().signal)).rejects.toMatchObject({
       category: 'session_unavailable',
     });

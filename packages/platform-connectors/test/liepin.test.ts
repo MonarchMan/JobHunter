@@ -143,6 +143,34 @@ it('首次 LOGIN、续批 UP 保留查询与排序，末批之后不再请求', 
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 
+it('猎聘按传入配置执行间隔，连接器不写死平台下限', async () => {
+  const calledAt: number[] = [];
+  const fetcher = vi.fn<typeof fetch>().mockImplementation((target) => {
+    calledAt.push(Date.now());
+    return Promise.resolve(
+      target === template.url
+        ? Response.json({ flag: 1, data: { data: [row], addData: [], hasNextPage: false } })
+        : new Response(`<script type="application/ld+json">${JSON.stringify(posting)}</script>`, {
+            headers: { 'content-type': 'text/html' },
+          }),
+    );
+  });
+  const session = new LiepinRecommendationHttpSession({
+    template,
+    fetch: fetcher,
+    requestIntervalMs: 1000,
+    readHeaders: () => Promise.resolve({ cookie: 'session=private' }),
+  });
+  await session.readNext(signal);
+  await expect(session.readDetail('job:1980000001', signal)).resolves.toMatchObject({
+    externalJobId: 'job:1980000001',
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const [first, second] = calledAt;
+  if (first === undefined || second === undefined) throw new Error('Missing request timestamps');
+  expect(second - first).toBeGreaterThanOrEqual(1000);
+}, 4000);
+
 it('跨批重复身份冻结且不请求旧详情', async () => {
   const { session, fetcher } = fixture();
   fetcher
@@ -264,6 +292,103 @@ it('重定向登录墙不跟随，不向新目标携带 Cookie', async () => {
   await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
     category: 'access_blocked',
     businessCode: 302,
+    reason: 'redirect_login',
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('详情 GET 的已知瞬时断线可在同一批次有界恢复', async () => {
+  const { session, fetcher, readHeaders } = fixture();
+  await session.readNext(signal);
+  const failure = Object.assign(new Error('private-url?token=secret'), { code: 'ECONNRESET' });
+  fetcher
+    .mockReset()
+    .mockRejectedValueOnce(failure)
+    .mockResolvedValueOnce(
+      new Response(`<script type="application/ld+json">${JSON.stringify(posting)}</script>`, {
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+  await expect(session.readDetail('job:1980000001', signal)).resolves.toMatchObject({
+    description: posting.description,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(readHeaders).toHaveBeenCalledTimes(3);
+});
+
+it('详情网络故障预算耗尽后保留固定底层原因，不泄露异常原文', async () => {
+  const { session, fetcher } = fixture();
+  await session.readNext(signal);
+  fetcher
+    .mockReset()
+    .mockRejectedValue(
+      Object.assign(new Error('private-url?token=secret'), { code: 'UND_ERR_SOCKET' }),
+    );
+  const error: unknown = await session
+    .readDetail('job:1980000001', signal)
+    .catch((e: unknown) => e);
+  expect(error).toMatchObject({ category: 'network_error', reason: 'socket_closed' });
+  expect(error instanceof Error ? error.message : '').toContain(
+    'liepin:detail;reason=socket_closed;code=UND_ERR_SOCKET;name=Error;attempts=3',
+  );
+  expect(error instanceof Error ? error.message : '').not.toContain('private-url');
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});
+
+it('列表 POST 和未知异常不做网络重试', async () => {
+  const list = fixture();
+  list.fetcher
+    .mockReset()
+    .mockRejectedValue(Object.assign(new Error('private-cookie'), { code: 'ECONNRESET' }));
+  await expect(list.session.readNext(signal)).rejects.toMatchObject({
+    category: 'network_error',
+    reason: 'connection_reset',
+  });
+  expect(list.fetcher).toHaveBeenCalledTimes(1);
+  const detail = fixture();
+  await detail.session.readNext(signal);
+  detail.fetcher.mockReset().mockRejectedValue(new TypeError('private-cookie'));
+  await expect(detail.session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category: 'network_error',
+    reason: 'unknown',
+  });
+  expect(detail.fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('详情重试退避可取消，取消后不再发送 HTTP', async () => {
+  const { session, fetcher } = fixture();
+  await session.readNext(signal);
+  fetcher
+    .mockReset()
+    .mockRejectedValue(Object.assign(new Error('private-cookie'), { code: 'ECONNRESET' }));
+  const controller = new AbortController();
+  const pending = session.readDetail('job:1980000001', controller.signal);
+  // 1、确认首次详情已失败并进入退避，再从调用方取消本次操作。
+  await vi.waitFor(() => {
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ category: 'session_unavailable' });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ['https://www.liepin.com/job/1980000002.shtml?token=secret', 'redirect_job'],
+  ['https://www.liepin.com/security/verify?token=secret', 'redirect_challenge'],
+  ['https://www.liepin.com/other?token=secret', 'redirect_internal_other'],
+  ['https://evil.test/steal?token=secret', 'redirect_external'],
+  ['/job/1980000002.shtml', 'redirect_job'],
+  [null, 'redirect_missing_location'],
+  ['http://[', 'redirect_invalid_location'],
+])('302 只保留固定脱敏目标类型：%s', async (location, reason) => {
+  const { session, fetcher } = fixture();
+  await session.readNext(signal);
+  const headers = location === null ? {} : { location };
+  fetcher.mockReset().mockResolvedValue(new Response(null, { status: 302, headers }));
+  await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category: 'access_blocked',
+    businessCode: 302,
+    reason,
   });
   expect(fetcher).toHaveBeenCalledTimes(1);
 });

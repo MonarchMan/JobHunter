@@ -67,6 +67,7 @@ it.skipIf(
     try {
       const connected = await run({
         action: 'connect',
+        acquisitionMode: 'http',
         portFile: String(process.env.BOSS_CDP_PORT_FILE),
         targetId: String(process.env.BOSS_CDP_TARGET_ID),
       });

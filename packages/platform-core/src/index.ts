@@ -73,13 +73,19 @@ export interface PlatformBatch {
 
 /** 连接基础设施对应用暴露的能力，不携带任何凭据。 */
 export interface PlatformSession {
-  /** 显式确认官网恢复后，只校验当前上下文；不自动刷新或发职位请求。 */
-  resume?(signal: AbortSignal): Promise<void>;
+  /** 只校验上下文；自动模式可在原期限内持续只读观察，不刷新或发职位请求。 */
+  resume?(signal: AbortSignal, options?: PlatformResumeOptions): Promise<void>;
   /** 仅通知底层连接关闭；订阅时已关闭须立即通知，返回函数用于释放监听。 */
   onDisconnected?(listener: () => void): () => void;
   readNext(signal: AbortSignal): Promise<PlatformBatch>;
   readDetail(externalJobId: string, signal: AbortSignal): Promise<PlatformJobDetail>;
   disconnect(): void;
+}
+
+/** 恢复观察选项；仅传递固定状态，不向应用暴露浏览器认证数据。 */
+export interface PlatformResumeOptions {
+  readonly waitForChange?: boolean;
+  readonly onContextCheck?: (state: 'unchanged' | 'updated') => void;
 }
 
 /** 用户明确选择本机浏览器实例和页面后，才能借用会话。 */
@@ -90,6 +96,8 @@ export interface PlatformSessionProvider {
       readonly targetId?: string | undefined;
       /** 仅 BOSS 支持显式浏览器辅助；省略时保持原平台行为。 */
       readonly acquisitionMode?: 'http' | 'browser' | undefined;
+      /** 智联自动搜索的非敏感条件；认证字段只能来自浏览器内存。 */
+      readonly search?: { readonly keyword: string; readonly city: string } | undefined;
     },
     signal: AbortSignal,
   ): Promise<PlatformSession>;

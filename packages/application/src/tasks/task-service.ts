@@ -116,31 +116,32 @@ export class TaskService {
     return result;
   }
 
-  /** 为失败任务创建带手动重试令牌的新任务。 */
+  /** 保留任务身份重新入队，仓储原子记录失败日志及操作幂等。 */
   public retryFailed(taskId: TaskId, retryToken: string): EnqueueTaskResult {
     const source = this.#queue.get(taskId);
     if (!source) throw new TypeError('Task was not found.');
-    if (source.status !== 'failed') throw new TypeError('Only failed tasks can be retried.');
     const token = retryToken.trim();
     if (!token) throw new TypeError('Retry token must not be empty.');
     const handler = this.#registry.get(source.taskType);
     const payload = handler.payloadSchema.parse(
-      handler.retryPayload?.(source.payload, source.result) ?? source.payload,
+      handler.manualRetryPayload?.(source.payload, source.result) ??
+        handler.retryPayload?.(source.payload, source.result) ??
+        source.payload,
     );
     const now = this.#dependencies.clock.now();
     const retry: PersistedTaskInput = {
-      id: parseId(this.#dependencies.ids.generate(), 'Task'),
+      id: source.id,
       taskType: source.taskType,
       payload,
       priority: source.priority,
-      idempotencyKey: `${source.idempotencyKey}:manual-retry:${token}`,
+      idempotencyKey: token,
       concurrencyKey: source.concurrencyKey,
       scheduleId: null,
-      retryOfTaskId: source.id,
+      retryOfTaskId: source.retryOfTaskId,
       maxAttempts: handler.defaultMaxAttempts,
       availableAt: now,
       createdAt: now,
     };
-    return this.#retryCoordinator?.enqueueRetry({ source, retry }) ?? this.#queue.enqueue(retry);
+    return this.#retryCoordinator?.enqueueRetry({ source, retry }) ?? this.#queue.retry(retry);
   }
 }

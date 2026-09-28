@@ -67,7 +67,10 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
     sourceUrl: 'https://www.zhaopin.com/jobdetail/CC_TEST.htm',
   };
   let state: object = { connection: null, batch: null, saved: {}, task: null };
-  const commands: { command: { action: string }; idempotencyToken: string }[] = [];
+  const commands: {
+    command: { action: string; search?: { keyword: string; city: string } | undefined };
+    idempotencyToken: string;
+  }[] = [];
   let reads = 0;
   let uncertain = true;
   await page.route('**/api/platforms/zhilian', async (route) => {
@@ -76,7 +79,13 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
       return route.fulfill({ json: { data: state } });
     }
     const input = z
-      .object({ command: z.object({ action: z.string() }), idempotencyToken: z.string() })
+      .object({
+        command: z.object({
+          action: z.string(),
+          search: z.object({ keyword: z.string(), city: z.string() }).optional(),
+        }),
+        idempotencyToken: z.string(),
+      })
       .parse(route.request().postDataJSON());
     commands.push(input);
     if (uncertain) {
@@ -115,6 +124,9 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();
   await page.getByLabel('调试描述文件绝对路径').fill('/fixture/DevToolsActivePort');
   await page.getByRole('button', { name: '连接 Chrome' }).click();
+  await expect(page.getByLabel('搜索关键词', { exact: true })).toBeFocused();
+  await page.getByLabel('搜索关键词', { exact: true }).fill('研发');
+  await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByRole('button', { name: '确认上次提交' })).toBeVisible();
   await page.getByRole('button', { name: '确认上次提交' }).focus();
   await page.keyboard.press('Enter');
@@ -134,6 +146,8 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
     { timeout: 10000 },
   );
   expect(commands.map((x) => x.command.action)).toEqual(['connect', 'connect', 'acquire']);
+  expect(commands[0]?.command.search).toEqual({ keyword: '研发', city: '' });
+  expect(commands[2]?.command.search).toBeUndefined();
   for (const width of [1280, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.evaluate(() => {
@@ -162,4 +176,35 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
   await expect(page.getByRole('heading', { name: 'BOSS 直聘' })).toBeVisible();
   await expect(page.getByRole('heading', { name: candidate.title })).toHaveCount(0);
   expect(commands).toHaveLength(3);
+});
+
+/** 日常入口直接传普通条件，不要求调试参数，也不在输入时自动采集。 */
+test('智联日常获取从本地关键词直接初始化，错误保留草稿', async ({ page }) => {
+  const commands: unknown[] = [];
+  await page.route('**/api/platforms/zhilian', (route) => {
+    if (route.request().method() === 'GET')
+      return route.fulfill({
+        json: { data: { connection: null, batch: null, saved: {}, task: null } },
+      });
+    commands.push(route.request().postDataJSON());
+    return route.fulfill({ status: 400, json: { error: { message: '测试拒绝，保留输入' } } });
+  });
+  await page.goto('/sources?channel=platform&provider=zhilian');
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: '获取职位' }).click();
+  await expect(page.getByLabel('搜索关键词', { exact: true })).toBeFocused();
+  expect(commands).toHaveLength(0);
+  await page.getByLabel('搜索关键词', { exact: true }).fill('Java');
+  expect(commands).toHaveLength(0);
+  await page.getByRole('button', { name: '清除关键词' }).click();
+  await expect(page.getByLabel('搜索关键词', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('搜索关键词', { exact: true })).toBeFocused();
+  await page.getByLabel('搜索关键词', { exact: true }).fill('研发');
+  await page.getByRole('button', { name: '获取职位' }).click();
+  await expect(page.getByText('测试拒绝，保留输入')).toBeVisible();
+  expect(commands).toHaveLength(1);
+  expect(commands[0]).toMatchObject({
+    command: { action: 'acquire', generation: null, search: { keyword: '研发', city: '' } },
+  });
+  await expect(page.getByLabel('搜索关键词', { exact: true })).toHaveValue('研发');
 });

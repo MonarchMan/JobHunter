@@ -1,4 +1,3 @@
-import { setTimeout as delay } from 'node:timers/promises';
 import {
   PlatformError,
   type PlatformBatch,
@@ -7,6 +6,8 @@ import {
 } from '@jobhunter/platform-core';
 import { z } from 'zod';
 import { BossHttpSession } from './boss.js';
+import type { BossPageState } from './boss-page-state.js';
+import { BossPageLifecycle } from './boss-page-lifecycle.js';
 
 const origin = 'https://www.zhipin.com';
 const listPath = '/wapi/zpgeek/pc/recommend/job/list.json';
@@ -21,6 +22,7 @@ const eventSchema = z.object({
 /** 仅保留所选页已发出请求的关联信息；原始正文不进入持久层。 */
 interface ObservedRequest {
   readonly url: URL;
+  readonly epoch: number;
   status?: number;
 }
 
@@ -31,7 +33,7 @@ interface ObservedPage {
   readonly observedAt: number;
 }
 
-/** BOSS 显式浏览器传输：正常页面动作产生 JSON，复用原协议和入库门槛。 */
+/** BOSS 默认浏览器传输：正常页面动作产生 JSON，复用原协议和入库门槛。 */
 export class BossBrowserSession implements PlatformSession {
   readonly #abort = new AbortController();
   readonly #requests = new Map<string, ObservedRequest>();
@@ -43,7 +45,8 @@ export class BossBrowserSession implements PlatformSession {
   #failure: PlatformError | undefined;
   #busy = false;
   #hasMore = true;
-  #lastObservedAt = 0;
+  #lastJobId: string | undefined;
+  readonly #lifecycle: BossPageLifecycle;
   #detail:
     | { securityId: string; resolve(response: Response): void; reject(error: unknown): void }
     | undefined;
@@ -51,6 +54,10 @@ export class BossBrowserSession implements PlatformSession {
   public constructor(
     private readonly input: {
       readonly sessionId: string;
+      /** 仅 Worker 自建页允许首批消费前的同源初始化导航。 */
+      readonly initialNavigationUrl?: string;
+      readonly inspectPage?: (signal: AbortSignal) => Promise<BossPageState>;
+      readonly lifecycle?: BossPageLifecycle;
       readonly call: (
         method: string,
         params: Record<string, unknown>,
@@ -58,12 +65,23 @@ export class BossBrowserSession implements PlatformSession {
       ) => Promise<unknown>;
       /** 只能点击通过本批校验的稳定职位链接，不能调用私有页面方法。 */
       readonly clickJob: (jobId: string, signal: AbortSignal) => Promise<void>;
+      readonly loadNext?: (lastJobId: string, signal: AbortSignal) => Promise<void>;
+      /** 独立后台窗口不抢占前台；显式借用调试页可沿用激活策略。 */
+      readonly activateForNext?: boolean;
     },
-  ) {}
+  ) {
+    this.#lifecycle =
+      input.lifecycle ??
+      new BossPageLifecycle({
+        allowInitialNavigation: !!input.initialNavigationUrl,
+        inspectPage: input.inspectPage,
+      });
+  }
 
   /** 释放观察正文及在途等待，但不拥有或关闭用户授权的 Socket。 */
   public disconnect(): void {
-    this.#fail(new PlatformError('session_unavailable'));
+    this.#lifecycle.disconnect();
+    this.#fail(new PlatformError('session_unavailable', null, 'browser_disconnected'));
   }
 
   /** 所有异常采用固定脱敏错误，并冻结当前代次；不得自动刷新恢复。 */
@@ -89,8 +107,21 @@ export class BossBrowserSession implements PlatformSession {
     try {
       // 1、主页面导航会使原批次失效，不能重新加载后继续使用旧候选。
       if (method === 'Page.frameNavigated') {
-        const frame = z.object({ parentId: z.string().optional() }).parse(params.frame);
-        if (!frame.parentId) this.#fail(new PlatformError('session_unavailable'));
+        const frame = z
+          .object({ parentId: z.string().optional(), url: z.string().optional() })
+          .parse(params.frame);
+        if (!frame.parentId) {
+          // 1.a、首批之前只清空旧文档观察；首批开始后导航必须使候选失效。
+          const epoch = this.#lifecycle.epoch;
+          this.#lifecycle.navigate(frame.url);
+          this.#lifecycle.assertCurrent();
+          if (epoch !== this.#lifecycle.epoch) {
+            this.#requests.clear();
+            this.#observedDetails.clear();
+            this.#page = undefined;
+            this.#query = undefined;
+          }
+        }
         return;
       }
       // 2、只保留列表及当前详情的请求 ID；限制并发工作集。
@@ -104,7 +135,6 @@ export class BossBrowserSession implements PlatformSession {
           .parse(params);
         const url = new URL(request.request.url);
         if (url.origin !== origin || ![listPath, detailPath].includes(url.pathname)) return;
-        this.#lastObservedAt = Date.now();
         if (request.request.method !== 'GET' || request.redirectResponse)
           throw new PlatformError('parse_changed');
         if (url.pathname === listPath) {
@@ -113,13 +143,13 @@ export class BossBrowserSession implements PlatformSession {
             this.#page ||
             [...this.#requests.values()].some((value) => value.url.pathname === listPath)
           )
-            throw new PlatformError('session_unavailable');
+            throw new PlatformError('session_unavailable', null, 'duplicate_list');
           const query = new URLSearchParams(url.searchParams);
           query.delete('page');
           query.delete('_');
           query.sort();
           if (this.#query !== undefined && this.#query !== query.toString())
-            throw new PlatformError('session_unavailable');
+            throw new PlatformError('session_unavailable', null, 'query_changed');
           this.#query = query.toString();
           this.#observedDetails.clear();
         } else if (
@@ -131,7 +161,7 @@ export class BossBrowserSession implements PlatformSession {
         )
           return;
         if (this.#requests.size >= 8) throw new PlatformError('session_unavailable');
-        this.#requests.set(request.requestId, { url });
+        this.#requests.set(request.requestId, { url, epoch: this.#lifecycle.epoch });
       } else if (method === 'Network.responseReceived') {
         const response = z
           .object({
@@ -159,7 +189,7 @@ export class BossBrowserSession implements PlatformSession {
         typeof params.requestId === 'string' &&
         this.#requests.has(params.requestId)
       ) {
-        throw new PlatformError('network_error');
+        throw new PlatformError('network_error', null, 'browser_request_failed');
       }
     } catch (error) {
       this.#fail(error instanceof PlatformError ? error : new PlatformError('parse_changed'));
@@ -175,15 +205,21 @@ export class BossBrowserSession implements PlatformSession {
         throw new PlatformError(
           status === 429 ? 'rate_limited' : status === 403 ? 'access_blocked' : 'upstream_error',
         );
+      let rawResult: unknown;
+      try {
+        rawResult = await this.input.call(
+          'Network.getResponseBody',
+          { requestId },
+          AbortSignal.any([this.#abort.signal, AbortSignal.timeout(10_000)]),
+        );
+      } catch {
+        throw new PlatformError('session_unavailable', null, 'response_body_unavailable');
+      }
+      // 1.a、旧文档的异步正文不可回写，也不可用其错误冻结新文档。
+      if (request.epoch !== this.#lifecycle.epoch) return;
       const result = z
         .object({ body: z.string().max(maxBytes * 2), base64Encoded: z.boolean() })
-        .parse(
-          await this.input.call(
-            'Network.getResponseBody',
-            { requestId },
-            AbortSignal.any([this.#abort.signal, AbortSignal.timeout(10_000)]),
-          ),
-        );
+        .parse(rawResult);
       const bytes = Buffer.from(result.body, result.base64Encoded ? 'base64' : 'utf8');
       if (bytes.length > maxBytes) throw new PlatformError('parse_changed');
       this.#abort.signal.throwIfAborted();
@@ -195,6 +231,7 @@ export class BossBrowserSession implements PlatformSession {
         throw new PlatformError(
           envelope.code === 37 ? 'access_blocked' : 'upstream_error',
           envelope.code,
+          envelope.code === 37 ? 'security_check' : 'envelope',
         );
       const response = new Response(bytes, { status: 200 });
       if (request.url.pathname === listPath)
@@ -213,34 +250,70 @@ export class BossBrowserSession implements PlatformSession {
         }
       }
     } catch (error) {
-      this.#fail(error instanceof PlatformError ? error : new PlatformError('parse_changed'));
+      if (request.epoch === this.#lifecycle.epoch)
+        this.#fail(error instanceof PlatformError ? error : new PlatformError('parse_changed'));
     } finally {
-      this.#requests.delete(requestId);
+      if (this.#requests.get(requestId) === request) this.#requests.delete(requestId);
     }
   }
 
   /** 首次必须消费连接后观察到的第一页；后续页不得跳页或更换查询。 */
   public async readNext(signal: AbortSignal): Promise<PlatformBatch> {
-    return this.#exclusive(signal, async (operationSignal) => {
-      operationSignal.throwIfAborted();
-      if (this.#remaining.size > 0) throw new PlatformError('session_unavailable');
-      if (!this.#hasMore) return { candidates: [], hasMore: false };
-      // 1、有界等待正常筛选产生的列表，不触发页面加载。
-      while (!this.#page) await delay(50, undefined, { signal: operationSignal });
-      if (!this.#client) {
-        this.#client = new BossHttpSession({
-          cookies: [],
-          observedListUrl: this.#page.url.href,
-          browserResponse: (url, requestSignal, jobId) => this.#response(url, requestSignal, jobId),
+    return this.#exclusive(
+      signal,
+      async (operationSignal) => {
+        operationSignal.throwIfAborted();
+        if (this.#remaining.size > 0) throw new PlatformError('session_unavailable');
+        if (!this.#hasMore) return { candidates: [], hasMore: false };
+        // 1、后续用户动作仅触发一次正常加载；已有预取响应则直接消费，不重复翻页。
+        if (this.#client && !this.#page && this.input.loadNext) {
+          // 1.a、显式获取时激活专用页，避免官网在后台延迟滚动后的加载；不刷新。
+          if (this.input.activateForNext !== false)
+            await this.input.call('Page.bringToFront', {}, operationSignal);
+          await this.#lifecycle.waitReady(operationSignal, { timeoutMs: 20_000 });
+          // 1.b、激活期间可能已产生响应或在途请求，不能再次触发第三页。
+          if (!this.#hasObservedList()) {
+            if (!this.#lastJobId)
+              throw new PlatformError('session_unavailable', null, 'next_page_control_unavailable');
+            await this.input.loadNext(this.#lastJobId, operationSignal);
+          }
+        }
+        // 2、正常页面与真实列表共同就绪才消费，不刷新或构造接口请求。
+        const epoch = await this.#lifecycle.waitReady(operationSignal, {
+          timeoutMs: !this.#client ? 60_000 : 20_000,
+          available: () => this.#page !== undefined,
         });
-      }
-      // 2、原解析器检查重复、公司身份及分页矛盾；记录可点击的当前批次。
-      const batch = await this.#client.readNext(operationSignal);
-      this.#hasMore = batch.hasMore;
-      this.#remaining.clear();
-      for (const row of batch.candidates) this.#remaining.add(row.externalJobId);
-      return batch;
-    });
+        this.#lifecycle.assertCurrent(epoch);
+        this.#lifecycle.lock();
+        if (!this.#page)
+          throw new PlatformError('session_unavailable', null, 'list_response_timeout');
+        if (!this.#client) {
+          this.#client = new BossHttpSession({
+            cookies: [],
+            observedListUrl: this.#page.url.href,
+            browserResponse: (url, requestSignal, jobId) =>
+              this.#response(url, requestSignal, jobId),
+          });
+        }
+        // 2、原解析器检查重复、公司身份及分页矛盾；记录可点击的当前批次。
+        const batch = await this.#client.readNext(operationSignal);
+        this.#hasMore = batch.hasMore;
+        this.#lastJobId = batch.candidates.at(-1)?.externalJobId;
+        this.#remaining.clear();
+        for (const row of batch.candidates) this.#remaining.add(row.externalJobId);
+        return batch;
+      },
+      !this.#client ? 65_000 : 25_000,
+    );
+  }
+
+  /** 复核已到达或正在接收的列表，避免激活后重复滚动。 */
+  #hasObservedList(): boolean {
+    // 1、异步 CDP 回调会在 await 期间更新状态，须重新读取而非沿用先前判断。
+    return (
+      this.#page !== undefined ||
+      [...this.#requests.values()].some((request) => request.url.pathname === listPath)
+    );
   }
 
   /** 只允许当前批次详情，正常点击后等待同请求的真实 JSON。 */
@@ -270,9 +343,7 @@ export class BossBrowserSession implements PlatformSession {
     const observed = this.#observedDetails.get(securityId);
     this.#observedDetails.delete(securityId);
     if (observed && Date.now() - observed.observedAt <= 120_000) return observed.response;
-    // 1、观察到的官网附带请求也会延后下一次主动点击，但不控制官网内部频率。
-    while (Date.now() - this.#lastObservedAt < 5000)
-      await delay(5000 - (Date.now() - this.#lastObservedAt), undefined, { signal });
+    // 1、串行处理已完成后直接点击下一条，不额外施加实验用固定间隔。
     signal.throwIfAborted();
     const response = new Promise<Response>((resolve, reject) => {
       this.#detail = { securityId, resolve, reject };
@@ -294,7 +365,11 @@ export class BossBrowserSession implements PlatformSession {
   }
 
   /** 取消或任何失败即冻结；不关闭底层授权连接，不重试上游请求。 */
-  async #exclusive<T>(signal: AbortSignal, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  async #exclusive<T>(
+    signal: AbortSignal,
+    work: (signal: AbortSignal) => Promise<T>,
+    timeoutMs = 20_000,
+  ): Promise<T> {
     const initialFailure = this.#currentFailure();
     if (initialFailure) throw initialFailure;
     if (this.#busy) throw new PlatformError('session_unavailable');
@@ -302,18 +377,20 @@ export class BossBrowserSession implements PlatformSession {
     const operationSignal = AbortSignal.any([
       signal,
       this.#abort.signal,
-      AbortSignal.timeout(20_000),
+      AbortSignal.timeout(timeoutMs),
     ]);
     try {
       return await work(operationSignal);
     } catch (error) {
       const failure =
         this.#currentFailure() ??
-        (operationSignal.aborted
+        (signal.aborted
           ? new PlatformError('session_unavailable')
           : error instanceof PlatformError
             ? error
-            : new PlatformError('session_unavailable'));
+            : operationSignal.aborted
+              ? new PlatformError('session_unavailable', null, 'browser_operation_timeout')
+              : new PlatformError('session_unavailable'));
       this.#fail(failure);
       throw failure;
     } finally {

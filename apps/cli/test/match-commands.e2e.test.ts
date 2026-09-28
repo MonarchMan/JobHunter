@@ -84,6 +84,7 @@ function seedMatchingInputs(dataRoot: string): void {
     title: 'Agent 开发工程师',
     department: '大模型平台',
     jobFamily: '研发',
+    recruitmentCategory: 'social',
     locations: ['北京'],
     employmentType: '全职',
     experienceText: '3 年以上',
@@ -103,13 +104,14 @@ function seedMatchingInputs(dataRoot: string): void {
          'unknown', 'fixture', 'fixture', 'v1', 'fixture', '{}', 1);
       INSERT INTO jobs
         (id, company_id, source_id, external_job_id, title, department, job_family,
+         recruitment_category,
          locations_json, employment_type, experience_text, education_text, description,
          detail_url, apply_url, published_at, status, missing_count, content_hash,
          first_seen_at, last_seen_at, created_at, updated_at)
       VALUES
         ('${ids.job}', '018f0000-0000-7000-8000-000000000101',
          '018f0000-0000-7000-8000-000000000201', 'match-cli-job', 'Agent 开发工程师',
-         '大模型平台', '研发', '["北京"]', '全职', '3 年以上', '本科',
+         '大模型平台', '研发', 'social', '["北京"]', '全职', '3 年以上', '本科',
          '使用 TypeScript 开发 Agent 平台。', 'https://careers.tencent.com/job/agent',
          'https://careers.tencent.com/apply/agent', 1700000000000, 'active', 0,
          '${'b'.repeat(64)}', 1, 2, 1, 2);
@@ -183,7 +185,7 @@ describe('match commands', () => {
         ok: true,
         data: {
           job: { title: 'Agent 开发工程师' },
-          rulesetVersion: 'v1',
+          rulesetVersion: 'v3.2',
           advice: null,
         },
       });

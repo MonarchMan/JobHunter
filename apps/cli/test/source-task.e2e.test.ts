@@ -210,12 +210,13 @@ describe('source and task commands', () => {
             task: {
               taskType: 'interview.experience-research.execute',
               status: 'pending',
-              retryOfTaskId: taskId,
+              retryOfTaskId: null,
             },
           },
         },
       });
       const retryTaskId = (retried.body as { data: { task: { id: string } } }).data.task.id;
+      expect(retryTaskId).toBe(taskId);
       const verificationDatabase = openSqliteDatabase({ dataRoot });
       try {
         expect(
@@ -348,11 +349,12 @@ describe('source and task commands', () => {
           ok: true,
           data: {
             kind: 'enqueued',
-            task: { taskType: fixture.taskType, retryOfTaskId: taskId },
+            task: { taskType: fixture.taskType, retryOfTaskId: null },
           },
         },
       });
       const retryTaskId = (retried.body as { data: { task: { id: string } } }).data.task.id;
+      expect(retryTaskId).toBe(taskId);
       const verificationDatabase = openSqliteDatabase({ dataRoot });
       try {
         const references = verificationDatabase.client

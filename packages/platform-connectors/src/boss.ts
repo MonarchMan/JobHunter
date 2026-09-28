@@ -3,9 +3,13 @@ import {
   type PlatformBatch,
   type PlatformCandidate,
   type PlatformJobDetail,
+  type PlatformResumeOptions,
 } from '@jobhunter/platform-core';
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
+import { PlatformRequestPacer } from './request-pacing.js';
 import { cookieHeaderForUrl, type BrowserCookie } from './cookies.js';
+import type { BossPageLifecycle } from './boss-page-lifecycle.js';
 
 const origin = 'https://www.zhipin.com';
 const listPath = '/wapi/zpgeek/pc/recommend/job/list.json';
@@ -104,6 +108,8 @@ class BossSecurityCheckError extends PlatformError {
     readonly request: number;
     readonly successes: number;
     readonly data: unknown;
+    readonly responseBytes: number;
+    readonly responseDigest: string;
   }) {
     super('access_blocked', 37, 'security_check');
     // 1、只输出固定字段存在性，禁止拼接任意上游键、message 或检查参数值。
@@ -111,7 +117,7 @@ class BossSecurityCheckError extends PlatformError {
       (key) =>
         input.data !== null && typeof input.data === 'object' && Object.hasOwn(input.data, key),
     );
-    this.message += ` [boss:${input.transport}:${input.endpoint};request=${String(input.request)};priorCode0=${String(input.successes)};check=${fields.join('+') || 'none'};browserState=unknown]`;
+    this.message += ` [boss:${input.transport}:${input.endpoint};request=${String(input.request)};priorCode0=${String(input.successes)};check=${fields.join('+') || 'none'};browserState=unknown;bytes=${String(input.responseBytes)};sha256=${input.responseDigest}]`;
   }
 }
 
@@ -134,21 +140,31 @@ export class BossHttpSession {
   #cookies: readonly BrowserCookie[];
   #token: string | undefined;
   #readContext: ((signal: AbortSignal) => Promise<BossRequestContext>) | undefined;
+  readonly #renewContext: ((jobId: string, signal: AbortSignal) => Promise<void>) | undefined;
   readonly #template: URL;
   readonly #fetch: typeof fetch;
+  readonly #pacer: PlatformRequestPacer;
   readonly #now: () => number;
   readonly #browserResponse:
     ((url: URL, signal: AbortSignal, jobId?: string) => Promise<Response>) | undefined;
   readonly #abort = new AbortController();
+  readonly #lifecycle: BossPageLifecycle | undefined;
   readonly #details = new Map<string, DetailContext>();
   readonly #seen = new Set<string>();
   #page = 0;
   #hasMore = true;
   #busy = false;
-  #lastRequestAt: number | null = null;
   #requestCount = 0;
   #successfulResponses = 0;
-  #paused: { expiresAt: number; binding: string; securityToken: string } | undefined;
+  #paused:
+    | {
+        expiresAt: number;
+        binding: string;
+        securityToken: string;
+        jobId: string;
+        renewalAttempted: boolean;
+      }
+    | undefined;
   #resumeCount = 0;
   #networkRetries = 0;
   #batchExpiresAt = 0;
@@ -159,8 +175,12 @@ export class BossHttpSession {
     readonly observedListUrl: string;
     readonly fetch?: typeof fetch;
     readonly now?: () => number;
+    readonly requestIntervalMs?: number;
     readonly token?: string;
     readonly readContext?: (signal: AbortSignal) => Promise<BossRequestContext>;
+    /** 仅 Worker 自有页可提供一次普通职位点击；浏览器响应不得作为职位事实。 */
+    readonly renewContext?: (jobId: string, signal: AbortSignal) => Promise<void>;
+    readonly lifecycle?: BossPageLifecycle;
     /** 显式浏览器模式只提供实际 JSON 响应；不走认证同步或 Node HTTP。 */
     readonly browserResponse?: (url: URL, signal: AbortSignal, jobId?: string) => Promise<Response>;
   }) {
@@ -185,9 +205,12 @@ export class BossHttpSession {
     this.#cookies = input.cookies.map((cookie) => ({ ...cookie }));
     this.#token = authToken(input.token);
     this.#readContext = input.readContext;
+    this.#renewContext = input.renewContext;
     this.#fetch = input.fetch ?? fetch;
+    this.#pacer = new PlatformRequestPacer(input.requestIntervalMs, input.now);
     this.#now = input.now ?? Date.now;
     this.#browserResponse = input.browserResponse;
+    this.#lifecycle = input.lifecycle;
   }
 
   /** 断开会话中止在途请求并释放凭据，已返回业务事实不受影响。 */
@@ -202,8 +225,9 @@ export class BossHttpSession {
     clearTimeout(this.#pauseTimer);
   }
 
-  /** 每段只在原认证绑定不变且官网已更新安全上下文时解冻，不请求职位。 */
-  public async resume(signal: AbortSignal): Promise<void> {
+  /** 原认证绑定不变时可让自有页做一次普通会话更新；仅更新后的 Node HTTP 能取得职位。 */
+  public async resume(callerSignal: AbortSignal, options?: PlatformResumeOptions): Promise<void> {
+    this.#lifecycle?.assertCurrent();
     const paused = this.#paused;
     if (
       !paused ||
@@ -218,36 +242,78 @@ export class BossHttpSession {
       throw new PlatformError('session_unavailable', null, 'resume_expired');
     }
     this.#busy = true;
+    const signal = AbortSignal.any([callerSignal, this.#abort.signal]);
+    let renewalDeadline: number | undefined;
     try {
-      // 1、只读官网正常浏览后的上下文；不向浏览器回灌挑战参数或操作验证。
-      const context = await this.#readContext(signal).catch(() => {
-        throw new PlatformError('session_unavailable', null, 'context_read_failed');
-      });
-      signal.throwIfAborted();
-      this.#abort.signal.throwIfAborted();
-      const identity = this.#contextIdentity(context);
-      if (identity?.binding !== paused.binding) {
-        this.disconnect();
-        throw new PlatformError(
-          'session_unavailable',
-          null,
-          identity ? 'auth_binding_changed' : 'auth_context_missing',
-        );
+      for (;;) {
+        // 1、每次检查先核对原批次期限与取消，不延长私有工作集生命周期。
+        if (this.#now() >= paused.expiresAt)
+          throw new PlatformError('session_unavailable', null, 'resume_expired');
+        if (renewalDeadline !== undefined && this.#now() >= renewalDeadline)
+          throw new PlatformError('session_unavailable', null, 'context_unchanged');
+        signal.throwIfAborted();
+        // 2、先只读官网上下文；不回灌挑战参数，也不以 HTTP 职位请求探测恢复。
+        const context = await this.#readContext(signal).catch((error: unknown) => {
+          this.#lifecycle?.assertCurrent();
+          throw error instanceof PlatformError
+            ? error
+            : new PlatformError('session_unavailable', null, 'context_read_failed');
+        });
+        signal.throwIfAborted();
+        this.#abort.signal.throwIfAborted();
+        const identity = this.#contextIdentity(context);
+        if (identity?.binding !== paused.binding) {
+          this.disconnect();
+          throw new PlatformError(
+            'session_unavailable',
+            null,
+            identity ? 'auth_binding_changed' : 'auth_context_missing',
+          );
+        }
+        if (this.#now() >= paused.expiresAt)
+          throw new PlatformError('session_unavailable', null, 'resume_expired');
+        if (identity.securityToken === paused.securityToken) {
+          options?.onContextCheck?.('unchanged');
+          if (!options?.waitForChange)
+            throw new PlatformError('session_unavailable', null, 'context_unchanged');
+          // 2.a、自有页每次 37 最多执行一次普通链接点击；借用页仍仅被动等待。
+          if (this.#renewContext && !paused.renewalAttempted) {
+            paused.renewalAttempted = true;
+            this.#lifecycle?.beginSessionRenewal();
+            await this.#renewContext(paused.jobId, signal);
+            renewalDeadline = Math.min(paused.expiresAt, this.#now() + 30_000);
+            continue;
+          }
+          // 2.b、点击后至多再观察三十秒；不重发尚未解冻的 HTTP 详情。
+          const { setTimeout } = await import('node:timers/promises');
+          await setTimeout(
+            Math.min(5_000, Math.max(0, (renewalDeadline ?? paused.expiresAt) - this.#now())),
+            undefined,
+            { signal },
+          );
+          continue;
+        }
+        // 3、校验通过才恢复发送上下文；同一批最多五次，未更新不消耗次数。
+        this.#cookies = context.cookies.map((value) => ({ ...value }));
+        this.#token = authToken(context.token);
+        this.#paused = undefined;
+        clearTimeout(this.#pauseTimer);
+        this.#resumeCount += 1;
+        options?.onContextCheck?.('updated');
+        return;
       }
-      if (identity.securityToken === paused.securityToken)
-        throw new PlatformError('session_unavailable', null, 'context_unchanged');
-      // 2、校验通过才恢复发送上下文；同一批最多五次，未更新上下文不消耗次数。
-      this.#cookies = context.cookies.map((value) => ({ ...value }));
-      this.#token = authToken(context.token);
-      this.#paused = undefined;
-      clearTimeout(this.#pauseTimer);
-      this.#resumeCount += 1;
     } catch (error) {
-      // 3、只有上下文尚未更新允许稍后确认；取消、读取失败或身份变化立即释放待办。
+      // 4、只有上下文尚未更新允许稍后确认；取消、读取失败或身份变化立即释放待办。
+      const disconnected = signal.aborted && !callerSignal.aborted;
       if (!(error instanceof PlatformError) || error.reason !== 'context_unchanged')
         this.disconnect();
+      if (!callerSignal.aborted && this.#now() >= paused.expiresAt)
+        throw new PlatformError('session_unavailable', null, 'resume_expired');
+      if (!callerSignal.aborted && disconnected && !(error instanceof PlatformError))
+        throw new PlatformError('session_unavailable');
       throw error;
     } finally {
+      this.#lifecycle?.endSessionRenewal();
       this.#busy = false;
     }
   }
@@ -361,14 +427,18 @@ export class BossHttpSession {
 
   /** 每个会话一次仅执行一个操作，访问受限或协议失败后禁止继续重试。 */
   async #exclusive<T>(work: () => Promise<T>): Promise<T> {
+    this.#lifecycle?.assertCurrent();
     if (this.#abort.signal.aborted || this.#busy || this.#paused)
       throw new PlatformError('session_unavailable');
     this.#busy = true;
     try {
-      return await work();
+      const result = await work();
+      this.#lifecycle?.assertCurrent();
+      return result;
     } catch (error) {
       // 1、仅可恢复的详情安全检查保留原工作集，其余错误释放全部私有上下文。
       if (!this.#isPaused()) this.disconnect();
+      this.#lifecycle?.assertCurrent();
       throw error instanceof PlatformError ? error : new PlatformError('network_error');
     } finally {
       this.#busy = false;
@@ -415,22 +485,30 @@ export class BossHttpSession {
 
   /** 单次只读请求；不跟随重定向，不输出上游错误原文。 */
   async #requestAttempt(url: URL, callerSignal: AbortSignal, jobId?: string): Promise<unknown> {
-    // 1、同会话至少间隔五秒，等待和网络均响应取消。
-    const signal = AbortSignal.any([callerSignal, this.#abort.signal, AbortSignal.timeout(20_000)]);
-    signal.throwIfAborted();
-    let delay =
-      this.#lastRequestAt === null ? 0 : Math.max(0, 5_000 - (this.#now() - this.#lastRequestAt));
-    while (delay > 0) {
-      const { setTimeout } = await import('node:timers/promises');
-      await setTimeout(delay, undefined, { signal });
-      // 1.a、计时器可能提前唤醒；再次检查时钟，未满五秒不得发送。
-      delay =
-        this.#lastRequestAt === null ? 0 : Math.max(0, 5_000 - (this.#now() - this.#lastRequestAt));
+    // 1、统一固定间隔不消耗网络超时，浏览器模式由主动点击边界控制。
+    if (!this.#browserResponse && this.#pacer.enabled) {
+      try {
+        await this.#pacer.before(
+          AbortSignal.any([
+            callerSignal,
+            this.#abort.signal,
+            ...(this.#lifecycle ? [this.#lifecycle.signal] : []),
+          ]),
+        );
+      } catch {
+        throw new PlatformError('session_unavailable');
+      }
     }
+    const signal = AbortSignal.any([
+      callerSignal,
+      this.#abort.signal,
+      ...(this.#lifecycle ? [this.#lifecycle.signal] : []),
+      AbortSignal.timeout(20_000),
+    ]);
+    signal.throwIfAborted();
     // 1.a、模式在连接时固定；浏览器响应复用相同解析，不经过 Cookie 或 HTTP。
     let response: Response;
     if (this.#browserResponse) {
-      this.#lastRequestAt = this.#now();
       this.#requestCount += 1;
       response = await this.#browserResponse(url, signal, jobId);
     } else {
@@ -441,8 +519,9 @@ export class BossHttpSession {
           signal.throwIfAborted();
           this.#cookies = context.cookies.map((value) => ({ ...value }));
           this.#token = authToken(context.token);
-        } catch {
-          throw new PlatformError('session_unavailable');
+        } catch (error) {
+          this.#lifecycle?.assertCurrent();
+          throw error instanceof PlatformError ? error : new PlatformError('session_unavailable');
         }
       }
       const cookie = cookieHeaderForUrl(this.#cookies, url, this.#now());
@@ -468,9 +547,8 @@ export class BossHttpSession {
       }
       if (this.#token) headers.token = this.#token;
       signal.throwIfAborted();
-      this.#lastRequestAt = this.#now();
-      // 1.c、等待和上下文读取完成后再生成普通缓存时间戳，与官网发送边界一致。
-      url.searchParams.set('_', String(this.#lastRequestAt));
+      // 1.c、上下文读取完成后再生成普通缓存时间戳，与官网发送边界一致。
+      url.searchParams.set('_', String(this.#now()));
       this.#requestCount += 1;
       response = await this.#fetch(url, {
         method: 'GET',
@@ -523,8 +601,9 @@ export class BossHttpSession {
     }
     // 3、37 表示 SECURITY_CHECK，不等于未登录或某条已知触发规则，也不切换传输继续。
     let raw: unknown;
+    const responseText = Buffer.concat(chunks).toString('utf8');
     try {
-      raw = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+      raw = JSON.parse(responseText) as unknown;
     } catch {
       throw new PlatformError('parse_changed');
     }
@@ -540,7 +619,12 @@ export class BossHttpSession {
         this.#resumeCount < 5 &&
         identity
       ) {
-        this.#paused = { ...identity, expiresAt: this.#batchExpiresAt };
+        this.#paused = {
+          ...identity,
+          expiresAt: this.#batchExpiresAt,
+          jobId,
+          renewalAttempted: false,
+        };
         // 3.a.i、私有工作集的释放期限同样固定在原批次，不随暂停次数延长。
         this.#pauseTimer = setTimeout(
           () => {
@@ -558,6 +642,8 @@ export class BossHttpSession {
         request: this.#requestCount,
         successes: this.#successfulResponses,
         data: parsed.data.zpData,
+        responseBytes: Buffer.byteLength(responseText, 'utf8'),
+        responseDigest: createHash('sha256').update(responseText).digest('hex').slice(0, 16),
       });
     }
     if (parsed.data.code !== 0) throw new PlatformError('upstream_error', parsed.data.code);

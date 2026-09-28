@@ -82,26 +82,43 @@ async function run(): Promise<void> {
   program
     .command('connect')
     .description(
-      '连接所选浏览器页；智联授权后在校园切换分类，或在主站搜索并打开一条详情；查询在连接时固定',
+      '自动创建平台专用页；智联通过首页认证后使用 HTTP 搜索，需提供 keyword；target-id 仅供旧协议调试',
     )
-    .requiredOption('--port-file <path>')
-    .requiredOption('--target-id <id>')
+    .option('--port-file <path>')
+    .option('--target-id <id>')
+    .option('--keyword <text>', '智联 HTTP 搜索关键词')
+    .option('--city <code>', '智联城市编号，省略表示不限城市')
     .addOption(
       new Option(
         '--acquisition-mode <mode>',
-        '仅 BOSS：browser 观察官网新列表并点击该批职位详情；不刷新',
+        '仅 BOSS：默认 browser 观察官网列表并点击详情；http 仅供显式调试',
       ).choices(['http', 'browser']),
     )
     .action(
       async (options: {
-        portFile: string;
-        targetId: string;
+        portFile?: string;
+        targetId?: string;
+        keyword?: string;
+        city?: string;
         acquisitionMode?: 'http' | 'browser';
       }) => {
-        // 1、浏览器辅助必须显式选择，不改变其他平台原有连接方式。
+        // 1、BOSS 默认由连接器选择浏览器辅助，不改变其他平台原有连接方式。
         if (options.acquisitionMode && provider() !== 'boss')
           throw new Error('acquisition-mode is only available for BOSS');
-        await submit({ action: 'connect', ...options });
+        // 2、查询仅支持智联自动连接，不能把认证或任意命令行字段透传到任务。
+        const { keyword, city, ...connection } = options;
+        if (
+          (keyword !== undefined || city !== undefined) &&
+          (provider() !== 'zhilian' || options.targetId)
+        )
+          throw new Error('Search options require Zhilian automatic connection');
+        if (provider() === 'zhilian' && !options.targetId && !keyword?.trim())
+          throw new Error('Zhilian automatic connection requires --keyword');
+        await submit({
+          action: 'connect',
+          ...connection,
+          ...(keyword !== undefined ? { search: { keyword, city: city ?? '' } } : {}),
+        });
       },
     );
   program

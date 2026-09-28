@@ -1,4 +1,4 @@
-import { setTimeout as delay } from 'node:timers/promises';
+import { PlatformRequestPacer } from './request-pacing.js';
 import {
   PlatformError,
   type PlatformSession,
@@ -89,19 +89,19 @@ export class ZhilianCampusHttpSession implements PlatformSession {
   #headers: Record<string, string> = {};
   #url: string | null;
   readonly #fetch: typeof fetch;
-  readonly #now: () => number;
+  readonly #pacer: PlatformRequestPacer;
   readonly #abort = new AbortController();
   readonly #candidates = new Map<string, PlatformCandidate>();
   readonly #seen = new Set<string>();
   #page = 0;
   #hasMore = true;
   #busy = false;
-  #lastRequestAt: number | null = null;
 
   public constructor(input: {
     readonly template: ZhilianCampusRequestTemplate;
     readonly fetch?: typeof fetch;
     readonly now?: () => number;
+    readonly requestIntervalMs?: number;
   }) {
     // 1、观察模板也视为外部输入；不得注入任意代理端点或未审核请求字段。
     try {
@@ -152,7 +152,7 @@ export class ZhilianCampusHttpSession implements PlatformSession {
       throw new PlatformError('parse_changed');
     }
     this.#fetch = input.fetch ?? fetch;
-    this.#now = input.now ?? Date.now;
+    this.#pacer = new PlatformRequestPacer(input.requestIntervalMs, input.now);
   }
 
   /** 一次一页；不自动翻页，不把重复页或矛盾空页当作末页。 */
@@ -245,18 +245,16 @@ export class ZhilianCampusHttpSession implements PlatformSession {
     this.#seen.clear();
   }
 
-  /** 串行实验请求，5 秒是用户确认的实验策略，不宣称为平台风控要求。 */
+  /** 串行请求保持互斥，正常间隔由共享 HTTP 发送边界处理。 */
   async #run<T>(caller: AbortSignal, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
     if (this.#busy || this.#abort.signal.aborted || caller.aborted)
       throw new PlatformError('session_unavailable');
     this.#busy = true;
     const signal = AbortSignal.any([caller, this.#abort.signal]);
     try {
-      const remaining =
-        this.#lastRequestAt === null ? 0 : Math.max(0, 5_000 - (this.#now() - this.#lastRequestAt));
-      if (remaining) await delay(remaining, undefined, { signal });
+      // 1、正常节流在网络超时之前，取消等待不发送请求。
+      await this.#pacer.before(signal);
       signal.throwIfAborted();
-      this.#lastRequestAt = this.#now();
       const result = await work(signal);
       signal.throwIfAborted();
       return result;

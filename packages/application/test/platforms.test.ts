@@ -8,9 +8,20 @@ import {
 import {
   bossCommandSchema,
   BossPlatformService,
+  createBossPlatformTaskHandler,
   type BossResult,
   type PlatformRepository,
 } from '../src/platforms.js';
+
+it('正常 Worker 领取不套用手动重连策略', () => {
+  const handler = createBossPlatformTaskHandler({ execute: vi.fn() });
+  expect(handler.retryPayload).toBeUndefined();
+  expect(handler.manualRetryPayload?.({ action: 'acquire', generation: 1 }, null)).toEqual({
+    action: 'acquire',
+    generation: 1,
+    reconnect: true,
+  });
+});
 import { platformProgressSchema } from '../src/platform-progress.js';
 
 /** 批次测试的可观察端口，用于验证请求和提交顺序。 */
@@ -32,12 +43,13 @@ interface BatchFixture {
   connect: () => Promise<BossResult>;
   next: () => Promise<BossResult>;
   resume: (sourceTaskId?: string, taskId?: string) => Promise<BossResult>;
-  acquire: (expectedGeneration?: number) => Promise<BossResult>;
+  acquire: (expectedGeneration?: number, reconnect?: true) => Promise<BossResult>;
 }
 
 /** 有界批次替身，不接触浏览器或真实平台。 */
 function batchFixture(now: () => number = Date.now): BatchFixture {
   let generation = 0;
+  let browserRecovered = false;
   const events: string[] = [];
   const detail = (id: string): PlatformJobDetail => ({
     externalJobId: id,
@@ -63,7 +75,14 @@ function batchFixture(now: () => number = Date.now): BatchFixture {
     recordProgress: vi.fn(),
   };
   const session = {
-    resume: vi.fn<NonNullable<PlatformSession['resume']>>(() => Promise.resolve()),
+    // 默认模拟官网尚未更新，显式恢复入口模拟用户确认后的新上下文。
+    resume: vi.fn<NonNullable<PlatformSession['resume']>>(() => {
+      if (browserRecovered) {
+        browserRecovered = false;
+        return Promise.resolve();
+      }
+      return Promise.reject(new PlatformError('session_unavailable', null, 'context_unchanged'));
+    }),
     readNext: vi.fn<PlatformSession['readNext']>(() =>
       Promise.resolve({ candidates: ['1', '2', '3'].map(detail), hasMore: true }),
     ),
@@ -87,20 +106,203 @@ function batchFixture(now: () => number = Date.now): BatchFixture {
     );
   const next = (): Promise<BossResult> =>
     service.execute({ action: 'next', generation }, 'task', controller.signal);
-  const resume = (sourceTaskId = 'task', taskId = 'resume-task'): Promise<BossResult> =>
+  const resume = async (sourceTaskId = 'task', taskId = 'resume-task'): Promise<BossResult> => {
+    browserRecovered = true;
+    // 只有本次显式校验成功；后续再遇 37 时仍需另一个新上下文。
+    try {
+      return await service.execute(
+        { action: 'resume', generation, sourceTaskId, browserRecovered: true },
+        taskId,
+        controller.signal,
+      );
+    } finally {
+      browserRecovered = false;
+    }
+  };
+  const acquire = (expectedGeneration = generation, reconnect?: true): Promise<BossResult> =>
     service.execute(
-      { action: 'resume', generation, sourceTaskId, browserRecovered: true },
-      taskId,
-      controller.signal,
-    );
-  const acquire = (expectedGeneration = generation): Promise<BossResult> =>
-    service.execute(
-      { action: 'acquire', generation: expectedGeneration },
+      { action: 'acquire', generation: expectedGeneration, ...(reconnect ? { reconnect } : {}) },
       'task',
       controller.signal,
     );
   return { repository, session, save, controller, events, detail, connect, next, resume, acquire };
 }
+
+it('上下文观察回调保留当前任务进度，更新后才同任务继续', async () => {
+  const f = batchFixture();
+  await f.connect();
+  f.session.readDetail.mockRejectedValueOnce(new PlatformError('access_blocked', 37));
+  f.session.resume.mockImplementation((_signal, options) => {
+    expect(options?.waitForChange).toBe(true);
+    options?.onContextCheck?.('unchanged');
+    expect(f.repository.recordProgress.mock.lastCall?.[2]).toMatchObject({
+      stage: 'detail',
+      resumeCount: 0,
+      recovery: { state: 'waiting_context', checks: 1 },
+    });
+    expect(f.session.readDetail).toHaveBeenCalledTimes(1);
+    expect(f.save).not.toHaveBeenCalled();
+    options?.onContextCheck?.('updated');
+    return Promise.resolve();
+  });
+  await expect(f.next()).resolves.toMatchObject({
+    savedCount: 3,
+    progress: {
+      resumeCount: 1,
+      recovery: { state: 'resumed', checks: 2 },
+    },
+  });
+  expect(f.session.readNext).toHaveBeenCalledTimes(1);
+});
+
+it.each(['context_unchanged', 'resume_expired', 'auth_binding_changed'])(
+  '恢复 %s 保留原始脱敏请求摘要',
+  async (reason) => {
+    const f = batchFixture();
+    await f.connect();
+    const original = new PlatformError('access_blocked', 37, 'security_check');
+    original.message +=
+      ' [boss:http:detail;request=6;priorCode0=5;check=seed+name+ts;browserState=unknown]';
+    f.session.readDetail.mockRejectedValueOnce(original);
+    f.session.resume.mockRejectedValueOnce(new PlatformError('session_unavailable', null, reason));
+    await expect(f.next()).rejects.toMatchObject({
+      message: `${original.message} [recovery=${reason}]`,
+    });
+  },
+);
+
+it('详情 37 后立即检查上下文并同任务续跑，不重抓已提交职位', async () => {
+  const f = batchFixture();
+  await f.connect();
+  f.session.resume.mockResolvedValue(undefined);
+  let blocked = false;
+  f.session.readDetail.mockImplementation((id) => {
+    if (id === '2' && !blocked) {
+      blocked = true;
+      return Promise.reject(new PlatformError('access_blocked', 37));
+    }
+    return Promise.resolve(f.detail(id));
+  });
+  await expect(f.next()).resolves.toMatchObject({ savedCount: 3, progress: { resumeCount: 1 } });
+  expect(f.session.readDetail.mock.calls.map(([id]) => id)).toEqual(['1', '2', '2', '3']);
+  expect(f.save.mock.calls.map(([job]) => job.externalJobId)).toEqual(['1', '2', '3']);
+  expect(f.session.readNext).toHaveBeenCalledTimes(1);
+  expect(f.session.resume).toHaveBeenCalledTimes(1);
+  expect(f.session.disconnect).not.toHaveBeenCalled();
+});
+
+it.each(['context_unchanged', 'context_read_failed', 'auth_binding_changed'])(
+  '上下文检查 %s 不重新请求职位，诊断保留具体原因',
+  async (reason) => {
+    const f = batchFixture();
+    await f.connect();
+    f.session.readDetail.mockRejectedValue(new PlatformError('access_blocked', 37));
+    f.session.resume.mockRejectedValue(new PlatformError('session_unavailable', null, reason));
+    await expect(f.next()).rejects.toMatchObject({
+      reason,
+      businessCode: reason === 'context_unchanged' ? 37 : null,
+    });
+    expect(f.session.readDetail).toHaveBeenCalledTimes(1);
+    expect(f.session.resume).toHaveBeenCalledTimes(1);
+    expect(f.save).not.toHaveBeenCalled();
+  },
+);
+
+it('自动恢复最多五次，额度耗尽不再检查或请求，保留累计次数', async () => {
+  const f = batchFixture();
+  await f.connect();
+  f.session.readDetail.mockRejectedValue(new PlatformError('access_blocked', 37));
+  f.session.resume.mockResolvedValue(undefined);
+  await expect(f.next()).rejects.toMatchObject({ businessCode: 37 });
+  expect(f.session.resume).toHaveBeenCalledTimes(5);
+  expect(f.session.readDetail).toHaveBeenCalledTimes(6);
+  expect(f.repository.recordProgress.mock.calls.at(-1)?.[2]).toMatchObject({ resumeCount: 5 });
+  await expect(f.resume()).rejects.toThrow();
+  expect(f.session.resume).toHaveBeenCalledTimes(5);
+});
+
+it('跨候选累计恢复次数，不因当前详情成功而重置预算', async () => {
+  const f = batchFixture();
+  await f.connect();
+  const attempts = new Map<string, number>();
+  f.session.resume.mockResolvedValue(undefined);
+  f.session.readDetail.mockImplementation((id) => {
+    const count = (attempts.get(id) ?? 0) + 1;
+    attempts.set(id, count);
+    // 1、每条详情前两次失败，使第三条触及跨候选共享的五次额度。
+    return count <= 2
+      ? Promise.reject(new PlatformError('access_blocked', 37))
+      : Promise.resolve(f.detail(id));
+  });
+  await expect(f.next()).rejects.toMatchObject({ businessCode: 37 });
+  expect(f.session.resume).toHaveBeenCalledTimes(5);
+  expect(f.save).toHaveBeenCalledTimes(2);
+  expect([...attempts.entries()]).toEqual([
+    ['1', 3],
+    ['2', 3],
+    ['3', 2],
+  ]);
+  expect(f.repository.recordProgress.mock.calls.at(-1)?.[2]).toMatchObject({
+    resumeCount: 5,
+    saved: 2,
+    currentExternalJobId: '3',
+  });
+});
+
+it('自动与显式恢复共享五次预算，未更新检查不占额度', async () => {
+  const f = batchFixture();
+  await f.connect();
+  f.session.readDetail.mockRejectedValue(new PlatformError('access_blocked', 37));
+  f.session.resume
+    .mockResolvedValue(undefined)
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(new PlatformError('session_unavailable', null, 'context_unchanged'));
+  await expect(f.next()).rejects.toMatchObject({ reason: 'context_unchanged', businessCode: 37 });
+  await expect(f.resume()).rejects.toMatchObject({ businessCode: 37 });
+  expect(f.session.resume).toHaveBeenCalledTimes(6);
+  expect(f.session.readDetail).toHaveBeenCalledTimes(6);
+  expect(f.repository.recordProgress.mock.calls.at(-1)?.[2]).toMatchObject({ resumeCount: 5 });
+});
+
+it.each(['cancelled', 'generation_changed', 'expired'] as const)(
+  '上下文校验过程中 %s 时禁止自动续跑',
+  async (mode) => {
+    let now = 1000;
+    const f = batchFixture(() => now);
+    await f.connect();
+    f.session.readDetail.mockRejectedValue(new PlatformError('access_blocked', 37));
+    f.session.resume.mockImplementation(() => {
+      if (mode === 'cancelled') f.controller.abort();
+      else if (mode === 'generation_changed') f.repository.reset(now);
+      else now += 600_000;
+      return Promise.resolve();
+    });
+    await expect(f.next()).rejects.toThrow();
+    expect(f.session.readDetail).toHaveBeenCalledTimes(1);
+    expect(f.save).not.toHaveBeenCalled();
+  },
+);
+
+it.each(['network_error', 'parse_changed'] as const)(
+  '非 37 的 %s 不触发上下文恢复',
+  async (category) => {
+    const f = batchFixture();
+    await f.connect();
+    f.session.readDetail.mockRejectedValue(new PlatformError(category));
+    await expect(f.next()).rejects.toMatchObject({ category });
+    expect(f.session.resume).not.toHaveBeenCalled();
+  },
+);
+
+it('列表 37 不触发详情恢复路径', async () => {
+  const f = batchFixture();
+  await f.connect();
+  f.session.readNext.mockRejectedValue(new PlatformError('access_blocked', 37));
+  await expect(f.next()).rejects.toMatchObject({ businessCode: 37 });
+  expect(f.session.resume).not.toHaveBeenCalled();
+  expect(f.session.readDetail).not.toHaveBeenCalled();
+});
 
 it('日常获取自动连接并保存一批，后续获取复用原代次且不重复连接', async () => {
   const fixture = batchFixture();
@@ -122,6 +324,46 @@ it('日常获取拒绝旧代次，37 冻结后不能通过自动连接重置工�
   expect(fixture.session.readNext).toHaveBeenCalledTimes(1);
   expect(fixture.session.disconnect).not.toHaveBeenCalled();
   expect(fixture.repository.generation()).toBe(1);
+});
+
+it('显式重试可替换冻结会话及过期代次，普通获取仍拒绝', async () => {
+  // 1、模拟第二次列表等待失败，避免用安全验证自动化来恢复。
+  const fixture = batchFixture();
+  await fixture.acquire();
+  fixture.session.readNext.mockRejectedValueOnce(
+    new PlatformError('session_unavailable', null, 'list_response_timeout'),
+  );
+  await expect(fixture.acquire()).rejects.toBeInstanceOf(PlatformError);
+  await expect(fixture.acquire()).rejects.toBeInstanceOf(PlatformError);
+  // 2、用户显式重试创建新连接但仍以相同任务身份记录结果。
+  await expect(fixture.acquire(99, true)).resolves.toMatchObject({ savedCount: 3, generation: 2 });
+  expect(fixture.session.disconnect).toHaveBeenCalledOnce();
+});
+
+it('首页 HTTP 查询传入连接且活动批次拒绝悄悄替换查询', async () => {
+  const fixture = batchFixture();
+  const provider = { connect: vi.fn().mockResolvedValue(fixture.session) };
+  const service = new BossPlatformService(provider, fixture.repository);
+  const signal = new AbortController().signal;
+  const search = { keyword: '研发', city: '' };
+  await service.execute({ action: 'acquire', generation: 0, search }, 'home', signal);
+  expect(provider.connect).toHaveBeenCalledWith({ action: 'connect', search }, signal);
+  await expect(
+    service.execute(
+      { action: 'acquire', generation: fixture.repository.generation(), search },
+      'changed',
+      signal,
+    ),
+  ).rejects.toMatchObject({ category: 'session_unavailable' });
+  expect(provider.connect).toHaveBeenCalledTimes(1);
+  expect(
+    bossCommandSchema.safeParse({ action: 'connect', search: { ...search, at: 'private' } })
+      .success,
+  ).toBe(false);
+  expect(
+    bossCommandSchema.safeParse({ action: 'connect', search: { ...search, keyword: ' ' } }).success,
+  ).toBe(false);
+  service.close();
 });
 
 it('页面歧义先返回选择结果，确认后才读取一批；连接异常不发列表请求', async () => {
@@ -201,7 +443,7 @@ it('恢复再次失败后拒绝旧任务引用，换代不能继续旧批次', a
   await expect(fixture.next()).rejects.toThrow();
   await expect(fixture.resume()).rejects.toThrow();
   await expect(fixture.resume()).rejects.toMatchObject({ category: 'session_unavailable' });
-  expect(fixture.session.resume).toHaveBeenCalledTimes(1);
+  expect(fixture.session.resume).toHaveBeenCalledTimes(3);
   await fixture.connect();
   await expect(fixture.resume()).rejects.toMatchObject({ category: 'session_unavailable' });
 });
@@ -215,7 +457,7 @@ it.each(['expired', 'cancelled'] as const)('恢复 %s 时不请求剩余详情',
   if (mode === 'expired') now += 600_000;
   else fixture.controller.abort();
   await expect(fixture.resume()).rejects.toThrow();
-  expect(fixture.session.resume).not.toHaveBeenCalled();
+  expect(fixture.session.resume).toHaveBeenCalledTimes(1);
   expect(fixture.session.readDetail).toHaveBeenCalledTimes(1);
 });
 
@@ -273,7 +515,7 @@ it('五次恢复耗尽后拒绝第六次，未更新检查不消耗有效次数'
   }
   await expect(f.resume(source, 'r6')).rejects.toThrow();
   expect(f.session.readDetail).toHaveBeenCalledTimes(6);
-  expect(f.session.resume).toHaveBeenCalledTimes(6);
+  expect(f.session.resume).toHaveBeenCalledTimes(11);
 });
 
 it('恢复不能延长原批次十分钟期限', async () => {
@@ -286,7 +528,7 @@ it('恢复不能延长原批次十分钟期限', async () => {
   await expect(f.resume('task', 'r1')).rejects.toThrow();
   now += 10000;
   await expect(f.resume('r1', 'r2')).rejects.toThrow();
-  expect(f.session.resume).toHaveBeenCalledTimes(1);
+  expect(f.session.resume).toHaveBeenCalledTimes(3);
 });
 
 it('恢复中的网络错误不能继续沿用 37 恢复链', async () => {
@@ -297,7 +539,7 @@ it('恢复中的网络错误不能继续沿用 37 恢复链', async () => {
   f.session.readDetail.mockRejectedValueOnce(new PlatformError('network_error'));
   await expect(f.resume('task', 'r1')).rejects.toMatchObject({ category: 'network_error' });
   await expect(f.resume('r1', 'r2')).rejects.toMatchObject({ category: 'session_unavailable' });
-  expect(f.session.resume).toHaveBeenCalledTimes(1);
+  expect(f.session.resume).toHaveBeenCalledTimes(2);
   expect(f.session.readDetail).toHaveBeenCalledTimes(2);
 });
 
@@ -385,6 +627,10 @@ it('详情请求前记录稳定身份，成功后清除检查点且拒绝 URL �
   const result = await fixture.next();
   expect(result.progress).not.toHaveProperty('currentExternalJobId');
   const progress = result.progress;
+  for (const id of ['job:1981234567', 'a:80123456'])
+    expect(
+      platformProgressSchema.safeParse({ ...progress, currentExternalJobId: id }).success,
+    ).toBe(true);
   expect(
     platformProgressSchema.safeParse({ ...progress, currentExternalJobId: 'abc_12-~' }).success,
   ).toBe(true);
@@ -392,6 +638,11 @@ it('详情请求前记录稳定身份，成功后清除检查点且拒绝 URL �
     '',
     'https://www.zhipin.com/job_detail/id.html?securityId=secret',
     'id\ncookie=secret',
+    'other:123',
+    'job:0',
+    'job:01',
+    'job:123?token=secret',
+    'job:123:456',
     'x'.repeat(513),
   ])
     expect(

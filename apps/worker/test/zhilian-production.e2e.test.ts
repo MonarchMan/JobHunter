@@ -273,8 +273,17 @@ it.each(['campus', 'search', '51job'] as const)(
       await run(['disconnect', '--generation', String(generation)]);
       expect(web.snapshot().connection?.status).toBe('disconnected');
       expect(boss.snapshot()).toEqual(beforeBoss);
-      await expect(cli(['next', '--generation', '1'], 'liepin')).rejects.toThrow();
-      expect(queue.list({ taskType: 'platform.liepin', limit: 10 })).toHaveLength(0);
+      // 3.a、猎聘已受支持；跨渠道命令只能进入猎聘队列，不得改变当前渠道或 BOSS 状态。
+      const liepinTask = JSON.parse(
+        (await cli(['next', '--generation', '1'], 'liepin')).stdout,
+      ) as {
+        task: { id: string };
+      };
+      expect(queue.list({ taskType: 'platform.liepin', limit: 10 }).map((task) => task.id)).toEqual(
+        [parseId(liepinTask.task.id, 'Task')],
+      );
+      expect(web.snapshot().connection?.status).toBe('disconnected');
+      expect(boss.snapshot()).toEqual(beforeBoss);
     } finally {
       await worker.close();
       db.close();

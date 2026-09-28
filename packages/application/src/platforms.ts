@@ -16,6 +16,16 @@ import {
   type PlatformProgress,
 } from './platform-progress.js';
 
+/** 智联首页初始化使用显式普通查询，不从实验记录推断用户意图。 */
+const platformSearchSchema = z
+  .object({
+    keyword: z.string().trim().min(1).max(200),
+    city: z
+      .string()
+      .regex(/^\d{0,12}$/)
+      .default(''),
+  })
+  .strict();
 /** 任务只保存非敏感连接选择和稳定职位身份，不接受 URL、Cookie 或私有游标。 */
 export const bossCommandSchema = z.discriminatedUnion('action', [
   z
@@ -24,12 +34,15 @@ export const bossCommandSchema = z.discriminatedUnion('action', [
       portFile: z.string().min(1).optional(),
       targetId: z.string().min(1).optional(),
       acquisitionMode: z.enum(['http', 'browser']).optional(),
+      search: platformSearchSchema.optional(),
     })
     .strict(),
   z
     .object({
       action: z.literal('acquire'),
       generation: z.number().int().positive().nullable(),
+      reconnect: z.literal(true).optional(),
+      search: platformSearchSchema.optional(),
       targetId: z
         .string()
         .regex(/^[\w-]{1,128}$/)
@@ -166,8 +179,14 @@ export class PlatformBrowsingService {
   ): Promise<BossResult> {
     if (this.#busy) throw new PlatformError('session_unavailable');
     // 旧客户端动作不得销毁当前有效连接。
-    if (command.action !== 'connect' && this.repository.generation() !== command.generation)
+    if (
+      command.action !== 'connect' &&
+      !(command.action === 'acquire' && command.reconnect) &&
+      this.repository.generation() !== command.generation
+    )
       throw new PlatformError('session_unavailable');
+    // 0、仅显式重试授权替换冻结／丢失的会话；不自动处理安全验证。
+    if (command.action === 'acquire' && command.reconnect) this.close();
     if (
       this.#failed &&
       (command.action === 'next' ||
@@ -176,14 +195,18 @@ export class PlatformBrowsingService {
     )
       throw new PlatformError('session_unavailable');
     // 0.a、日常动作复用现存会话，不允许选页参数悄悄替换正在使用的账号。
-    if (command.action === 'acquire' && this.#session && command.targetId)
+    if (command.action === 'acquire' && this.#session && (command.targetId || command.search))
       throw new PlatformError('session_unavailable');
     const acquire = command.action === 'acquire';
     if (command.action === 'acquire') {
       command =
         this.#session && this.#generation !== null
           ? { action: 'next', generation: this.#generation }
-          : { action: 'connect', ...(command.targetId ? { targetId: command.targetId } : {}) };
+          : {
+              action: 'connect',
+              ...(command.targetId ? { targetId: command.targetId } : {}),
+              ...(command.search ? { search: command.search } : {}),
+            };
     }
     // 0、恢复只消费原失败任务的当前内存工作集；错误引用不改变现有状态。
     if (
@@ -271,6 +294,8 @@ export class PlatformBrowsingService {
           signal.throwIfAborted();
           if (this.#pending !== pending || this.repository.generation() !== generation)
             throw new PlatformError('session_unavailable');
+          if (this.now() >= pending.expiresAt)
+            throw new PlatformError('session_unavailable', null, 'resume_expired');
           this.#failed = false;
           result = {
             candidates: pending.batch.candidates.slice(pending.saved),
@@ -298,6 +323,7 @@ export class PlatformBrowsingService {
           ...progress,
           total: result.candidates.length,
           skipped: result.skippedMissingCompanyId ?? 0,
+          ...(this.#pending ? { resumeCount: this.#pending.resumes } : {}),
         };
         report();
         for (const candidate of result.candidates) {
@@ -309,7 +335,81 @@ export class PlatformBrowsingService {
           // 2.a.i、外部请求前保存稳定身份，失败后可准确定位，不持久化私有访问参数。
           progress.currentExternalJobId = candidate.externalJobId;
           report();
-          const detail = await this.#session.readDetail(candidate.externalJobId, signal);
+          let detail: PlatformJobDetail;
+          for (;;) {
+            try {
+              detail = await this.#session.readDetail(candidate.externalJobId, signal);
+              break;
+            } catch (error) {
+              // 2.a.ii、仅详情 37 立即检查上下文；网络错误仍由连接器独立处理。
+              const pending = this.#pending;
+              if (
+                !(error instanceof PlatformError) ||
+                error.category !== 'access_blocked' ||
+                error.businessCode !== 37 ||
+                !pending ||
+                !this.#session.resume ||
+                signal.aborted ||
+                this.#connectionFailed() ||
+                this.repository.generation() !== generation ||
+                pending.resumes >= 5 ||
+                this.now() >= pending.expiresAt
+              )
+                throw error;
+              try {
+                progress.recovery = {
+                  state: 'checking_context',
+                  checks: progress.recovery?.checks ?? 0,
+                };
+                report();
+                await this.#session.resume(signal, {
+                  waitForChange: true,
+                  onContextCheck: (state) => {
+                    // 2.a.iii、观察状态与恢复次数分开；换代后不能继续更新或发送请求。
+                    signal.throwIfAborted();
+                    if (
+                      this.#connectionFailed() ||
+                      this.#pending !== pending ||
+                      this.repository.generation() !== generation
+                    )
+                      throw new PlatformError('session_unavailable');
+                    progress.recovery = {
+                      state: state === 'updated' ? 'resumed' : 'waiting_context',
+                      checks: (progress.recovery?.checks ?? 0) + 1,
+                    };
+                    report();
+                  },
+                });
+              } catch (recoveryError) {
+                // 2.a.iv、保留原请求的脱敏摘要，恢复原因单独追加，不吞掉诊断现场。
+                if (
+                  recoveryError instanceof PlatformError &&
+                  recoveryError.reason === 'context_unchanged'
+                ) {
+                  const blocked = new PlatformError('access_blocked', 37, 'context_unchanged');
+                  blocked.message = `${error.message} [recovery=context_unchanged]`;
+                  throw blocked;
+                }
+                if (recoveryError instanceof PlatformError)
+                  recoveryError.message = `${error.message} [recovery=${platformFailure(recoveryError, false).reason ?? 'unknown'}]`;
+                throw recoveryError;
+              }
+              signal.throwIfAborted();
+              if (
+                this.#connectionFailed() ||
+                this.#pending !== pending ||
+                this.repository.generation() !== generation
+              )
+                throw new PlatformError('session_unavailable');
+              if (this.now() >= pending.expiresAt)
+                throw new PlatformError('session_unavailable', null, 'resume_expired');
+              // 2.a.v、自动和显式恢复共用预算；不重置期限、不重抓已提交详情。
+              pending.resumes += 1;
+              progress.resumeCount = pending.resumes;
+              progress.recovery = { state: 'resumed', checks: progress.recovery.checks };
+              report();
+            }
+          }
           signal.throwIfAborted();
           if (this.#connectionFailed() || this.repository.generation() !== generation)
             throw new PlatformError('session_unavailable');
@@ -364,6 +464,8 @@ export class PlatformBrowsingService {
       // 4、仅批次详情 37 或未更新上下文保留待办；取消和其他错误不能恢复。
       if (
         signal.aborted ||
+        this.repository.generation() !== this.#generation ||
+        (this.#pending !== null && this.now() >= this.#pending.expiresAt) ||
         !(error instanceof PlatformError) ||
         !(
           ((command.action === 'next' || command.action === 'resume') &&
@@ -414,6 +516,13 @@ export function createPlatformTaskHandler(
     payloadSchema: bossCommandSchema,
     outputSchema: bossResultSchema,
     defaultMaxAttempts: 1,
+    manualRetryPayload: (payload) => {
+      // 1、重试输入也在边界校验；只有 BOSS 日常获取明确授权重连。
+      const command = bossCommandSchema.parse(payload);
+      return command.action === 'acquire' && providerKey === 'boss'
+        ? { ...command, reconnect: true }
+        : command;
+    },
     leaseDurationMs: 60_000,
     concurrencyKey: () => `platform:${providerKey}`,
     lateCancellationPolicy: (result) => (result.status === 'saved' ? 'complete' : 'cancel'),

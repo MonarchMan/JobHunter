@@ -563,6 +563,24 @@ export const schedules = sqliteTable('schedules', {
   updatedAt: epoch('updated_at').notNull(),
 });
 
+/** 手动重试的脱敏失败日志；不保存任务载荷与原始响应。 */
+export const taskRetryLogs = sqliteTable(
+  'task_retry_logs',
+  {
+    taskId: text('task_id')
+      .notNull()
+      .references((): AnySQLiteColumn => tasks.id, { onDelete: 'cascade' }),
+    retryToken: text('retry_token').notNull(),
+    errorCategory: text('error_category'),
+    errorSummary: text('error_summary'),
+    attemptCount: integer('attempt_count').notNull(),
+    startedAt: epoch('started_at'),
+    finishedAt: epoch('finished_at'),
+    retriedAt: epoch('retried_at').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.taskId, table.retryToken] })],
+);
+
 /** 通用异步任务队列，承载可重试的后台工作。 */
 export const tasks = sqliteTable(
   'tasks',

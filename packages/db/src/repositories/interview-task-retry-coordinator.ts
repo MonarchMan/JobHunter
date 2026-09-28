@@ -25,7 +25,7 @@ export class SqliteInterviewTaskRetryCoordinator implements TaskRetryCoordinator
   ): EnqueueTaskResult {
     return this.#client
       .transaction(() => {
-        const result = this.#tasks.enqueue(input.retry);
+        const result = this.#tasks.retry(input.retry);
         if (
           result.kind !== 'enqueued' &&
           (result.task.taskType !== input.retry.taskType ||

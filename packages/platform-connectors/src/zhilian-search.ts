@@ -1,4 +1,4 @@
-import { setTimeout as delay } from 'node:timers/promises';
+import { PlatformRequestPacer } from './request-pacing.js';
 import {
   PlatformError,
   type PlatformSession,
@@ -224,19 +224,19 @@ export class ZhilianSearchHttpSession implements PlatformSession {
   #listHeaders: Record<string, string>;
   #detailHeaders: Record<string, string>;
   readonly #fetch: typeof fetch;
-  readonly #now: () => number;
+  readonly #pacer: PlatformRequestPacer;
   readonly #abort = new AbortController();
   readonly #candidates = new Map<string, PlatformCandidate>();
   readonly #seen = new Set<string>();
   #page = 0;
   #hasMore = true;
   #busy = false;
-  #lastAt: number | null = null;
 
   public constructor(input: {
     readonly templates: ZhilianSearchTemplates;
     readonly fetch?: typeof fetch;
     readonly now?: () => number;
+    readonly requestIntervalMs?: number;
   }) {
     // 1、模板边界错误只报告分类，不把 URL／令牌带入异常。
     try {
@@ -250,7 +250,7 @@ export class ZhilianSearchHttpSession implements PlatformSession {
       throw new PlatformError('parse_changed');
     }
     this.#fetch = input.fetch ?? fetch;
-    this.#now = input.now ?? Date.now;
+    this.#pacer = new PlatformRequestPacer(input.requestIntervalMs, input.now);
   }
 
   /** 显式读取一页，结束信号与本地 20 页安全上限分开处理。 */
@@ -360,17 +360,14 @@ export class ZhilianSearchHttpSession implements PlatformSession {
     this.#seen.clear();
   }
 
-  /** 串行及 5 秒间隔是保守实验策略；任一失败冻结，不重试或回退浏览器。 */
+  /** 保留串行互斥；固定间隔由发送边界统一处理，任一失败冻结。 */
   async #run<T>(caller: AbortSignal, work: (signal: AbortSignal) => Promise<T>): Promise<T> {
     if (caller.aborted || this.#abort.signal.aborted || this.#busy)
       throw new PlatformError('session_unavailable');
     this.#busy = true;
     const signal = AbortSignal.any([caller, this.#abort.signal]);
     try {
-      // 1、等待可取消；间隔计于真实上游请求开始，而不是本地空结果动作。
-      const remaining =
-        this.#lastAt === null ? 0 : Math.max(0, 5000 - (this.#now() - this.#lastAt));
-      if (remaining) await delay(remaining, undefined, { signal });
+      // 1、只有实际 HTTP 才参与统一节流，本地空结果不消耗配额。
       signal.throwIfAborted();
       const result = await work(signal);
       signal.throwIfAborted();
@@ -397,6 +394,7 @@ export class ZhilianSearchHttpSession implements PlatformSession {
     caller: AbortSignal,
   ): Promise<unknown> {
     // 1、超时覆盖请求与正文读取；保留原分类，取消优先于超时，不自动重试。
+    await this.#pacer.before(caller);
     const timeout = AbortSignal.timeout(20_000);
     const signal = AbortSignal.any([caller, timeout]);
     try {
@@ -416,7 +414,6 @@ export class ZhilianSearchHttpSession implements PlatformSession {
     signal: AbortSignal,
   ): Promise<unknown> {
     // 1、固定端点执行一次请求，流式读取仍受同一取消信号和大小上限约束。
-    this.#lastAt = this.#now();
     const response = await this.#fetch(url.href, {
       method: body === undefined ? 'GET' : 'POST',
       headers,

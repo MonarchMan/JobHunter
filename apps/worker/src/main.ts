@@ -20,6 +20,8 @@ const logger = createSafeLogger({
 try {
   const worker = createProductionWorkerApplication({
     dataRoot: config.bootstrap.dataRoot.value,
+    platformRequestIntervalMs: config.platforms.requestIntervalMs.value,
+    platformRequestIntervalMsByProvider: config.platforms.requestIntervalMsByProvider.value,
     pollIntervalMs: config.worker.pollIntervalMs.value,
     maxConcurrentNetworkTasks: config.worker.maxConcurrentNetworkTasks.value,
     taskTypeConcurrency: config.worker.taskTypeConcurrency.value,

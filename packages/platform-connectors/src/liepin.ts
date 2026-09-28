@@ -1,3 +1,4 @@
+import { PlatformRequestPacer } from './request-pacing.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import {
@@ -71,6 +72,47 @@ const headerNames = new Set(
 /** 异步期间 AbortSignal 可变化，每次读取当前状态。 */
 function isAborted(signal: AbortSignal): boolean {
   return signal.aborted;
+}
+
+/** 只从有限 cause 链读取已知传输码；异常原文可能含 URL、Cookie，不能进入日志。 */
+function networkDiagnostic(error: unknown): { reason: string | null; code: string; name: string } {
+  const reasons: Readonly<Record<string, string>> = {
+    ECONNRESET: 'connection_reset',
+    ETIMEDOUT: 'request_timeout',
+    EAI_AGAIN: 'dns_error',
+    ECONNREFUSED: 'connection_refused',
+    UND_ERR_SOCKET: 'socket_closed',
+    UND_ERR_CONNECT_TIMEOUT: 'connect_timeout',
+    UND_ERR_HEADERS_TIMEOUT: 'headers_timeout',
+    UND_ERR_BODY_TIMEOUT: 'body_timeout',
+  };
+  let current = error;
+  const name =
+    error instanceof Error && ['TypeError', 'TimeoutError', 'AbortError'].includes(error.name)
+      ? error.name
+      : 'Error';
+  // 1、只检查有界异常链，未知 TypeError 不冒充可重试网络故障。
+  for (let depth = 0; depth < 3; depth += 1) {
+    if (!(current instanceof Error)) break;
+    if (current.name === 'TimeoutError') return { reason: 'request_timeout', code: 'none', name };
+    const code = 'code' in current ? current.code : undefined;
+    if (typeof code === 'string' && Object.hasOwn(reasons, code))
+      return { reason: reasons[code] ?? null, code, name };
+    current = current.cause;
+  }
+  return { reason: null, code: 'unknown', name };
+}
+
+/** 保留请求阶段、固定错误码和重试次数，不保留底层异常文本或原始响应。 */
+class LiepinNetworkError extends PlatformError {
+  public constructor(
+    phase: 'list' | 'detail' | 'operation',
+    diagnostic: ReturnType<typeof networkDiagnostic>,
+    attempts: number,
+  ) {
+    super('network_error', null, diagnostic.reason ?? 'unknown');
+    this.message += ` [liepin:${phase};reason=${diagnostic.reason ?? 'unknown'};code=${diagnostic.code};name=${diagnostic.name};attempts=${String(attempts)}]`;
+  }
 }
 
 /** 仅保留已验证的普通请求字段，浏览器特征头和 Cookie 不随模板跨请求复用。 */
@@ -212,16 +254,37 @@ function parseDetail(
   return { ...candidate, description: posting.description };
 }
 
+/** 仅把重定向目标映射为固定原因码，绝不把 Location 或查询参数带入任务日志。 */
+function redirectReason(location: string | null, sourceUrl: string): string {
+  if (!location) return 'redirect_missing_location';
+  let target: URL;
+  try {
+    target = new URL(location, sourceUrl);
+  } catch {
+    return 'redirect_invalid_location';
+  }
+  if (
+    target.protocol !== 'https:' ||
+    (target.hostname !== 'liepin.com' && !target.hostname.endsWith('.liepin.com'))
+  )
+    return 'redirect_external';
+  const path = target.pathname.toLowerCase();
+  if (/(^|\/)(login|passport|signin|register)(\/|$)/.test(path)) return 'redirect_login';
+  if (/(^|\/)(verify|verification|security|captcha|risk|safe)(\/|$)/.test(path))
+    return 'redirect_challenge';
+  if (/^\/(job|a)\/[1-9]\d*\.shtml$/.test(path)) return 'redirect_job';
+  return 'redirect_internal_other';
+}
+
 /** 猎聘固定条件的 HTTP 推荐流；每次显式读取一批，LOGIN 后以 UP 续批。 */
 export class LiepinRecommendationHttpSession implements PlatformSession {
   readonly #fetch: typeof fetch;
-  readonly #now: () => number;
+  readonly #pacer: PlatformRequestPacer;
   readonly #readHeaders: (
     url: string,
     signal: AbortSignal,
   ) => Promise<Readonly<Record<string, string>>>;
   #template: LiepinRecommendationTemplate | null;
-  #lastAt: number | null = null;
   #closed = false;
   #busy = false;
   #consumed = false;
@@ -237,6 +300,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     readHeaders: (url: string, signal: AbortSignal) => Promise<Readonly<Record<string, string>>>;
     fetch?: typeof fetch;
     now?: () => number;
+    requestIntervalMs?: number;
   }) {
     try {
       if (input.template.url !== endpoint || input.template.body.length > 20000) throw new Error();
@@ -247,7 +311,8 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     this.#template = { ...input.template };
     this.#readHeaders = input.readHeaders;
     this.#fetch = input.fetch ?? fetch;
-    this.#now = input.now ?? Date.now;
+    // 1、间隔下限由 Worker 配置合成；连接器只执行传入值，不隐含平台常量。
+    this.#pacer = new PlatformRequestPacer(input.requestIntervalMs, input.now);
   }
 
   /** 原始查询固定，只修改官网已验证的普通续批操作类型，不生成私有游标。 */
@@ -313,7 +378,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     this.#seen.clear();
   }
 
-  /** 串行、取消与失败冻结，错误不会触发浏览器回退或隐式重试。 */
+  /** 串行、取消与失败冻结；仅详情 GET 在发送边界允许有界传输重试。 */
   async #operation<T>(
     signal: AbortSignal,
     action: (signal: AbortSignal) => Promise<T>,
@@ -321,8 +386,9 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     if (this.#closed || this.#busy || signal.aborted)
       throw new PlatformError('session_unavailable');
     this.#busy = true;
-    const combined = AbortSignal.any([signal, this.#abort.signal, AbortSignal.timeout(20000)]);
     try {
+      // 1、二十秒操作截止时间覆盖详情传输重试；每次实际发送单独执行节流。
+      const combined = AbortSignal.any([signal, this.#abort.signal, AbortSignal.timeout(20000)]);
       const result = await action(combined);
       combined.throwIfAborted();
       return result;
@@ -331,17 +397,34 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
       this.disconnect();
       if (cancelled) throw new PlatformError('session_unavailable');
       if (error instanceof PlatformError) throw error;
-      throw new PlatformError('network_error');
+      throw new LiepinNetworkError('operation', networkDiagnostic(error), 1);
     } finally {
       this.#busy = false;
     }
   }
 
-  /** 固定目标、五秒节流、有界正文；禁止自动重定向转发认证信息。 */
+  /** 只对已知瞬时传输故障重试详情 GET；有状态列表 POST 一律不重放。 */
   async #request(url: string, body: string | null, signal: AbortSignal): Promise<string> {
-    // 1、节流唤醒后复核，随后只读当前目标适用上下文。
-    while (this.#lastAt !== null && this.#now() - this.#lastAt < 5000)
-      await delay(5000 - (this.#now() - this.#lastAt), undefined, { signal });
+    // 1、每次失败重新读取适用认证头，不跨请求保留上下文。
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.#requestAttempt(url, body, signal);
+      } catch (error) {
+        if (error instanceof PlatformError || signal.aborted) throw error;
+        const diagnostic = networkDiagnostic(error);
+        if (body === null && diagnostic.reason !== null && attempt < 3) {
+          // 2、仅幂等 GET 做最多两次可取消退避，正常请求间隔仍由配置控制。
+          await delay(attempt * 1000, undefined, { signal });
+          continue;
+        }
+        throw new LiepinNetworkError(body === null ? 'detail' : 'list', diagnostic, attempt);
+      }
+    }
+  }
+
+  /** 固定目标、统一节流、有界正文；禁止自动重定向转发认证信息。 */
+  async #requestAttempt(url: string, body: string | null, signal: AbortSignal): Promise<string> {
+    // 1、只读当前目标适用上下文，实际 HTTP 由统一发送边界节流。
     const supplied = await this.#readHeaders(url, signal);
     const headers: Record<string, string> = {};
     for (const [key, value] of Object.entries(supplied)) {
@@ -353,7 +436,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     headers.accept = body === null ? 'text/html' : 'application/json, text/plain, */*';
     if (body !== null) headers['content-type'] = 'application/json';
     signal.throwIfAborted();
-    this.#lastAt = this.#now();
+    await this.#pacer.before(signal);
     const response = await this.#fetch(url, {
       method: body === null ? 'GET' : 'POST',
       headers,
@@ -363,6 +446,9 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     });
     // 2、重定向／认证墙不当作正文；状态码与业务码分别分类。
     if (response.status !== 200) {
+      const reason = [301, 302, 303, 307, 308].includes(response.status)
+        ? redirectReason(response.headers.get('location'), url)
+        : null;
       await response.body?.cancel();
       throw new PlatformError(
         response.status === 429
@@ -371,6 +457,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
             ? 'access_blocked'
             : 'upstream_error',
         response.status,
+        reason,
       );
     }
     const contentType = response.headers.get('content-type') ?? '';

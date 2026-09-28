@@ -10,6 +10,68 @@ import {
 } from '../src/index.js';
 
 describe('two-stage configuration', () => {
+  it('平台统一间隔默认零，保留显式零覆盖及配置优先级', () => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    expect(resolveAppConfig({ bootstrap, environment: {} }).platforms.requestIntervalMs).toEqual({
+      value: 0,
+      source: 'default',
+    });
+    const file = { platforms: { requestIntervalMs: 5000 } };
+    expect(
+      resolveAppConfig({ bootstrap, environment: {}, file }).platforms.requestIntervalMs,
+    ).toEqual({ value: 5000, source: 'file' });
+    const environment = { JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS: '0' };
+    expect(resolveAppConfig({ bootstrap, environment, file }).platforms.requestIntervalMs).toEqual({
+      value: 0,
+      source: 'environment',
+    });
+    expect(
+      resolveAppConfig({ bootstrap, environment, file, cli: { platformRequestIntervalMs: 100 } })
+        .platforms.requestIntervalMs,
+    ).toEqual({ value: 100, source: 'cli' });
+    expect(
+      resolveAppConfig({ bootstrap, environment: {} }).platforms.requestIntervalMsByProvider,
+    ).toEqual({ value: {}, source: 'default' });
+    expect(
+      resolveAppConfig({
+        bootstrap,
+        environment,
+        file: { platforms: { requestIntervalMsByProvider: { boss: 0, liepin: 1000 } } },
+      }).platforms.requestIntervalMsByProvider,
+    ).toEqual({ value: { boss: 0, liepin: 1000 }, source: 'file' });
+  });
+
+  it.each([-1, 1.5, 60_001])('拒绝错误的平台专用间隔 %s', (value) => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    expect(() =>
+      resolveAppConfig({
+        bootstrap,
+        environment: {},
+        file: { platforms: { requestIntervalMsByProvider: { liepin: value } } },
+      }),
+    ).toThrow();
+  });
+
+  it('拒绝未知平台间隔键', () => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    expect(() =>
+      resolveAppConfig({
+        bootstrap,
+        environment: {},
+        file: { platforms: { requestIntervalMsByProvider: { unknown: 1000 } } },
+      }),
+    ).toThrow();
+  });
+
+  it.each(['-1', '1.5', '60001', 'invalid'])('拒绝错误平台间隔 %s', (value) => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    expect(() =>
+      resolveAppConfig({
+        bootstrap,
+        environment: { JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS: value },
+      }),
+    ).toThrow();
+  });
   it('loads workspace environment consistently and lets process values override it', async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), 'jobhunter-runtime-config-'));
     try {

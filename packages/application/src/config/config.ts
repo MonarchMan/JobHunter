@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
+import type { PlatformProviderKey } from '@jobhunter/platform-core';
 
 /** 应用层使用的类型约束。 */
 export type ConfigSource = 'cli' | 'environment' | 'file' | 'default';
@@ -45,6 +46,12 @@ export interface BootstrapConfig {
 export interface AppConfig {
   readonly bootstrap: BootstrapConfig;
   readonly logLevel: SourcedValue<'debug' | 'info' | 'warn' | 'error'>;
+  readonly platforms: {
+    readonly requestIntervalMs: SourcedValue<number>;
+    readonly requestIntervalMsByProvider: SourcedValue<
+      Readonly<Partial<Record<PlatformProviderKey, number | undefined>>>
+    >;
+  };
   readonly worker: {
     readonly pollIntervalMs: SourcedValue<number>;
     readonly maxConcurrentNetworkTasks: SourcedValue<number>;
@@ -63,6 +70,7 @@ export interface ConfigOverrides {
   readonly dataRoot?: string;
   readonly configPath?: string;
   readonly logLevel?: string;
+  readonly platformRequestIntervalMs?: number;
   readonly workerPollIntervalMs?: number;
   readonly maxConcurrentNetworkTasks?: number;
   readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
@@ -75,6 +83,21 @@ export interface ConfigOverrides {
 const localConfigSchema = z
   .object({
     logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
+    platforms: z
+      .object({
+        requestIntervalMs: z.number().int().min(0).max(60_000).optional(),
+        requestIntervalMsByProvider: z
+          .object({
+            boss: z.number().int().min(0).max(60_000).optional(),
+            zhilian: z.number().int().min(0).max(60_000).optional(),
+            '51job': z.number().int().min(0).max(60_000).optional(),
+            liepin: z.number().int().min(0).max(60_000).optional(),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     worker: z
       .object({
         pollIntervalMs: z.number().int().min(100).max(60_000).optional(),
@@ -247,9 +270,28 @@ export function resolveAppConfig(input: {
     file.worker?.taskTypeConcurrency,
     defaultTaskTypeConcurrency,
   );
+  const requestIntervalMs = choose(
+    input.cli?.platformRequestIntervalMs,
+    environmentInteger(
+      environment.JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS,
+      'platform request interval',
+    ),
+    file.platforms?.requestIntervalMs,
+    0,
+  );
+  const requestIntervalMsByProvider = choose<
+    Readonly<Partial<Record<PlatformProviderKey, number | undefined>>>
+  >(undefined, undefined, file.platforms?.requestIntervalMsByProvider, {});
   return {
     bootstrap: input.bootstrap,
     logLevel: { ...logLevel, value: parsedLogLevel },
+    platforms: {
+      requestIntervalMs: {
+        ...requestIntervalMs,
+        value: z.number().int().min(0).max(60_000).parse(requestIntervalMs.value),
+      },
+      requestIntervalMsByProvider,
+    },
     worker: {
       pollIntervalMs: {
         ...pollIntervalMs,

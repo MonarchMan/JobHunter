@@ -22,11 +22,19 @@ class FakeSocket extends EventTarget {
   static failMethod: string | undefined;
   static onCreate: (() => void) | undefined;
   static emptyResourceReads = 0;
+  static responseBodies = new Map<string, unknown>();
   static targetUrl = 'https://www.zhipin.com/web/geek/jobs';
   static extraTargets: { targetId: string; type: string; url: string }[] = [];
+  static bossAuth = false;
+  static bossSecurity = 'old';
+  static bossAutoSecurityReturn = false;
+  static bossMissingLink = false;
   readyState = 0;
   methods: string[] = [];
-  commands: { method: string; params?: { targetId?: string; url?: string } }[] = [];
+  commands: {
+    method: string;
+    params?: { targetId?: string; url?: string; expression?: string };
+  }[] = [];
   ownedUrl: string | undefined;
   constructor() {
     super();
@@ -43,12 +51,38 @@ class FakeSocket extends EventTarget {
     const request = JSON.parse(data) as {
       id: number;
       method: string;
-      params?: { expression?: string; targetId?: string; url?: string };
+      params?: { expression?: string; targetId?: string; url?: string; requestId?: string };
     };
     this.methods.push(request.method);
     this.commands.push(request);
     if (FakeSocket.silent) return;
     if (request.method === 'Target.createTarget') FakeSocket.onCreate?.();
+    if (
+      FakeSocket.bossAuth &&
+      !FakeSocket.bossMissingLink &&
+      request.params?.expression?.includes('link.click()')
+    )
+      FakeSocket.bossSecurity = 'new';
+    if (
+      FakeSocket.bossAutoSecurityReturn &&
+      !FakeSocket.bossMissingLink &&
+      request.params?.expression?.includes('link.click()')
+    )
+      queueMicrotask(() => {
+        for (const url of [
+          'https://www.zhipin.com/web/passport/zp/security.html',
+          'https://www.zhipin.com/web/geek/jobs',
+        ])
+          this.dispatchEvent(
+            new MessageEvent('message', {
+              data: JSON.stringify({
+                sessionId: 'attached',
+                method: 'Page.frameNavigated',
+                params: { frame: { url } },
+              }),
+            }),
+          );
+      });
     if (request.method === 'Page.navigate') this.ownedUrl = request.params?.url;
     const responses: Record<string, unknown> = {
       'Target.getTargets': {
@@ -64,15 +98,30 @@ class FakeSocket extends EventTarget {
       'Target.createTarget': { targetId: 'worker-owned' },
       'Target.closeTarget': { success: true },
       'Page.navigate': {},
+      'Network.getResponseBody': {
+        body: JSON.stringify(
+          FakeSocket.responseBodies.get(String(request.params?.requestId)) ?? {
+            code: 0,
+            zpData: { hasMore: false, lid: 'fixture', jobList: [] },
+          },
+        ),
+        base64Encoded: false,
+      },
       'Runtime.evaluate': {
         result: {
-          value: request.params?.expression?.includes('window._PAGE')
-            ? 'page-token'
-            : request.method === 'Runtime.evaluate' && FakeSocket.emptyResourceReads-- > 0
-              ? '[]'
-              : JSON.stringify([
-                  'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1',
-                ]),
+          value: request.params?.expression?.includes('const jobs = any')
+            ? 'ready'
+            : request.params?.expression?.includes("window.dispatchEvent(new Event('scroll'))")
+              ? true
+              : request.params?.expression?.includes('link.click()')
+                ? !FakeSocket.bossMissingLink
+                : request.params?.expression?.includes('window._PAGE')
+                  ? 'page-token'
+                  : request.method === 'Runtime.evaluate' && FakeSocket.emptyResourceReads-- > 0
+                    ? '[]'
+                    : JSON.stringify([
+                        'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1',
+                      ]),
         },
       },
       'Network.getCookies': {
@@ -85,6 +134,34 @@ class FakeSocket extends EventTarget {
             secure: true,
             expires: -1,
           },
+          ...(FakeSocket.bossAuth
+            ? [
+                {
+                  name: 'wt2',
+                  value: 'account',
+                  domain: '.zhipin.com',
+                  path: '/',
+                  secure: true,
+                  expires: -1,
+                },
+                {
+                  name: 'bst',
+                  value: 'bst',
+                  domain: '.zhipin.com',
+                  path: '/',
+                  secure: true,
+                  expires: -1,
+                },
+                {
+                  name: '__zp_stoken__',
+                  value: FakeSocket.bossSecurity,
+                  domain: '.zhipin.com',
+                  path: '/',
+                  secure: true,
+                  expires: -1,
+                },
+              ]
+            : []),
         ],
       },
       'Target.detachFromTarget': {},
@@ -126,8 +203,13 @@ beforeEach(() => {
   FakeSocket.failMethod = undefined;
   FakeSocket.onCreate = undefined;
   FakeSocket.emptyResourceReads = 0;
+  FakeSocket.responseBodies.clear();
   FakeSocket.targetUrl = 'https://www.zhipin.com/web/geek/jobs';
   FakeSocket.extraTargets = [];
+  FakeSocket.bossAuth = false;
+  FakeSocket.bossSecurity = 'old';
+  FakeSocket.bossAutoSecurityReturn = false;
+  FakeSocket.bossMissingLink = false;
   vi.stubGlobal('WebSocket', FakeSocket);
 });
 afterEach(() => {
@@ -136,7 +218,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it('日常连接新建默认上下文专用页，HTTP 使用自己的页且不刷新', async () => {
+it('显式 HTTP 调试新建默认上下文专用页，使用自己的页且不刷新', async () => {
   const fetcher = vi
     .fn()
     .mockResolvedValue(
@@ -146,7 +228,10 @@ it('日常连接新建默认上下文专用页，HTTP 使用自己的页且不�
   FakeSocket.extraTargets = [
     { targetId: 'other', type: 'page', url: 'https://example.com/?secret=never-expose' },
   ];
-  const pending = new BossCdpSessionProvider().connect({}, new AbortController().signal);
+  const pending = new BossCdpSessionProvider().connect(
+    { acquisitionMode: 'http' },
+    new AbortController().signal,
+  );
   await vi.advanceTimersByTimeAsync(1);
   const session = await pending;
   await expect(session.readNext(new AbortController().signal)).resolves.toMatchObject({
@@ -158,7 +243,11 @@ it('日常连接新建默认上下文专用页，HTTP 使用自己的页且不�
   const socket = FakeSocket.instances[0];
   if (!socket) throw new Error('Missing socket');
   expect(socket.commands.filter((command) => command.method === 'Target.createTarget')).toEqual([
-    { id: 1, method: 'Target.createTarget', params: { url: 'about:blank' } },
+    {
+      id: 1,
+      method: 'Target.createTarget',
+      params: { url: 'about:blank', newWindow: true, background: true },
+    },
   ]);
   expect(socket.methods.filter((method) => method === 'Page.navigate')).toHaveLength(1);
   expect(
@@ -174,6 +263,95 @@ it('日常连接新建默认上下文专用页，HTTP 使用自己的页且不�
   ).toEqual({ targetId: 'worker-owned' });
 });
 
+it.each([
+  [true, false, false],
+  [true, true, false],
+  [true, false, true],
+  [false, false, false],
+] as const)(
+  'BOSS HTTP 自有页=%s 官网自然返回=%s 链接缺失=%s 的受限恢复',
+  async (owned, autoReturn, missingLink) => {
+    FakeSocket.bossAuth = true;
+    FakeSocket.bossAutoSecurityReturn = autoReturn;
+    FakeSocket.bossMissingLink = missingLink;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          code: 0,
+          zpData: {
+            hasMore: false,
+            lid: 'root',
+            jobList: [
+              {
+                encryptJobId: 'job1',
+                encryptBrandId: 'brand1',
+                securityId: 'private-test',
+                jobName: '测试职位',
+                brandName: '测试公司',
+                cityName: '上海',
+                salaryDesc: '',
+                jobExperience: '',
+                jobDegree: '',
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ code: 37 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          code: 0,
+          zpData: {
+            jobInfo: { encryptId: 'job1', jobName: '测试职位', postDescription: '测试正文' },
+          },
+        }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+    const pending = new BossCdpSessionProvider().connect(
+      owned ? { acquisitionMode: 'http' } : { targetId: 'valid', acquisitionMode: 'http' },
+      new AbortController().signal,
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    const session = await pending;
+    const socket = FakeSocket.instances[0];
+    if (!socket?.readyState) throw new Error('Missing socket');
+    const signal = new AbortController().signal;
+    try {
+      // 1、列表和失败详情均为独立 HTTP；浏览器动作只允许自有页恢复。
+      expect((await session.readNext(signal)).candidates).toHaveLength(1);
+      await expect(session.readDetail('job1', signal)).rejects.toMatchObject({ businessCode: 37 });
+      if (owned) {
+        const resumed = session.resume?.(signal, { waitForChange: true });
+        if (autoReturn) await vi.advanceTimersByTimeAsync(2_100);
+        if (missingLink)
+          await expect(resumed).rejects.toMatchObject({ reason: 'job_link_unavailable' });
+        else await resumed;
+        expect(
+          socket.commands.filter((command) => command.params?.expression?.includes('link.click()')),
+        ).toHaveLength(1);
+        expect(fetcher).toHaveBeenCalledTimes(2);
+        if (!missingLink) {
+          expect((await session.readDetail('job1', signal)).description).toBe('测试正文');
+          expect(fetcher).toHaveBeenCalledTimes(3);
+        }
+      } else {
+        await expect(session.resume?.(signal)).rejects.toMatchObject({
+          reason: 'context_unchanged',
+        });
+        expect(
+          socket.commands.some((command) => command.params?.expression?.includes('link.click()')),
+        ).toBe(false);
+        expect(fetcher).toHaveBeenCalledTimes(2);
+      }
+      expect(socket.methods).not.toContain('Page.reload');
+      expect(socket.methods).not.toContain('Page.bringToFront');
+    } finally {
+      session.disconnect();
+    }
+  },
+);
+
 it('已有多个平台页面仍只新建专用页，不返回选择、不枚举用户页面', async () => {
   FakeSocket.extraTargets = [
     { targetId: 'second', type: 'page', url: `${FakeSocket.targetUrl}?secret=never-expose` },
@@ -188,7 +366,7 @@ it('已有多个平台页面仍只新建专用页，不返回选择、不枚举�
 
 it('没有已有平台页仍可创建，初始化失败仅关闭自己的页', async () => {
   FakeSocket.targetUrl = 'https://example.com/';
-  FakeSocket.failMethod = 'Network.getCookies';
+  FakeSocket.failMethod = 'Page.enable';
   const pending = new BossCdpSessionProvider()
     .connect({}, new AbortController().signal)
     .catch((error: unknown) => error);
@@ -209,6 +387,10 @@ it('前程无忧专用页先安装监听再导航，重复断开只清理一次'
   const session = await pending;
   const socket = FakeSocket.instances[0];
   if (!socket) throw new Error('Missing socket');
+  expect(
+    socket.commands.find((command) => command.method === 'Target.createTarget')?.params,
+  ).toEqual({ url: 'about:blank', newWindow: true, background: true });
+  expect(socket.methods).not.toContain('Page.bringToFront');
   expect(socket.methods.indexOf('Network.enable')).toBeLessThan(
     socket.methods.indexOf('Page.navigate'),
   );
@@ -223,12 +405,17 @@ it('前程无忧专用页先安装监听再导航，重复断开只清理一次'
 
 it('新页自然加载前只等待本地资源时间线，不重复导航', async () => {
   FakeSocket.emptyResourceReads = 3;
-  const pending = new BossCdpSessionProvider().connect({}, new AbortController().signal);
-  await vi.advanceTimersByTimeAsync(1600);
+  const pending = new BossCdpSessionProvider().connect(
+    { acquisitionMode: 'http' },
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(3100);
   const session = await pending;
   const socket = FakeSocket.instances[0];
   expect(socket?.methods.filter((method) => method === 'Page.navigate')).toHaveLength(1);
-  expect(socket?.methods.filter((method) => method === 'Runtime.evaluate')).toHaveLength(4);
+  expect(socket?.commands.filter((command) => command.method === 'Runtime.evaluate')).toHaveLength(
+    8,
+  );
   expect(socket?.methods).not.toContain('Page.reload');
   session.disconnect();
   await vi.advanceTimersByTimeAsync(1);
@@ -253,10 +440,19 @@ it.each(['zhilian', 'liepin'] as const)('%s 专用页初始化取消只关闭自
   const controller = new AbortController();
   const connector =
     provider === 'zhilian' ? new ZhilianCdpSessionProvider() : new LiepinCdpSessionProvider();
-  const pending = connector.connect({}, controller.signal).catch((error: unknown) => error);
+  const pending = connector
+    .connect(
+      provider === 'zhilian' ? { search: { keyword: '研发', city: '' } } : {},
+      controller.signal,
+    )
+    .catch((error: unknown) => error);
   await vi.advanceTimersByTimeAsync(1);
   const socket = FakeSocket.instances[0];
   if (!socket) throw new Error('Missing socket');
+  expect(
+    socket.commands.find((command) => command.method === 'Target.createTarget')?.params,
+  ).toEqual({ url: 'about:blank', newWindow: true, background: true });
+  expect(socket.methods).not.toContain('Page.bringToFront');
   expect(socket.methods.indexOf('Network.enable')).toBeLessThan(
     socket.methods.indexOf('Page.navigate'),
   );
@@ -362,6 +558,133 @@ it.each([false, true])('猎聘初始化后通过 HTTP 获取，专用页模式=%
   expect(socket.methods.includes('Target.closeTarget')).toBe(owned);
 });
 
+it.each([undefined, false, true])(
+  'BOSS browser 新页观察真实列表，后台窗口=%s',
+  async (backgroundWindow) => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const pending = new BossCdpSessionProvider(
+      backgroundWindow === undefined ? {} : { backgroundWindow },
+    ).connect({}, new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(1);
+    const session = await pending;
+    const socket = FakeSocket.instances[0];
+    if (!socket) throw new Error('Missing socket');
+    expect(
+      socket.commands.find((command) => command.method === 'Target.createTarget'),
+    ).toMatchObject({
+      params: {
+        url: 'about:blank',
+        ...(backgroundWindow !== false ? { newWindow: true, background: true } : {}),
+      },
+    });
+    const url = 'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1';
+    // 1、专用页的首次导航和列表响应均经过生产观察器，不使用历史模板替代。
+    for (const [method, params] of [
+      ['Page.frameNavigated', { frame: { url: 'https://www.zhipin.com/web/geek/jobs' } }],
+      ['Network.requestWillBeSent', { requestId: 'list', request: { url, method: 'GET' } }],
+      ['Network.responseReceived', { requestId: 'list', response: { url, status: 200 } }],
+      ['Network.loadingFinished', { requestId: 'list', encodedDataLength: 100 }],
+    ])
+      socket.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ sessionId: 'attached', method, params }),
+        }),
+      );
+    await vi.advanceTimersByTimeAsync(1);
+    const firstBatch = session.readNext(new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(1100);
+    await expect(firstBatch).resolves.toMatchObject({ candidates: [], hasMore: false });
+    expect(socket.methods.indexOf('Network.enable')).toBeLessThan(
+      socket.methods.indexOf('Page.navigate'),
+    );
+    expect(socket.methods.filter((method) => method === 'Page.navigate')).toHaveLength(1);
+    expect(socket.methods).not.toContain('Network.getCookies');
+    expect(socket.methods).not.toContain('Page.reload');
+    expect(fetcher).not.toHaveBeenCalled();
+    expect('resume' in session).toBe(false);
+    session.disconnect();
+    await vi.advanceTimersByTimeAsync(1);
+  },
+);
+
+it('BOSS 后台下一批只派发一次普通滚动事件，不刷新或激活页面', async () => {
+  const pending = new BossCdpSessionProvider().connect({}, new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  const emit = (method: string, params: unknown): void => {
+    socket.dispatchEvent(
+      new MessageEvent('message', {
+        data: JSON.stringify({ sessionId: 'attached', method, params }),
+      }),
+    );
+  };
+  const emitResponse = (requestId: string, url: string, body: unknown): void => {
+    FakeSocket.responseBodies.set(requestId, body);
+    emit('Network.requestWillBeSent', { requestId, request: { url, method: 'GET' } });
+    emit('Network.responseReceived', { requestId, response: { url, status: 200 } });
+    emit('Network.loadingFinished', { requestId, encodedDataLength: 100 });
+  };
+  // 1、首批与详情均由所选页的真实响应事件交付，不模拟额外 HTTP。
+  emit('Page.frameNavigated', { frame: { url: 'https://www.zhipin.com/web/geek/jobs' } });
+  emitResponse('list1', 'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1', {
+    code: 0,
+    zpData: {
+      hasMore: true,
+      lid: 'fixture',
+      jobList: [
+        {
+          encryptJobId: 'job1',
+          encryptBrandId: 'brand1',
+          securityId: 'security1',
+          jobName: '测试职位',
+          brandName: '测试公司',
+          cityName: '上海',
+          salaryDesc: '',
+          jobExperience: '',
+          jobDegree: '',
+        },
+      ],
+    },
+  });
+  const first = session.readNext(new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1100);
+  await expect(first).resolves.toMatchObject({ candidates: [{ externalJobId: 'job1' }] });
+  const detail = session.readDetail('job1', new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1);
+  emitResponse(
+    'detail1',
+    'https://www.zhipin.com/wapi/zpgeek/job/detail.json?securityId=security1',
+    {
+      code: 0,
+      zpData: { jobInfo: { encryptId: 'job1', jobName: '测试职位', postDescription: '测试正文' } },
+    },
+  );
+  await expect(detail).resolves.toMatchObject({ externalJobId: 'job1' });
+  // 2、后台下一批只运行一次三段普通滚动；没有响应时取消等待，不补发第二次动作。
+  const controller = new AbortController();
+  const next = session.readNext(controller.signal).catch((error: unknown) => error);
+  await vi.advanceTimersByTimeAsync(1);
+  const actions = socket.commands.filter(
+    (command) =>
+      command.method === 'Runtime.evaluate' &&
+      command.params?.expression?.includes("window.dispatchEvent(new Event('scroll'))"),
+  );
+  expect(actions).toHaveLength(1);
+  expect(actions[0]?.params?.expression).toContain('window.scrollTo(0, 0)');
+  expect(actions[0]?.params?.expression).toContain(
+    'window.scrollTo(0, document.body.scrollHeight)',
+  );
+  expect(actions[0]?.params?.expression).toContain('/job_detail/job1.html');
+  expect(socket.methods).not.toContain('Page.bringToFront');
+  expect(socket.methods).not.toContain('Page.reload');
+  controller.abort();
+  await next;
+  session.disconnect();
+});
+
 it('BOSS 显式浏览器模式不读取凭据、不刷新且保持同一授权连接', async () => {
   const pending = new BossCdpSessionProvider().connect(
     { portFile: '/fixture/DevToolsActivePort', targetId: 'valid', acquisitionMode: 'browser' },
@@ -454,7 +777,7 @@ it('retains the selected 51job observer beyond initialization without another au
 /** 完成模拟授权与初始化，返回可跨动作复用的会话。 */
 async function connected(signal = new AbortController().signal): Promise<PlatformSession> {
   const pending = new BossCdpSessionProvider().connect(
-    { portFile: '/profile/DevToolsActivePort', targetId: 'valid' },
+    { portFile: '/profile/DevToolsActivePort', targetId: 'valid', acquisitionMode: 'http' },
     signal,
   );
   await vi.advanceTimersByTimeAsync(FakeSocket.openDelay + 1);
@@ -463,9 +786,9 @@ async function connected(signal = new AbortController().signal): Promise<Platfor
 
 it('reports an expired initialization session without an unhandled rejection or socket leak', async () => {
   // 1、模拟初始化读取完成后标签失效，不连接真实浏览器。
-  FakeSocket.failMethod = 'Target.detachFromTarget';
+  FakeSocket.failMethod = 'Network.getCookies';
   const pending = new BossCdpSessionProvider().connect(
-    { portFile: '/profile/DevToolsActivePort', targetId: 'valid' },
+    { portFile: '/profile/DevToolsActivePort', targetId: 'valid', acquisitionMode: 'http' },
     new AbortController().signal,
   );
   // 2、先挂接拒绝断言，再推进异步命令，确认生产边界将错误收敛为可用性失败。
@@ -525,14 +848,67 @@ it('keeps one authorized socket across HTTP actions and ignores completed connec
   );
   expect(fetcher).toHaveBeenCalledTimes(2);
   expect(socket.readyState).toBe(1);
-  expect(methods.at(-1)).toBe('Target.detachFromTarget');
+  expect(methods.at(-1)).toBe('Network.getCookies');
   await vi.advanceTimersByTimeAsync(130_000);
   expect(socket.readyState).toBe(1);
-  expect(socket.methods).toEqual([...methods, ...methods, ...methods]);
+  const sync = [
+    'Runtime.evaluate',
+    'Target.getTargets',
+    'Target.attachToTarget',
+    'Runtime.evaluate',
+    'Network.getCookies',
+    'Target.detachFromTarget',
+  ];
+  expect(socket.methods).toEqual([...methods, ...sync, ...sync]);
+  expect(socket.methods.filter((method) => method === 'Page.enable')).toHaveLength(1);
   expect(FakeSocket.instances).toHaveLength(1);
   session.disconnect();
   expect(socket.readyState).toBe(3);
 });
+
+it.each(['before', 'inflight'] as const)(
+  'HTTP %s 导航使上下文失效，不交付迟到列表',
+  async (when) => {
+    let deliver!: (value: Response) => void;
+    const fetcher = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          deliver = resolve;
+        }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const session = await connected();
+    const socket = FakeSocket.instances[0];
+    if (!socket) throw new Error('Missing socket');
+    const navigate = (): void => {
+      socket.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            sessionId: 'attached',
+            method: 'Page.frameNavigated',
+            params: { frame: { url: 'https://www.zhipin.com/web/geek/jobs' } },
+          }),
+        }),
+      );
+    };
+    if (when === 'before') navigate();
+    const assertion = expect(session.readNext(new AbortController().signal)).rejects.toMatchObject({
+      reason: 'page_navigated',
+    });
+    if (when === 'inflight') {
+      await vi.advanceTimersByTimeAsync(1);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      navigate();
+      deliver(Response.json({ code: 0, zpData: { hasMore: false, lid: 'fixture', jobList: [] } }));
+    }
+    await assertion;
+    expect(fetcher).toHaveBeenCalledTimes(when === 'before' ? 0 : 1);
+    expect(socket.methods).not.toContain('Network.enable');
+    expect(socket.methods).not.toContain('Network.getResponseBody');
+    expect(socket.readyState).toBe(1);
+    session.disconnect();
+  },
+);
 
 it('freezes HTTP failure without closing or reconnecting CDP', async () => {
   const fetcher = vi.fn().mockResolvedValue(Response.json({ code: 37 }));
@@ -699,14 +1075,47 @@ function emitCampus(request = campusRequest, sessionId = 'attached'): void {
   );
 }
 
-it.each([
-  ['list-first', false],
-  ['detail-first', false],
-  ['list-first', true],
-  ['detail-first', true],
-] as const)(
-  'initializes main-site %s templates on one authorized socket, owned=%s',
-  async (order, owned) => {
+it('智联自动连接只打开首页，以同一次认证请求初始化 HTTP，缺少查询不启动浏览器', async () => {
+  const connector = new ZhilianCdpSessionProvider();
+  const signal = new AbortController().signal;
+  await expect(connector.connect({}, signal)).rejects.toMatchObject({ reason: 'query_required' });
+  expect(FakeSocket.instances).toHaveLength(0);
+  const pending = connector.connect({ search: { keyword: '研发', city: '' } }, signal);
+  await vi.advanceTimersByTimeAsync(1);
+  const request = {
+    method: 'POST',
+    url: 'https://fe-api.zhaopin.com/c/i/resume/preview-standardnode?at=test-at&rt=test-rt&platform=13&version=0.0.0',
+    headers: {},
+    postData: JSON.stringify({
+      at: 'test-at',
+      rt: 'test-rt',
+      resumeNumber: 'test-resume',
+      platform: 13,
+      version: '0.0.0',
+    }),
+  };
+  emitCampus(request, 'foreign');
+  await vi.advanceTimersByTimeAsync(1);
+  expect(FakeSocket.instances[0]?.methods).not.toContain('Network.disable');
+  emitCampus(request);
+  const session = await pending;
+  const socket = FakeSocket.instances[0];
+  expect(
+    socket?.commands
+      .filter((command) => command.method === 'Page.navigate')
+      .map((command) => command.params?.url),
+  ).toEqual(['https://www.zhaopin.com/jobs']);
+  expect(socket?.methods).not.toContain('Network.getResponseBody');
+  expect(socket?.methods).not.toContain('Network.getCookies');
+  expect(socket?.methods).not.toContain('Runtime.evaluate');
+  expect(socket?.methods.slice(-2)).toEqual(['Network.disable', 'Target.detachFromTarget']);
+  session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
+});
+
+it.each(['list-first', 'detail-first'] as const)(
+  'initializes explicit main-site %s templates on one authorized socket',
+  async (order) => {
     const fixture = JSON.parse(
       readFileSync(
         new URL('../../../fixtures/platforms/zhilian-search.json', import.meta.url),
@@ -723,7 +1132,7 @@ it.each([
     );
     vi.stubGlobal('fetch', fetcher);
     const pending = new ZhilianCdpSessionProvider().connect(
-      owned ? {} : { portFile: '/profile/DevToolsActivePort', targetId: 'valid' },
+      { portFile: '/profile/DevToolsActivePort', targetId: 'valid' },
       new AbortController().signal,
     );
     await vi.advanceTimersByTimeAsync(1);
@@ -743,9 +1152,7 @@ it.each([
     emitCampus(list, 'foreign');
     emitCampus(order === 'list-first' ? list : detail);
     await vi.advanceTimersByTimeAsync(1);
-    expect(FakeSocket.instances[0]?.methods.at(-1)).toBe(
-      owned ? 'Page.navigate' : 'Network.enable',
-    );
+    expect(FakeSocket.instances[0]?.methods.at(-1)).toBe('Network.enable');
     emitCampus(order === 'list-first' ? detail : list);
     const session = await pending;
     expect(await session.readNext(new AbortController().signal)).toMatchObject({ hasMore: false });

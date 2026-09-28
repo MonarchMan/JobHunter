@@ -3,6 +3,20 @@ import { PlatformError } from '@jobhunter/platform-core';
 
 /** 固定诊断码白名单，禁止动态消息、URL、凭据或任意上游字段进入状态投影。 */
 const reasonSchema = z.enum([
+  'browser_disconnected',
+  'page_navigated',
+  'unexpected_page',
+  'duplicate_list',
+  'browser_request_failed',
+  'response_body_unavailable',
+  'page_state_unavailable',
+  'list_response_timeout',
+  'page_not_ready',
+  'browser_operation_timeout',
+  'login_required',
+  'verification_required',
+  'access_blocked',
+  'rate_limited',
   'browser_not_found',
   'platform_page_not_found',
   'too_many_targets',
@@ -23,6 +37,7 @@ const reasonSchema = z.enum([
   'unknown',
   'request_template',
   'query_changed',
+  'query_required',
   'content_type',
   'missing_body',
   'body_limit',
@@ -47,11 +62,20 @@ export const platformProgressSchema = z
     processed: z.number().int().nonnegative(),
     saved: z.number().int().nonnegative(),
     skipped: z.number().int().nonnegative(),
+    resumeCount: z.number().int().min(0).max(5).optional(),
+    recovery: z
+      .object({
+        state: z.enum(['checking_context', 'waiting_context', 'resumed']),
+        checks: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
     currentExternalJobId: z
       .string()
       .min(1)
       .max(512)
-      .regex(/^[\w~-]+$/)
+      // 猎聘身份带资源命名空间，只开放已知前缀，不能放行 URL 或任意冒号载荷。
+      .regex(/^(?:[\w~-]+|(?:job|a):[1-9]\d*)$/)
       .optional(),
     failure: z
       .object({
@@ -101,6 +125,9 @@ export function platformFailureMessage(failure: NonNullable<PlatformProgress['fa
     return '未找到该平台支持的页面。请在 Chrome 打开下方官网入口并登录，然后重新获取。';
   if (failure.reason === 'too_many_targets')
     return '该平台打开的页面过多，请关闭不需要的页面后重新获取。';
+  if (failure.reason === 'query_required') return '请先填写智联搜索关键词，再重新获取职位。';
+  if (failure.reason === 'auth_context_missing')
+    return '未取得完整认证上下文。请在官网确认登录状态后重新连接，无需反复刷新或搜索职位。';
   return {
     access_blocked: '平台限制访问，已停止请求。请在官网确认状态，恢复后再显式连接。',
     rate_limited: '平台限制请求频率，已停止请求。请稍后再显式连接。',

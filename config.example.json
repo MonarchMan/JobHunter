@@ -1,5 +1,9 @@
 {
   "logLevel": "info",
+  "platforms": {
+    "requestIntervalMs": 0,
+    "requestIntervalMsByProvider": { "boss": 0, "zhilian": 0, "51job": 0, "liepin": 1000 }
+  },
   "worker": {
     "pollIntervalMs": 1000,
     "maxConcurrentNetworkTasks": 4,

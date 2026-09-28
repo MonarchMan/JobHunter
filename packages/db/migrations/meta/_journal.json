@@ -253,6 +253,13 @@
       "when": 1789837200000,
       "tag": "0035_platform_provider_isolation",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790065000000,
+      "tag": "0036_task_retry_logs",
+      "breakpoints": true
     }
   ]
 }

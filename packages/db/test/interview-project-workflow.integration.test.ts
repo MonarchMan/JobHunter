@@ -425,7 +425,7 @@ describe('interview project workflow', () => {
     );
     const taskCountBeforeCrossStageRetry = tasks.count({});
     expect(() => tasks.retryFailed(failedQuestionTask.id, 'question-retry-after-digest')).toThrow(
-      /Another task is active/u,
+      /Only failed tasks/u,
     );
     expect(tasks.count({})).toBe(taskCountBeforeCrossStageRetry);
     expect(service.getDossier(created.dossier.dossier.id).turns[0]).toMatchObject({

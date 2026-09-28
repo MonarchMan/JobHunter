@@ -277,6 +277,10 @@ export function createWorkerApplication(input: {
 /** 创建生产 Worker，加载本机配置并启用受限外部执行器。 */
 export function createProductionWorkerApplication(input: {
   readonly dataRoot: string;
+  readonly platformRequestIntervalMs?: number;
+  readonly platformRequestIntervalMsByProvider?: Readonly<
+    Partial<Record<'boss' | 'zhilian' | '51job' | 'liepin', number | undefined>>
+  >;
   readonly workerId?: string;
   readonly pollIntervalMs?: number;
   readonly maxConcurrentNetworkTasks?: number;
@@ -339,22 +343,37 @@ export function createProductionWorkerApplication(input: {
   });
   const registry = new HandlerRegistry();
   const boss = new BossPlatformService(
-    new BossCdpSessionProvider(),
+    new BossCdpSessionProvider({
+      requestIntervalMs:
+        input.platformRequestIntervalMsByProvider?.boss ?? input.platformRequestIntervalMs ?? 0,
+    }),
     new SqlitePlatformRepository(database.client),
   );
   registry.register(createBossPlatformTaskHandler(boss));
   const zhilian = new PlatformBrowsingService(
-    new ZhilianCdpSessionProvider(),
+    new ZhilianCdpSessionProvider({
+      requestIntervalMs:
+        input.platformRequestIntervalMsByProvider?.zhilian ?? input.platformRequestIntervalMs ?? 0,
+    }),
     new SqlitePlatformRepository(database.client, 'zhilian'),
   );
   registry.register(createPlatformTaskHandler('zhilian', zhilian));
   const job51 = new PlatformBrowsingService(
-    new Job51CdpSessionProvider(),
+    new Job51CdpSessionProvider({
+      requestIntervalMs:
+        input.platformRequestIntervalMsByProvider?.['51job'] ??
+        input.platformRequestIntervalMs ??
+        0,
+    }),
     new SqlitePlatformRepository(database.client, '51job'),
   );
   registry.register(createPlatformTaskHandler('51job', job51));
   const liepin = new PlatformBrowsingService(
-    new LiepinCdpSessionProvider(),
+    new LiepinCdpSessionProvider({
+      // 1、每个平台优先采用自身配置；缺失时沿用统一间隔，避免连接器隐藏常量。
+      requestIntervalMs:
+        input.platformRequestIntervalMsByProvider?.liepin ?? input.platformRequestIntervalMs ?? 0,
+    }),
     new SqlitePlatformRepository(database.client, 'liepin'),
   );
   registry.register(createPlatformTaskHandler('liepin', liepin));

@@ -811,7 +811,7 @@ describe('community interview research persistence', () => {
 
     const retry = tasks.retryFailed(failed.id, 'manual-research-retry');
 
-    expect(retry).toMatchObject({ kind: 'enqueued', task: { retryOfTaskId: failed.id } });
+    expect(retry).toMatchObject({ kind: 'enqueued', task: { id: failed.id } });
     expect(repository.getRequest(created.detail.request.id)?.request.currentTaskId).toBe(
       retry.task.id,
     );

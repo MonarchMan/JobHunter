@@ -24,8 +24,8 @@ describe('documentation checker', () => {
   it('accepts the repository documentation', async () => {
     const result = await checkDocs(workspaceRoot);
     expect(result.errors).toEqual([]);
-    // 1. 同时纳入官网来源扩展与交互架构规格，校验合并后的完整基线。
-    expect(result.specCount).toBe(28);
+    // 1. 校验当前规格目录的完整基线，避免文档遗漏。
+    expect(result.specCount).toBe(29);
   });
 
   it('finds missing triplet files', async () => {

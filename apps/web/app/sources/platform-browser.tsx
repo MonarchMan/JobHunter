@@ -39,11 +39,13 @@ export function PlatformBrowser({
   const endpoint = `/api/platforms/${provider}`;
   const [state, setState] = useState(initial);
   const [portFile, setPortFile] = useState('');
+  const [keyword, setKeyword] = useState('');
+  const keywordInput = useRef<HTMLInputElement>(null);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState(false);
-  const [fieldError, setFieldError] = useState<'portFile' | null>(null);
+  const [fieldError, setFieldError] = useState<'portFile' | 'keyword' | null>(null);
   const portInput = useRef<HTMLInputElement>(null);
   const intent = useRef<{ command: BossCommand; idempotencyToken: string } | null>(null);
   const submitting = useRef(false);
@@ -131,6 +133,20 @@ export function PlatformBrowser({
   /** 提交结果不明时保留同一令牌，恢复确认不能重复创建任务。 */
   const submit = async (command?: BossCommand): Promise<void> => {
     if (submitting.current) return;
+    // 1、首次智联连接必须明确关键词；活动连接的后续批次不替换既有查询。
+    if (
+      command &&
+      provider === 'zhilian' &&
+      (command.action === 'connect' || (command.action === 'acquire' && !usable))
+    ) {
+      if (!keyword.trim()) {
+        setFieldError('keyword');
+        keywordInput.current?.focus();
+        return;
+      }
+      command = { ...command, search: { keyword: keyword.trim(), city: '' } };
+    }
+    setFieldError(null);
     const signal = lifetime.current?.signal;
     if (!signal || signal.aborted) return;
     const cancelled = (): boolean => signal.aborted;
@@ -207,9 +223,49 @@ export function PlatformBrowser({
           {label}官网
         </a>
         ，启用远程调试。获取时由 Worker
-        新建专用标签页，共享当前配置的登录态，不接管已有页面；后续复用专用页。Chrome
+        新建独立后台窗口的专用页，共享当前配置的登录态，不接管已有页面；后续复用专用页。Chrome
         如提示授权，请点击允许，不需要刷新。
       </p>
+      {provider === 'zhilian' && (
+        <div className={styles.form}>
+          <label>
+            搜索关键词
+            <input
+              ref={keywordInput}
+              value={keyword}
+              maxLength={200}
+              disabled={disabled || usable}
+              aria-invalid={fieldError === 'keyword'}
+              aria-describedby={`${provider}-search-help${fieldError === 'keyword' ? ` ${provider}-search-error` : ''}`}
+              onChange={(event) => {
+                setKeyword(event.target.value);
+                setFieldError(null);
+              }}
+            />
+          </label>
+          {keyword && !usable && (
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={disabled}
+              onClick={() => {
+                setKeyword('');
+                keywordInput.current?.focus();
+              }}
+            >
+              清除关键词
+            </button>
+          )}
+          <p id={`${provider}-search-help`}>
+            城市不限，使用默认排序。查询随连接固定；切换关键词请先断开连接。活动连接继续使用原查询。
+          </p>
+          {fieldError === 'keyword' && (
+            <p id={`${provider}-search-error`} role="alert">
+              请先填写搜索关键词，再获取职位。
+            </p>
+          )}
+        </div>
+      )}
       {
         <label className={styles.consent}>
           <input
@@ -258,7 +314,7 @@ export function PlatformBrowser({
           新建专用页，不需要标签页 ID。连接时请在 Chrome 确认授权。同一活动连接内不会逐次授权，重启
           Worker 后需要重新连接。断开连接只关闭 Worker 自己创建的页，不关闭你的其他页面。
           {provider === 'zhilian'
-            ? '授权后请在新建的主站搜索页执行一次搜索并打开一条职位详情；初始化最多等待 120 秒，不需要刷新。主站目前支持关键词、城市、经验筛选及默认排序，其他筛选尚未支持。查询随连接固定；官网改动不会同步，切换查询请重新连接。'
+            ? '授权后仅打开首页提取认证上下文，列表与详情使用 HTTP 获取，无需在官网搜索或点击详情。初始化最多等待 120 秒；未取得上下文会明确提示，不会自动反复刷新。'
             : ''}
           {provider === '51job'
             ? '连接后在专用页正常搜索或翻页，再读取官网批次。只观察专用页的职位请求，不自动翻页；最多等待新批次 90 秒，不自行生成签名。更换查询请重新连接。'
@@ -313,12 +369,14 @@ export function PlatformBrowser({
       <p className={styles.guidance}>
         {provider === 'boss'
           ? 'BOSS 当前仅接入推荐流，不提供搜索排序；本次仅处理一批，不遍历全部结果。'
-          : '请在 Worker 专用页设置支持的查询条件，不沿用你原页面的筛选；本次仅处理一页，不遍历全部结果。'}
+          : provider === 'zhilian'
+            ? '按连接时填写的关键词获取一批 HTTP 搜索结果，不沿用官网页面筛选，不遍历全部结果。'
+            : '请在 Worker 专用页设置支持的查询条件，不沿用你原页面的筛选；本次仅处理一页，不遍历全部结果。'}
         详情失败或取消会停止后续请求，已入库职位保留；每次网络请求沿用平台连接器的间隔限制。
       </p>
       {provider === 'zhilian' && (
         <p className={styles.guidance}>
-          首次连接后请在新建的主站搜索页执行搜索并打开一条详情；初始化最多等待 120 秒。
+          首页只提供必要认证上下文，认证失效时请先在官网确认登录，再重新连接。
         </p>
       )}
       {provider === 'liepin' && (
@@ -339,7 +397,7 @@ export function PlatformBrowser({
             ? progress && progress.stage !== 'connect'
               ? '后台正在处理本批职位，无需刷新官网页面。'
               : provider === 'zhilian'
-                ? '后台任务执行中；若为连接任务，请允许 Chrome 授权，并在新建专用页执行主站搜索、打开职位详情。'
+                ? '后台正在从首页初始化认证上下文；如 Chrome 提示授权，请允许，无需搜索或点击职位。'
                 : '后台任务执行中；连接任务可能正在等待 Chrome 授权。'
             : state.task.status === 'succeeded'
               ? '上次操作已完成。'

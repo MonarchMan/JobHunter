@@ -1,6 +1,5 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import {
   PlatformError,
   type PlatformSession,
@@ -10,8 +9,12 @@ import { z } from 'zod';
 import { chromePortFile } from './browser-discovery.js';
 import { BossHttpSession } from './boss.js';
 import { BossBrowserSession } from './boss-browser.js';
+import { bossPageStateExpression, bossPageStateSchema } from './boss-page-state.js';
+import { BossPageLifecycle } from './boss-page-lifecycle.js';
 import { ZhilianCampusHttpSession } from './zhilian-recommend.js';
 import { ZhilianSearchHttpSession } from './zhilian-search.js';
+import { zhilianSessionFromHome, zhilianHomeSearchSchema } from './zhilian-home.js';
+import { PlatformRequestPacer } from './request-pacing.js';
 import { Job51HttpSession } from './job51.js';
 import { Job51RequestObserver } from './job51-observer.js';
 import {
@@ -32,20 +35,32 @@ const cookieSchema = z.object({
 /** CDP 默认新建专用页共享登录态；活动会话持有连接，显式目标仅兼容调试。 */
 class CdpSessionProvider implements PlatformSessionProvider {
   /** 协议由装配固定，不接受用户输入的任意站点。 */
-  public constructor(private readonly provider: 'boss' | 'zhilian' | '51job' | 'liepin') {}
+  public constructor(
+    private readonly provider: 'boss' | 'zhilian' | '51job' | 'liepin',
+    private readonly backgroundWindow = true,
+    private readonly requestIntervalMs = 0,
+  ) {}
 
   public async connect(
     input: {
       readonly portFile?: string | undefined;
       readonly targetId?: string | undefined;
       readonly acquisitionMode?: 'http' | 'browser' | undefined;
+      readonly search?: { readonly keyword: string; readonly city: string } | undefined;
     },
     callerSignal: AbortSignal,
   ): Promise<PlatformSession> {
     // 1、只读取用户选择的调试描述文件，不扫描浏览器配置或磁盘凭据。
-    const browserMode = this.provider === 'boss' && input.acquisitionMode === 'browser';
+    const browserMode = this.provider === 'boss' && input.acquisitionMode !== 'http';
+    const browserPacer = new PlatformRequestPacer(this.requestIntervalMs);
+    // 1.a、自建智联页必须先有明确条件，不把实验关键词或用户旧页面条件当默认值。
+    const homeSearch = this.provider === 'zhilian' && !input.targetId;
+    if (input.search && (this.provider !== 'zhilian' || input.targetId))
+      throw new PlatformError('session_unavailable', null, 'query_changed');
+    if (homeSearch && !zhilianHomeSearchSchema.safeParse(input.search).success)
+      throw new PlatformError('session_unavailable', null, 'query_required');
     const portFile = input.portFile ?? chromePortFile();
-    const keepObservation = this.provider === '51job' || browserMode;
+    const keepObservation = this.provider === '51job' || this.provider === 'boss';
     if (
       (input.acquisitionMode !== undefined && this.provider !== 'boss') ||
       !path.isAbsolute(portFile) ||
@@ -224,16 +239,18 @@ class CdpSessionProvider implements PlatformSessionProvider {
           signal.throwIfAborted();
           creatingOwned = true;
           try {
-            ownedTarget = z
-              .object({ targetId: z.string().min(1) })
-              .parse(
-                await call(
-                  'Target.createTarget',
-                  { url: 'about:blank' },
-                  undefined,
-                  AbortSignal.timeout(5_000),
-                ),
-              ).targetId;
+            ownedTarget = z.object({ targetId: z.string().min(1) }).parse(
+              await call(
+                'Target.createTarget',
+                {
+                  url: 'about:blank',
+                  // 1.a、窗口隔离与传输无关，HTTP 会话也不能占用用户工作窗口。
+                  ...(this.backgroundWindow ? { newWindow: true, background: true } : {}),
+                },
+                undefined,
+                AbortSignal.timeout(5_000),
+              ),
+            ).targetId;
           } finally {
             creatingOwned = false;
           }
@@ -274,17 +291,64 @@ class CdpSessionProvider implements PlatformSessionProvider {
             .parse(await call('Page.navigate', { url: entryUrl }, attached.sessionId));
           if (result.errorText) throw new PlatformError('session_unavailable');
         };
-        // 3、智联按所选页面固定协议；主站需要同次搜索与详情双模板，不读 Cookie。
+        // 3、BOSS 两种传输共用只读页面探针，生命周期不接触凭据或正文。
+        const lifecycle =
+          this.provider === 'boss'
+            ? new BossPageLifecycle({
+                allowInitialNavigation: !!ownedTarget,
+                inspectPage: async (operationSignal) => {
+                  const result = z
+                    .object({ result: z.object({ value: bossPageStateSchema }) })
+                    .parse(
+                      await call(
+                        'Runtime.evaluate',
+                        { expression: bossPageStateExpression, returnByValue: true },
+                        attached.sessionId,
+                        operationSignal,
+                      ),
+                    );
+                  return result.result.value;
+                },
+              })
+            : undefined;
         if (browserMode) {
           if (targetUrl.pathname !== '/web/geek/jobs')
             throw new PlatformError('session_unavailable');
-          // 3.a、显式浏览器模式不读 Cookie；仅保留所选页固定端点的观察。
+          // 3.a、BOSS 默认浏览器模式不读 Cookie；仅观察当前页固定端点。
           const browser = new BossBrowserSession({
             sessionId: attached.sessionId,
+            activateForNext: !(ownedTarget && this.backgroundWindow),
+            ...(ownedTarget ? { initialNavigationUrl: entryUrl } : {}),
+            ...(lifecycle ? { lifecycle } : {}),
             call: (method, params, operationSignal) =>
               call(method, params, attached.sessionId, operationSignal),
+            loadNext: async (lastJobId, operationSignal) => {
+              // 3.a.i、后台页可能推迟原生滚动事件；仅对当前列表执行一次正常滚动并显式派发事件。
+              if (!/^[\w~-]{1,512}$/.test(lastJobId))
+                throw new PlatformError('session_unavailable');
+              await browserPacer.before(operationSignal);
+              const result = await call(
+                'Runtime.evaluate',
+                {
+                  expression: `(() => { if (location.origin !== "https://www.zhipin.com" || location.pathname !== "/web/geek/jobs") return false; const path = ${JSON.stringify(`/job_detail/${lastJobId}.html`)}; const last = [...document.querySelectorAll('a[href]')].find(a => { const u = new URL(a.href, location.href); return u.origin === location.origin && u.pathname === path && a.getClientRects().length > 0; }); if (!last) return false; window.scrollTo(0, 0); window.scrollTo(0, document.body.scrollHeight); window.dispatchEvent(new Event('scroll')); return true; })()`,
+                  returnByValue: true,
+                },
+                attached.sessionId,
+                operationSignal,
+              );
+              if (
+                !z.object({ result: z.object({ value: z.literal(true) }) }).safeParse(result)
+                  .success
+              )
+                throw new PlatformError(
+                  'session_unavailable',
+                  null,
+                  'next_page_control_unavailable',
+                );
+            },
             clickJob: async (jobId, operationSignal) => {
               if (!/^[\w~-]{1,512}$/.test(jobId)) throw new PlatformError('session_unavailable');
+              await browserPacer.before(operationSignal);
               // 3.a.i、只触发本批职位链接的普通点击，不执行官网私有方法或安全脚本。
               const result = z.object({ result: z.object({ value: z.literal(true) }) });
               result.parse(
@@ -355,6 +419,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
               try {
                 const headers = liepinRequestHeaders(request.headers);
                 const session = new LiepinRecommendationHttpSession({
+                  requestIntervalMs: this.requestIntervalMs,
                   template: { url: request.url, body: request.postData },
                   readHeaders: async (url, operationSignal) => {
                     // 3.a.i、所选页离开首页时不借用别的标签或沿用旧 Cookie。
@@ -420,7 +485,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
           http = await observed;
         } else if (this.provider === '51job') {
           // 3.a、仅此平台保留所选页监听；用户正常翻页提供新模板，不自动操作网页。
-          const session = new Job51HttpSession();
+          const session = new Job51HttpSession({ requestIntervalMs: this.requestIntervalMs });
           http = session;
           const observer = new Job51RequestObserver(attached.sessionId, session);
           onEvent = (message) => {
@@ -438,7 +503,13 @@ class CdpSessionProvider implements PlatformSessionProvider {
               { url: string; headers: Record<string, string>; body: string } | undefined;
             let detailTemplate: { url: string; headers: Record<string, string> } | undefined;
             rejectObservation = () => {
-              reject(new PlatformError('session_unavailable'));
+              reject(
+                new PlatformError(
+                  'session_unavailable',
+                  null,
+                  homeSearch ? 'auth_context_missing' : null,
+                ),
+              );
             };
             onEvent = (raw) => {
               const event = z
@@ -470,6 +541,23 @@ class CdpSessionProvider implements PlatformSessionProvider {
               const url = new URL(request.url);
               if (social) {
                 if (url.origin !== 'https://fe-api.zhaopin.com') return;
+                if (homeSearch && input.search) {
+                  // 3.a、首页请求提供认证，不等待浏览器搜索和详情，不读取响应正文。
+                  try {
+                    const session = zhilianSessionFromHome(
+                      request,
+                      input.search,
+                      this.requestIntervalMs,
+                    );
+                    if (session) {
+                      onEvent = undefined;
+                      resolve(session);
+                    }
+                  } catch {
+                    rejectObservation?.();
+                  }
+                  return;
+                }
                 try {
                   if (request.method === 'POST' && url.pathname === '/c/i/search/positions') {
                     if (!request.postData || Buffer.byteLength(request.postData, 'utf8') > 32768)
@@ -493,6 +581,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
                   } else return;
                   if (listTemplate && detailTemplate) {
                     const session = new ZhilianSearchHttpSession({
+                      requestIntervalMs: this.requestIntervalMs,
                       templates: { list: listTemplate, detail: detailTemplate },
                     });
                     onEvent = undefined;
@@ -516,6 +605,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
                 const body: unknown = JSON.parse(request.postData);
                 if (!z.object({ pageIndex: z.literal(1) }).safeParse(body).success) return;
                 const session = new ZhilianCampusHttpSession({
+                  requestIntervalMs: this.requestIntervalMs,
                   template: {
                     url: request.url,
                     headers: request.headers,
@@ -538,28 +628,55 @@ class CdpSessionProvider implements PlatformSessionProvider {
           onEvent = undefined;
           await call('Network.disable', {}, attached.sessionId);
         } else {
-          // 3.b、BOSS 只读资源时间线与适用 Cookie；保留现有协议。
+          if (!lifecycle) throw new PlatformError('session_unavailable');
+          // 3.b、HTTP 只保留文档导航观察，不监听职位正文；先监听再打开专用页。
+          onEvent = (raw) => {
+            const event = z
+              .object({ sessionId: z.string().optional(), method: z.string(), params: z.unknown() })
+              .safeParse(raw);
+            if (
+              !event.success ||
+              event.data.sessionId !== attached.sessionId ||
+              event.data.method !== 'Page.frameNavigated'
+            )
+              return;
+            const frame = z
+              .object({
+                frame: z.object({ parentId: z.string().optional(), url: z.string().optional() }),
+              })
+              .safeParse(event.data.params);
+            if (frame.success && !frame.data.frame.parentId)
+              lifecycle.navigate(frame.data.frame.url);
+          };
+          clearObservation = () => {
+            onEvent = undefined;
+            lifecycle.disconnect();
+          };
+          await call('Page.enable', {}, attached.sessionId);
           await openOwnedPage();
-          // 3.b.i、新页仅轮询本地资源时间线，等待自然加载；不刷新或重发官网请求。
+          // 3.b.i、页面正常与模板共同就绪，跨导航的资源读取结果不能交付。
           let url: string | undefined;
-          for (let attempt = 0; attempt < (ownedTarget ? 60 : 1); attempt++) {
-            const evaluated = z.object({ result: z.object({ value: z.string() }) }).safeParse(
-              await call(
-                'Runtime.evaluate',
-                {
-                  expression:
-                    'JSON.stringify(performance.getEntriesByType("resource").map(x=>x.name).filter(x=>{try{const u=new URL(x);return u.origin==="https://www.zhipin.com"&&u.pathname==="/wapi/zpgeek/pc/recommend/job/list.json"}catch{return false}}))',
-                  returnByValue: true,
-                },
-                attached.sessionId,
-              ),
-            );
-            if (evaluated.success)
-              url = z.array(z.string()).parse(JSON.parse(evaluated.data.result.value)).at(-1);
-            if (url) break;
-            if (ownedTarget) await delay(500, undefined, { signal });
-          }
-          if (!url) throw new Error('no observed list');
+          const epoch = await lifecycle.waitReady(signal, {
+            timeoutMs: 60_000,
+            available: async (operationSignal) => {
+              const evaluated = z.object({ result: z.object({ value: z.string() }) }).safeParse(
+                await call(
+                  'Runtime.evaluate',
+                  {
+                    expression:
+                      'JSON.stringify(performance.getEntriesByType("resource").map(x=>x.name).filter(x=>{try{const u=new URL(x);return u.origin==="https://www.zhipin.com"&&u.pathname==="/wapi/zpgeek/pc/recommend/job/list.json"}catch{return false}}))',
+                    returnByValue: true,
+                  },
+                  attached.sessionId,
+                  operationSignal,
+                ),
+              );
+              if (evaluated.success)
+                url = z.array(z.string()).parse(JSON.parse(evaluated.data.result.value)).at(-1);
+              return url !== undefined;
+            },
+          });
+          if (!url) throw new PlatformError('session_unavailable', null, 'list_response_timeout');
           const cookieResult = z
             .object({ cookies: z.array(cookieSchema).max(200) })
             .parse(
@@ -569,10 +686,45 @@ class CdpSessionProvider implements PlatformSessionProvider {
                 attached.sessionId,
               ),
             );
+          lifecycle.assertCurrent(epoch);
+          lifecycle.lock();
           http = new BossHttpSession({
+            requestIntervalMs: this.requestIntervalMs,
             cookies: cookieResult.cookies,
             observedListUrl: url,
+            lifecycle,
+            ...(ownedTarget
+              ? {
+                  renewContext: async (jobId: string, operationSignal: AbortSignal) => {
+                    // 3.b.iv、只对自建正常职位页点击本批失败职位；不读取浏览器响应或操作验证。
+                    if (!/^[\w~-]{1,512}$/.test(jobId))
+                      throw new PlatformError('session_unavailable', null, 'job_link_unavailable');
+                    const contextEpoch = await lifecycle.waitReady(operationSignal, {
+                      timeoutMs: 20_000,
+                    });
+                    await browserPacer.before(operationSignal);
+                    lifecycle.assertCurrent(contextEpoch);
+                    const result = z.object({ result: z.object({ value: z.boolean() }) }).parse(
+                      await call(
+                        'Runtime.evaluate',
+                        {
+                          expression: `(() => { if (location.origin !== "https://www.zhipin.com" || location.pathname !== "/web/geek/jobs") return false; const path = ${JSON.stringify(`/job_detail/${jobId}.html`)}; const link = [...document.querySelectorAll('a[href]')].find(a => { const u = new URL(a.href, location.href); return u.origin === location.origin && u.pathname === path && a.getClientRects().length > 0; }); if (!link) return false; link.click(); return true; })()`,
+                          returnByValue: true,
+                        },
+                        attached.sessionId,
+                        operationSignal,
+                      ),
+                    );
+                    if (!result.result.value)
+                      throw new PlatformError('session_unavailable', null, 'job_link_unavailable');
+                    // 允许官网自行经过一次检查页并返回，绝不点击验证控件。
+                    await lifecycle.waitReady(operationSignal, { timeoutMs: 20_000 });
+                    lifecycle.assertCurrent();
+                  },
+                }
+              : {}),
             readContext: async (requestSignal) => {
+              const contextEpoch = await lifecycle.waitReady(requestSignal, { timeoutMs: 20_000 });
               // 3.b.i、每次读取前重新确认原目标仍为 BOSS 同源页，禁止跨站取凭据。
               const currentTargets = z
                 .object({
@@ -627,12 +779,16 @@ class CdpSessionProvider implements PlatformSessionProvider {
                     ),
                   );
                 requestSignal.throwIfAborted();
+                lifecycle.assertCurrent(contextEpoch);
                 return {
                   cookies: refreshed.cookies,
                   token: evaluatedToken.result.value,
                 };
-              } catch {
-                throw new PlatformError('session_unavailable');
+              } catch (error) {
+                lifecycle.assertCurrent(contextEpoch);
+                throw error instanceof PlatformError
+                  ? error
+                  : new PlatformError('session_unavailable');
               } finally {
                 // 3.b.iii、取消后也释放临时 attach，不关闭用户授权的底层连接。
                 await call(
@@ -650,10 +806,8 @@ class CdpSessionProvider implements PlatformSessionProvider {
         signal.throwIfAborted();
         const session = http;
         const resume =
-          this.provider === 'boss' && input.acquisitionMode !== 'browser'
-            ? session.resume?.bind(session)
-            : undefined;
-        // 4、仅显式观察模式保留页面 session；所有模式均不自动重连或刷新。
+          this.provider === 'boss' && !browserMode ? session.resume?.bind(session) : undefined;
+        // 4、BOSS 两模式保留页面生命周期监听；所有模式均不自动重连或刷新。
         if (ws.readyState !== WebSocket.OPEN) throw new Error('connection closed');
         handedOff = true;
         return {
@@ -699,28 +853,31 @@ class CdpSessionProvider implements PlatformSessionProvider {
 /** 猎聘只借用首页查询和实时登录上下文，列表与详情使用独立 HTTP。 */
 export class LiepinCdpSessionProvider extends CdpSessionProvider {
   /** 固定猎聘学生首页协议，不接受任意站点或搜索模板。 */
-  public constructor() {
-    super('liepin');
+  public constructor(options: { readonly requestIntervalMs?: number } = {}) {
+    super('liepin', true, options.requestIntervalMs);
   }
 }
 
 /** 前程无忧采用官网辅助的搜索批次观察，同一连接贯穿用户活动会话。 */
 export class Job51CdpSessionProvider extends CdpSessionProvider {
-  public constructor() {
-    super('51job');
+  public constructor(options: { readonly requestIntervalMs?: number } = {}) {
+    super('51job', true, options.requestIntervalMs);
   }
 }
 
 /** BOSS 固定资源 URL，并在 HTTP 前只读同一浏览器的最小认证上下文。 */
 export class BossCdpSessionProvider extends CdpSessionProvider {
-  public constructor() {
-    super('boss');
+  /** 默认独立后台窗口共享登录态；显式 false 保留旧专用标签页供调试。 */
+  public constructor(
+    options: { readonly backgroundWindow?: boolean; readonly requestIntervalMs?: number } = {},
+  ) {
+    super('boss', options.backgroundWindow ?? true, options.requestIntervalMs);
   }
 }
 
 /** 智联按目标页面选择校园推荐或主站搜索，仅借用正常浏览产生的请求模板。 */
 export class ZhilianCdpSessionProvider extends CdpSessionProvider {
-  public constructor() {
-    super('zhilian');
+  public constructor(options: { readonly requestIntervalMs?: number } = {}) {
+    super('zhilian', true, options.requestIntervalMs);
   }
 }

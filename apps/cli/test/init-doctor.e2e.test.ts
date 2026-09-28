@@ -82,8 +82,8 @@ describe('init and doctor commands', () => {
         data: {
           dataRoot,
           configCreated: true,
-          companies: 15,
-          sources: 47,
+          companies: 20,
+          sources: 62,
           bootstrap: {
             defaultResumeTaskId: null,
             schedules: 1,
@@ -107,7 +107,7 @@ describe('init and doctor commands', () => {
         }),
       ).toBe(0);
       expect(JSON.parse(secondOutput.stdout.join(''))).toMatchObject({
-        data: { configCreated: false, companies: 15, sources: 47 },
+        data: { configCreated: false, companies: 20, sources: 62 },
       });
       await expect(readFile(configPath, 'utf8')).resolves.toBe('{"logLevel":"error"}\n');
 

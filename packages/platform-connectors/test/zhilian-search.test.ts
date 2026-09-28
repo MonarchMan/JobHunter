@@ -47,7 +47,7 @@ function batch(
     data: { statusCode: 200, isVerification: 0, count: 40, isEndPage: end, list: rows },
   };
 }
-/** 递增时钟仅用于离线测试，生产默认仍真实等待 5 秒。 */
+/** 递增时钟仅用于离线测试，不影响默认零固定间隔。 */
 function setup(responses: unknown[]): {
   fetcher: ReturnType<typeof vi.fn<typeof fetch>>;
   session: ZhilianSearchHttpSession;
@@ -70,12 +70,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('keeps the session after a Worker finishes its first task and honors the next delay', async () => {
+it('keeps the session after a Worker finishes its first task and honors an explicit interval', async () => {
   const fetcher = vi
     .fn<typeof fetch>()
     .mockResolvedValueOnce(Response.json(batch([fixture.row], 0)))
     .mockResolvedValueOnce(Response.json(batch([{ ...fixture.row, number: 'NEXT' }])));
-  const session = new ZhilianSearchHttpSession({ templates: fixture.templates, fetch: fetcher });
+  const session = new ZhilianSearchHttpSession({
+    templates: fixture.templates,
+    fetch: fetcher,
+    requestIntervalMs: 50,
+  });
   const first = new AbortController();
   await session.readNext(first.signal);
   first.abort('finished');
@@ -83,7 +87,7 @@ it('keeps the session after a Worker finishes its first task and honors the next
   const next = session.readNext(new AbortController().signal);
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect((await next).candidates[0]?.externalJobId).toBe('NEXT');
-  expect(Date.now() - started).toBeGreaterThanOrEqual(4900);
+  expect(Date.now() - started).toBeGreaterThanOrEqual(40);
   expect(fetcher).toHaveBeenCalledTimes(2);
 }, 10000);
 
@@ -219,10 +223,14 @@ it.each(['html', 'oversized', 'broken-json'])('rejects %s without fallback', asy
   const session = new ZhilianSearchHttpSession({ templates: fixture.templates, fetch: fetcher });
   await expect(session.readNext(signal)).rejects.toThrow('parse_changed');
 });
-it('waits five seconds and cancels queued work without extra request', async () => {
+it('honors configured five seconds and cancels queued work without extra request', async () => {
   vi.useFakeTimers();
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json(batch([fixture.row], 0)));
-  const session = new ZhilianSearchHttpSession({ templates: fixture.templates, fetch: fetcher });
+  const session = new ZhilianSearchHttpSession({
+    templates: fixture.templates,
+    fetch: fetcher,
+    requestIntervalMs: 5000,
+  });
   await session.readNext(signal);
   const controller = new AbortController();
   const pending = session.readDetail('CC_TEST', controller.signal);

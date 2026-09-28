@@ -1,4 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { PlatformRequestPacer } from './request-pacing.js';
 import { z } from 'zod';
 import {
   PlatformError,
@@ -134,14 +135,17 @@ export class Job51HttpSession implements PlatformSession {
   #ended = false;
   #busy = false;
   #failure: PlatformError | undefined;
-  #lastAt = 0;
   readonly #abort = new AbortController();
   readonly #details = new Map<string, PlatformJobDetail>();
   readonly #seen = new Set<string>();
   readonly #fetch: typeof fetch;
+  readonly #pacer: PlatformRequestPacer;
 
-  public constructor(input: { readonly fetch?: typeof fetch } = {}) {
+  public constructor(
+    input: { readonly fetch?: typeof fetch; readonly requestIntervalMs?: number } = {},
+  ) {
     this.#fetch = input.fetch ?? fetch;
+    this.#pacer = new PlatformRequestPacer(input.requestIntervalMs);
   }
 
   /** 观察器在冻结后不再收集认证数据，连接本身仍可保留至显式断开。 */
@@ -184,10 +188,8 @@ export class Job51HttpSession implements PlatformSession {
       while (!this.#template) await delay(100, undefined, { signal });
       const selected = this.#template;
       this.#template = undefined;
-      const remaining = Math.max(0, 5000 - (Date.now() - this.#lastAt));
-      if (remaining) await delay(remaining, undefined, { signal });
+      await this.#pacer.before(signal);
       signal.throwIfAborted();
-      this.#lastAt = Date.now();
       // 2、原样发送已观察 URL，禁止跳转、自动重试或修改签名。
       const active = AbortSignal.any([signal, AbortSignal.timeout(20_000)]);
       const response = await this.#fetch(selected.template.url, {
