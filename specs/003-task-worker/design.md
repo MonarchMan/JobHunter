@@ -28,7 +28,7 @@ Worker 使用 Node 事件循环延迟直方图周期输出 `worker.runtime`，�
 
 Cron 解析使用 `cron-parser` 和 IANA timezone；计算结果统一转换为 UTC epoch milliseconds 后持久化。夏令时重复/跳过时以库的时区语义为准，并用 occurrence UTC 时间参与幂等键。
 
-重试由 `RetryPolicy` 产生 `availableAt`；测试注入确定性随机数。手动 retry 创建新任务幂等键后缀并关联原失败任务，保留审计链。
+重试由 `RetryPolicy` 产生 `availableAt`；测试注入确定性随机数。按 ADR-0045，手动 retry 原子记录脱敏失败日志并将原任务重新入队，任务 ID、业务关联与原幂等键不变；操作令牌在日志中去重，自动尝试预算重置。历史子任务链保留。
 
 ## 取消
 

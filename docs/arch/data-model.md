@@ -11,7 +11,7 @@
 
 ### 招聘平台目标模型增量（设计已确定，尚未迁移）
 
-[ADR-0025](../adr/0025-platform-browsing-and-unified-job-lifecycle.md) 与 [028 设计](../../specs/028-recruitment-platforms/design.md) 扩展下文官网基线约束：job_sources 新增 official/platform 类别，官网 company_id、channel_id 非空，平台两者为空且不适用 coverage_role；用 CHECK 限制分支，不放松既有官网不变量。平台招聘公司由职位解析，经 provider_key + external_company_id 的唯一身份映射关联 companies，不把平台当公司。
+[ADR-0045](../adr/0045-platform-job-lifecycle-and-tasks.md) 与 [028 设计](../../specs/028-recruitment-platforms/design.md) 扩展下文官网基线约束：job_sources 新增 official/platform 类别，官网 company_id、channel_id 非空，平台两者为空且不适用 coverage_role；用 CHECK 限制分支，不放松既有官网不变量。平台招聘公司由职位解析，经 provider_key + external_company_id 的唯一身份映射关联 companies，不把平台当公司。
 
 新增 platform_connections 仅存非敏感配置、generation 和脱敏连接状态；凭据、私有游标、推荐上下文不入库。jobs、job_revisions 与匹配沿用正式事实模型，不建平台职位缓存表；jobs 增加核验及用户交互时间供保留策略使用。job_observations 归属为 sync_run_id 或 platform_task_id，外键与 CHECK 保证恰有一种；平台不写 sync_seen_jobs 或伪同步运行。首次职位写入在同一短事务内保存修订、相应观察与状态事件，已见标记只适用于官网同步。
 

@@ -1,12 +1,12 @@
 # 招聘平台来源与按需浏览架构
 
-ADR-0036 覆盖下文历史页面选择规则：日常连接默认同一 Chrome 配置与账号，由 Worker 在默认上下文创建平台专用页并持有至断开，后续批次复用；不接管用户已有页。浏览器仍仅提供必要上下文，HTTP 优先不变。先监听再单次导航，释放仅作用于当前会话创建的 ID；意外断线不自动重连。显式 CLI 目标页参数仅保留调试兼容，不属于日常流程。
+当前有效决策分见 [职位生命周期与任务](../adr/0045-platform-job-lifecycle-and-tasks.md)、[浏览器会话与窗口](../adr/0046-platform-browser-session-and-windows.md)、[智联／前程无忧 HTTP 初始化](../adr/0047-platform-http-protocol-initialization.md)、[BOSS 默认 browser](../adr/0048-boss-browser-default-and-page-lifecycle.md) 和 [BOSS 显式 HTTP 恢复](../adr/0049-boss-http-recovery-and-retries.md)。下文保留部分历史实验记录；遇到旧默认值、旧重试语义时，以这五份整合 ADR 和当前 028 规格为准。
 
-日常获取按 ADR-0035，由 Worker 执行 acquire：复用健康会话，或在用户点击后自动定位 Chrome 和平台页面、连接后获取一批；Web 只发布任务与读取脱敏状态。固定描述文件发现替代日常手填技术参数，不扩大凭据读取范围；歧义页面由用户选择，冻结会话不自动重连。
+2026-09-28 隔离在线验收：显式 HTTP 在同一批两次详情 37 后均通过自有后台页的一次正常官网动作更新会话，最终 10 条有效职位全由 Node HTTP 取得正文并入隔离库；未验证跨批或长期稳定，不将此结果归入默认 browser 模式。
 
-按 ADR-0034，BOSS 只读临时传输错误在连接器内最多额外重试三次，独立于五次显式安全上下文恢复。应用事务边界、任务并发与正式职位所有权不变；原批次期限覆盖退避和恢复。
+正常采集间隔通过配置 `platforms.requestIntervalMs`（默认 0）提供统一回退值，`platforms.requestIntervalMsByProvider` 可分别覆盖 boss／zhilian／51job／liepin；Worker 将各自有效值注入 Provider，由每会话独立的 PlatformRequestPacer 执行。生产文件目前四平台分别为 0／0／0／1000 毫秒，连接器不写死下限。等待不占用网络请求超时；BOSS 浏览器模式只限制 Worker 主动采集动作。该配置不保存认证、不增加并发，不覆盖网络退避、Retry-After、模板等待及安全恢复节奏。
 
-按 [ADR-0033](../adr/0033-boss-bounded-resume-chain.md)，BOSS 同批次可在原十分钟期限内显式恢复最多五次，替代早期单次上限。每次官网正常更新上下文后才允许继续剩余集合；原并发域、代次和任务观察所有权不变，不自动发布恢复动作。
+日常 BOSS 默认 browser，只有显式选择时才发送独立 Node HTTP；两种传输共用页面生命周期而不共用采集响应。显式 HTTP 的详情 37 在原任务、原期限内校验认证与安全上下文，必要时允许自有页对失败职位执行一次普通点击以促成官网正常会话更新；浏览器响应不进入职位事实管道。恢复仍受十分钟、五次有效续跑及独立网络重试预算限制，不能切换传输或处理验证。四平台自建页默认各有独立后台窗口；智联日常从首页取认证后发 HTTP，前程无忧依赖官网新批次签名模板。
 
 > 状态：Accepted
 > 日期：2026-09-19
@@ -14,7 +14,7 @@ ADR-0036 覆盖下文历史页面选择规则：日常连接默认同一 Chrome 
 > 智联补充（2026-09-20）：校园推荐与主站搜索均已接入 Worker／CLI／Web，单批／详情真实隔离入库通过。校园首页／末页、主站独立 HTTP 首页／第二页／末页已验证；主站生产连续两批曾发生一次 network_error，仍待单独复核（PLT-T017），不以单批成功掩盖失败，不宣称长期稳定。
 > 实现状态：CLI / Web / Worker / 正式入库链路已实现并通过离线与界面验证；生产装配曾在首批 HTTP 返回 37，用户确认恢复后，低频单批单详情真实隔离 smoke 通过（两次 HTTP 间隔至少 30 秒，未刷新页面）。平台保留清理已实现，默认关闭且须预览确认启用。观察仍暂停，后续四个平台分别进行 12 小时／每 3 小时的独立观察；长期稳定性仍未证明，不晋级 supported。
 
-依据 [ADR-0025](../adr/0025-platform-browsing-and-unified-job-lifecycle.md) 和 [028 规格](../../specs/028-recruitment-platforms/spec.md)。本文与官网同步架构并列，不替换官网协议或面经研究执行器。
+依据 [ADR-0045](../adr/0045-platform-job-lifecycle-and-tasks.md) 和 [028 规格](../../specs/028-recruitment-platforms/spec.md)。本文与官网同步架构并列，不替换官网协议或面经研究执行器。
 
 ## 1. 统一事实，分开获取流程
 
@@ -22,15 +22,15 @@ ADR-0036 覆盖下文历史页面选择规则：日常连接默认同一 Chrome 
 
 猎聘复用既有一次 CDP 初始化和独立 HTTP 机制：当前支持学生首页推荐模板，首次 LOGIN、续批 UP；CLI／Web／Worker 和统一职位页已装配。外部 Chrome 原生 CDP 的真实限量验收通过：首批 39 条中 24 条有效职位全部补齐详情并入隔离库，15 条缺少公司 ID 排除计数；同会话续批返回有效末批，26 次独立 HTTP 最小间隔 5000ms。首批经过真实 CLI、生产 Worker 和 Web 应用查询，续批直接调用同一生产会话；不等同于线上 Web UI、多轮非空分页或长期稳定验收。内置浏览器现已暴露完整 CDP，但猎聘页面检测命中后主动跳转 about:blank，其兼容问题仍未解决；外部 Chrome 是用户明确允许的替代路径，不禁用官网检测。详见 028 的 PLT-T022，平台保持 experimental。
 
-BOSS 按 [ADR-0031](../adr/0031-boss-explicit-browser-assisted-transport.md) 增加显式 browser 模式：官网正常操作维护会话并产生 JSON，Worker 观察所选页响应，复用协议校验及批次入库，不导出 Cookie 或重复发独立 HTTP。该模式保留页面监听；首次列表来自连接后的正常筛选，详情仅操作当前批次职位链接，至少间隔五秒，不刷新或后台翻页。原 HTTP 默认行为保留，失败不自动切换。CLI 先提供选择；整批实测通过前不开放 Web 选项、不宣称稳定。
+BOSS 当前按 [ADR-0048](../adr/0048-boss-browser-default-and-page-lifecycle.md) 默认使用 browser：官网正常操作维护会话并产生 JSON，Worker 观察专用页实际响应，复用协议校验及批次入库，不导出 Cookie 或重复发独立 HTTP。下一批仅由明确获取动作的一次正常滚动加载，详情只操作当前批次职位链接；节奏由配置决定。显式 HTTP 保留诊断用途，失败不自动切换。
 
-按 [ADR-0030](../adr/0030-platform-batch-ingestion-and-job-list.md)，一次显式批次获取自动串行补齐所有候选的必需详情，完整职位逐条入库；异常停止后续请求，已提交数据保留。统一“职位”页按来源类型及 provider 查询，默认官网；平台默认全部招聘类别。来源页仅保留连接、批次动作和结果摘要，不再承担另一套职位列表。无需迁移，网络与短事务边界、平台缺失不下架、原清理策略均不变。
+按 [ADR-0045](../adr/0045-platform-job-lifecycle-and-tasks.md)，一次显式批次获取自动串行补齐所有候选的必需详情，完整职位逐条入库；异常停止后续请求，已提交数据保留。统一“职位”页按来源类型及 provider 查询，默认官网；平台默认全部招聘类别。来源页仅保留连接、批次动作和结果摘要，不再承担另一套职位列表。无需迁移，网络与短事务边界、平台缺失不下架、原清理策略均不变。
 
-前程无忧使用 [ADR-0029](../adr/0029-job51-observed-batch-session.md) 的官网辅助模式：所选页面持续只读监听，用户实际翻页提供原始签名模板，显式读取时独立 HTTP；不修改签名或自动翻页。完整列表正文可直接供详情入库，持久化仍走通用应用和仓储。该例外不改变其他平台初始化后 detach 的机制。
+前程无忧使用 [ADR-0047](../adr/0047-platform-http-protocol-initialization.md) 的官网辅助模式：所选页面持续只读监听，用户实际翻页提供原始签名模板，显式读取时独立 HTTP；不修改签名或自动翻页。完整列表正文可直接供详情入库，持久化仍走通用应用和仓储。该例外不改变其他平台初始化后 detach 的机制。
 
-智联连接采用 [ADR-0028](../adr/0028-zhilian-observed-request-template.md)：按所选目标页固定校园推荐或主站搜索。校园监听正常分类切换的 POST；主站监听正常搜索及详情双模板，通过边界校验即停止监听；后续列表和详情均独立 HTTP、至少间隔 5 秒、失败冻结。Worker、CLI 和 Web 复用既有 provider 隔离与来源身份，不新增数据库或浏览器进程；查询变更须显式重新连接。
+智联连接采用 [ADR-0047](../adr/0047-platform-http-protocol-initialization.md)：校园或显式调试页沿用已观察模板；日常自建主站页只从首页自然请求取得认证，搜索条件由应用提供。后续列表和详情均独立 HTTP，节奏由配置决定；查询变更须显式重新连接。
 
-多平台隔离及可见详情交互采用 [ADR-0027](../adr/0027-platform-isolation-and-view-activity.md)：provider 绑定连接、任务和身份命名空间；Web 仅通过应用端口同步记录短本地交互，自动清理仍由 Worker 执行。后续范围为智联、前程无忧和猎聘，未实现连接器不暴露可用能力。
+多平台隔离与可见详情交互采用 [ADR-0045](../adr/0045-platform-job-lifecycle-and-tasks.md) 和 [ADR-0046](../adr/0046-platform-browser-session-and-windows.md)：provider 绑定连接、任务和身份命名空间；Web 通过应用端口记录真实本地交互，自动清理仍由 Worker 执行。未实现连接器不暴露可用能力。
 
 官网：计划触发 → 完整或部分同步 → 统一职位写入 → 仅完整覆盖时允许缺失判断。
 
@@ -64,11 +64,11 @@ BOSS 按 [ADR-0031](../adr/0031-boss-explicit-browser-assisted-transport.md) 增
 
 ## 4. 最小会话借用
 
-连接必须由用户发起并选择浏览器实例；禁止扫描后自动连接第一个可用配置。CDP 仅连接已核验的本机回环端点，按允许域名选择页面和 Cookie；不读取其他网站、完整 LocalStorage 或浏览器磁盘 Cookie 数据库。必要数据由逐平台协议实验确定，不将目前 11 个 Cookie 宣称为最小集合。
+连接必须由用户明确发起；日常自动定位本机默认 Chrome 配置并创建 Worker 专用页，显式借用目标页仅用于调试。CDP 仅连接已核验的本机回环端点，按允许域名选择页面和 Cookie；不读取其他网站、完整 LocalStorage 或浏览器磁盘 Cookie 数据库。必要数据由逐平台协议实验确定，不将实验 Cookie 集合宣称为最小集合。
 
 会话凭据保存在 Worker 内存，由 sessionRef 与 sessionGeneration 引用；不写任务 payload/result、SQLite、事件、日志、异常、备份或模型输入。持久配置仅含非敏感连接选项和脱敏状态。请求中的个性化期望标识与职位访问参数也留在有界内存工作集中，原始 URL 的敏感查询参数不得作为来源链接保存。
 
-认证会话、查询上下文与单职位访问参数三者分离。按 [ADR-0026](../adr/0026-platform-cdp-session-lifetime.md)，浏览器提供必要认证与初始化上下文后 detach 页面，保留本次授权的空闲 CDP WebSocket，直到显式断开、替换或 Worker 退出。HTTP 使用列表实际返回的访问参数读取详情，不默认复用旧页面参数；HTTP 失败冻结请求，不自动重连。浏览器退出或连接异常使当前会话失效、清除 HTTP 凭据，但不等于平台账号已登出；不保证浏览器登出后 Cookie 立即撤销。显式断开使 generation 失效、取消在途请求、清除工作集和凭据；迟到结果提交前必须再次核对 generation。已经正式保存的职位不随断开删除。
+认证会话、查询上下文与单职位访问参数三者分离。按 [ADR-0046](../adr/0046-platform-browser-session-and-windows.md)，浏览器提供必要认证与初始化上下文后 detach 页面，保留本次授权的空闲 CDP WebSocket，直到显式断开、替换或 Worker 退出。HTTP 使用列表实际返回的访问参数读取详情，不默认复用旧页面参数；HTTP 失败冻结请求，不自动重连。浏览器退出或连接异常使当前会话失效、清除 HTTP 凭据，但不等于平台账号已登出；不保证浏览器登出后 Cookie 立即撤销。显式断开使 generation 失效、取消在途请求、清除工作集和凭据；迟到结果提交前必须再次核对 generation。已经正式保存的职位不随断开删除。
 
 连接状态为 disconnected、available、login_required、verification_required、cooldown、unavailable。浏览器控制是否可用是独立诊断。状态来源于实际响应，不能把 Cookie 存在当成认证成功，也不能把网络失败或未知业务码归为未登录。
 
@@ -76,7 +76,7 @@ BOSS 按 [ADR-0031](../adr/0031-boss-explicit-browser-assisted-transport.md) 增
 
 ## 5. 浏览与详情短任务
 
-按 [ADR-0032](../adr/0032-boss-explicit-batch-resume.md) 与 ADR-0033，BOSS HTTP 详情 37 的剩余批次可在原 Worker／代次内保留十分钟，稳定失败 ID 保存到任务，私有访问参数仍仅在连接器内存。显式 resume 引用最近失败采集任务；官网恢复确认、普通认证绑定不变且安全上下文更新后才允许续跑，同批最多五次。取消、断线、换代、重启、非 37 错误或次数耗尽不恢复，不自动重试或切换传输。新任务只保存剩余事实，原失败记录不改写。
+按 [ADR-0049](../adr/0049-boss-http-recovery-and-retries.md)，BOSS 显式 HTTP 详情 37 的剩余批次可在原 Worker、任务与代次内保留十分钟；稳定失败 ID 写入脱敏进度，私有访问参数只留连接器内存。认证绑定不变且安全上下文更新后才允许同任务续跑，同批最多五次有效恢复。自有页的受限普通点击只用于官网会话更新，Node HTTP 仍负责职位事实；取消、断线、换代、重启、非 37 错误或次数耗尽即停止。
 
 能力按 search、recommend、next、detail 独立验证和记录 supported 状态；supported 是协议能力，不是当前账号状态。BOSS 首版从 recommend 开始，智联后续验证；不得由搜索成功推断推荐可用。
 

@@ -1,9 +1,5 @@
 # 架构决策记录索引
 
-- [ADR-0030：平台批次自动补齐详情并统一职位列表](./0030-platform-batch-ingestion-and-job-list.md)
-
-- [ADR-0028：智联校园使用已观察请求模板初始化 HTTP 会话](./0028-zhilian-observed-request-template.md)
-
 - [ADR-0022：简历编辑画布的 WebKit 事件边界](./0022-resume-studio-webkit-event-boundary.md)
 
 - [ADR-0001：TypeScript 模块化单体（已被 ADR-0007 替代）](./0001-typescript-modular-monolith.md)
@@ -25,7 +21,7 @@
 - [ADR-0017：网友面经来源正文仅用于瞬时核验](./0017-transient-community-source-verification.md)
 - [ADR-0018：项目拷打问题由 Web 同步生成](./0018-synchronous-project-question-generation.md)
 
-ADR 一经 Accepted 不直接改写历史结论；需要改变决策时新增 ADR，并把旧记录标为 Superseded。
+ADR 一经 Accepted 通常不直接改写历史结论；后续决策变更通过新 ADR 说明。
 
 - [ADR-0019：任务诊断写入投影与批量读取](./0019-task-diagnostic-projection.md)
 
@@ -33,13 +29,8 @@ ADR 一经 Accepted 不直接改写历史结论；需要改变决策时新增 AD
 - [ADR-0021：Agent 业务校验与评分阶段恢复](./0021-agent-output-validation-and-score-recovery.md)
 - [ADR-0023：官网原始请求运行时驱动](./0023-official-runtime-source-driver.md)
 - [ADR-0024：列表无正文时先取得必需详情再入库](./0024-required-job-detail.md)
-- [ADR-0025：招聘平台按需读取与统一职位生命周期](./0025-platform-browsing-and-unified-job-lifecycle.md)
-- [ADR-0026：平台 CDP 连接与用户活动会话同寿命](./0026-platform-cdp-session-lifetime.md)
-- [ADR-0027：平台实例隔离与显式浏览活动](./0027-platform-isolation-and-view-activity.md)
-- [ADR-0029：前程无忧按官网已观察批次执行独立 HTTP](./0029-job51-observed-batch-session.md)
-- [ADR-0031：BOSS 显式浏览器辅助传输](./0031-boss-explicit-browser-assisted-transport.md)
-- [ADR-0032：BOSS 当前进程内显式恢复未完成批次](./0032-boss-explicit-batch-resume.md)
-- [ADR-0033：BOSS 同批次有界显式恢复链](./0033-boss-bounded-resume-chain.md)
-- [ADR-0034：BOSS 网络重试与安全上下文恢复独立计数](./0034-boss-transport-retries.md)
-- [ADR-0035：招聘平台日常获取与自动连接](./0035-platform-daily-acquisition.md)
-- [ADR-0036：招聘平台使用 Worker 专用标签页](./0036-platform-worker-owned-tabs.md)
+- [ADR-0045：招聘平台职位生命周期与任务](./0045-platform-job-lifecycle-and-tasks.md)
+- [ADR-0046：招聘平台浏览器会话、隔离与窗口所有权](./0046-platform-browser-session-and-windows.md)
+- [ADR-0047：智联与前程无忧的 HTTP 协议初始化](./0047-platform-http-protocol-initialization.md)
+- [ADR-0048：BOSS 默认浏览器辅助传输与页面生命周期](./0048-boss-browser-default-and-page-lifecycle.md)
+- [ADR-0049：BOSS 显式 HTTP 的有界重试与会话恢复](./0049-boss-http-recovery-and-retries.md)

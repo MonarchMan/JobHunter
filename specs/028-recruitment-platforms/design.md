@@ -1,16 +1,46 @@
 # 028 招聘平台来源设计
 
+ADR-0049：BOSS HTTP 详情 37 的暂停工作集记录失败职位稳定 ID。应用沿用同任务 `resume`；连接器先核对 wt2／token 绑定，再由 CDP Provider 对 Worker 自有后台页执行一次当前批次可见职位的普通链接点击，随后只读检查安全上下文。点击不读取或交付浏览器 JSON；上下文变化后才由 Node HTTP 重试失败详情。仅接受一次官网自动安全检查路由及自然返回职位页；可见验证控件、额外导航或上下文未更新仍终止。每次暂停最多点击一次、沿用原十分钟及五次有效恢复预算。显式借用页不装配自动点击回调，browser 传输模式也不装配。此决策仅改变 HTTP 会话恢复的浏览器职责，不改变职位数据所有权或默认 browser 模式。
+
 > 状态：In Progress
+
+猎聘 HTTP 请求在实际发送边界执行统一节流；详情 GET 遇到已识别的临时网络异常时，在同一操作截止时间内最多补发两次，退避可取消，列表 POST 不重试。连接器将异常链中的固定错误码归一化并附于 PlatformError，沿现有任务失败日志记录；原始异常 message 与 URL 不输出。BOSS 37 只追加有界响应长度／哈希，保留现有上下文检查续跑规则，禁止普通日志写原始响应。
+
+固定采集间隔通过统一运行配置注入 Worker→四个 CDP Provider→会话。连接器共用可取消的请求节流组件，默认零等待、记录请求起始时间；各平台／连接不共用全局锁。BOSS browser 复用同一组件控制主动采集动作。HTTP 重试的指数退避、服务端 Retry-After、37 检查及 51job 模板等待不参与该设置。应用层整批详情仍串行，不推广实验并发。
+
+ADR-0047：自建智联主站页只监听固定首页 POST `/c/i/resume/preview-standardnode` 的请求元数据，取同一请求中的 at/rt/resumeNumber 并验证查询与正文一致，不读取简历响应。认证快照和非敏感搜索条件合成现有 HTTP 会话需要的请求结构；初始化不等待搜索与详情请求，也不发独立职位 HTTP。显式 targetId 调试与校园初始化保持原语义。
+
+2026-09-23：ADR-0046 覆盖下文仅 BOSS browser 的窗口限制。公共 CDP 创建选项默认 backgroundWindow=true，所有自建页传入 newWindow/background；HTTP 不增加页面点击、刷新或前台激活。进度身份白名单增加精确的猎聘 job/a 数字命名空间，保留原身份、不做替换或截断。
+
+后台窗口通过 Target.createTarget 的 newWindow/background 参数实现，仍使用默认浏览器上下文共享登录。BossCdpSessionProvider 构造选项 backgroundWindow 默认 true，自建 browser 页的 activateForNext 设为 false；显式 false 或借用调试页保留原行为。销毁仍仅关闭自身 target，不关闭其他窗口或整个 Chrome。
+
+旧标签页或借用调试页模式下，用户获取后续批次且无预取响应时可通过 Page.bringToFront 激活专用页。默认后台窗口跳过此步骤；两者均检查 ready 与已观察的在途列表请求，只有仍无列表时滚动一次，不刷新、不操作验证、不用于 HTTP 模式。
+
+2026-09-28 同页受控对照：现用滚动动作执行后 8 秒无第 2 页请求、仍为 15 张卡；顶部→底部并派发普通 `scroll` 事件后仅出现一次真实第 2 页列表请求、卡片增至 30，无主文档刷新。`loadNext` 保留末项可见校验与单次动作边界，改为后者；网络监听仍只消费官网 JSON，不回退 DOM 职位采集。
+
+按 ADR-0045，BOSS 后续批次在 ready 且无预取页时执行一次正常滚动加载；失败仍冻结。acquire 的手动重试载荷显式携带 reconnect 标志，仅该动作可释放冻结会话并新建专用页，不重放旧候选；新进度沿用任务 ID，职位写入保持幂等。
+
+BOSS 正常采集不再使用固定五秒间隔：删除共享协议请求前的等待与浏览器观察请求延后点击的等待；HTTP 的普通缓存时间戳在发送时生成。串行互斥、网络异常指数退避和恢复观察计时独立保留，不扩展并发或自动翻页。
 
 ## 1. 架构依据
 
-ADR-0036 覆盖日常已有页面选择：CdpSessionProvider 在默认上下文创建专用空白页，记录内存所有权，attach 并安装平台监听后单次导航到固定入口。BOSS 等待新页自然产生列表资源再读取最小上下文；不刷新以催生请求。会话复用与 HTTP 协议不变，资源释放仅针对自己创建的 ID；Web 共享 PlatformBrowser 移除目标选择和 ID 输入，高级设置仅保留路径。旧显式 targetId 仅为 CLI 调试兼容，不参与自动连接。
+ADR-0048 抽取 BossPageLifecycle：输入只读页面探针及是否允许初始化导航，输出固定状态／错误和 epoch、AbortSignal。browser 的正文观察只引用 epoch，HTTP 的上下文读取前后复核 epoch；两者锁定后主文档导航均终止。HTTP 保留原 CDP 页面 session 以监听导航，不增加职位响应观察或导出 DOM。组件无持久化、Cookie 或职位依赖，其他平台不参与此次重构。
 
-ADR-0035：增加 acquire 命令作为一次显式日常获取意图，应用复用活动会话或先连接再进入既有单批循环。CDP 基础设施解析固定描述文件和白名单页面，应用只投影安全页面选择项。PlatformBrowser 同时服务职位／来源页；职位页在任务终态刷新本地列表，保留 URL 条件，手动调试表单折叠。连接选择与凭据获取仍仅发生在 Worker，不在 Web Server 扫描浏览器。
+ADR-0048 初始化补充覆盖“一次导航”历史限制：BossBrowserSession 以首个列表消费为初始化边界；初始化导航增加文档 epoch 并清空观察，异步正文完成时复核 epoch，防止旧文档回写。CDP 仅返回固定页面状态，不返回正文或凭据；每秒只读检查，风险连续两次一致才停止。六十秒期限独立于二十秒详情等待，导航后至少一秒稳定且 ready 加真实列表才消费。保留严格 JSON 协议，不改成 DOM 采集。
 
-ADR-0034：BossHttpSession 的单次 HTTP 解析外包一层有界传输重试，临时错误按固定白名单分类；批次 networkRetries 与 resumeCount 独立，只在下一批初始化时重置。每次重试重新读取正常上下文并使用同一详情参数，HTTP 完整校验之后才返回应用保存。Retry-After 不进入持久结果，超过剩余期限时不等待或重试。
+ADR-0048：CdpSessionProvider 对 BOSS 缺省 acquisitionMode 选择 browser，同步关闭 resume 暴露。新建页的 BossBrowserSession 显式允许一次固定入口主框架导航，已有调试页不享有该例外；监听安装后导航，初始响应可用于第一批。HTTP 类仅作共享解析器使用，其 browserResponse 分支不发独立 HTTP。后续批次仍以官网实际响应为准，不增加自动翻页。
 
-ADR-0033 将早期单次恢复扩展为同批次最多五次显式恢复。应用 pending 保存恢复次数及原始 expiresAt；续跑开始将剩余候选绑定到新任务并将本次 saved 归零，保留原期限。连接器只在每批 readNext 时重置恢复计数，安全上下文未更新不消耗次数。再次详情 37 可保留下一段剩余集合，但第五次恢复失败后清除资格；不会后台自行发布 resume。
+ADR-0049 补充：自动 resume 使用 waitForChange 选项，在原期限内每五秒只读检查浏览器上下文，回调只报告 unchanged／updated；应用持有原任务并记录 recovery 状态和检查次数，更新后同任务继续，不新建任务或重复列表。检查与职位 HTTP 重试分离；取消、断线、身份变化、读取失败、期限或预算耗尽立即停止。恢复异常保留原始请求脱敏摘要。以下“一次检查未变即暂停”为历史实现，由本段覆盖。
+
+ADR-0049：详情读取循环内捕获 PlatformError 的 access_blocked／37，仅在当前 pending、会话、代次、取消状态、预算与原期限有效时调用 resume。成功后递增共享次数并报告进度，再读取同一 externalJobId；上下文未变转为保留 37 的固定原因后交给既有暂停路径。保存事务仍在重试循环外且每条只执行一次；显式恢复读取后续候选也使用同一循环。
+
+ADR-0046 覆盖日常已有页面选择：CdpSessionProvider 在默认上下文创建专用空白页，记录内存所有权，attach 并安装平台监听后单次导航到固定入口。BOSS 等待新页自然产生列表资源再读取最小上下文；不刷新以催生请求。会话复用与 HTTP 协议不变，资源释放仅针对自己创建的 ID；Web 共享 PlatformBrowser 移除目标选择和 ID 输入，高级设置仅保留路径。旧显式 targetId 仅为 CLI 调试兼容，不参与自动连接。
+
+ADR-0046：增加 acquire 命令作为一次显式日常获取意图，应用复用活动会话或先连接再进入既有单批循环。CDP 基础设施解析固定描述文件和白名单页面，应用只投影安全页面选择项。PlatformBrowser 同时服务职位／来源页；职位页在任务终态刷新本地列表，保留 URL 条件，手动调试表单折叠。连接选择与凭据获取仍仅发生在 Worker，不在 Web Server 扫描浏览器。
+
+ADR-0049：BossHttpSession 的单次 HTTP 解析外包一层有界传输重试，临时错误按固定白名单分类；批次 networkRetries 与 resumeCount 独立，只在下一批初始化时重置。每次重试重新读取正常上下文并使用同一详情参数，HTTP 完整校验之后才返回应用保存。Retry-After 不进入持久结果，超过剩余期限时不等待或重试。
+
+ADR-0049 将早期单次恢复扩展为同批次最多五次有效恢复。应用 pending 保存恢复次数及原始 expiresAt；续跑保留原任务与剩余候选，不重置原期限或已保存计数。连接器只在新批次 readNext 时重置恢复计数，安全上下文未更新不消耗次数。再次详情 37 可继续保留剩余集合；达到上限、过期或身份失效则清除资格。
 
 平台界面复用 SourceTabs 的导航样式所有者，增加四平台换行变体及 aria-current；PlatformBrowser 继续拥有本地状态与显式命令，使用现有表面、边框和状态令牌分隔连接、操作和任务区域。职位页根据已解析 sourceKind／providerKey 构造同范围的清除与来源恢复链接，不从任意原始 URL 拼接目标。任务页复用 taskTypeLabels 统一四平台名称与筛选选项。桌面与 390px 下验证四平台切换、空状态恢复、字段错误、长诊断与任务状态；不访问上游平台。
 
@@ -20,7 +50,9 @@ ADR-0033 将早期单次恢复扩展为同批次最多五次显式恢复。应�
 
 猎聘生产装配扩展：在 CdpSessionProvider 中新增固定 c.liepin.com 首页提供方，初始化最多等待 120 秒，仅接收所选页首页推荐 POST；模板与普通认证头保留内存，成功捕获后停止页面观察。首次 LOGIN、后续 UP 的状态迁移来自当前官网普通业务脚本并以有限真实请求验收；当前只接受 PC_STU_HP_MIX／PC_STU_HP_NEW，不把成人首页或搜索默认为兼容。每次 HTTP 前只读对应域／路径 Cookie，连接失效不沿用旧凭据；详情只发目标 Cookie，不透传 API 专用头。重复身份、异常空页、未知结构停止，不触发官网缺失下架。内存最多记录 2000 个已见身份，超过上限要求新连接。
 
-CLI／Web 注册 liepin，来源页复用 PlatformBrowser，以学生首页推荐、一次正常排序切换初始化和后续 HTTP 批次说明能力。职位入口始终指向统一 `/jobs?source=platform&provider=liepin`；应用默认整批逐条入库，不沿用研究单条选择包装器。无新数据所有权、进程或传输选型，沿用 ADR-0025／0026／0030。
+猎聘重定向诊断：HTTP 保持 `redirect: manual`，先读取 `Location` 并仅按目标主机及路径白名单映射到固定原因码；不输出原始地址、查询参数或头值。保留 302 原状态码和失败冻结。应用配置严格校验 `requestIntervalMsByProvider` 的四个固定平台键与 0～60000 毫秒值；Worker 对每个平台优先取自身覆盖值，缺失时用统一 `requestIntervalMs`，连接器只执行传入间隔。生产文件为猎聘 1000、其他平台 0。
+
+CLI／Web 注册 liepin，来源页复用 PlatformBrowser，以学生首页推荐、一次正常排序切换初始化和后续 HTTP 批次说明能力。职位入口始终指向统一 `/jobs?source=platform&provider=liepin`；应用默认整批逐条入库，不沿用研究单条选择包装器。无新数据所有权、进程或传输选型，沿用 ADR-0045／0046。
 
 猎聘最小闭环沿用既有 PlatformSession／provider 隔离和正式职位写入，不新增账号池或临时职位库。先参考本地 BossHunter 的只读采集、稳定 ID 与登录墙分类，再以当前官网实际请求为协议依据；不直接复制其持续 DOM 采集或城市编码回退。使用同一已授权 CDP 的有界被动观察取得只读列表模板，独立 HTTP 请求至少间隔五秒。详情端点或重定向须由真实页面确认，逐目标匹配 Cookie，禁止跨域透传；先做一批及一条详情隔离验收，再开放生产装配及分页。
 
@@ -34,7 +66,7 @@ BOSS HTTP 在发送边界生成 `_`，使用与请求起始计时相同的 Clock
 
 最小请求间隔采用唤醒后复核：根据上次起始时刻计算剩余等待，计时器完成后重新读取 Clock，剩余值仍为正则继续等待；循环沿用同一取消及截止信号。研究工具同样复核，避免一次 setTimeout 的舍入或提前唤醒导致实际不足五秒。
 
-传输宗旨保持 HTTP 优先：browser 为显式选择的独立能力，不因单次整批成功替换 HTTP 默认，也不把浏览器采集结果作为 HTTP 翻页或稳定性证据。HTTP 真实 smoke 限前两至三页及少量详情，分别记录初始化上下文读取次数、独立 HTTP 次数、页码／候选数、身份正文校验与错误停止；长驻研究进程须核验模块版本，生产验收使用新执行上下文加载当前构建，避免模块缓存污染结论。动态推荐 hasMore=true 时不虚构末页。
+传输验收分别记录 browser 与独立 HTTP；BOSS 当前默认 browser，显式 HTTP 保留为单独能力，不能把浏览器采集结果作为 HTTP 翻页或稳定性证据。HTTP 真实 smoke 限前两至三页及少量详情，分别记录初始化上下文读取次数、独立 HTTP 次数、页码／候选数、身份正文校验与错误停止；长驻研究进程须核验模块版本，生产验收使用新执行上下文加载当前构建，避免模块缓存污染结论。动态推荐 hasMore=true 时不虚构末页。
 
 37 的研究诊断保留原始业务码，并记录固定端点类别、请求序号／是否首请求、此前成功数、同轮浏览器成功响应及距今时间、检查参数的字段存在性、检查 Cookie 写入／清除属性、认证上下文变化的布尔结果。浏览器同期状态未观察时必须记为 unknown／not_observed，不能用较早 code=0 替代。不得持久化 Cookie、token、完整请求 URL、检查参数原值或响应原文；这些观测维度不是官方子错误码或根因判定。
 
@@ -42,19 +74,19 @@ BOSS HTTP 在发送边界生成 `_`，使用与请求起始计时相同的 Clock
 
 HTTP 完整对照先借用新捕获的正常浏览器请求 URL 和已观察端到端头，HTTP/2 伪头、Host、长度、压缩及连接控制由 HTTP 客户端生成。若请求 Cookie 未捕获而使用所选同站点的当前适用 Cookie，必须记录 current_scoped_snapshot，不能声称逐字节重放。只有成功基线建立后才逐项删除字段；顺序试验不能排除时间和服务端会话状态的干扰，失败不自动回填字段重试、不复制安全脚本或回灌检查参数。研究对照不是将任意请求头代理开放给 Web。
 
-ADR-0031 增加显式 BOSS browser 模式：官网正常操作承担网络与安全状态维护，基础设施只观察实际列表／详情 JSON。新增受限浏览器传输回调复用 BOSS 解析器；不会为复用 HTTP 类构造假 Cookie，也不把浏览器响应描述成独立 HTTP。CLI connect 可选择 acquisitionMode，默认 http；模式固定在当前代次。所选标签外事件不接收，原始响应最大两 MiB、在途请求有界、操作受取消与超时约束。首次列表等待正常筛选生成的新响应，后续页也须实际观察；详情只点击当前批次 ID 对应链接。37／限流冻结，不切换传输或操作验证控件。Web 入口在能力验收后再开放。
+ADR-0048 确定 BOSS 默认 browser：官网正常操作承担网络与安全状态维护，基础设施只观察实际列表／详情 JSON。受限浏览器传输回调复用 BOSS 解析器；不会为复用 HTTP 类构造假 Cookie，也不把浏览器响应描述成独立 HTTP。CLI connect 可显式选择 acquisitionMode，模式固定在当前代次。所选页外事件不接收，原始响应最大两 MiB、在途请求有界、操作受取消与超时约束。首次列表及后续页都须实际观察；详情只点击当前批次 ID 对应链接。37／限流冻结，不切换传输或操作验证控件。
 
 CLI 显式参数为 `connect --acquisition-mode browser`；未选择时兼容旧行为，其他平台拒绝该参数。列表最多保留一页，正文最多两 MiB、在途最多八个请求；每次操作二十秒内结束。官网自动打开首条时可复用同轮实际详情 JSON（最多保留三条、两分钟内有效），仍按当前批次访问参数及稳定身份核对，不重复点击已选职位。新查询、主页面导航或未消费批次被替换会冻结会话，不把过期响应当成实时事实。
 
-BOSS 普通认证修复保持 ADR-0026 的单连接生命周期：BossHttpSession 接受受限的上下文读取回调，每次 HTTP 前经同一 CDP Socket 临时 attach 所选同源页，只读页面 token 和适用 Cookie，随后 detach；不保持页面监听、不执行刷新或安全脚本。列表模板固定，回调不改变查询。认证头限 token、由适用 bst 得到的 zp_token 和固定 X-Requested-With，不复制 UA、客户端提示或 traceId。CDP 操作使用本次请求取消信号，不复用已经到期的初始化 120 秒期限；读取失败不降级为旧 Cookie。安全检查中间 Cookie 不由本项目消费或写回浏览器，37 仍立即冻结，所以该修复不承诺脱离浏览器完成安全上下文续期。
+BOSS 普通认证修复保持 ADR-0046 的单连接生命周期：BossHttpSession 接受受限的上下文读取回调，每次 HTTP 前经同一 CDP Socket 临时 attach 所选同源页，只读页面 token 和适用 Cookie，随后 detach；不保持页面监听、不执行刷新或安全脚本。列表模板固定，回调不改变查询。认证头限 token、由适用 bst 得到的 zp_token 和固定 X-Requested-With，不复制 UA、客户端提示或 traceId。CDP 操作使用本次请求取消信号，不复用已经到期的初始化 120 秒期限；读取失败不降级为旧 Cookie。安全检查中间 Cookie 不由本项目消费或写回浏览器，37 仍立即冻结，所以该修复不承诺脱离浏览器完成安全上下文续期。
 
-ADR-0030 统一批次入库与职位展示：`next` 在单个 Worker 任务内按候选顺序调用 `readDetail` 和仓储 `save`，每次网络前后复核取消及代次，事务内继续检查租约。成功结果新增可选 `savedCount`（旧任务兼容）；错误冻结并保留已提交记录。列表获取和详情消费不自动翻页，51job 复用完整 JSON，不重复 HTTP。来源页保留获取操作、删除摘要卡片，链接到 `/jobs?source=platform&provider=…`。Web 查询默认 official，平台默认全部招聘类别；查询端口以 `sourceKind`、`providerKey` 过滤 job_sources，并同时用于计数与分页。沿用现有表、正式职位质量门槛及 SelectField，不引入新的生命周期。
+ADR-0045 统一批次入库与职位展示：`next` 在单个 Worker 任务内按候选顺序调用 `readDetail` 和仓储 `save`，每次网络前后复核取消及代次，事务内继续检查租约。成功结果新增可选 `savedCount`（旧任务兼容）；错误冻结并保留已提交记录。列表获取和详情消费不自动翻页，51job 复用完整 JSON，不重复 HTTP。来源页保留获取操作、删除摘要卡片，链接到 `/jobs?source=platform&provider=…`。Web 查询默认 official，平台默认全部招聘类别；查询端口以 `sourceKind`、`providerKey` 过滤 job_sources，并同时用于计数与分页。沿用现有表、正式职位质量门槛及 SelectField，不引入新的生命周期。
 
 前程无忧解析诊断使用连接器内部 `PlatformError` 子类，仍归类 `parse_changed`，仅在错误消息中追加编译期固定阶段码；不传 Zod 原始错误、动态字段值或响应。阶段分开覆盖模板、查询变化、媒体类型、响应体、JSON、信封、职位结构、分页及详情身份，Worker 既有安全错误投影无需新端口或数据库迁移。
 
 智联主站采用相同的内部错误子类方式，网络错误仅映射顶层及一层 cause 的白名单 code。调用方取消优先于请求超时，超时通过本次请求的 AbortSignal 判断；不保留原始 Error 或 cause。请求及响应体读取共享 20 秒上限，冻结前完成分类，避免 disconnect 自身的 abort 干扰判断。等待节流期间取消归为 session_unavailable。此次不新增重试、代理、浏览器回退或超时放宽。
 
-前程无忧生产装配见 ADR-0029：观察器仅绑定所选搜索页，最多保留 5 个在途请求和最新一个成功模板；只接受固定只读端点以及已观察字段。HTTP 会话逐批消费模板，原样保留签名，不自行修改页码；新模板最多等待 90 秒，间隔至少 5 秒。查询固定、页码递增、重复页拒绝；公司缺失计数排除，未知结构报错。详情消费同次 JSON 完整正文，正式 URL 去除跟踪参数。Worker／CLI／Web 复用已有 provider 隔离和正式职位生命周期，前端复用 PlatformBrowser、原有表单校验与任务轮询，不改视觉令牌。
+前程无忧生产装配见 ADR-0047：观察器仅绑定所选搜索页，最多保留 5 个在途请求和最新一个成功模板；只接受固定只读端点以及已观察字段。HTTP 会话逐批消费模板，原样保留签名，不自行修改页码；新模板最多等待 90 秒，请求间隔取现行配置。查询固定、页码递增、重复页拒绝；公司缺失计数排除，未知结构报错。详情消费同次 JSON 完整正文，正式 URL 去除跟踪参数。Worker／CLI／Web 复用已有 provider 隔离和正式职位生命周期，前端复用 PlatformBrowser、原有表单校验与任务轮询，不改视觉令牌。
 
 研究连接清理约束（PLT-004／PLT-006）：标签页会话寿命短于浏览器 WebSocket，失效标签的 `Network.disable` 拒绝不得结束空闲研究进程；清理失败输出固定脱敏阶段，仍释放内存。显式关闭时，即使 detach 失败也必须关闭连接和输入。离线模拟失效会话复现，不用真实账号反复授权；生产初始化错误仍按 `session_unavailable` 返回，不吞掉初始化失败。
 
@@ -62,7 +94,7 @@ ADR-0030 统一批次入库与职位展示：`next` 在单个 Worker 任务内�
 
 当前交付 CLI 和 Web 提交操作与现有 Worker 执行，复用现有职位查询查看入库结果；保留清理通过 CLI 预览、确认启用，自动删除默认关闭。最小闭环只实现 BOSS recommend/next/detail，不以此声明 search 或智联受支持。
 
-遵循 [专题架构](../../docs/arch/recruitment-platforms.md) 与 [ADR-0025](../../docs/adr/0025-platform-browsing-and-unified-job-lifecycle.md)。实现包为 platform-core、platform-connectors，应用用例位于 application，Worker 只装配。首版单本机、单 Worker、每平台一个活动连接。
+遵循 [专题架构](../../docs/arch/recruitment-platforms.md) 与 [ADR-0045](../../docs/adr/0045-platform-job-lifecycle-and-tasks.md)。实现包为 platform-core、platform-connectors，应用用例位于 application，Worker 只装配。首版单本机、单 Worker、每平台一个活动连接。
 
 ## 2. 目标数据迁移
 
@@ -87,7 +119,7 @@ ADR-0030 统一批次入库与职位展示：`next` 在单个 Worker 任务内�
 
 ## 3. 契约与用例
 
-按 ADR-0027，使用受信任的内置 provider 定义绑定来源 ID、公司命名空间及任务类型，仓储和应用服务每实例只拥有一个平台；保留 BOSS 已发布来源 ID 与任务协议。通用任务工厂及 Web 投影按 provider 区分并发和幂等键，未接入平台不注册生产 handler。四个平台同名／同外部 ID 仍分别保存，事务还需验证任务类型属于该平台。
+按 ADR-0046，使用受信任的内置 provider 定义绑定来源 ID、公司命名空间及任务类型，仓储和应用服务每实例只拥有一个平台；保留 BOSS 已发布来源 ID 与任务协议。通用任务工厂及 Web 投影按 provider 区分并发和幂等键，未接入平台不注册生产 handler。四个平台同名／同外部 ID 仍分别保存，事务还需验证任务类型属于该平台。
 
 交互缺口通过可见详情页客户端一次性 POST 补齐；不在服务端 GET 中写库、不轮询触碰。应用端口执行短原子 UPDATE，避免排队期间清理先删掉已浏览职位；仅更新 platform 职位的 last_interacted_at，不修改 last_seen_at 或官网记录。后台详情保存只更新成功核验时间。Web 单独读取保留策略的安全投影（enabled 与 policy），不读取确认令牌，不扫描候选、不发布清理任务；失败显示状态未知。所有自动删除仍走 Worker。
 
@@ -103,11 +135,11 @@ BOSS 真实成功列表可包含 encryptBrandId 为空字符串的匿名公司�
 
 ## 4. 并发与恢复
 
-ADR-0032 增加可选 PlatformSession.resume；只有 BOSS HTTP 提供有效恢复。应用保留有界剩余候选与原 taskId／代次／过期时间；连接器保留原详情访问参数及普通认证绑定，37 后清空发送 Cookie／token 并冻结正常动作。resume 只读现有浏览器上下文，检查 wt2/token 一致、bst 非空且无歧义、**zp_stoken** 更新后才解冻一次；bst 的正常轮换不视为换号，不会自行执行安全检查。CLI resume 和 Web 应用命令复用原并发键、幂等队列及仓储事务，新结果含 resumedFromTaskId，不修改原任务状态。
+ADR-0049 增加可选 PlatformSession.resume；只有 BOSS HTTP 提供有效恢复。应用保留有界剩余候选与原 taskId／代次／过期时间；连接器保留原详情访问参数及普通认证绑定，37 后清空发送 Cookie／token 并冻结正常动作。resume 只读现有浏览器上下文，检查 wt2/token 一致、bst 非空且无歧义、**zp_stoken** 更新后才解冻一次；bst 的正常轮换不视为换号，不会自行执行安全检查。CLI resume 和 Web 应用命令复用原并发键、幂等队列及仓储事务，新结果含 resumedFromTaskId，不修改原任务状态。
 
 稳定身份检查点复用 `tasks.result_json.progress.currentExternalJobId`，可选字段兼容旧结果。应用在详情外部调用前写入，仓储将清除字段与职位／观察／入库计数放在同一事务，避免提交后崩溃仍标记该条待处理。已失败任务保留 ID 供同职位对照；ID 本身不是恢复所需的 securityId/lid，不能据此重建旧 HTTP 请求。官网尚未恢复正常时不发布恢复请求；显式恢复必须验证上下文更新、账号／查询绑定和剩余集合，未通过检查时仍冻结会话。
 
-按 [ADR-0026](../../docs/adr/0026-platform-cdp-session-lifetime.md)，CDP WebSocket 与活动平台会话同寿命，初始化后 detach 页面但不关闭 WebSocket。授权等待 120 秒，每个 CDP 命令仍为 20 秒；任务完成的取消信号不影响已交接的连接。HTTP 失败冻结请求并保留空闲 CDP，主动断开／替换／Worker 退出才释放；意外断线取消 HTTP，不自动重连。
+按 [ADR-0046](../../docs/adr/0046-platform-browser-session-and-windows.md)，CDP WebSocket 与活动平台会话同寿命，初始化后 detach 页面但不关闭 WebSocket。授权等待 120 秒，每个 CDP 命令仍为 20 秒；任务完成的取消信号不影响已交接的连接。HTTP 失败冻结请求并保留空闲 CDP，主动断开／替换／Worker 退出才释放；意外断线取消 HTTP，不自动重连。
 
 最小实现使用 platform.boss，action 为 connect/next/detail/disconnect，共用 platform:boss 并发键，最大尝试次数为 1。connect payload 只含用户指定的 DevToolsActivePort 文件路径与 targetId；其他动作含 generation，detail 再含 externalJobId。禁止 Cookie、原始请求 URL、securityId 和私有游标进入任务。一次 CLI 提交产生一个幂等键；重复执行 next 命令属于新的下一批操作。
 

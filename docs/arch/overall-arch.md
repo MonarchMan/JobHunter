@@ -70,7 +70,7 @@ JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有�
 
 ### 招聘平台扩展约束
 
-[ADR-0025](../adr/0025-platform-browsing-and-unified-job-lifecycle.md) 新增 platform-core 契约和 platform-connectors 基础设施；应用声明会话／仓储端口，Worker 装配并执行短任务，Web 不读取凭据。平台来源跨公司，不参与官网三渠道及完整覆盖聚合；原公司逻辑渠道到多个物理来源映射不变。
+[ADR-0045](../adr/0045-platform-job-lifecycle-and-tasks.md) 新增 platform-core 契约和 platform-connectors 基础设施；应用声明会话／仓储端口，Worker 装配并执行短任务，Web 不读取凭据。平台来源跨公司，不参与官网三渠道及完整覆盖聚合；原公司逻辑渠道到多个物理来源映射不变。
 
 浏览器按用户授权提供最小必要会话与初始化上下文，HTTP 优先；凭据只留 Worker 内存，不自动保活或规避验证。该授权路径仅限招聘平台，本文其他官网匿名浏览器与面经研究隔离约束保持不变。平台列表未再次出现不能推进缺失下架，正式职位按独立保留策略正常清理，业务关联优先保护。缺少必需正文时遵循 ADR-0024，取得真实详情后自动入库，不写占位事实。
 
