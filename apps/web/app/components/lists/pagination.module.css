@@ -5,7 +5,7 @@
   gap: 0.45rem;
   justify-content: center;
   margin-top: 1rem;
-  color: #50586a;
+  color: var(--text-secondary);
 }
 
 .pagination a {

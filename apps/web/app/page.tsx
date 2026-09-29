@@ -58,7 +58,7 @@ export default async function DashboardPage(): Promise<ReactElement> {
             value={dashboard.tasks.pending}
             detail={`${String(dashboard.tasks.failed)} 个失败任务`}
             href="/tasks"
-            tone={dashboard.tasks.failed > 0 ? 'amber' : 'primary'}
+            tone="amber"
           />
         </div>
       </section>

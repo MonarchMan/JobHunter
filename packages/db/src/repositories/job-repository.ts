@@ -32,7 +32,7 @@ interface CurrentJobRow {
   readonly closed_at: number | null;
 }
 
-/** 持久化职位规范化结果、修订快照和来源观测。 */
+/** 持久化当前职位内容和来源观测；SQLite 触发器原子淘汰旧内容及其推导结果。 */
 export class SqliteJobRepository implements JobRepository {
   readonly #client: Database.Database;
 

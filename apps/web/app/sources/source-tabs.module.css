@@ -34,7 +34,7 @@
 
 .tab.active {
   background: var(--surface);
-  box-shadow: 0 0.25rem 0.8rem rgb(34 67 47 / 8%);
+  box-shadow: var(--shadow-sm);
   color: var(--primary-hover);
 }
 
@@ -42,7 +42,7 @@
   padding: 0.18rem 0.45rem;
   border-radius: 999px;
   background: var(--neutral-soft);
-  color: #5e6675;
+  color: var(--text-secondary);
   font-size: 0.7rem;
   font-weight: 800;
   white-space: nowrap;

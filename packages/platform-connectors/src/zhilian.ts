@@ -39,11 +39,11 @@ const detailSchema = z.object({
 /** 浏览器已展示且由用户选择的卡片；不以展示名称推测公司 ID。 */
 export type ZhilianCampusSelection = z.infer<typeof selectionSchema>;
 
-/** 解析已观察的无属性排版为纯文本；仅主站显式允许 div，校园边界保持不变。 */
-export function campusDescription(html: string, allowDiv = false): string {
+/** 解析已观察的无属性排版为纯文本；主站额外允许 div 与无序列表，校园边界保持不变。 */
+export function campusDescription(html: string, allowMainSiteFormatting = false): string {
   // 1、未知实体和标签不能静默丢弃；有限标签栈同时验证成对闭合。
   if (/&(?:#\w+|\w+);/.test(html)) throw new PlatformError('parse_changed');
-  const stack: { tag: 'p' | 'ol' | 'li' | 'div'; count: number }[] = [];
+  const stack: { tag: 'p' | 'ol' | 'ul' | 'li' | 'div'; count: number }[] = [];
   let output = '';
   let hasText = false;
   for (const token of html.split(/(<[^>]*>)/g)) {
@@ -57,23 +57,30 @@ export function campusDescription(html: string, allowDiv = false): string {
       output += '\n';
       continue;
     }
-    const match = /^<(\/?)(p|ol|li|div)\s*>$/i.exec(token);
+    const match = /^<(\/?)(p|ol|ul|li|div)\s*>$/i.exec(token);
     const tag = match?.[2]?.toLowerCase();
-    if (!match || (tag !== 'p' && tag !== 'ol' && tag !== 'li' && !(allowDiv && tag === 'div')))
+    if (
+      !match ||
+      (tag !== 'p' &&
+        tag !== 'ol' &&
+        tag !== 'li' &&
+        !(allowMainSiteFormatting && (tag === 'div' || tag === 'ul')))
+    )
       throw new PlatformError('parse_changed');
     if (match[1] === '/') {
       if (stack.pop()?.tag !== tag) throw new PlatformError('parse_changed');
       output += '\n';
       continue;
     }
-    // 3、li 必须直属 ol，每个列表独立计数；禁止隐式闭合的畸形结构。
+    // 3、li 必须直属列表；有序列表编号，无序列表加项目符号，禁止隐式闭合。
     const parent = stack.at(-1);
     if (tag === 'li') {
-      if (parent?.tag !== 'ol') throw new PlatformError('parse_changed');
+      if (parent?.tag !== 'ol' && parent?.tag !== 'ul') throw new PlatformError('parse_changed');
       parent.count += 1;
-      output += `\n${String(parent.count)}. `;
+      output += parent.tag === 'ol' ? `\n${String(parent.count)}. ` : '\n- ';
     } else {
-      if (parent?.tag === 'p' || parent?.tag === 'ol') throw new PlatformError('parse_changed');
+      if (parent?.tag === 'p' || parent?.tag === 'ol' || parent?.tag === 'ul')
+        throw new PlatformError('parse_changed');
       output += '\n';
     }
     stack.push({ tag, count: 0 });

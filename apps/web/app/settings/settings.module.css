@@ -140,7 +140,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface-muted);
-  color: #50586a;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 700;

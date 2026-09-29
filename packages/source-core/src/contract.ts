@@ -129,6 +129,12 @@ export interface DiscoveryDiagnostics {
   readonly expectedPages?: number | null;
   readonly fetchedPages?: number;
   readonly duplicateIds?: number;
+  /** 有界重复样本，仅包含公开职位 ID 和页码，不保存官网正文。 */
+  readonly duplicateJobSamples?: readonly {
+    readonly id: string;
+    readonly pages: readonly number[];
+  }[];
+  readonly recheckedPages?: readonly number[];
   readonly totalChanged?: boolean;
   /** 已知但不属于目标招聘类型的记录数，不计入目标职位发现数。 */
   readonly skippedRecruitmentType?: number;

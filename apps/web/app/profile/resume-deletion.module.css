@@ -1,7 +1,7 @@
 .root {
   margin-top: 1.5rem;
   padding: 1.25rem;
-  border: 1px solid #c67a70;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
   border-radius: var(--radius-panel);
   background: var(--danger-soft);
   color: var(--danger);

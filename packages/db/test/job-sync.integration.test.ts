@@ -6,6 +6,7 @@ import {
   type JobSyncResult,
   type SyncTrigger,
 } from '@jobhunter/application';
+import { readFile } from 'node:fs/promises';
 import {
   parseContentHash,
   parseId,
@@ -22,7 +23,7 @@ import {
 } from '@jobhunter/source-core';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { z } from 'zod';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { openSqliteDatabase, SqliteUnitOfWork, type SqliteDatabaseHandle } from '../src/index.js';
 import { SqliteWebDiagnosticsRepository } from '../src/web.js';
 
@@ -77,6 +78,7 @@ interface AdapterScenario {
 function fixtureAdapter(
   scenario: AdapterScenario,
   deferredDetails = false,
+  requiredDetails = false,
 ): JobSourceAdapter<Record<string, never>, { readonly description: string }> {
   return {
     metadata: {
@@ -87,7 +89,7 @@ function fixtureAdapter(
       canonicalEntryUrl: 'https://careers.example.com/jobs',
       officialHosts: ['careers.example.com'],
       capabilities: {
-        detail: deferredDetails ? 'deferred' : 'inline',
+        detail: requiredDetails ? 'required' : deferredDetails ? 'deferred' : 'inline',
         pagination: 'page',
         transport: 'json',
       },
@@ -121,7 +123,7 @@ function fixtureAdapter(
         discoveredCount: count,
       };
     },
-    ...(deferredDetails
+    ...(deferredDetails || requiredDetails
       ? {
           fetchDetail(job) {
             scenario.detailFetches += 1;
@@ -201,6 +203,7 @@ async function setup(
   options: {
     readonly rejectAllJobs?: boolean;
     readonly deferredDetails?: boolean;
+    readonly requiredDetails?: boolean;
   } = {},
 ): Promise<SyncFixture> {
   const root = await createTemporaryDataRoot('jobhunter-sync-');
@@ -255,7 +258,7 @@ async function setup(
     detailFetches: 0,
   };
   const registry = new AdapterRegistry();
-  registry.register(fixtureAdapter(scenario, options.deferredDetails));
+  registry.register(fixtureAdapter(scenario, options.deferredDetails, options.requiredDetails));
   const uow = new SqliteUnitOfWork(handle.client);
   const service = new JobSyncService({
     uow,
@@ -304,6 +307,185 @@ function count(handle: SqliteDatabaseHandle, table: string): number {
 }
 
 describe('JobSyncService', () => {
+  it.each([false, true])(
+    'retires old content and dependent results atomically (migration=%s)',
+    async (migration) => {
+      const fixture = await setup();
+      const db = fixture.handle.client;
+      if (migration) db.exec('DROP TRIGGER job_content_replace; DROP TRIGGER job_content_retire;');
+      await run(fixture);
+      const old = db.prepare('SELECT id, job_id FROM job_revisions ORDER BY id LIMIT 1').get() as {
+        id: string;
+        job_id: string;
+      };
+      db.exec(`
+      INSERT INTO candidate_profiles (id, name, created_at, updated_at) VALUES ('p', 'Fixture', 1, 1);
+      INSERT INTO profile_versions (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json, content_hash, is_current, created_at)
+        VALUES ('pv', 'p', 1, '{}', '{}', '[]', 'profile-hash', 1, 1);
+      INSERT INTO match_rulesets (id, version, definition_json, definition_hash, active, created_at)
+        VALUES ('rules', 'fixture', '{}', 'rules-hash', 1, 1);
+      INSERT INTO agent_runs (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash, cache_key, status, output_json, started_at)
+        VALUES ('agent', 'fixture', '1', '1', 'config', 'input', 'cache', 'succeeded', '{}', 1);
+    `);
+      db.prepare(
+        `INSERT INTO job_enrichments (id, job_revision_id, agent_run_id, schema_version, content_hash, result_json, created_at)
+      VALUES ('enrichment', ?, 'agent', '1', 'enrichment-hash', '{}', 1)`,
+      ).run(old.id);
+      db.prepare(
+        `INSERT INTO match_results (id, profile_version_id, job_revision_id, job_enrichment_id, ruleset_id, filter_status, total_score, components_json, risks_json, input_hash, created_at)
+      VALUES ('score', 'pv', ?, 'enrichment', 'rules', 'eligible', 80, '[]', '[]', 'score-hash', 1)`,
+      ).run(old.id);
+      db.exec(`INSERT INTO match_advices (id, match_result_id, agent_run_id, schema_version, content_hash, result_json, created_at)
+      VALUES ('advice', 'score', 'agent', '1', 'advice-hash', '{}', 1)`);
+      for (const [id, type, payload, status] of [
+        ['pending-score', 'match.score-job', { jobRevisionId: old.id }, 'pending'],
+        ['running-advice', 'match.advise', { matchResultId: 'score' }, 'running'],
+      ] as const)
+        db.prepare(
+          `INSERT INTO tasks (id, task_type, payload_json, status, idempotency_key, max_attempts, available_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 3, 1, 1)`,
+        ).run(id, type, JSON.stringify(payload), status, id);
+      // 1、相同内容重放不得删除有效结果。
+      await run(fixture);
+      expect(db.prepare('SELECT count(*) FROM match_results').pluck().get()).toBe(1);
+      const first = fixture.scenario.jobs[0];
+      if (!first) throw new Error('Missing fixture job');
+      fixture.scenario.jobs[0] = { ...first, description: 'Updated requirements' };
+      await run(fixture);
+      const current = db
+        .prepare('SELECT id FROM job_revisions WHERE job_id = ? ORDER BY revision_no DESC LIMIT 1')
+        .pluck()
+        .get(old.job_id) as string;
+      // 2、存量迁移前在最新内容上保留有效评分，验证不会一并误删。
+      if (migration) {
+        db.prepare(
+          `INSERT INTO match_results (id, profile_version_id, job_revision_id, ruleset_id, filter_status, total_score, components_json, risks_json, input_hash, created_at)
+        VALUES ('current-score', 'pv', ?, 'rules', 'eligible', 90, '[]', '[]', 'current-score-hash', 2)`,
+        ).run(current);
+        const sql = await readFile(
+          new URL('../migrations/0037_current_job_content.sql', import.meta.url),
+          'utf8',
+        );
+        db.transaction(() => db.exec(sql))();
+        expect(
+          db.prepare("SELECT count(*) FROM match_results WHERE id = 'current-score'").pluck().get(),
+        ).toBe(1);
+      }
+      expect(
+        db
+          .prepare('SELECT id, change_set_json FROM job_revisions WHERE job_id = ?')
+          .all(old.job_id),
+      ).toEqual([{ id: current, change_set_json: '[]' }]);
+      expect(
+        db.prepare("SELECT count(*) FROM match_results WHERE id = 'score'").pluck().get(),
+      ).toBe(0);
+      expect(db.prepare('SELECT count(*) FROM match_advices').pluck().get()).toBe(0);
+      expect(db.prepare('SELECT count(*) FROM job_enrichments').pluck().get()).toBe(0);
+      expect(
+        db
+          .prepare('SELECT DISTINCT job_revision_id FROM job_observations WHERE job_id = ?')
+          .pluck()
+          .all(old.job_id),
+      ).toEqual([current]);
+      expect(
+        db
+          .prepare("SELECT status FROM tasks WHERE id IN ('pending-score', 'running-advice')")
+          .pluck()
+          .all(),
+      ).toEqual(['cancelled', 'cancelled']);
+      // 3、旧任务即使晚到，也不能把旧内容的评分写回。
+      expect(() =>
+        db
+          .prepare(
+            `INSERT INTO match_results (id, profile_version_id, job_revision_id, ruleset_id, filter_status, total_score, components_json, risks_json, input_hash, created_at)
+      VALUES ('late', 'pv', ?, 'rules', 'eligible', 80, '[]', '[]', 'late-hash', 3)`,
+          )
+          .run(old.id),
+      ).toThrow(/FOREIGN KEY/);
+      expect(db.pragma('foreign_key_check')).toEqual([]);
+    },
+  );
+
+  it('reuses validated required details after interruption, including filtered jobs, but expires them', async () => {
+    const fixture = await setup({ requiredDetails: true, rejectAllJobs: true });
+    fixture.scenario.throwAfter = 2;
+    expect(await run(fixture)).toMatchObject({ status: 'partial' });
+    expect(fixture.scenario.detailFetches).toBe(2);
+    fixture.scenario.throwAfter = null;
+    expect(await run(fixture, 'retry')).toMatchObject({
+      status: 'succeeded',
+      stats: { skippedOutOfScope: 3 },
+    });
+    expect(fixture.scenario.detailFetches).toBe(3);
+    const first = fixture.scenario.jobs[0];
+    if (!first) throw new Error('Missing fixture job');
+    fixture.scenario.jobs[0] = { ...first, token: 'changed' };
+    await run(fixture);
+    expect(fixture.scenario.detailFetches).toBe(4);
+    fixture.handle.client.prepare("UPDATE source_job_details SET adapter_version = 'old'").run();
+    await run(fixture);
+    expect(fixture.scenario.detailFetches).toBe(7);
+    fixture.clock.advance(6 * 60 * 60_000);
+    await run(fixture);
+    expect(fixture.scenario.detailFetches).toBe(10);
+  });
+
+  it('does not cache invalid required details or record cancellation as an isolated item', async () => {
+    const fixture = await setup({ requiredDetails: true });
+    const first = fixture.scenario.jobs[0];
+    if (!first) throw new Error('Missing fixture job');
+    fixture.scenario.jobs[0] = { ...first, failNormalize: true };
+    expect(await run(fixture)).toMatchObject({ stats: { isolated: 1 } });
+    expect(count(fixture.handle, 'source_job_details')).toBe(2);
+    const controller = new AbortController();
+    const registry = new AdapterRegistry();
+    const adapter = fixtureAdapter(fixture.scenario, false, true);
+    registry.register({
+      ...adapter,
+      fetchDetail: () => {
+        controller.abort();
+        throw new SourceError('temporary', 'Cancelled fixture');
+      },
+    });
+    const service = new JobSyncService({
+      uow: fixture.uow,
+      registry,
+      http: unusedHttp,
+      clock: fixture.clock,
+      ids: fixture.ids,
+      options: { normalizerVersion: 'normalize-v1' },
+    });
+    expect(await service.run({ sourceId, trigger: 'retry' }, controller.signal)).toMatchObject({
+      status: 'cancelled',
+      stats: { isolated: 0 },
+    });
+  });
+
+  it('persists throttled progress before completion without overwriting a finished run', async () => {
+    const fixture = await setup();
+    const snapshots: number[] = [];
+    const repository = fixture.uow.run(({ sync }) => sync);
+    const original = repository.recordProgress.bind(repository);
+    const spy = vi.spyOn(repository, 'recordProgress').mockImplementation((runId, stats) => {
+      original(runId, stats);
+      const row = fixture.handle.client
+        .prepare('SELECT status, stats_json FROM sync_runs WHERE id = ?')
+        .get(runId) as { status: string; stats_json: string };
+      expect(row.status).toBe('running');
+      snapshots.push((JSON.parse(row.stats_json) as { discovered: number }).discovered);
+    });
+    const result = await run(fixture);
+    expect(snapshots).toEqual([1]);
+    spy.mockRestore();
+    if (result.kind !== 'completed') throw new Error('Expected completion');
+    original(result.runId, { ...result.stats, discovered: 0 });
+    const row = fixture.handle.client
+      .prepare('SELECT stats_json FROM sync_runs WHERE id = ?')
+      .pluck()
+      .get(result.runId) as string;
+    expect(JSON.parse(row)).toMatchObject({ discovered: 3 });
+  });
+
   it('does not enqueue matching or model tasks during synchronization', async () => {
     const fixture = await setup();
     const result = await run(fixture);
@@ -373,7 +555,7 @@ describe('JobSyncService', () => {
     };
 
     await details.run(command(0), new AbortController().signal);
-    expect(count(fixture.handle, 'job_revisions')).toBe(4);
+    expect(count(fixture.handle, 'job_revisions')).toBe(3);
     expect(count(fixture.handle, 'source_job_details')).toBe(1);
 
     fixture.scenario.detailFailure = true;
@@ -393,7 +575,7 @@ describe('JobSyncService', () => {
     ).toBe(1);
   });
 
-  it('records recurring historical content and preserves the last successful detail cache', async () => {
+  it('replaces current content and preserves the last successful detail cache', async () => {
     const fixture = await setup({ deferredDetails: true });
     await run(fixture);
     const registry = new AdapterRegistry();
@@ -426,7 +608,7 @@ describe('JobSyncService', () => {
     };
 
     await details.run(detailCommand(), new AbortController().signal);
-    expect(count(fixture.handle, 'job_revisions')).toBe(4);
+    expect(count(fixture.handle, 'job_revisions')).toBe(3);
 
     fixture.handle.client
       .prepare('DELETE FROM source_job_details WHERE source_id = ? AND external_job_id = ?')
@@ -435,10 +617,10 @@ describe('JobSyncService', () => {
     if (!first) throw new Error('Fixture job-1 is missing.');
     fixture.scenario.jobs[0] = { ...first, token: 'new-list-payload' };
     await run(fixture);
-    expect(count(fixture.handle, 'job_revisions')).toBe(5);
+    expect(count(fixture.handle, 'job_revisions')).toBe(3);
 
     await details.run(detailCommand(), new AbortController().signal);
-    expect(count(fixture.handle, 'job_revisions')).toBe(6);
+    expect(count(fixture.handle, 'job_revisions')).toBe(3);
     expect(
       fixture.handle.client
         .prepare("SELECT status FROM source_job_details WHERE external_job_id = 'job-1'")
@@ -493,7 +675,7 @@ describe('JobSyncService', () => {
       status: 'succeeded',
       stats: { unchanged: 2, revised: 1, followupEnqueued: 0 },
     });
-    expect(count(fixture.handle, 'job_revisions')).toBe(4);
+    expect(count(fixture.handle, 'job_revisions')).toBe(3);
     expect(count(fixture.handle, 'tasks')).toBe(0);
   });
 

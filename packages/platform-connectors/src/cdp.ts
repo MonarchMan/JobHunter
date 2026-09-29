@@ -484,8 +484,39 @@ class CdpSessionProvider implements PlatformSessionProvider {
           await openOwnedPage();
           http = await observed;
         } else if (this.provider === '51job') {
-          // 3.a、仅此平台保留所选页监听；用户正常翻页提供新模板，不自动操作网页。
-          const session = new Job51HttpSession({ requestIntervalMs: this.requestIntervalMs });
+          // 3.a、仅自建页可在显式下一批时点击一次官网分页；借用页仍由用户操作。
+          const session = new Job51HttpSession({
+            requestIntervalMs: this.requestIntervalMs,
+            ...(ownedTarget
+              ? {
+                  loadNextPage: async (currentPage: number, operationSignal: AbortSignal) => {
+                    await browserPacer.before(operationSignal);
+                    const expression = `(() => {
+                      if (location.origin !== 'https://we.51job.com' || location.pathname !== '/pc/search') return false;
+                      const pagers = document.querySelectorAll('.el-pagination');
+                      if (pagers.length !== 1) return false;
+                      const active = pagers[0].querySelectorAll('.el-pager .number.active');
+                      const next = pagers[0].querySelector('button.btn-next');
+                      if (active.length !== 1 || active[0].textContent?.trim() !== '${String(currentPage)}' || !(next instanceof HTMLButtonElement) || next.disabled) return false;
+                      next.click();
+                      return true;
+                    })()`;
+                    const result = z
+                      .object({ result: z.object({ value: z.boolean() }) })
+                      .parse(
+                        await call(
+                          'Runtime.evaluate',
+                          { expression, returnByValue: true },
+                          attached.sessionId,
+                          operationSignal,
+                        ),
+                      );
+                    if (!result.result.value)
+                      throw new PlatformError('session_unavailable', null, 'template_required');
+                  },
+                }
+              : {}),
+          });
           http = session;
           const observer = new Job51RequestObserver(attached.sessionId, session);
           onEvent = (message) => {

@@ -36,6 +36,7 @@ const reasonSchema = z.enum([
   'dns_error',
   'unknown',
   'request_template',
+  'template_required',
   'query_changed',
   'query_required',
   'content_type',
@@ -48,6 +49,21 @@ const reasonSchema = z.enum([
   'detail_url',
   'detail_identity',
   'list',
+  'list_envelope',
+  'list_main',
+  'list_extra',
+  'list_pagination',
+  'list_job',
+  'list_company',
+  'list_schema',
+  'list_empty',
+  'redirect_missing_location',
+  'redirect_invalid_location',
+  'redirect_external',
+  'redirect_login',
+  'redirect_challenge',
+  'redirect_job',
+  'redirect_internal_other',
   'detail',
   'template',
   'identity',
@@ -119,15 +135,19 @@ export function platformFailure(
 /** 统一 Web 恢复说明，不将解析或网络错误引导成反复登录。 */
 export function platformFailureMessage(failure: NonNullable<PlatformProgress['failure']>): string {
   // 1、自动发现失败说明具体前置条件，不误报登录失效。
-  if (failure.reason === 'browser_not_found')
-    return '未找到 Chrome 调试连接。请在本机 Chrome 启用远程调试；自定义浏览器位置可在高级连接设置中指定。';
-  if (failure.reason === 'platform_page_not_found')
-    return '未找到该平台支持的页面。请在 Chrome 打开下方官网入口并登录，然后重新获取。';
-  if (failure.reason === 'too_many_targets')
-    return '该平台打开的页面过多，请关闭不需要的页面后重新获取。';
-  if (failure.reason === 'query_required') return '请先填写智联搜索关键词，再重新获取职位。';
-  if (failure.reason === 'auth_context_missing')
-    return '未取得完整认证上下文。请在官网确认登录状态后重新连接，无需反复刷新或搜索职位。';
+  switch (failure.reason) {
+    case 'browser_not_found':
+      return '未找到 Chrome 调试连接。请在本机 Chrome 启用远程调试；自定义浏览器位置可在高级连接设置中指定。';
+    case 'platform_page_not_found':
+      return '未找到该平台支持的页面。请在 Chrome 打开下方官网入口并登录，然后重新获取。';
+    case 'too_many_targets':
+      return '该平台打开的页面过多，请关闭不需要的页面后重新获取。';
+    case 'query_required':
+      return '请先填写智联搜索关键词，再重新获取职位。';
+    case 'auth_context_missing':
+      return '未取得完整认证上下文。请在官网确认登录状态后重新连接，无需反复刷新或搜索职位。';
+  }
+  // 2、没有专属恢复提示时按错误类别返回通用说明。
   return {
     access_blocked: '平台限制访问，已停止请求。请在官网确认状态，恢复后再显式连接。',
     rate_limited: '平台限制请求频率，已停止请求。请稍后再显式连接。',

@@ -29,7 +29,7 @@
 
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
 }
 
@@ -37,24 +37,6 @@
   margin: 1.5rem 0;
   line-height: 1.8;
   white-space: pre-wrap;
-}
-
-.timeline {
-  display: grid;
-  gap: 1rem;
-  padding-left: 1.2rem;
-}
-
-.timeline li {
-  padding-left: 0.5rem;
-}
-
-.timeline time,
-.timeline span {
-  display: block;
-  margin-top: 0.25rem;
-  color: #667085;
-  font-size: 0.82rem;
 }
 
 .matchCard {
@@ -86,7 +68,7 @@
 
 .matchCard > header span,
 .matchCard > header small {
-  color: #667085;
+  color: var(--text-secondary);
 }
 
 .scoreGrid,

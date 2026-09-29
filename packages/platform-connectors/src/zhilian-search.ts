@@ -327,7 +327,7 @@ export class ZhilianSearchHttpSession implements PlatformSession {
       const parsed = detailSchema.safeParse(
         await this.#request(url, this.#detailHeaders, undefined, active),
       );
-      if (!parsed.success) throw new PlatformError('parse_changed');
+      if (!parsed.success) throw new PlatformError('parse_changed', null, 'detail_schema_invalid');
       const { detailedPosition: job, detailedCompany: company } = parsed.data;
       if (
         job.positionNumber !== externalJobId ||
@@ -335,15 +335,22 @@ export class ZhilianSearchHttpSession implements PlatformSession {
         company.companyNumber !== candidate.externalCompanyId ||
         company.companyName !== candidate.company
       )
-        throw new PlatformError('parse_changed');
+        throw new PlatformError('parse_changed', null, 'detail_identity_mismatch');
       // 2、JSON 的 jobDesc 含有限 HTML 排版，仅转为纯文本，绝不执行脚本。
+      let description: string;
+      try {
+        description = campusDescription(job.jobDesc, true);
+      } catch (error) {
+        if (!(error instanceof PlatformError) || error.category !== 'parse_changed') throw error;
+        throw new PlatformError('parse_changed', null, 'detail_description_format');
+      }
       return {
         ...candidate,
         city: job.positionWorkCity,
         salary: job.salary,
         experience: job.positionWorkingExp,
         education: job.education,
-        description: campusDescription(job.jobDesc, true),
+        description,
       };
     });
   }

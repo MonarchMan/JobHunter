@@ -2,6 +2,8 @@
 
 当前有效决策分见 [职位生命周期与任务](../adr/0045-platform-job-lifecycle-and-tasks.md)、[浏览器会话与窗口](../adr/0046-platform-browser-session-and-windows.md)、[智联／前程无忧 HTTP 初始化](../adr/0047-platform-http-protocol-initialization.md)、[BOSS 默认 browser](../adr/0048-boss-browser-default-and-page-lifecycle.md) 和 [BOSS 显式 HTTP 恢复](../adr/0049-boss-http-recovery-and-retries.md)。下文保留部分历史实验记录；遇到旧默认值、旧重试语义时，以这五份整合 ADR 和当前 028 规格为准。
 
+前程无忧 Worker 自建页的后续批次分页责任由 [ADR-0050](../adr/0050-job51-owned-page-pagination.md) 补充：仅在用户显式获取下一批时执行一次官网普通分页，官网产生签名模板，职位事实仍由独立 HTTP 获取；借用页不自动操作。
+
 2026-09-28 隔离在线验收：显式 HTTP 在同一批两次详情 37 后均通过自有后台页的一次正常官网动作更新会话，最终 10 条有效职位全由 Node HTTP 取得正文并入隔离库；未验证跨批或长期稳定，不将此结果归入默认 browser 模式。
 
 正常采集间隔通过配置 `platforms.requestIntervalMs`（默认 0）提供统一回退值，`platforms.requestIntervalMsByProvider` 可分别覆盖 boss／zhilian／51job／liepin；Worker 将各自有效值注入 Provider，由每会话独立的 PlatformRequestPacer 执行。生产文件目前四平台分别为 0／0／0／1000 毫秒，连接器不写死下限。等待不占用网络请求超时；BOSS 浏览器模式只限制 Worker 主动采集动作。该配置不保存认证、不增加并发，不覆盖网络退避、Retry-After、模板等待及安全恢复节奏。

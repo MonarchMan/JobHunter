@@ -8,6 +8,11 @@ import {
   type PlatformJobDetail,
 } from '@jobhunter/platform-core';
 
+/** 异步等待中取消状态会改变，统一从当前信号重新读取。 */
+function isAborted(signal: AbortSignal): boolean {
+  return signal.aborted;
+}
+
 const endpoint = 'https://we.51job.com/api/job/search-pc';
 const queryKeys = new Set(
   'api_key timestamp keyword searchType function industry jobArea jobArea2 landmark metro salary workYear degree companyType companySize jobType issueDate sortType pageNum requestId keywordType pageSize source accountId pageCode scene decode__1048'.split(
@@ -140,12 +145,19 @@ export class Job51HttpSession implements PlatformSession {
   readonly #seen = new Set<string>();
   readonly #fetch: typeof fetch;
   readonly #pacer: PlatformRequestPacer;
+  readonly #loadNextPage: ((currentPage: number, signal: AbortSignal) => Promise<void>) | undefined;
 
   public constructor(
-    input: { readonly fetch?: typeof fetch; readonly requestIntervalMs?: number } = {},
+    input: {
+      readonly fetch?: typeof fetch;
+      readonly requestIntervalMs?: number;
+      /** 仅 Worker 自建页可通过官网正常分页产生下一批签名模板。 */
+      readonly loadNextPage?: (currentPage: number, signal: AbortSignal) => Promise<void>;
+    } = {},
   ) {
     this.#fetch = input.fetch ?? fetch;
     this.#pacer = new PlatformRequestPacer(input.requestIntervalMs);
+    this.#loadNextPage = input.loadNextPage;
   }
 
   /** 观察器在冻结后不再收集认证数据，连接本身仍可保留至显式断开。 */
@@ -174,20 +186,31 @@ export class Job51HttpSession implements PlatformSession {
     this.disconnect();
   }
 
-  /** 用户显式读取；最多等待 90 秒官网新模板，未就绪不伪造末页。 */
+  /** 用户显式读取；自建页可正常翻页一次，最多等待 90 秒官网新模板。 */
   public async readNext(caller: AbortSignal): Promise<PlatformBatch> {
     if (this.#failure) throw this.#failure;
     if (this.#busy || this.#abort.signal.aborted || caller.aborted)
       throw new PlatformError('session_unavailable');
     this.#busy = true;
     const signal = AbortSignal.any([caller, this.#abort.signal, AbortSignal.timeout(90_000)]);
+    let waitingForTemplate = false;
     try {
       // 1、末页无需再请求；本地上限不能被当作完整来源覆盖。
       if (this.#ended) return { candidates: [], hasMore: false };
       if (this.#count >= 20) throw new PlatformError('session_unavailable');
+      waitingForTemplate = !this.#template;
+      let requestedNextPage = false;
+      // 1.a、只有已消费上一批、又没有预取模板时才让自建页点击一次；借用页仍由用户翻页。
+      if (!this.#template && this.#page > 0 && this.#loadNextPage) {
+        requestedNextPage = true;
+        await this.#loadNextPage(this.#page, signal);
+      }
       while (!this.#template) await delay(100, undefined, { signal });
       const selected = this.#template;
       this.#template = undefined;
+      waitingForTemplate = false;
+      if (requestedNextPage && selected.page !== this.#page + 1)
+        throw new Job51ParseError('pagination');
       await this.#pacer.before(signal);
       signal.throwIfAborted();
       // 2、原样发送已观察 URL，禁止跳转、自动重试或修改签名。
@@ -319,7 +342,13 @@ export class Job51HttpSession implements PlatformSession {
         this.#currentFailure() ??
         (error instanceof PlatformError
           ? error
-          : new PlatformError(signal.aborted ? 'session_unavailable' : 'network_error'));
+          : new PlatformError(
+              waitingForTemplate || signal.aborted ? 'session_unavailable' : 'network_error',
+              null,
+              waitingForTemplate && !isAborted(caller) && !isAborted(this.#abort.signal)
+                ? 'template_required'
+                : null,
+            ));
       this.fail(failure);
       throw failure;
     } finally {

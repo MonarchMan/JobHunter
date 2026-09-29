@@ -1,4 +1,4 @@
-/* 014 UI redesign: archive-indigo product shell and shared interaction states. */
+/* 014 UI redesign: clean minimalist product shell and shared interaction states. */
 html {
   min-height: 100%;
   background: var(--canvas);
@@ -24,7 +24,7 @@ main {
 }
 
 .panel {
-  box-shadow: 0 0.35rem 1.25rem rgb(54 64 117 / 6%);
+  box-shadow: var(--shadow-sm);
 }
 
 button,
@@ -42,7 +42,7 @@ button,
 
 button,
 .button-primary {
-  background: var(--primary);
+  background: var(--button-primary);
 }
 
 button:hover:not(:disabled),
@@ -62,7 +62,7 @@ button:active:not(:disabled),
 
 .button-primary:hover,
 button:hover:not(:disabled) {
-  background: var(--primary-hover);
+  background: var(--button-primary-hover);
 }
 
 .button-primary {
@@ -71,20 +71,20 @@ button:hover:not(:disabled) {
 
 .button-secondary,
 .button-muted {
-  border-color: #b8bfcc;
+  border-color: var(--border);
   background: var(--surface);
-  color: #3f4757;
+  color: var(--text-secondary);
 }
 
 .button-secondary:hover,
 .button-muted:hover {
-  border-color: #929bb0;
+  border-color: var(--action);
   background: var(--surface-muted);
 }
 
 button.button-secondary:hover:not(:disabled),
 button.button-muted:hover:not(:disabled) {
-  border-color: #929bb0;
+  border-color: var(--action);
   background: var(--surface-muted);
   color: var(--ink);
 }
@@ -103,7 +103,7 @@ button.button-muted:hover:not(:disabled) {
 input,
 select,
 textarea {
-  border-color: #b8bfcc;
+  border-color: var(--border);
   background: var(--surface);
   color: var(--ink);
   transition:
@@ -115,7 +115,7 @@ textarea {
 input:hover:not(:disabled),
 select:hover:not(:disabled),
 textarea:hover:not(:disabled) {
-  border-color: #929bb0;
+  border-color: var(--action);
 }
 
 input:focus,
@@ -174,7 +174,7 @@ input[type='radio'] {
 .status-closed,
 .status-cancelled {
   background: var(--neutral-soft);
-  color: #5e6675;
+  color: var(--text-secondary);
 }
 
 .empty-state-icon {

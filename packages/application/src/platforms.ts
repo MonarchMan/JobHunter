@@ -220,9 +220,19 @@ export class PlatformBrowsingService {
     )
       throw new PlatformError('session_unavailable');
     this.#busy = true;
+    let stage: PlatformProgress['stage'];
+    switch (command.action) {
+      case 'connect':
+        stage = 'connect';
+        break;
+      case 'detail':
+        stage = 'detail';
+        break;
+      default:
+        stage = 'list';
+    }
     let progress: PlatformProgress = {
-      stage:
-        command.action === 'connect' ? 'connect' : command.action === 'detail' ? 'detail' : 'list',
+      stage,
       total: null,
       processed: 0,
       saved: 0,
@@ -282,171 +292,180 @@ export class PlatformBrowsingService {
         (this.#failed && command.action !== 'resume')
       )
         throw new PlatformError('session_unavailable');
-      // 2、每批串行补齐正文并逐条提交；失败即停止，已提交职位不回滚。
-      if (command.action === 'next' || command.action === 'resume') {
-        report();
-        let result: PlatformBatch;
-        if (command.action === 'resume') {
-          const pending = this.#pending;
-          if (!pending || !this.#session.resume) throw new PlatformError('session_unavailable');
-          // 2.a、先验证官网正常更新的上下文；通过前绝不再次请求原失败详情。
-          await this.#session.resume(signal);
-          signal.throwIfAborted();
-          if (this.#pending !== pending || this.repository.generation() !== generation)
-            throw new PlatformError('session_unavailable');
-          if (this.now() >= pending.expiresAt)
-            throw new PlatformError('session_unavailable', null, 'resume_expired');
-          this.#failed = false;
-          result = {
-            candidates: pending.batch.candidates.slice(pending.saved),
-            hasMore: pending.batch.hasMore,
-          };
-          // 2.a.i、只保留剩余候选并绑定本次任务；原期限不因恢复延长。
-          this.#pending = {
-            taskId,
-            batch: result,
-            saved: 0,
-            expiresAt: pending.expiresAt,
-            resumes: pending.resumes + 1,
-          };
-        } else {
-          result = await this.#session.readNext(signal);
-          this.#pending = this.#session.resume
-            ? { taskId, batch: result, saved: 0, expiresAt: this.now() + 600_000, resumes: 0 }
-            : null;
-        }
-        signal.throwIfAborted();
-        if (this.#connectionFailed() || this.repository.generation() !== generation)
-          throw new PlatformError('session_unavailable');
-        let savedCount = 0;
-        progress = {
-          ...progress,
-          total: result.candidates.length,
-          skipped: result.skippedMissingCompanyId ?? 0,
-          ...(this.#pending ? { resumeCount: this.#pending.resumes } : {}),
-        };
-        report();
-        for (const candidate of result.candidates) {
-          // 2.a、网络前后复核取消和代次，旧会话不得继续请求或提交。
-          signal.throwIfAborted();
-          if (this.#connectionFailed() || this.repository.generation() !== generation)
-            throw new PlatformError('session_unavailable');
-          progress.stage = 'detail';
-          // 2.a.i、外部请求前保存稳定身份，失败后可准确定位，不持久化私有访问参数。
-          progress.currentExternalJobId = candidate.externalJobId;
+      // 2、按动作处理批次或单条详情；批次串行补齐正文，失败时已提交职位不回滚。
+      switch (command.action) {
+        case 'next':
+        case 'resume': {
           report();
-          let detail: PlatformJobDetail;
-          for (;;) {
-            try {
-              detail = await this.#session.readDetail(candidate.externalJobId, signal);
-              break;
-            } catch (error) {
-              // 2.a.ii、仅详情 37 立即检查上下文；网络错误仍由连接器独立处理。
+          let result: PlatformBatch;
+          switch (command.action) {
+            case 'resume': {
               const pending = this.#pending;
-              if (
-                !(error instanceof PlatformError) ||
-                error.category !== 'access_blocked' ||
-                error.businessCode !== 37 ||
-                !pending ||
-                !this.#session.resume ||
-                signal.aborted ||
-                this.#connectionFailed() ||
-                this.repository.generation() !== generation ||
-                pending.resumes >= 5 ||
-                this.now() >= pending.expiresAt
-              )
-                throw error;
-              try {
-                progress.recovery = {
-                  state: 'checking_context',
-                  checks: progress.recovery?.checks ?? 0,
-                };
-                report();
-                await this.#session.resume(signal, {
-                  waitForChange: true,
-                  onContextCheck: (state) => {
-                    // 2.a.iii、观察状态与恢复次数分开；换代后不能继续更新或发送请求。
-                    signal.throwIfAborted();
-                    if (
-                      this.#connectionFailed() ||
-                      this.#pending !== pending ||
-                      this.repository.generation() !== generation
-                    )
-                      throw new PlatformError('session_unavailable');
-                    progress.recovery = {
-                      state: state === 'updated' ? 'resumed' : 'waiting_context',
-                      checks: (progress.recovery?.checks ?? 0) + 1,
-                    };
-                    report();
-                  },
-                });
-              } catch (recoveryError) {
-                // 2.a.iv、保留原请求的脱敏摘要，恢复原因单独追加，不吞掉诊断现场。
-                if (
-                  recoveryError instanceof PlatformError &&
-                  recoveryError.reason === 'context_unchanged'
-                ) {
-                  const blocked = new PlatformError('access_blocked', 37, 'context_unchanged');
-                  blocked.message = `${error.message} [recovery=context_unchanged]`;
-                  throw blocked;
-                }
-                if (recoveryError instanceof PlatformError)
-                  recoveryError.message = `${error.message} [recovery=${platformFailure(recoveryError, false).reason ?? 'unknown'}]`;
-                throw recoveryError;
-              }
+              if (!pending || !this.#session.resume) throw new PlatformError('session_unavailable');
+              // 2.a、先验证官网正常更新的上下文；通过前绝不再次请求原失败详情。
+              await this.#session.resume(signal);
               signal.throwIfAborted();
-              if (
-                this.#connectionFailed() ||
-                this.#pending !== pending ||
-                this.repository.generation() !== generation
-              )
+              if (this.#pending !== pending || this.repository.generation() !== generation)
                 throw new PlatformError('session_unavailable');
               if (this.now() >= pending.expiresAt)
                 throw new PlatformError('session_unavailable', null, 'resume_expired');
-              // 2.a.v、自动和显式恢复共用预算；不重置期限、不重抓已提交详情。
-              pending.resumes += 1;
-              progress.resumeCount = pending.resumes;
-              progress.recovery = { state: 'resumed', checks: progress.recovery.checks };
-              report();
+              this.#failed = false;
+              result = {
+                candidates: pending.batch.candidates.slice(pending.saved),
+                hasMore: pending.batch.hasMore,
+              };
+              // 2.a.i、只保留剩余候选并绑定本次任务；原期限不因恢复延长。
+              this.#pending = {
+                taskId,
+                batch: result,
+                saved: 0,
+                expiresAt: pending.expiresAt,
+                resumes: pending.resumes + 1,
+              };
+              break;
             }
+            case 'next':
+              result = await this.#session.readNext(signal);
+              this.#pending = this.#session.resume
+                ? { taskId, batch: result, saved: 0, expiresAt: this.now() + 600_000, resumes: 0 }
+                : null;
+              break;
           }
           signal.throwIfAborted();
           if (this.#connectionFailed() || this.repository.generation() !== generation)
             throw new PlatformError('session_unavailable');
-          progress.stage = 'save';
+          let savedCount = 0;
+          progress = {
+            ...progress,
+            total: result.candidates.length,
+            skipped: result.skippedMissingCompanyId ?? 0,
+            ...(this.#pending ? { resumeCount: this.#pending.resumes } : {}),
+          };
           report();
-          // 2.b、完整事实才入库；仓储短事务复核租约，不包裹任何网络请求。
-          this.repository.save(detail, generation, taskId, this.now());
-          savedCount += 1;
-          progress.processed = savedCount;
-          progress.saved = savedCount;
-          delete progress.currentExternalJobId;
-          if (this.#pending) this.#pending.saved = savedCount;
+          for (const candidate of result.candidates) {
+            // 2.a、网络前后复核取消和代次，旧会话不得继续请求或提交。
+            signal.throwIfAborted();
+            if (this.#connectionFailed() || this.repository.generation() !== generation)
+              throw new PlatformError('session_unavailable');
+            progress.stage = 'detail';
+            // 2.a.i、外部请求前保存稳定身份，失败后可准确定位，不持久化私有访问参数。
+            progress.currentExternalJobId = candidate.externalJobId;
+            report();
+            let detail: PlatformJobDetail;
+            for (;;) {
+              try {
+                detail = await this.#session.readDetail(candidate.externalJobId, signal);
+                break;
+              } catch (error) {
+                // 2.a.ii、仅详情 37 立即检查上下文；网络错误仍由连接器独立处理。
+                const pending = this.#pending;
+                if (
+                  !(error instanceof PlatformError) ||
+                  error.category !== 'access_blocked' ||
+                  error.businessCode !== 37 ||
+                  !pending ||
+                  !this.#session.resume ||
+                  signal.aborted ||
+                  this.#connectionFailed() ||
+                  this.repository.generation() !== generation ||
+                  pending.resumes >= 5 ||
+                  this.now() >= pending.expiresAt
+                )
+                  throw error;
+                try {
+                  progress.recovery = {
+                    state: 'checking_context',
+                    checks: progress.recovery?.checks ?? 0,
+                  };
+                  report();
+                  await this.#session.resume(signal, {
+                    waitForChange: true,
+                    onContextCheck: (state) => {
+                      // 2.a.iii、观察状态与恢复次数分开；换代后不能继续更新或发送请求。
+                      signal.throwIfAborted();
+                      if (
+                        this.#connectionFailed() ||
+                        this.#pending !== pending ||
+                        this.repository.generation() !== generation
+                      )
+                        throw new PlatformError('session_unavailable');
+                      progress.recovery = {
+                        state: state === 'updated' ? 'resumed' : 'waiting_context',
+                        checks: (progress.recovery?.checks ?? 0) + 1,
+                      };
+                      report();
+                    },
+                  });
+                } catch (recoveryError) {
+                  // 2.a.iv、保留原请求的脱敏摘要，恢复原因单独追加，不吞掉诊断现场。
+                  if (
+                    recoveryError instanceof PlatformError &&
+                    recoveryError.reason === 'context_unchanged'
+                  ) {
+                    const blocked = new PlatformError('access_blocked', 37, 'context_unchanged');
+                    blocked.message = `${error.message} [recovery=context_unchanged]`;
+                    throw blocked;
+                  }
+                  if (recoveryError instanceof PlatformError)
+                    recoveryError.message = `${error.message} [recovery=${platformFailure(recoveryError, false).reason ?? 'unknown'}]`;
+                  throw recoveryError;
+                }
+                signal.throwIfAborted();
+                if (
+                  this.#connectionFailed() ||
+                  this.#pending !== pending ||
+                  this.repository.generation() !== generation
+                )
+                  throw new PlatformError('session_unavailable');
+                if (this.now() >= pending.expiresAt)
+                  throw new PlatformError('session_unavailable', null, 'resume_expired');
+                // 2.a.v、自动和显式恢复共用预算；不重置期限、不重抓已提交详情。
+                pending.resumes += 1;
+                progress.resumeCount = pending.resumes;
+                progress.recovery = { state: 'resumed', checks: progress.recovery.checks };
+                report();
+              }
+            }
+            signal.throwIfAborted();
+            if (this.#connectionFailed() || this.repository.generation() !== generation)
+              throw new PlatformError('session_unavailable');
+            progress.stage = 'save';
+            report();
+            // 2.b、完整事实才入库；仓储短事务复核租约，不包裹任何网络请求。
+            this.repository.save(detail, generation, taskId, this.now());
+            savedCount += 1;
+            progress.processed = savedCount;
+            progress.saved = savedCount;
+            delete progress.currentExternalJobId;
+            if (this.#pending) this.#pending.saved = savedCount;
+          }
+          progress.stage = 'complete';
+          report();
+          this.repository.setStatus(generation, 'available', this.now());
+          this.#pending = null;
+          return {
+            generation,
+            status: 'available',
+            hasMore: result.hasMore,
+            savedCount,
+            progress,
+            candidates: [...result.candidates],
+            skippedMissingCompanyId: result.skippedMissingCompanyId,
+            ...(command.action === 'resume' ? { resumedFromTaskId: command.sourceTaskId } : {}),
+          };
         }
-        progress.stage = 'complete';
-        report();
-        this.repository.setStatus(generation, 'available', this.now());
-        this.#pending = null;
-        return {
-          generation,
-          status: 'available',
-          hasMore: result.hasMore,
-          savedCount,
-          progress,
-          candidates: [...result.candidates],
-          skippedMissingCompanyId: result.skippedMissingCompanyId,
-          ...(command.action === 'resume' ? { resumedFromTaskId: command.sourceTaskId } : {}),
-        };
+        case 'detail': {
+          progress.currentExternalJobId = command.externalJobId;
+          report();
+          const detail = await this.#session.readDetail(command.externalJobId, signal);
+          signal.throwIfAborted();
+          if (this.#connectionFailed() || this.repository.generation() !== generation)
+            throw new PlatformError('session_unavailable');
+          // 3、仓储在事务内校验任务仍持有租约且未取消，原子保存职位和观察。
+          const jobId = this.repository.save(detail, generation, taskId, this.now());
+          return { generation, status: 'saved', jobId };
+        }
       }
-      progress.currentExternalJobId = command.externalJobId;
-      report();
-      const detail = await this.#session.readDetail(command.externalJobId, signal);
-      signal.throwIfAborted();
-      if (this.#connectionFailed() || this.repository.generation() !== generation)
-        throw new PlatformError('session_unavailable');
-      // 3、仓储在事务内校验任务仍持有租约且未取消，原子保存职位和观察。
-      const jobId = this.repository.save(detail, generation, taskId, this.now());
-      return { generation, status: 'saved', jobId };
     } catch (error) {
       // 3.a、选择页是无凭据的中间结果；用户确认之前不读 Cookie 或职位。
       if (
@@ -481,17 +500,21 @@ export class PlatformBrowsingService {
       this.#failed = true;
       progress.failure = platformFailure(error, signal.aborted);
       report();
-      // 4.a、保留同一 CDP 授权；只在显式断开或退出时关闭。
-      if (this.#generation !== null)
-        this.repository.setStatus(
-          this.#generation,
-          error instanceof PlatformError && error.category === 'access_blocked'
-            ? 'access_blocked'
-            : error instanceof PlatformError && error.category === 'rate_limited'
-              ? 'rate_limited'
-              : 'unavailable',
-          this.now(),
-        );
+      // 4.a、按错误类别记录连接状态；保留同一 CDP 授权直至显式断开或退出。
+      if (this.#generation !== null) {
+        let status: 'access_blocked' | 'rate_limited' | 'unavailable';
+        switch (error instanceof PlatformError ? error.category : null) {
+          case 'access_blocked':
+            status = 'access_blocked';
+            break;
+          case 'rate_limited':
+            status = 'rate_limited';
+            break;
+          default:
+            status = 'unavailable';
+        }
+        this.repository.setStatus(this.#generation, status, this.now());
+      }
       throw error;
     } finally {
       this.#busy = false;

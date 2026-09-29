@@ -114,6 +114,15 @@
   transform: scale(0.98);
 }
 
+/* 任务处理入口沿用深炭黑主操作色，卡片边缘保留唯一紫色强调。 */
+.taskAction {
+  background: var(--button-primary);
+}
+
+.taskAction:hover {
+  background: var(--button-primary-hover);
+}
+
 .goodState .message {
   color: var(--muted-ink);
 }

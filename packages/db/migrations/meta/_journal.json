@@ -260,6 +260,13 @@
       "when": 1790065000000,
       "tag": "0036_task_retry_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1790660000000,
+      "tag": "0037_current_job_content",
+      "breakpoints": true
     }
   ]
 }

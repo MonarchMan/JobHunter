@@ -5,7 +5,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
-  box-shadow: 0 0.5rem 1.8rem rgb(54 64 117 / 7%);
+  box-shadow: var(--shadow-sm);
 }
 
 .structured-resume-heading {
@@ -157,7 +157,7 @@
 
 .resume-edit-section:hover,
 .resume-edit-section:focus-within {
-  border-color: #cbd1ee;
+  border-color: var(--border-hover);
   background: var(--surface-muted);
 }
 
@@ -230,7 +230,7 @@
   min-width: 0;
   min-height: 2.75rem;
   overflow: hidden;
-  border: 1px solid #b8bfcc;
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--surface);
   transition:
@@ -240,7 +240,7 @@
 }
 
 .iso-date-input:hover {
-  border-color: #929bb0;
+  border-color: var(--border-hover);
 }
 
 .iso-date-input:focus-within {
@@ -342,7 +342,7 @@
   width: 2.5rem;
   height: 2.5rem;
   place-items: center;
-  border: 1px solid #cbd1ee;
+  border: 1px solid var(--border-hover);
   border-radius: var(--radius-control);
   background: var(--primary-soft);
   color: var(--primary-hover);
@@ -370,8 +370,8 @@
   padding: 0.85rem 1.25rem;
   border-top: 1px solid var(--line);
   border-radius: 0 0 var(--radius-panel) var(--radius-panel);
-  background: rgb(255 255 255 / 94%);
-  box-shadow: 0 -0.8rem 1.6rem rgb(54 64 117 / 7%);
+  background: var(--surface-translucent);
+  box-shadow: var(--shadow-sticky);
   backdrop-filter: blur(8px);
 }
 
@@ -392,7 +392,7 @@
   display: grid;
   place-items: center;
   padding: 1.5rem;
-  background: rgb(24 29 45 / 58%);
+  background: var(--overlay-backdrop);
   animation: feedback-in var(--motion-standard) var(--ease-out);
 }
 
@@ -405,7 +405,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
-  box-shadow: 0 1.5rem 4rem rgb(17 22 40 / 24%);
+  box-shadow: var(--shadow-dialog);
   animation: dialog-in var(--motion-emphasis) var(--ease-out);
 }
 
@@ -451,7 +451,7 @@
   margin: 0 auto;
   padding: clamp(1.25rem, 4vw, 3rem);
   background: var(--surface);
-  box-shadow: 0 0.5rem 1.8rem rgb(54 64 117 / 10%);
+  box-shadow: var(--shadow-md);
 }
 
 .resume-preview-person {

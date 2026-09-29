@@ -164,10 +164,38 @@ export interface LiepinRecommendationTemplate {
 
 /** 固定阶段码不含上游原文或私有查询参数。 */
 class LiepinParseError extends PlatformError {
-  public constructor(stage: 'template' | 'list' | 'identity' | 'detail' | 'body') {
+  public constructor(
+    stage:
+      | 'template'
+      | 'list_envelope'
+      | 'list_main'
+      | 'list_extra'
+      | 'list_pagination'
+      | 'list_job'
+      | 'list_company'
+      | 'list_schema'
+      | 'list_empty'
+      | 'identity'
+      | 'detail'
+      | 'body',
+  ) {
     super('parse_changed', null, stage);
     this.message += ` [liepin:${stage}]`;
   }
+}
+
+/** 只把 Zod 的已知字段路径映射为固定阶段，不写入动态校验值或响应正文。 */
+function listSchemaStage(
+  issues: readonly z.core.$ZodIssue[],
+): ConstructorParameters<typeof LiepinParseError>[0] {
+  const path = issues[0]?.path;
+  if (path?.[0] !== 'data') return 'list_envelope';
+  if (path[1] === 'hasNextPage') return 'list_pagination';
+  if (path[1] !== 'data' && path[1] !== 'addData') return 'list_schema';
+  if (typeof path[2] !== 'number') return path[1] === 'data' ? 'list_main' : 'list_extra';
+  if (path[3] === 'job') return 'list_job';
+  if (path[3] === 'comp') return 'list_company';
+  return path[1] === 'data' ? 'list_main' : 'list_extra';
 }
 
 /** 只接受官网已返回的稳定职位 URL；不同公开路径空间不合并身份。 */
@@ -180,7 +208,7 @@ function jobIdentity(value: string): string {
 /** 将成功信封中的主推荐和补充推荐合并，未知结构不能当作末页。 */
 function parseList(raw: unknown): { batch: PlatformBatch; ids: Map<string, string> } {
   const parsed = listSchema.safeParse(raw);
-  if (!parsed.success) throw new LiepinParseError('list');
+  if (!parsed.success) throw new LiepinParseError(listSchemaStage(parsed.error.issues));
   const candidates: PlatformCandidate[] = [];
   const ids = new Map<string, string>();
   let skipped = 0;
@@ -205,7 +233,7 @@ function parseList(raw: unknown): { batch: PlatformBatch; ids: Map<string, strin
       sourceUrl: row.job.link,
     });
   }
-  if (!ids.size && parsed.data.data.hasNextPage) throw new LiepinParseError('list');
+  if (!ids.size && parsed.data.data.hasNextPage) throw new LiepinParseError('list_empty');
   return {
     batch: { candidates, hasMore: parsed.data.data.hasNextPage, skippedMissingCompanyId: skipped },
     ids,
@@ -333,7 +361,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
       const envelope = z
         .object({ flag: z.number(), code: z.union([z.string(), z.number()]).optional() })
         .safeParse(raw);
-      if (!envelope.success) throw new LiepinParseError('list');
+      if (!envelope.success) throw new LiepinParseError('list_envelope');
       if (envelope.data.flag !== 1) {
         const code = Number(envelope.data.code);
         throw new PlatformError('upstream_error', Number.isSafeInteger(code) ? code : null);

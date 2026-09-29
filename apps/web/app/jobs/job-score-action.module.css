@@ -26,7 +26,7 @@
   border: 1px solid var(--line);
   border-radius: 0.7rem;
   background: var(--surface);
-  box-shadow: 0 1.5rem 4rem rgb(34 40 71 / 18%);
+  box-shadow: var(--shadow-popover);
   animation: popover-in var(--motion-standard) var(--ease-out) both;
 }
 
@@ -38,7 +38,7 @@
   min-height: 0;
   padding: 0.75rem;
   background: transparent;
-  color: #243129;
+  color: var(--text-primary);
   text-align: left;
 }
 

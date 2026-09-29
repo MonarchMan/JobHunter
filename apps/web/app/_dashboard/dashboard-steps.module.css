@@ -25,7 +25,7 @@
   min-height: 4.4rem;
   padding: 0.65rem 0.75rem;
   border-radius: 0.75rem;
-  background: #f8f9fc;
+  background: var(--surface-muted);
 }
 
 .step:not(.complete):hover {
@@ -37,7 +37,7 @@
   width: 1.85rem;
   height: 1.85rem;
   place-items: center;
-  border: 1px solid #cbd1df;
+  border: 1px solid var(--border-hover);
   border-radius: 50%;
   color: var(--primary);
   font-size: 0.72rem;
@@ -68,7 +68,7 @@
 }
 
 .complete .number {
-  border-color: #9bc4d5;
-  background: #d7edf5;
+  border-color: var(--success);
+  background: var(--success-soft);
   color: var(--success);
 }

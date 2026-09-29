@@ -95,13 +95,16 @@ export async function collectKuaishouPages(
         ...(project ? { project } : {}),
       });
       const parsed = parseKuaishouPage(value, key, number, size, dictionaries, project);
-      pages.push({
+      const captured = {
         page: number,
         url: site.entry,
         records: parsed.records,
         total: parsed.total,
         capturedAt: Date.now(),
-      });
+      };
+      const existing = pages.findIndex((item) => item.page === number);
+      if (existing < 0) pages.push(captured);
+      else pages[existing] = captured;
       return parsed.total;
     };
     const total = await read(1);
@@ -116,7 +119,7 @@ export async function collectKuaishouPages(
       ? [...new Set([1, ...(limit >= 3 ? [Math.ceil(count / 2)] : []), count])]
       : Array.from({ length: Math.min(count, limit) }, (_, index) => index + 1);
     for (const number of numbers.slice(1)) await read(number);
-    return validateKuaishouCollection(
+    const result = validateKuaishouCollection(
       {
         pages,
         coverage: numbers.length < count ? 'partial' : 'complete',
@@ -129,6 +132,23 @@ export async function collectKuaishouPages(
       key,
       size,
     );
+    // 4、仅完整抓取的重复异常有限重读；替换旧页，绝不靠历史结果并集补齐计数。
+    if (numbers.length === count && result.diagnostics?.reason === 'duplicate_job_ids') {
+      const recheckedPages = [
+        ...new Set(result.diagnostics.duplicateJobSamples?.flatMap((sample) => sample.pages) ?? []),
+      ].slice(0, 4);
+      for (const number of recheckedPages) await read(number);
+      return validateKuaishouCollection(
+        {
+          pages,
+          coverage: 'complete',
+          diagnostics: { reason: null, retryable: false, recheckedPages },
+        },
+        key,
+        size,
+      );
+    }
+    return result;
   } catch (error) {
     if (error instanceof SourceError) throw error;
     throw new SourceError('temporary', 'Kuaishou browser collection failed.');

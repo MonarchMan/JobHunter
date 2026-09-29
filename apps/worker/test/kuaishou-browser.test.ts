@@ -18,10 +18,13 @@ function harness(
   overrides: Partial<SourcePageCollectionRequest> = {},
 ): {
   request: SourcePageCollectionRequest;
-  page: Record<
-    'goto' | 'waitForFunction' | 'close' | 'isClosed' | 'evaluate',
-    ReturnType<typeof vi.fn>
-  >;
+  page: Record<'goto' | 'waitForFunction' | 'close' | 'isClosed', ReturnType<typeof vi.fn>> & {
+    evaluate: ReturnType<
+      typeof vi.fn<
+        (fn: unknown, input: Parameters<typeof invokeKuaishouRuntime>[0]) => Promise<unknown>
+      >
+    >;
+  };
   run: (options?: BrowserSourceOptions) => Promise<SourcePageCollection>;
 } {
   const site = kuaishouSite(key);
@@ -96,6 +99,61 @@ function harness(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Kuaishou native browser lifecycle (ADR-0023)', () => {
+  it.each(['recover', 'persistent', 'total-change', 'sampled'] as const)(
+    'rechecks duplicate pages once without unioning stale results: %s',
+    async (mode) => {
+      const h = harness();
+      const original = h.page.evaluate.getMockImplementation();
+      if (!original) throw new Error('Missing fixture implementation');
+      const calls = new Map<number, number>();
+      h.page.evaluate.mockImplementation(
+        async (fn: unknown, input: Parameters<typeof invokeKuaishouRuntime>[0]) => {
+          const response = (await original(fn, input)) as {
+            result: { total: number; list: { id: number }[] };
+          };
+          if (input.operation === 'list' && input.pageNum) {
+            const attempt = (calls.get(input.pageNum) ?? 0) + 1;
+            calls.set(input.pageNum, attempt);
+            if (input.pageNum === 3 && (attempt === 1 || mode !== 'recover')) {
+              const job = response.result.list[0];
+              if (!job) throw new Error('Missing fixture job');
+              job.id = 1;
+            }
+            if (mode === 'total-change' && attempt > 1) response.result.total = 4;
+          }
+          return response;
+        },
+      );
+      const result = await h.run(
+        mode === 'sampled' ? { maximumPages: 2, pageSampling: 'first-last' } : {},
+      );
+      expect(result.coverage).toBe(mode === 'recover' ? 'complete' : 'partial');
+      expect(result.pages).toHaveLength(mode === 'sampled' ? 2 : 3);
+      if (mode === 'sampled') {
+        expect([...calls.values()]).toEqual([1, 1]);
+        expect(result.diagnostics?.recheckedPages).toBeUndefined();
+      } else {
+        expect(result.diagnostics?.recheckedPages).toEqual([1, 3]);
+        expect(calls.get(1)).toBe(2);
+        expect(calls.get(2)).toBe(1);
+        expect(calls.get(3)).toBe(2);
+      }
+      if (mode === 'persistent')
+        expect(result.diagnostics).toMatchObject({
+          reason: 'duplicate_job_ids',
+          duplicateIds: 1,
+          discoveredCount: 2,
+          duplicateJobSamples: [{ id: '1', pages: [1, 3] }],
+        });
+      if (mode === 'recover')
+        expect(result.diagnostics).toMatchObject({
+          reason: null,
+          duplicateIds: 0,
+          discoveredCount: 3,
+        });
+    },
+  );
+
   it.each([false, true])(
     'uses verified export shape when campus=%s, including modules absent from the chunk queue',
     async (campus) => {
@@ -155,11 +213,11 @@ describe('Kuaishou native browser lifecycle (ADR-0023)', () => {
         diagnostics: { reason: 'sampled_pages', expectedCount: 3, duplicateIds: 0 },
       });
       expect(h.page.goto).toHaveBeenCalledWith(kuaishouSite(key).bootstrap, expect.anything());
-      expect(
-        h.page.evaluate.mock.calls.map(
-          (args) => (args[1] as Parameters<typeof invokeKuaishouRuntime>[0]).operation,
-        ),
-      ).toEqual([kuaishouSite(key).campus ? 'projects' : 'dictionaries', 'list', 'list']);
+      expect(h.page.evaluate.mock.calls.map((args) => args[1].operation)).toEqual([
+        kuaishouSite(key).campus ? 'projects' : 'dictionaries',
+        'list',
+        'list',
+      ]);
       expect(h.page.close).toHaveBeenCalledOnce();
     },
   );

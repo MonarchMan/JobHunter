@@ -7,6 +7,8 @@
 
 ## 1. 目的、范围与设计目标
 
+2026-09-29 增量：[ADR-0051](../adr/0051-current-job-content-only.md) 覆盖下文职位不可变历史约束。job_revisions 每个 job 只保留当前内容，内部 ID/序号用于并发代际校验；替换内容时删除旧理解、评分及建议并取消旧任务，观察记录重绑当前内容。画像版本不变。
+
 本文档定义 JobHunter 的目标 SQLite 数据模型，是 Drizzle Schema、迁移、Repository、清理、备份和集成测试的共同依据。本文只描述业务表；SQLite 自身的 `sqlite_*`、Drizzle 迁移表等内部对象不属于业务数据模型。
 
 ### 招聘平台目标模型增量（设计已确定，尚未迁移）

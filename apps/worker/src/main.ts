@@ -4,7 +4,7 @@ import { loadRuntimeAppConfig } from '@jobhunter/application';
 import { createSafeLogger } from '@jobhunter/observability';
 import path from 'node:path';
 import {
-  createPlaywrightSourcePageClient,
+  createWorkerSourcePageClient,
   createProductionWorkerApplication,
   runWorkerProcess,
 } from './index.js';
@@ -17,6 +17,7 @@ const logger = createSafeLogger({
   level: config.logLevel.value,
   logFile: path.join(config.bootstrap.dataRoot.value, 'logs', 'jobhunter.log'),
 });
+const pageClient = createWorkerSourcePageClient();
 try {
   const worker = createProductionWorkerApplication({
     dataRoot: config.bootstrap.dataRoot.value,
@@ -26,7 +27,7 @@ try {
     maxConcurrentNetworkTasks: config.worker.maxConcurrentNetworkTasks.value,
     taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
     logger,
-    pageClient: createPlaywrightSourcePageClient(),
+    pageClient,
     ...(config.model.provider.value &&
     config.model.baseUrl.value &&
     config.model.modelName.value &&
@@ -43,5 +44,9 @@ try {
   });
   await runWorkerProcess(worker);
 } finally {
-  await logger.close();
+  try {
+    await pageClient.close();
+  } finally {
+    await logger.close();
+  }
 }

@@ -195,7 +195,7 @@ export class SqliteSyncRepository implements SyncRepository {
   ): CachedSourceJobDetail | null {
     const row = this.#client
       .prepare(
-        `SELECT detail_json, list_content_hash, adapter_version
+        `SELECT detail_json, list_content_hash, adapter_version, fetched_at
          FROM source_job_details
          WHERE source_id = ? AND external_job_id = ? AND status = 'succeeded'
            AND adapter_version = ?`,
@@ -205,12 +205,14 @@ export class SqliteSyncRepository implements SyncRepository {
           readonly detail_json: string;
           readonly list_content_hash: string;
           readonly adapter_version: string;
+          readonly fetched_at: number;
         }
       | undefined;
     void listContentHash;
     if (!row) return null;
     return {
       detail: JSON.parse(row.detail_json) as unknown,
+      fetchedAt: utcInstant(row.fetched_at),
       listContentHash: parseContentHash(row.list_content_hash),
       adapterVersion: row.adapter_version,
     };
@@ -397,5 +399,12 @@ export class SqliteSyncRepository implements SyncRepository {
   /** 执行数据库组件对外暴露的操作。 */
   public cleanupSeen(runId: SyncRunId): void {
     this.#client.prepare('DELETE FROM sync_seen_jobs WHERE sync_run_id = ?').run(runId);
+  }
+
+  /** 进度快照只更新活跃运行，避免迟到写入覆盖最终统计。 */
+  public recordProgress(runId: SyncRunId, stats: SyncRunStats): void {
+    this.#client
+      .prepare("UPDATE sync_runs SET stats_json = ? WHERE id = ? AND status = 'running'")
+      .run(canonicalJson(stats), runId);
   }
 }

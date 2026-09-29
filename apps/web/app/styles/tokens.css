@@ -1,45 +1,106 @@
 :root {
   color-scheme: light;
   font-family: Inter, 'Noto Sans SC', 'Microsoft YaHei UI', system-ui, sans-serif;
-  color: #1c2130;
-  background: #f5f6fa;
-  --ink: #1c2130;
-  --muted-ink: #596275;
-  --line: #dee2ec;
-  --line-soft: #eaecf2;
-  --canvas: #f5f6fa;
-  --canvas-tint: #eef1fb;
+  color: #111827;
+  background: #fafafa;
+
+  /* 基础色彩 - 清爽极简美学 */
+  --ink: #111827;
+  --muted-ink: #5b6472;
+  --line: #e5e7eb;
+  --line-soft: #f3f4f6;
+  --line-hover: #d1d5db;
+  --canvas: #fafafa;
+  --canvas-tint: #f9fafb;
   --surface: #ffffff;
-  --surface-muted: #f8f9fc;
-  --primary: #4e5fbb;
-  --primary-hover: #3f4e9a;
-  --primary-soft: #e9ecff;
-  --action: #e06c5d;
-  --action-soft: #fdece9;
-  --success: #236a8d;
-  --success-soft: #e6f3f8;
-  --warning: #8f5b0c;
-  --warning-soft: #fff3d8;
-  --danger: #a13d32;
-  --danger-soft: #fcebe8;
-  --health-healthy: #2f7d57;
-  --health-healthy-soft: #eef8f2;
-  --health-degraded: #8f5b0c;
-  --health-degraded-soft: #fff7e5;
-  --health-unhealthy: #b5473c;
-  --health-unhealthy-soft: #fdf0ee;
-  --health-unknown: #596275;
-  --health-unknown-soft: #f2f4f7;
-  --shadow-toast: 0 0.75rem 2rem rgb(24 31 52 / 16%);
-  --neutral-soft: #eef0f4;
-  --violet: #6655a6;
-  --violet-soft: #eeefff;
-  --blue: #316d8b;
-  --blue-soft: #e6f3f8;
-  --amber: #8f5b0c;
-  --amber-soft: #fff3d8;
-  --radius-control: 0.5rem;
-  --radius-panel: 0.75rem;
+  --surface-muted: #f9fafb;
+
+  /* 文本层级 */
+  --text-primary: #111827;
+  --text-secondary: #5b6472;
+  --text-tertiary: #5b6472;
+
+  /* 边框 */
+  --border: #e5e7eb;
+  --border-hover: #d1d5db;
+
+  /* 主色：深森林绿（专业、成长、机会） */
+  --primary: #1f4d36;
+  --primary-hover: #163a28;
+  --primary-soft: #e7f0ea;
+
+  /* 按钮色：深炭黑（主要操作） */
+  --button-primary: #111827;
+  --button-primary-hover: #000000;
+
+  /* 强调色：深紫色（行动、决策光标） */
+  --action: #7c3aed;
+  --action-hover: #6d28d9;
+  --action-soft: #ede9fe;
+
+  /* 导航与数据表专用色，不改变按钮或业务状态语义。 */
+  --nav-selected-bg: #ede7f6;
+  --nav-selected-ink: #5b347a;
+  --nav-indicator: #7c3aed;
+  --table-header-bg: #f3f0f7;
+  --table-header-ink: #62566f;
+  --table-row-hover: #f8f6fb;
+
+  /* 强调色板（用于 MetricCard 等） */
+  --accent-primary: #1f4d36;
+  --accent-info: #0891b2;
+  --accent-warning: #f59e0b;
+  --accent-purple: #7c3aed;
+
+  /* 语义色 */
+  --success: #047857;
+  --success-soft: #ecfdf5;
+  --warning: #b45309;
+  --warning-hover: #92400e;
+  --warning-soft: #fef3c7;
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+
+  /* 健康状态（专用） */
+  --health-healthy: #047857;
+  --health-healthy-soft: #ecfdf5;
+  --health-degraded: #b45309;
+  --health-degraded-soft: #fef3c7;
+  --health-unhealthy: #b91c1c;
+  --health-unhealthy-soft: #fee2e2;
+  --health-unknown: #5b6472;
+  --health-unknown-soft: #f3f4f6;
+
+  /* 数据可视化色板 */
+  --data-1: #1f4d36;
+  --data-2: #0891b2;
+  --data-3: #7c3aed;
+  --data-4: #f59e0b;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-popover: 0 16px 40px rgba(17, 24, 39, 0.16);
+  --shadow-dialog: 0 24px 64px rgba(17, 24, 39, 0.2);
+  --shadow-toast: 0 0.75rem 2rem rgba(0, 0, 0, 0.16);
+  --shadow-nav: 0 -0.6rem 1.8rem rgb(17 24 39 / 8%);
+  --shadow-sticky: 0 -0.8rem 1.6rem rgb(17 24 39 / 7%);
+  --overlay-backdrop: rgb(17 24 39 / 48%);
+  --surface-translucent: rgb(255 255 255 / 94%);
+
+  /* 保留兼容性（旧名称映射） */
+  --neutral-soft: #f3f4f6;
+  --violet: #7c3aed;
+  --violet-soft: #ede9fe;
+  --blue: #0891b2;
+  --blue-soft: #cffafe;
+  --amber: #f59e0b;
+  --amber-soft: #fef3c7;
+
+  /* 几何与动效 */
+  --radius-control: 8px;
+  --radius-panel: 8px;
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
   --motion-fast: 120ms;
   --motion-standard: 180ms;
@@ -47,7 +108,9 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --z-dropdown: 200;
-  scrollbar-color: #aab2c4 #eef0f4;
+
+  /* 滚动条 */
+  scrollbar-color: #9ca3af #f3f4f6;
   scrollbar-width: thin;
 }
 
@@ -59,17 +122,17 @@ body::-webkit-scrollbar,
 
 body::-webkit-scrollbar-track,
 *::-webkit-scrollbar-track {
-  background: var(--neutral-soft);
+  background: var(--line-soft);
 }
 
 body::-webkit-scrollbar-thumb,
 *::-webkit-scrollbar-thumb {
-  border: 0.2rem solid var(--neutral-soft);
+  border: 0.2rem solid var(--line-soft);
   border-radius: 999px;
-  background: #aab2c4;
+  background: #9ca3af;
 }
 
 body::-webkit-scrollbar-thumb:hover,
 *::-webkit-scrollbar-thumb:hover {
-  background: #838da2;
+  background: #6b7280;
 }

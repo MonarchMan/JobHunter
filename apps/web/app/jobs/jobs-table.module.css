@@ -6,27 +6,27 @@
   min-height: 4rem;
   margin-top: 0.75rem;
   padding: 0.65rem 0.85rem;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border);
   border-bottom: 0;
-  border-radius: 0.85rem 0.85rem 0 0;
-  background: #f0f2ff;
-  color: #50586a;
-  box-shadow: 0 0.35rem 1.25rem rgb(54 64 117 / 6%);
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
   font-size: 0.85rem;
   font-weight: 700;
 }
 
 .tableScroll {
   overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 0.35rem 1.25rem rgb(54 64 117 / 6%);
+  box-shadow: var(--shadow-sm);
   scrollbar-gutter: stable;
 }
 
 .selectionToolbar + .tableScroll {
-  border-radius: 0 0 1rem 1rem;
+  border-radius: 0 0 8px 8px;
 }
 
 .tableScroll table {
@@ -49,7 +49,8 @@
 }
 
 .tableScroll th {
-  color: #626b7c;
+  background: var(--table-header-bg);
+  color: var(--table-header-ink);
   font-size: 0.78rem;
   letter-spacing: 0.035em;
   text-transform: uppercase;
@@ -98,7 +99,7 @@
 }
 
 .tableScroll tbody tr:hover {
-  background: #f6f7ff;
+  background: var(--table-row-hover);
 }
 
 .staleRow {
@@ -184,8 +185,8 @@
   display: grid;
   gap: 0.5rem;
   padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--surface);
   transition:
     border-color var(--motion-fast) var(--ease-standard),
@@ -194,8 +195,8 @@
 }
 
 .card:hover {
-  border-color: #c6ccec;
-  box-shadow: 0 0.7rem 1.6rem rgb(60 73 145 / 8%);
+  border-color: var(--action);
+  box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
 
@@ -209,7 +210,7 @@
 .card p,
 .card small {
   margin: 0;
-  color: #667085;
+  color: var(--text-tertiary);
 }
 
 .cardSelection {

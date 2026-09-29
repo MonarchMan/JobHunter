@@ -200,6 +200,8 @@ export function validateKuaishouCollection(
     throw new SourceError('parse_changed', 'Kuaishou collection has no verified total.');
   const expectedPages = Math.max(1, Math.ceil(total / pageSize));
   const ids = new Set<string>();
+  const firstPages = new Map<string, number>();
+  const duplicatePages = new Map<string, Set<number>>();
   const numbers = new Set<number>();
   let duplicateIds = 0;
   let totalChanged = false;
@@ -217,7 +219,16 @@ export function validateKuaishouCollection(
     numbers.add(page.page);
     const records = page.records.map((value) => {
       const job = parseKuaishouJob(value, key);
-      if (ids.has(job.id)) duplicateIds += 1;
+      if (ids.has(job.id)) {
+        duplicateIds += 1;
+        // 1.a、只保留十个公开 ID 样本，避免诊断随来源规模无限增长。
+        if (duplicatePages.has(job.id) || duplicatePages.size < 10) {
+          const occurrences =
+            duplicatePages.get(job.id) ?? new Set([firstPages.get(job.id) ?? page.page]);
+          if (occurrences.size < 10) occurrences.add(page.page);
+          duplicatePages.set(job.id, occurrences);
+        }
+      } else firstPages.set(job.id, page.page);
       ids.add(job.id);
       if (job.recruitSubProjectCode) projects.add(job.recruitSubProjectCode);
       return job;
@@ -249,6 +260,10 @@ export function validateKuaishouCollection(
       expectedPages,
       fetchedPages: pages.length,
       duplicateIds,
+      duplicateJobSamples: [...duplicatePages].map(([id, occurrences]) => ({
+        id,
+        pages: [...occurrences],
+      })),
       totalChanged,
     },
   };

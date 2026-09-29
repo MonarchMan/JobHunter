@@ -113,15 +113,17 @@ class FakeSocket extends EventTarget {
             ? 'ready'
             : request.params?.expression?.includes("window.dispatchEvent(new Event('scroll'))")
               ? true
-              : request.params?.expression?.includes('link.click()')
-                ? !FakeSocket.bossMissingLink
-                : request.params?.expression?.includes('window._PAGE')
-                  ? 'page-token'
-                  : request.method === 'Runtime.evaluate' && FakeSocket.emptyResourceReads-- > 0
-                    ? '[]'
-                    : JSON.stringify([
-                        'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1',
-                      ]),
+              : request.params?.expression?.includes('next.click()')
+                ? true
+                : request.params?.expression?.includes('link.click()')
+                  ? !FakeSocket.bossMissingLink
+                  : request.params?.expression?.includes('window._PAGE')
+                    ? 'page-token'
+                    : request.method === 'Runtime.evaluate' && FakeSocket.emptyResourceReads-- > 0
+                      ? '[]'
+                      : JSON.stringify([
+                          'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1',
+                        ]),
         },
       },
       'Network.getCookies': {
@@ -401,6 +403,79 @@ it('前程无忧专用页先安装监听再导航，重复断开只清理一次'
   session.disconnect();
   await vi.advanceTimersByTimeAsync(1);
   expect(socket.methods.filter((method) => method === 'Target.closeTarget')).toHaveLength(1);
+});
+
+it('前程无忧自建页续批只点击一次普通下一页，借用页不自动操作', async () => {
+  const rows = Array.from({ length: 20 }, (_, i) => ({
+    jobId: String(100 + i),
+    coId: '200',
+    jobName: '开发工程师',
+    companyName: '测试公司',
+    jobAreaString: '上海',
+    provideSalaryString: '面议',
+    workYearString: '1年',
+    degreeString: '本科',
+    jobHref: `https://jobs.51job.com/shanghai/${String(100 + i)}.html`,
+    jobDescribe: '完整职位描述。',
+  }));
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      Response.json({ status: '1', resultbody: { job: { items: rows, totalCount: 21 } } }),
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        status: '1',
+        resultbody: {
+          job: {
+            items: [
+              { ...rows[0], jobId: '120', jobHref: 'https://jobs.51job.com/shanghai/120.html' },
+            ],
+            totalCount: 21,
+          },
+        },
+      }),
+    );
+  vi.stubGlobal('fetch', fetcher);
+  const pending = new Job51CdpSessionProvider().connect({}, new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  const offer = (page: number): void => {
+    const requestId = `page-${String(page)}`;
+    const url = `https://we.51job.com/api/job/search-pc?api_key=51job&pageSize=20&pageNum=${String(page)}&decode__1048=fixture`;
+    for (const [method, params] of [
+      [
+        'Network.requestWillBeSent',
+        { requestId, request: { url, method: 'GET', headers: { accept: 'application/json' } } },
+      ],
+      ['Network.requestWillBeSentExtraInfo', { requestId, headers: { cookie: 'test-only' } }],
+      ['Network.responseReceived', { requestId, response: { status: 200 } }],
+    ] as const)
+      socket.dispatchEvent(
+        new MessageEvent('message', {
+          data: JSON.stringify({ sessionId: 'attached', method, params }),
+        }),
+      );
+  };
+  offer(1);
+  expect((await session.readNext(new AbortController().signal)).hasMore).toBe(true);
+  const next = session.readNext(new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1);
+  const clicks = socket.commands.filter(
+    (command) =>
+      command.method === 'Runtime.evaluate' && command.params?.expression?.includes('next.click()'),
+  );
+  expect(clicks).toHaveLength(1);
+  expect(clicks[0]?.params?.expression).toContain("active[0].textContent?.trim() !== '1'");
+  expect(socket.methods).not.toContain('Page.bringToFront');
+  expect(socket.methods).not.toContain('Page.reload');
+  offer(2);
+  await vi.advanceTimersByTimeAsync(100);
+  expect((await next).hasMore).toBe(false);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  session.disconnect();
 });
 
 it('新页自然加载前只等待本地资源时间线，不重复导航', async () => {

@@ -251,6 +251,38 @@ it('重复页和异常空页不能冒充成功', async () => {
   }
 });
 
+it.each([
+  [{ flag: 1, data: { data: [], hasNextPage: true } }, 'list_extra'],
+  [{ flag: 1, data: { data: 'private-secret', addData: [], hasNextPage: true } }, 'list_main'],
+  [{ flag: 1, data: { data: [], addData: [], hasNextPage: 'private-secret' } }, 'list_pagination'],
+  [
+    {
+      flag: 1,
+      data: { data: [{ ...row, job: { ...row.job, title: '' } }], addData: [], hasNextPage: false },
+    },
+    'list_job',
+  ],
+  [
+    {
+      flag: 1,
+      data: {
+        data: [{ ...row, comp: { ...row.comp, compName: '' } }],
+        addData: [],
+        hasNextPage: false,
+      },
+    },
+    'list_company',
+  ],
+  [{ flag: 1, data: { data: [], addData: [], hasNextPage: true } }, 'list_empty'],
+] as const)('列表结构异常只输出固定 %s 诊断，不泄漏原始值', async (body, stage) => {
+  const { session } = fixture(body);
+  await expect(session.readNext(signal)).rejects.toMatchObject({
+    category: 'parse_changed',
+    reason: stage,
+    message: `Platform request failed: parse_changed [liepin:${stage}]`,
+  });
+});
+
 it('已知缺公司身份计数排除，未知类型仍报错', async () => {
   const missing = { ...row, comp: { ...row.comp, compId: null } };
   expect(

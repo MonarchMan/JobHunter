@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import AxeBuilder from '@axe-core/playwright';
+import { AxeBuilder } from '@axe-core/playwright';
+import { z } from 'zod';
 
 const jobId = '018f0000-0000-7000-8000-000000000401';
 
@@ -10,14 +11,29 @@ test('activity POST requires CSRF while GET/prefetch and official jobs do not wr
 }) => {
   expect((await request.get(`/api/jobs/${jobId}/view`)).status()).toBe(405);
   expect((await request.post(`/api/jobs/${jobId}/view`)).status()).toBe(403);
-  const csrf = (await (await request.get('/api/csrf')).json()).data.token;
-  const headers = { Origin: baseURL!, 'x-jobhunter-csrf': csrf };
+  // 1. API 的 JSON 响应须经边界校验，避免测试把未定义的令牌误作有效授权。
+  const csrf = z
+    .object({ data: z.object({ token: z.string() }) })
+    .parse(await (await request.get('/api/csrf')).json()).data.token;
+  if (!baseURL) throw new Error('Missing local test URL');
+  const headers = { Origin: baseURL, 'x-jobhunter-csrf': csrf };
   expect((await request.post('/api/jobs/invalid/view', { headers })).status()).toBe(400);
   const official = await request.post(`/api/jobs/${jobId}/view`, { headers });
   expect(official.status()).toBe(200);
-  expect((await official.json()).data).toEqual({ updated: false });
+  expect(
+    z.object({ data: z.object({ updated: z.boolean() }) }).parse(await official.json()).data,
+  ).toEqual({ updated: false });
   const status = await request.get('/api/platforms/retention');
-  expect((await status.json()).data).toEqual({
+  expect(
+    z
+      .object({
+        data: z.object({
+          enabled: z.boolean(),
+          policy: z.object({ retentionDays: z.number(), intervalHours: z.number() }),
+        }),
+      })
+      .parse(await status.json()).data,
+  ).toEqual({
     enabled: false,
     policy: { retentionDays: 30, intervalHours: 6 },
   });

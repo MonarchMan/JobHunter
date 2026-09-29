@@ -5,13 +5,13 @@
   min-height: 22rem;
   padding: clamp(2rem, 5vw, 4rem);
   overflow: hidden;
-  border: 1px solid #313c78;
-  border-radius: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   background:
-    radial-gradient(circle at 88% 12%, rgb(224 108 93 / 24%), transparent 17rem),
-    linear-gradient(128deg, #242c59 0%, #3d4b9a 100%);
-  box-shadow: 0 1.5rem 3.5rem rgb(45 55 110 / 17%);
-  color: #f4fbf5;
+    radial-gradient(circle at 88% 12%, var(--action-soft), transparent 17rem),
+    linear-gradient(135deg, var(--surface) 0%, var(--primary-soft) 100%);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-primary);
 }
 
 .copy {
@@ -22,22 +22,23 @@
 .hero h1 {
   max-width: 13ch;
   margin: 0 0 1rem;
-  color: #fff;
+  color: var(--text-primary);
   font-size: clamp(3rem, 5vw, 4.5rem);
   letter-spacing: -0.07em;
   line-height: 0.98;
 }
 
 .hero h1 em {
-  color: #f5b4aa;
-  font-style: normal;
+  color: var(--action);
+  font-style: italic;
 }
 
 .copy > p {
   max-width: 32rem;
   margin: 0;
-  color: #e3e6f7;
+  color: var(--text-secondary);
   font-size: 1rem;
+  font-weight: 300;
   line-height: 1.75;
 }
 
@@ -52,23 +53,24 @@
 .primaryAction {
   min-height: 3.1rem;
   padding: 0 1.25rem;
-  border-radius: 0.65rem;
-  background: #fff;
-  color: #313c78;
+  border-radius: 8px;
+  background: var(--action);
+  color: #fff;
 }
 
 .primaryAction:hover {
-  background: #fff;
+  background: var(--action-hover);
+  box-shadow: var(--shadow-md);
 }
 
 .quietAction {
-  color: #f1f3ff;
-  font-weight: 750;
+  color: var(--text-secondary);
+  font-weight: 500;
   text-decoration: none;
 }
 
 .quietAction:hover {
-  color: #fff;
+  color: var(--action);
   text-decoration: underline;
   text-underline-offset: 0.25rem;
 }
@@ -89,9 +91,9 @@
   justify-content: flex-end;
   align-self: flex-end;
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 54%);
-  border-radius: 1.25rem;
-  background: rgb(255 255 255 / 94%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .brandSymbol img {
@@ -104,30 +106,30 @@
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  color: #d9deff;
+  color: var(--text-secondary);
   font-size: 0.82rem;
 }
 
 .liveStatus strong {
   margin-left: auto;
-  color: #fff;
-  font-weight: 750;
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .liveDot {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: #e06c5d;
-  box-shadow: 0 0 0 0.25rem rgb(127 221 161 / 16%);
+  background: var(--success);
+  box-shadow: 0 0 0 0.25rem var(--success-soft);
 }
 
 .note {
   position: relative;
   padding: 1.25rem;
-  border: 1px solid rgb(218 222 255 / 22%);
-  border-radius: 0.9rem;
-  background: rgb(20 26 65 / 30%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .note::before {
@@ -143,14 +145,16 @@
 
 .note strong {
   display: block;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 1.05rem;
+  font-weight: 600;
 }
 
 .note p {
   margin: 0.5rem 0 0;
-  color: #d8dcf2;
+  color: var(--text-secondary);
   font-size: 0.82rem;
+  font-weight: 300;
   line-height: 1.6;
 }
 
@@ -204,7 +208,7 @@
   .hero {
     min-height: 0;
     padding: 1.5rem;
-    border-radius: 1.15rem;
+    border-radius: 8px;
   }
 
   .hero h1 {

@@ -632,14 +632,21 @@ async function collectJsonPages(
 /** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 function createSessionFactory(
   options: BrowserSourceOptions,
+  sharedBrowser?: () => Promise<Browser>,
 ): BrowserSessionFactory<SourcePageClient> {
   return {
     create(): Promise<BrowserSession<SourcePageClient>> {
-      let browser: Browser | undefined;
+      let ownedBrowser: Browser | undefined;
+      /** 一次性调用拥有进程，Worker 调用仅借用共享进程。 */
+      async function getBrowser(): Promise<Browser> {
+        if (sharedBrowser) return sharedBrowser();
+        ownedBrowser ??= await launchBrowser(options);
+        return ownedBrowser;
+      }
       let context: BrowserContext | undefined;
       const pageClient: SourcePageClient = {
         async snapshot(request) {
-          browser ??= await launchBrowser(options);
+          const browser = await getBrowser();
           context ??= await browser.newContext();
           const page = await context.newPage();
           await page.goto(request.url, {
@@ -649,7 +656,7 @@ function createSessionFactory(
           return { url: page.url(), html: await page.content(), capturedAt: Date.now() };
         },
         async collect(request) {
-          browser ??= await launchBrowser(options);
+          const browser = await getBrowser();
           context ??= await browser.newContext();
           const page = await context.newPage();
           // 滴滴原始客户端直接返回白名单集合，调试模式也不记录其原始响应或会话参数。
@@ -674,15 +681,81 @@ function createSessionFactory(
       return Promise.resolve({
         page: pageClient,
         async close() {
-          await context?.close();
-          await browser?.close();
+          try {
+            await context?.close();
+          } finally {
+            await ownedBrowser?.close();
+          }
         },
       });
     },
   };
 }
 
-/** 创建使用本机 Playwright 浏览器会话的来源客户端。 */
+/** Worker 拥有浏览器进程；来源请求只拥有隔离上下文。 */
+export interface ManagedSourcePageClient extends SourcePageClient {
+  close(): Promise<void>;
+}
+
+/** 创建按需复用进程的来源客户端；调用方必须在 Worker 退出时关闭。 */
+export function createWorkerSourcePageClient(
+  options: BrowserSourceOptions = {},
+): ManagedSourcePageClient {
+  let pending: Promise<Browser> | undefined;
+  let closed = false;
+  let closing: Promise<void> | undefined;
+  /** 异步启动前后均重新读取退出状态，不能沿用 await 前的判断。 */
+  function assertOpen(): void {
+    if (closed) throw new SourceError('temporary', 'Source browser client is closed.');
+  }
+  /** 1、合并启动；2、断开或启动失败后允许下一请求重建，不重放失败请求。 */
+  async function getBrowser(): Promise<Browser> {
+    assertOpen();
+    if (!pending) {
+      const launch = launchBrowser(options);
+      pending = launch;
+      void launch.then(
+        (browser) => {
+          browser.on('disconnected', () => {
+            if (pending === launch) pending = undefined;
+          });
+        },
+        () => {
+          if (pending === launch) pending = undefined;
+        },
+      );
+    }
+    const browser = await pending;
+    assertOpen();
+    if (!browser.isConnected()) {
+      pending = undefined;
+      throw new SourceError('temporary', 'Source browser disconnected.');
+    }
+    return browser;
+  }
+  const client = createPooledSourcePageClient(
+    new BrowserPool(createSessionFactory(options, getBrowser)),
+  );
+  return {
+    ...client,
+    close(): Promise<void> {
+      // 3、先拒绝后续请求，再等待并释放晚到启动；重复退出共享同一清理过程。
+      closed = true;
+      closing ??= (async () => {
+        let browser: Browser | undefined;
+        try {
+          browser = await pending;
+        } catch {
+          /* 启动失败时没有需要释放的进程。 */
+        }
+        await browser?.close();
+      })();
+      return closing;
+    },
+  };
+}
+
+/** 一次性探测仍按请求关闭进程，不要求既有调用方持有 Worker 生命周期。 */
 export function createPlaywrightSourcePageClient(
   options: BrowserSourceOptions = {},
 ): SourcePageClient {

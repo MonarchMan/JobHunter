@@ -67,7 +67,7 @@ import { jobAdviceAgentDefinition } from '@jobhunter/matching';
 import { createSafeLogger } from '@jobhunter/observability';
 import { firstPartySourceCatalog } from '@jobhunter/sources';
 import {
-  createPlaywrightSourcePageClient,
+  createWorkerSourcePageClient,
   createProductionWorkerApplication,
   runWorkerProcess,
 } from '@jobhunter/worker';
@@ -434,6 +434,7 @@ export function createLocalCliContainer(
           level: config.logLevel.value,
           logFile: path.join(config.bootstrap.dataRoot.value, 'logs', 'jobhunter.log'),
         });
+        const pageClient = createWorkerSourcePageClient();
         try {
           await runWorkerProcess(
             createProductionWorkerApplication({
@@ -442,7 +443,7 @@ export function createLocalCliContainer(
               maxConcurrentNetworkTasks: config.worker.maxConcurrentNetworkTasks.value,
               taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
               logger,
-              pageClient: createPlaywrightSourcePageClient(),
+              pageClient,
               ...(config.model.provider.value &&
               config.model.baseUrl.value &&
               config.model.modelName.value &&
@@ -459,7 +460,11 @@ export function createLocalCliContainer(
             }),
           );
         } finally {
-          await logger.close();
+          try {
+            await pageClient.close();
+          } finally {
+            await logger.close();
+          }
         }
       },
     },

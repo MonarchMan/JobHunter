@@ -357,7 +357,7 @@ export const jobRevisions = sqliteTable(
   },
   (table) => [
     unique('job_revisions_number_unique').on(table.jobId, table.revisionNo),
-    unique('job_revisions_content_unique').on(table.jobId, table.contentHash),
+    // ADR-0051：迁移触发器在写入结束前只保留当前内容；不保留历史哈希集合。
     check('job_revisions_number_check', sql`${table.revisionNo} >= 1`),
     check('job_revisions_source_hash_check', sql`length(${table.sourcePayloadHash}) = 64`),
   ],

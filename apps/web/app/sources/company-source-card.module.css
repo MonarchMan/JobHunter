@@ -136,7 +136,7 @@
   height: 2.5rem;
   min-height: 2.5rem;
   padding: 0 2rem 0 0.7rem;
-  border-color: #c8ceef;
+  border-color: var(--border-hover);
   background-color: var(--surface);
   color: var(--primary-hover);
   font-size: 0.86rem;
@@ -285,7 +285,7 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.5rem;
-  color: #667085;
+  color: var(--text-secondary);
   font-size: 0.82rem;
 }
 
@@ -306,7 +306,7 @@
 
 .health-unknown {
   background: var(--neutral-soft);
-  color: #5e6675;
+  color: var(--text-secondary);
 }
 
 .support-supported {
@@ -347,7 +347,7 @@
 }
 
 .stats-list dt {
-  color: #667085;
+  color: var(--text-secondary);
   font-size: 0.75rem;
 }
 

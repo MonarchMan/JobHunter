@@ -17,9 +17,9 @@
   gap: 0.35rem;
   min-width: min(100%, 25rem);
   padding: 1.25rem;
-  border: 1px dashed #aeb6d8;
+  border: 1px dashed var(--border-hover);
   border-radius: 0.85rem;
-  background: #f8f9fc;
+  background: var(--surface-muted);
   cursor: pointer;
 }
 
@@ -29,7 +29,7 @@
 }
 
 .dropzone span {
-  color: #667085;
+  color: var(--text-secondary);
   font-size: 0.85rem;
 }
 

@@ -9,7 +9,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.7rem 0;
-  color: #667085;
+  color: var(--text-secondary);
   font-size: 0.88rem;
   font-weight: 650;
   text-decoration: none;
@@ -36,20 +36,26 @@
   content: '';
 }
 
+.current,
+.current:hover {
+  background: var(--nav-selected-bg);
+  color: var(--nav-selected-ink);
+}
+
 .current::after {
-  background: var(--primary);
+  background: var(--nav-indicator);
 }
 
 .link svg {
   display: block;
   flex: 0 0 auto;
-  color: #7781ae;
+  color: var(--text-secondary);
   transition: color var(--motion-fast) var(--ease-standard);
 }
 
 .link:hover svg,
 .current svg {
-  color: var(--primary);
+  color: var(--nav-selected-ink);
 }
 
 .shortLabel,
@@ -75,8 +81,8 @@
   }
 
   .current {
-    background: var(--primary-soft);
-    color: var(--primary-hover);
+    background: var(--nav-selected-bg);
+    color: var(--nav-selected-ink);
   }
 
   .current::after {
@@ -86,7 +92,7 @@
     left: 0;
     width: 3px;
     height: auto;
-    background: var(--action);
+    background: var(--nav-indicator);
   }
 }
 
@@ -120,8 +126,8 @@
       max(0.45rem, env(safe-area-inset-bottom)) max(0.55rem, env(safe-area-inset-left));
     overflow: visible;
     border-top: 1px solid var(--line);
-    background: rgb(255 255 255 / 94%);
-    box-shadow: 0 -0.6rem 1.8rem rgb(38 45 84 / 8%);
+    background: var(--surface-translucent);
+    box-shadow: var(--shadow-nav);
     backdrop-filter: blur(16px);
     scrollbar-gutter: auto;
   }
@@ -139,8 +145,8 @@
   }
 
   .current {
-    background: var(--primary-soft);
-    color: var(--primary-hover);
+    background: var(--nav-selected-bg);
+    color: var(--nav-selected-ink);
   }
 
   .current::after {
@@ -149,7 +155,7 @@
     bottom: auto;
     left: 35%;
     height: 3px;
-    background: var(--action);
+    background: var(--nav-indicator);
   }
 
   .fullLabel,
@@ -188,7 +194,7 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-panel);
     background: var(--surface);
-    box-shadow: 0 1rem 2.5rem rgb(38 45 84 / 18%);
+    box-shadow: var(--shadow-popover);
     animation: feedback-in var(--motion-standard) var(--ease-out) both;
   }
 
@@ -206,8 +212,8 @@
 
   .moreLink:hover,
   .moreLinkCurrent {
-    background: var(--primary-soft);
-    color: var(--primary-hover);
+    background: var(--nav-selected-bg);
+    color: var(--nav-selected-ink);
   }
 }
 

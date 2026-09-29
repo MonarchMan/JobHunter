@@ -15,7 +15,7 @@
   gap: 1rem;
   padding: 0.65rem 1.2rem;
   border-bottom: 1px solid var(--line);
-  background: rgb(255 255 255 / 96%);
+  background: var(--surface-translucent);
 }
 .back {
   padding: 0.45rem;
@@ -76,7 +76,7 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.65rem 1.2rem;
-  border-bottom: 1px solid #ead09f;
+  border-bottom: 1px solid color-mix(in srgb, var(--warning) 36%, var(--border));
   background: var(--warning-soft);
   color: var(--warning);
 }
@@ -100,7 +100,7 @@
   padding: 0.55rem 1.2rem;
   overflow-x: auto;
   border-bottom: 1px solid var(--line);
-  background: rgb(249 250 252 / 97%);
+  background: var(--surface-translucent);
   scrollbar-width: thin;
 }
 .selectionHint {
@@ -250,7 +250,7 @@
 .paperFrame {
   width: min(210mm, 100%);
   margin: 0 auto;
-  box-shadow: 0 1.4rem 3rem rgb(28 33 48 / 12%);
+  box-shadow: var(--shadow-lg);
 }
 .paperFrame iframe {
   display: block;
@@ -268,7 +268,7 @@
   display: grid;
   place-items: center;
   padding: 1rem;
-  background: rgb(28 33 48 / 55%);
+  background: var(--overlay-backdrop);
 }
 .dialog {
   width: min(30rem, 100%);
@@ -287,7 +287,7 @@
   border: 1px solid var(--line);
 }
 .deleteDialog::backdrop {
-  background: rgb(28 33 48 / 55%);
+  background: var(--overlay-backdrop);
 }
 .dialog > div {
   display: flex;
@@ -306,7 +306,7 @@
   box-shadow: var(--shadow-dialog);
 }
 .previewDialog::backdrop {
-  background: rgb(28 33 48 / 55%);
+  background: var(--overlay-backdrop);
   backdrop-filter: blur(3px);
 }
 .previewHeader,
@@ -341,7 +341,7 @@
 .previewPaper {
   width: 210mm;
   margin: 0 auto;
-  box-shadow: 0 1.4rem 3rem rgb(28 33 48 / 16%);
+  box-shadow: var(--shadow-lg);
 }
 .previewPaper iframe {
   display: block;

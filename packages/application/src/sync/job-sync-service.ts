@@ -198,7 +198,7 @@ export class JobSyncService {
     };
     const listContentHash = contentHash(job.raw);
     const cachedDetail =
-      input.adapter.metadata.capabilities.detail === 'deferred'
+      input.adapter.metadata.capabilities.detail !== 'inline'
         ? this.#uow.run(({ sync }) =>
             sync.getCachedJobDetail(
               input.source.id,
@@ -209,6 +209,10 @@ export class JobSyncService {
           )
         : null;
     const detailCacheIsCurrent = cachedDetail?.listContentHash === listContentHash;
+    const requiredDetailIsCurrent =
+      detailCacheIsCurrent &&
+      observedAt >= cachedDetail.fetchedAt &&
+      observedAt - cachedDetail.fetchedAt < 6 * 60 * 60_000;
     let detail: unknown = cachedDetail?.detail ?? null;
 
     let normalized: NormalizedSourceJob;
@@ -217,16 +221,17 @@ export class JobSyncService {
       if (input.adapter.metadata.capabilities.detail === 'required') {
         if (!input.adapter.fetchDetail)
           throw new SourceError('invalid_config', 'Required-detail adapter lacks fetchDetail.');
-        detail = await input.adapter.fetchDetail(job, {
-          sourceId: input.source.id,
-          companyId: input.source.companyId,
-          config: input.config,
-          requestId: `${input.runId}:${job.externalJobId}:required-detail`,
-          signal: input.signal,
-          timeoutMs: input.source.syncPolicy.requestTimeoutMs,
-          http: this.#http,
-          ...(this.#page ? { page: this.#page } : {}),
-        });
+        if (!requiredDetailIsCurrent)
+          detail = await input.adapter.fetchDetail(job, {
+            sourceId: input.source.id,
+            companyId: input.source.companyId,
+            config: input.config,
+            requestId: `${input.runId}:${job.externalJobId}:required-detail`,
+            signal: input.signal,
+            timeoutMs: input.source.syncPolicy.requestTimeoutMs,
+            http: this.#http,
+            ...(this.#page ? { page: this.#page } : {}),
+          });
       }
       // 2、正文与身份验证通过后才允许后续归一化、过滤及短事务写入。
       const normalizedSourceJob = await input.adapter.normalize(
@@ -250,6 +255,8 @@ export class JobSyncService {
         throw new SourceError('parse_changed', 'Adapter normalization changed source identity.');
       }
     } catch (error) {
+      // 2.a、取消属于运行中断，不伪装成解析失败或污染条目隔离统计。
+      if (input.signal.aborted) throw error;
       input.stats.isolated += 1;
       this.#uow.run(({ sync }) => {
         sync.recordItemFailure({
@@ -281,6 +288,20 @@ export class JobSyncService {
         stats: input.stats,
       });
       return;
+    }
+
+    // 3、只缓存经归一化及身份校验的必需详情；复用时不延长原有效期。
+    if (input.adapter.metadata.capabilities.detail === 'required' && !requiredDetailIsCurrent) {
+      this.#uow.run(({ sync }) => {
+        sync.recordJobDetailSuccess({
+          sourceId: input.source.id,
+          externalJobId: job.externalJobId,
+          listContentHash,
+          adapterVersion: input.adapter.metadata.version,
+          detail,
+          fetchedAt: this.#clock.now(),
+        });
+      });
     }
 
     const sourcePayloadHash = contentHash({ discovered: job.raw, detail });
@@ -451,6 +472,7 @@ export class JobSyncService {
     if (start.kind === 'conflict') return { kind: 'conflict', runId: start.runId };
 
     const stats = emptyStats();
+    let lastProgressAt: number | null = null;
     let completion: Extract<DiscoveryEvent, { type: 'complete' }> | null = null;
     let runError: unknown = null;
     try {
@@ -484,6 +506,14 @@ export class JobSyncService {
           signal,
           stats,
         });
+        // 1、首条及每隔五秒保存已处理进度，避免逐条快速写放大与运行中零统计。
+        const now = this.#clock.now();
+        if (lastProgressAt === null || now - lastProgressAt >= 5_000) {
+          this.#uow.run(({ sync }) => {
+            sync.recordProgress(runId, immutableStats(stats));
+          });
+          lastProgressAt = now;
+        }
       }
       if (!completion)
         throw new SourceError('parse_changed', 'Discovery ended without completion.');

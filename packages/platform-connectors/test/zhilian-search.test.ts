@@ -119,6 +119,28 @@ it('preserves search filters across pages and requests independent verified deta
   expect(await session.readNext(signal)).toEqual({ candidates: [], hasMore: false });
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
+
+it('preserves the observed unordered-list description in a main-site detail', async () => {
+  // 1、主站详情允许无属性 ul/li；正文仍只能来自通过身份核对的独立 HTTP 响应。
+  const detail = structuredClone(fixture.detail);
+  detail.data.detailedPosition.jobDesc = '<div>职责<ul><li>开发。</li><li>测试。</li></ul></div>';
+  const { session } = setup([batch(), detail]);
+  await session.readNext(signal);
+  expect((await session.readDetail('CC_TEST', signal)).description).toBe(
+    '职责\n- 开发。\n- 测试。',
+  );
+});
+
+it('rejects malformed unordered-list structure in a main-site detail', async () => {
+  const detail = structuredClone(fixture.detail);
+  detail.data.detailedPosition.jobDesc = '<ul><li>正文</ul>';
+  const { session } = setup([batch(), detail]);
+  await session.readNext(signal);
+  await expect(session.readDetail('CC_TEST', signal)).rejects.toMatchObject({
+    category: 'parse_changed',
+    reason: 'detail_description_format',
+  });
+});
 it.each([
   'foreign',
   'unknown-query',

@@ -39,6 +39,8 @@
 
 ## Visual contract
 
+职位详情遵循 ADR-0051，仅展示当前内容和对应匹配结果，不提供职位版本时间线。内容变化后旧评分/建议删除，沿用“尚无匹配结果”的空状态和手动评分入口。
+
 - Project `docs/design/DESIGN.md`: `docs/design/DESIGN.md`。
 - Token ownership model: 现有运行时 CSS 为规范所有者，`docs/design/DESIGN.md` 镜像批准值。
 - Runtime design-system/token source: `apps/web/app/styles/tokens.css` 中唯一的 `:root`。

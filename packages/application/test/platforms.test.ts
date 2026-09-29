@@ -22,7 +22,37 @@ it('正常 Worker 领取不套用手动重连策略', () => {
     reconnect: true,
   });
 });
-import { platformProgressSchema } from '../src/platform-progress.js';
+import { platformFailure, platformProgressSchema } from '../src/platform-progress.js';
+
+it.each([
+  ['access_blocked', 'redirect_login'],
+  ['access_blocked', 'redirect_challenge'],
+  ['access_blocked', 'redirect_job'],
+  ['parse_changed', 'list_main'],
+  ['parse_changed', 'list_empty'],
+  ['session_unavailable', 'template_required'],
+] as const)('固定平台诊断 %s／%s 不在任务进度中丢失', (category, reason) => {
+  expect(platformFailure(new PlatformError(category, null, reason), false)).toMatchObject({
+    category,
+    reason,
+  });
+  expect(
+    platformProgressSchema.shape.failure.safeParse({
+      category,
+      businessCode: null,
+      reason,
+    }).success,
+  ).toBe(true);
+});
+
+it('动态上游重定向目标不进入任务进度', () => {
+  expect(
+    platformFailure(
+      new PlatformError('access_blocked', 302, 'https://private.example/token'),
+      false,
+    ),
+  ).toEqual({ category: 'access_blocked', businessCode: 302, reason: null });
+});
 
 /** 批次测试的可观察端口，用于验证请求和提交顺序。 */
 interface BatchFixture {
@@ -294,6 +324,23 @@ it.each(['network_error', 'parse_changed'] as const)(
     expect(f.session.resume).not.toHaveBeenCalled();
   },
 );
+
+it('平台详情 302 保留已提交职位与固定重定向原因且不自动重试', async () => {
+  const fixture = batchFixture();
+  await fixture.connect();
+  fixture.session.readDetail.mockImplementation((id) =>
+    id === '3'
+      ? Promise.reject(new PlatformError('access_blocked', 302, 'redirect_job'))
+      : Promise.resolve(fixture.detail(id)),
+  );
+  await expect(fixture.next()).rejects.toMatchObject({ businessCode: 302 });
+  expect(fixture.save).toHaveBeenCalledTimes(2);
+  expect(fixture.session.readDetail).toHaveBeenCalledTimes(3);
+  expect(fixture.repository.recordProgress.mock.calls.at(-1)?.[2]).toMatchObject({
+    saved: 2,
+    failure: { category: 'access_blocked', businessCode: 302, reason: 'redirect_job' },
+  });
+});
 
 it('列表 37 不触发详情恢复路径', async () => {
   const f = batchFixture();

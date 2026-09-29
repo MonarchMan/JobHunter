@@ -89,6 +89,7 @@ export interface FinishSyncRunInput {
 
 /** 执行应用层的解析、转换或编排辅助逻辑。 */
 export interface CachedSourceJobDetail {
+  readonly fetchedAt: UtcInstant;
   readonly detail: unknown;
   readonly listContentHash: ContentHash;
   readonly adapterVersion: string;
@@ -98,6 +99,8 @@ export interface CachedSourceJobDetail {
 export interface SyncRepository {
   getSource(sourceId: JobSourceId): SyncSourceRecord | null;
   startRun(input: StartSyncRunInput): StartSyncRunResult;
+  /** 仅为仍在运行的记录保存已处理统计，不改变覆盖度或来源健康。 */
+  recordProgress(runId: SyncRunId, stats: SyncRunStats): void;
   getCachedJobDetail(
     sourceId: JobSourceId,
     externalJobId: string,

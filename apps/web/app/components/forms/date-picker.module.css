@@ -3,7 +3,7 @@
   display: grid;
   min-width: 0;
   gap: 0.45rem;
-  color: #50586a;
+  color: var(--text-secondary);
   font-size: 0.85rem;
   font-weight: 700;
 }
@@ -45,7 +45,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--surface);
-  box-shadow: 0 0.8rem 1.8rem rgb(30 40 70 / 16%);
+  box-shadow: var(--shadow-popover);
 }
 
 .monthBar,

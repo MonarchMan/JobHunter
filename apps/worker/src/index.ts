@@ -106,7 +106,10 @@ import {
 import { PlaywrightResumePdfRenderer } from './resume-pdf-renderer.js';
 import { createSqliteMaintenanceTick } from './sqlite-maintenance.js';
 
-export { createPlaywrightSourcePageClient } from './browser-source.js';
+export {
+  createPlaywrightSourcePageClient,
+  createWorkerSourcePageClient,
+} from './browser-source.js';
 
 /** Worker 运行时数据结构或执行契约。 */
 export interface WorkerApplication {

@@ -22,12 +22,12 @@
   border: 1px solid var(--line);
   border-radius: 1rem;
   background: var(--surface);
-  box-shadow: 0 1.5rem 4rem rgb(34 40 71 / 18%);
+  box-shadow: var(--shadow-dialog);
   animation: dialog-in var(--motion-emphasis) var(--ease-out) both;
 }
 
 .dialog::backdrop {
-  background: rgb(28 33 48 / 44%);
+  background: var(--overlay-backdrop);
   animation: backdrop-in var(--motion-standard) var(--ease-standard) both;
   backdrop-filter: blur(3px);
 }

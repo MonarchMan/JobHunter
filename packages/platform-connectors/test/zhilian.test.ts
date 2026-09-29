@@ -48,6 +48,7 @@ it.each([
   '<p onclick="run()">正文</p>',
   '<ol><li>正文</ol>',
   '<li>正文</li>',
+  '<ul><li>正文</li></ul>',
   '<p>未闭合',
   '<p>&unknown;</p>',
   '<p><br></p>',

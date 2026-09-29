@@ -5,10 +5,10 @@
 
 .scroll {
   overflow-x: auto;
-  border: 1px solid var(--line);
-  border-radius: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--surface);
-  box-shadow: 0 0.35rem 1.25rem rgb(54 64 117 / 6%);
+  box-shadow: var(--shadow-sm);
   scrollbar-gutter: stable;
 }
 
@@ -31,7 +31,8 @@
 }
 
 .scroll th {
-  color: #626b7c;
+  background: var(--table-header-bg);
+  color: var(--table-header-ink);
   font-size: 0.78rem;
   letter-spacing: 0.035em;
   text-transform: uppercase;
@@ -44,7 +45,7 @@
 .scroll td:first-child span {
   display: block;
   margin-top: 0.35rem;
-  color: #667085;
+  color: var(--text-tertiary);
   font-size: 0.82rem;
 }
 
@@ -53,7 +54,7 @@
 }
 
 .scroll tbody tr:hover {
-  background: #f6f7ff;
+  background: var(--table-row-hover);
 }
 
 .panel th,
@@ -62,7 +63,7 @@
 }
 
 .panel th {
-  color: #667085;
+  color: var(--table-header-ink);
   font-size: 0.78rem;
   letter-spacing: 0.04em;
 }
@@ -70,7 +71,7 @@
 .panel td small {
   display: block;
   margin-top: 0.3rem;
-  color: #667085;
+  color: var(--text-tertiary);
 }
 
 .panel td.empty {

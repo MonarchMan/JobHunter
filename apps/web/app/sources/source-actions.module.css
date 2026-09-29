@@ -33,7 +33,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--ink);
-  box-shadow: var(--shadow-panel);
+  box-shadow: var(--shadow-sm);
   color: var(--surface);
   font-size: 0.76rem;
   font-weight: 700;
@@ -84,7 +84,7 @@
 .scheduleForm label {
   display: grid;
   gap: 0.4rem;
-  color: #50586a;
+  color: var(--text-secondary);
   font-size: 0.82rem;
   font-weight: 700;
 }

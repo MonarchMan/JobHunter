@@ -47,16 +47,13 @@ export function DashboardNextAction({
       case 'handle_failures':
         return (
           <>
-            <span className={styles.cursorIcon} aria-hidden="true">
-              ▎
-            </span>
             <div className={styles.content}>
               <h2 id="next-action-title" className={styles.title}>
                 需要处理
               </h2>
               <p className={styles.message}>{action.message}</p>
             </div>
-            <a className={styles.action} href={action.href}>
+            <a className={[styles.action, styles.taskAction].join(' ')} href={action.href}>
               查看任务 <span aria-hidden="true">→</span>
             </a>
           </>

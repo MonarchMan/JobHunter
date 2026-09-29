@@ -44,7 +44,7 @@
 
 .list {
   position: absolute;
-  z-index: 80;
+  z-index: var(--z-dropdown);
   top: calc(100% + 0.45rem);
   left: 0;
   display: grid;
@@ -56,7 +56,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
-  box-shadow: 0 1.25rem 3rem rgb(34 40 71 / 20%);
+  box-shadow: var(--shadow-popover);
   list-style: none;
   animation: list-in var(--motion-standard) var(--ease-out) both;
   scrollbar-gutter: stable;

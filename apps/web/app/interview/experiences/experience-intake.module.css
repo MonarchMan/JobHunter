@@ -137,7 +137,7 @@
   display: grid;
   gap: 0.35rem;
   padding: 1.1rem;
-  border: 1px dashed #aeb6d8;
+  border: 1px dashed var(--border-hover);
   border-radius: var(--radius-panel);
   background: var(--canvas);
   cursor: pointer;
@@ -187,7 +187,7 @@
 .notesField {
   display: grid;
   gap: 0.45rem;
-  color: #50586a;
+  color: var(--text-secondary);
   font-size: 0.85rem;
   font-weight: 700;
 }

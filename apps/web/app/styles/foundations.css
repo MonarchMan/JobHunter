@@ -21,7 +21,7 @@ main:focus {
   top: 0.75rem;
   left: 0.75rem;
   padding: 0.6rem 0.8rem;
-  background: #1c2130;
+  background: var(--ink);
   color: #fff;
   transform: translateY(-200%);
 }
@@ -44,10 +44,10 @@ main {
 }
 
 .eyebrow {
-  color: #4e5fbb;
+  color: var(--primary);
   font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
 
 h1 {
@@ -60,10 +60,10 @@ h2 {
 }
 
 .panel {
-  border: 1px solid #dee2ec;
-  border-radius: 1rem;
-  background: #fff;
-  box-shadow: 0 0.4rem 1.5rem rgb(33 54 41 / 5%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .panel {
@@ -72,32 +72,32 @@ h2 {
 }
 
 .muted {
-  color: #667085;
+  color: var(--muted-ink);
 }
 
 button {
   min-height: 2.75rem;
-  padding: 0 1rem;
+  padding: 0 1.25rem;
   border: 0;
-  border-radius: 0.5rem;
-  background: #4e5fbb;
+  border-radius: 8px;
+  background: var(--button-primary);
   color: #fff;
   cursor: pointer;
   font: inherit;
-  font-weight: 700;
+  font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 button:hover:not(:disabled),
 .button-primary:hover,
 .button-secondary:hover {
-  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 button:active:not(:disabled),
 .button-primary:active,
 .button-secondary:active {
-  transform: translateY(0);
-  box-shadow: inset 0 0.15rem 0.3rem rgb(20 55 35 / 18%);
+  box-shadow: var(--shadow-sm);
 }
 
 button:disabled {
@@ -111,10 +111,10 @@ textarea {
   min-height: 2.75rem;
   width: 100%;
   padding: 0 0.75rem;
-  border: 1px solid #b8bfcc;
-  border-radius: 0.5rem;
-  background: #fff;
-  color: #1c2130;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-primary);
   font: inherit;
 }
 
@@ -130,14 +130,21 @@ textarea {
 .button-secondary {
   display: inline-grid;
   min-height: 2.75rem;
-  padding: 0 1rem;
+  padding: 0 1.25rem;
   place-items: center;
-  border: 1px solid #b8bfcc;
-  border-radius: 0.5rem;
-  color: #354139;
-  font-weight: 700;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 500;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   text-decoration: none;
+}
+
+.button-secondary:hover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
 }
 
 button,
@@ -156,13 +163,19 @@ button,
 .button-primary {
   display: inline-grid;
   min-height: 2.75rem;
-  padding: 0 1rem;
+  padding: 0 1.25rem;
   place-items: center;
-  border-radius: 0.5rem;
-  background: #4e5fbb;
+  border-radius: 8px;
+  background: var(--button-primary);
   color: #fff;
-  font-weight: 750;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   text-decoration: none;
+}
+
+.button-primary:hover {
+  background: var(--button-primary-hover);
+  box-shadow: var(--shadow-md);
 }
 
 .status {
@@ -175,49 +188,49 @@ button,
 }
 
 .status-active {
-  background: #e6f3f8;
-  color: #236a8d;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .status-stale {
-  background: #fff3d8;
-  color: #9a6514;
+  background: var(--warning-soft);
+  color: var(--warning-hover);
 }
 
 .status-closed {
-  background: #eef0f4;
-  color: #5e6675;
+  background: var(--line-soft);
+  color: var(--muted-ink);
 }
 
 .status-pending {
-  background: var(--blue-soft, #e3f1f7);
-  color: var(--blue, #316d8b);
+  background: var(--blue-soft);
+  color: var(--blue);
 }
 
 .status-running {
-  background: var(--violet-soft, #eeeaff);
-  color: var(--violet, #6655a6);
+  background: var(--action-soft);
+  color: var(--action);
 }
 
 .status-succeeded {
-  background: var(--primary-soft, #e9ecff);
-  color: var(--primary, #4e5fbb);
+  background: var(--primary-soft);
+  color: var(--primary);
 }
 
 .status-failed {
-  background: #fcebe8;
-  color: #a13d32;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .status-cancelled {
-  background: #eef0f4;
-  color: #5e6675;
+  background: var(--line-soft);
+  color: var(--muted-ink);
 }
 
 .empty-state {
   padding: 3rem;
-  border: 1px dashed #b8bfcc;
-  border-radius: 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
   text-align: center;
 }
 
@@ -251,9 +264,9 @@ button,
   height: 2.8rem;
   place-items: center;
   margin-bottom: 0.35rem;
-  border-radius: 0.85rem;
-  background: var(--violet-soft, #eeeaff);
-  color: var(--violet, #6655a6);
+  border-radius: 8px;
+  background: var(--action-soft);
+  color: var(--action);
   font-size: 1.6rem;
   font-weight: 800;
 }
@@ -271,9 +284,9 @@ button,
 
 .panel-block {
   padding: 1.5rem;
-  border: 1px solid #dee2ec;
-  border-radius: 1rem;
-  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .facts {
@@ -284,11 +297,11 @@ button,
 
 .facts div {
   padding-top: 0.8rem;
-  border-top: 1px solid #eaecf2;
+  border-top: 1px solid var(--line-soft);
 }
 
 .facts dt {
-  color: #667085;
+  color: var(--muted-ink);
   font-size: 0.8rem;
 }
 
@@ -308,18 +321,18 @@ button,
 }
 
 .risk {
-  color: #a13d32;
+  color: var(--danger);
 }
 
 details {
   padding: 1rem 0;
-  border-top: 1px solid #eaecf2;
-  border-bottom: 1px solid #eaecf2;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
 }
 
 summary {
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .inline-actions {
@@ -329,9 +342,9 @@ summary {
 }
 
 .button-muted {
-  border: 1px solid #b8bfcc;
-  background: #eef0f4;
-  color: #354139;
+  border: 1px solid var(--line);
+  background: var(--line-soft);
+  color: var(--ink);
 }
 
 .form-feedback {
@@ -340,25 +353,25 @@ summary {
 }
 
 .form-feedback.error {
-  background: #fcebe8;
-  color: #a13d32;
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .form-feedback.success {
-  background: #e6f3f8;
-  color: #236a8d;
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .button-link {
   min-height: auto;
   padding: 0;
   background: transparent;
-  color: #3f4e9a;
+  color: var(--primary);
   text-decoration: underline;
 }
 
 .button-danger {
-  background: #a13d32;
+  background: var(--danger);
   color: #fff;
 }
 

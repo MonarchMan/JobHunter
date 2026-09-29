@@ -77,6 +77,49 @@ it('reads observed first and last pages with a configured gap and no invented si
   expect(fetcher.mock.calls[1]?.[0]).toBe(template(3).url);
 }, 10_000);
 
+it('自建页仅在缺少下一批模板时触发一次官网正常分页，职位仍由 HTTP 获取', async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      response(
+        Array.from({ length: 20 }, (_, i) => row(String(100 + i))),
+        21,
+      ),
+    )
+    .mockResolvedValueOnce(response([row('120')], 21));
+  const loadNextPage = vi.fn((currentPage: number) => {
+    expect(currentPage).toBe(1);
+    session.offer(template(2));
+    return Promise.resolve();
+  });
+  const session = new Job51HttpSession({ fetch: fetcher, loadNextPage });
+  session.offer(template());
+  expect((await session.readNext(new AbortController().signal)).hasMore).toBe(true);
+  expect(loadNextPage).not.toHaveBeenCalled();
+  expect((await session.readNext(new AbortController().signal)).hasMore).toBe(false);
+  expect(loadNextPage).toHaveBeenCalledTimes(1);
+  expect(fetcher.mock.calls.map((call) => call[0])).toEqual([template().url, template(2).url]);
+});
+
+it('已预取下一页时不重复操作官网分页', async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      response(
+        Array.from({ length: 20 }, (_, i) => row(String(100 + i))),
+        21,
+      ),
+    )
+    .mockResolvedValueOnce(response([row('120')], 21));
+  const loadNextPage = vi.fn(() => Promise.resolve());
+  const session = new Job51HttpSession({ fetch: fetcher, loadNextPage });
+  session.offer(template());
+  await session.readNext(new AbortController().signal);
+  session.offer(template(2));
+  await session.readNext(new AbortController().signal);
+  expect(loadNextPage).not.toHaveBeenCalled();
+});
+
 it.each([
   [
     'cross origin',

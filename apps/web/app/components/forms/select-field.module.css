@@ -6,7 +6,7 @@
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0 0.75rem;
-  border: 1px solid #b8bfcc;
+  border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--ink);
@@ -20,7 +20,7 @@
 }
 
 .trigger:hover:not(:disabled) {
-  border-color: #929bb0;
+  border-color: var(--border-hover);
   background: var(--surface);
   transform: none;
 }
@@ -62,7 +62,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--surface);
-  box-shadow: 0 1rem 2.5rem rgb(34 40 71 / 18%);
+  box-shadow: var(--shadow-popover);
   transform-origin: var(--radix-select-content-transform-origin);
   animation: select-in var(--motion-standard) var(--ease-out);
 }

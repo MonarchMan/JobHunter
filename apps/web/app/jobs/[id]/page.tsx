@@ -117,28 +117,6 @@ export default async function JobDetailPage({
             </div>
           </dl>
         </article>
-        <aside className="panel-block">
-          <h2>修订时间线</h2>
-          {job.revisions.length === 0 ? (
-            <p className="muted">暂无修订记录。</p>
-          ) : (
-            <ol className={styles.timeline}>
-              {job.revisions.map((revision) => (
-                <li key={revision.id}>
-                  <strong>版本 {revision.revisionNumber}</strong>
-                  <time dateTime={revision.createdAt}>
-                    {new Intl.DateTimeFormat('zh-CN').format(new Date(revision.createdAt))}
-                  </time>
-                  <span>
-                    {Object.keys(revision.changes).length === 0
-                      ? '首次记录'
-                      : `变更：${Object.keys(revision.changes).join('、')}`}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </aside>
       </section>
       <section aria-labelledby="matching-title">
         <div className="section-heading">

@@ -90,6 +90,7 @@ for (const width of [1280, 768, 390]) {
     await body.click();
     await expect(page).toHaveURL(new URL(href, listUrl).href);
     await expect(page.getByRole('heading', { name: '匹配与建议' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '修订时间线' })).toHaveCount(0);
     await page.getByRole('link', { name: '← 返回职位列表' }).click();
     await expect(page).toHaveURL(listUrl);
     // 3、原生详情链接支持键盘 Enter，与行点击去往同一站内页面。

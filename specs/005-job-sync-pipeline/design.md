@@ -4,10 +4,12 @@
 
 ## 应用服务
 
+保留策略以 [ADR-0051](../../docs/adr/0051-current-job-content-only.md) 为准，覆盖下文旧时序历史描述：Revision ID 是当前内容代际而非保留历史。SQLite 内容插入触发器在同一事务中删除旧代际和推导结果、取消旧任务并重绑观察；禁止保留 change_set_json 中的旧内容。仅保留最新一条，不影响职位稳定 ID 和列表投影。
+
 `JobSyncService.run(command, signal)` 负责运行级编排：
 
 1. 校验来源和互斥条件，创建 SyncRun。
-2. 从 Adapter Registry 取得实例，在事务外执行 discover 和列表 normalize；列表同步不执行 fetchDetail。
+2. 从 Adapter Registry 取得实例，在事务外执行 discover 和 normalize；deferred 列表同步不执行 fetchDetail，required 来源按有界缓存规则先取得必需详情。
 3. 每个职位生成原始内容哈希并存储 Artifact/RawJobRecord。
 4. 调用领域合并规则，使用 UnitOfWork 写 Job、Revision、Observation、Event。
 5. 记录 seen job IDs；大来源使用临时表 `sync_seen_jobs(run_id, job_id)`，不在内存保存全集。
@@ -52,5 +54,7 @@ Adapter 结束时提供 coverage，但应用层只在以下证据同时成立时
 SyncRun 创建时即写入与最终统计同构的完整零值对象，不能以 `{}` 表示“尚未完成”。任务诊断因此可以在运行中、取消或孤儿恢复阶段继续使用严格 Schema。已有统计通过破坏性数据迁移统一投影为当前 12 个字段：缺失值填 0，并移除 `rawStored` 等废弃或未知字段；读取层不保留旧形状兼容分支。
 
 ## 测试
+
+required 来源（如滴滴实习）仍须在归一化前取得完整详情；成功详情经身份校验后写入既有详情缓存。列表哈希、适配器版本和最长 6 小时有效期共同限定复用，失效后重新请求，不永久依赖列表更新标记。网络请求保持在事务外，未入库的过滤项也可复用验证过的详情，减少中断重试成本。首条处理完成及此后每隔至少 5 秒保存统计快照，最终统计仍由 finishRun 提交；进度写入仅更新 running 记录，不提前认定覆盖完整。
 
 使用 FakeAdapter 与真实临时 SQLite 测试所有验收场景。失败注入点覆盖分页、详情、文件、每个事务阶段、任务入队和取消，并覆盖职位内容恢复为历史哈希及失败刷新保留成功详情缓存。

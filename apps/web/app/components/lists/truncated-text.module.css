@@ -24,7 +24,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--ink);
-  box-shadow: 0 0.8rem 2rem rgb(28 33 48 / 20%);
+  box-shadow: var(--shadow-popover);
   color: var(--surface);
   font-size: 0.78rem;
   font-weight: 600;

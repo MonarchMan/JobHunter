@@ -26,9 +26,6 @@ export function MetricCard({
       <p>{label}</p>
       <strong>{value}</strong>
       <span>{detail}</span>
-      <span className={styles.arrow} aria-hidden="true">
-        ↗
-      </span>
     </a>
   );
 }
