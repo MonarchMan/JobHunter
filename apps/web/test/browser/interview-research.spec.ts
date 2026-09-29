@@ -59,7 +59,7 @@ test.describe('外部 Agent 网友面经研究', () => {
       `/api/interview/research/${request.id}/schema`,
     );
     await expect(page.getByRole('combobox', { name: '研究执行方式' })).toHaveText(
-      '受限浏览器增强（推荐）',
+      '配置模型（推荐）',
     );
 
     const origin = new URL(page.url()).origin;

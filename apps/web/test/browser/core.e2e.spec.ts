@@ -313,12 +313,24 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(location.getByRole('tooltip')).toBeVisible();
   });
 
-  test('queues an idempotent source sync without waiting for collection', async ({ page }) => {
+  test('queues an idempotent source sync without waiting for collection', async ({
+    page,
+  }, testInfo) => {
     await page.goto('/sources?page=2');
     const sourceCard = page.locator('[data-company-source-card]').filter({
       has: page.getByRole('heading', { name: '腾讯', exact: true }),
     });
     await expect(sourceCard).toHaveCount(1);
+    // 1、公司卡片是唯一完整容器；总览和指标条不得再次形成带外框的小卡片。
+    const overview = sourceCard.getByRole('region', { name: '腾讯全部渠道总览' });
+    await expect(overview).toHaveCSS('border-top-width', '0px');
+    await expect(overview).toHaveCSS('border-left-width', '0px');
+    await expect(overview).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    const overviewMetrics = overview.locator('dl');
+    await expect(overviewMetrics).toHaveCSS('border-left-width', '0px');
+    await expect(overviewMetrics).toHaveCSS('border-right-width', '0px');
+    await expect(overviewMetrics).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+    await sourceCard.screenshot({ path: testInfo.outputPath('source-card-flat.png') });
     const sync = sourceCard.getByRole('button', { name: /^立即同步 / });
     await expect(sync).toBeEnabled();
     await expect(sync.locator('svg')).toBeVisible();
@@ -383,6 +395,10 @@ test.describe('校招实习管理台核心流程', () => {
     ).toHaveText(firstFeedback ?? '');
 
     await sourceCard.getByLabel('腾讯招聘渠道', { exact: true }).selectOption('intern');
+    const sourcePanel = sourceCard.locator('[data-company-source-panel]').first();
+    await expect(sourcePanel).toHaveCSS('border-top-width', '0px');
+    await expect(sourcePanel).toHaveCSS('border-left-width', '0px');
+    await expect(sourcePanel).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await expect(channelHealth).toHaveAttribute('data-company-channel-health', 'unknown');
     await expect(channelHealth).toContainText('未知');
     await expect(channelHealth).not.toContainText('实习');

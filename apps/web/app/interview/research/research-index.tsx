@@ -218,7 +218,7 @@ export function ResearchIndex({
             <button type="submit" disabled={busy} aria-busy={busy}>
               {busy ? '正在建立…' : '创建研究 Brief'}
             </button>
-            <p>创建后可下载 Prompt 与 Schema，也可以直接发布给本机 Codex。</p>
+            <p>创建后可下载 Prompt 与 Schema，也可以选择配置模型、Codex 或 Claude 执行。</p>
           </div>
         </form>
       </section>

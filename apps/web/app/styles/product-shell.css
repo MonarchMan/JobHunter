@@ -66,7 +66,7 @@ button:hover:not(:disabled) {
 }
 
 .button-primary {
-  color: #fff;
+  color: var(--text-on-strong);
 }
 
 .button-secondary,
@@ -97,7 +97,7 @@ button.button-muted:hover:not(:disabled) {
 .button-danger,
 .button-danger:hover:not(:disabled) {
   background: var(--danger);
-  color: #fff;
+  color: var(--text-on-strong);
 }
 
 input,

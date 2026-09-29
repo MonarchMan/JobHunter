@@ -1,5 +1,5 @@
 /** 应用层使用的类型约束。 */
-export type ExternalResearchExecutorKey = 'codex-local' | 'browser-assisted-codex';
+export type ExternalResearchExecutorKey = 'configured-model' | 'codex-local' | 'claude-local';
 
 /** 应用层数据结构或端口契约。 */
 export interface ExternalResearchBrowserPolicy {
@@ -49,7 +49,7 @@ export interface ExternalResearchExecutor {
   readonly capabilitySummary: Readonly<{
     liveWebSearch: boolean;
     browserTools: readonly ('search' | 'open' | 'readPage')[];
-    sandbox: 'web-search-only-local-process' | 'isolated-evidence-local-process';
+    sandbox: 'web-search-only-local-process' | 'isolated-evidence-model-api';
   }>;
   execute(input: ExternalResearchInput, signal: AbortSignal): Promise<ExternalResearchOutput>;
 }

@@ -5,6 +5,7 @@
 - [x] **SYNC-T018** 将职位改为当前内容保留，迁移历史数据并清理旧评分/建议，覆盖统一写入约束、详情补全及迟到结果。（SYNC-022）
 
 - [x] **SYNC-T017** 实现 required 详情有界缓存、取消传播和运行统计快照，覆盖重跑、过期、列表变化及隔离行为。（SYNC-021）
+
 > 显式覆盖：SYNC-001, SYNC-002, SYNC-003, SYNC-004, SYNC-005, SYNC-006, SYNC-007, SYNC-008, SYNC-009, SYNC-010, SYNC-011, SYNC-012, SYNC-013, SYNC-014, SYNC-015, SYNC-016, SYNC-017, SYNC-018, SYNC-019, SYNC-020, SYNC-Q01, SYNC-Q02, SYNC-Q03, SYNC-Q04
 
 - [x] **SYNC-T001** 实现 SyncRun 创建/结束、来源互斥和运行统计对象。（SYNC-001,002,012）

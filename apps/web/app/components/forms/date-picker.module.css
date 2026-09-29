@@ -104,7 +104,7 @@
 
 .days .selected {
   background: var(--primary);
-  color: #fff;
+  color: var(--text-on-strong);
 }
 
 .actions {

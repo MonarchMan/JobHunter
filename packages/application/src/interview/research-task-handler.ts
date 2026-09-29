@@ -18,7 +18,7 @@ export const experienceResearchTaskPayloadSchema = z
     requestId: z.uuid(),
     requestFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
     expectedRevision: z.number().int().nonnegative(),
-    executorKey: z.enum(['codex-local', 'browser-assisted-codex']),
+    executorKey: z.enum(['configured-model', 'codex-local', 'claude-local']),
   })
   .strict();
 

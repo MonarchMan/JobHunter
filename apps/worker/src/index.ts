@@ -100,9 +100,10 @@ import {
 import { firstPartySourceCatalog, registerFirstPartyAdapters } from '@jobhunter/sources';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import {
-  BrowserAssistedCodexResearchExecutor,
+  ClaudeCodeResearchExecutor,
   CodexLocalResearchExecutor,
 } from './codex-research-executor.js';
+import { ConfiguredModelResearchExecutor } from './configured-model-research-executor.js';
 import { PlaywrightResumePdfRenderer } from './resume-pdf-renderer.js';
 import { createSqliteMaintenanceTick } from './sqlite-maintenance.js';
 
@@ -309,6 +310,15 @@ export function createProductionWorkerApplication(input: {
   });
   const uow = new SqliteUnitOfWork(database.client);
   const networkSemaphore = new AsyncSemaphore(input.maxConcurrentNetworkTasks ?? 4);
+  // 1、统一创建并限流模型客户端；面经研究和其他 Agent 复用相同配置与运行记录底座。
+  const configuredRunner = input.model
+    ? new AgentRunner({
+        store: new SqliteAgentRunStore(database.client),
+        model: limitModel(createConfiguredModelClient(input.model), networkSemaphore),
+        createId: () => ids.generate(),
+        now: () => clock.now(),
+      })
+    : null;
   const sourceRateLimit = new TokenBucketSourceRateLimitGate(firstPartyRateLimits());
   const sourceHttp = limitSourceHttp(
     new FetchSourceHttpClient(),
@@ -399,7 +409,11 @@ export function createProductionWorkerApplication(input: {
         clock,
         ids,
       }),
-      executors: [new CodexLocalResearchExecutor(), new BrowserAssistedCodexResearchExecutor()],
+      executors: [
+        ...(configuredRunner ? [new ConfiguredModelResearchExecutor(configuredRunner)] : []),
+        new CodexLocalResearchExecutor(),
+        new ClaudeCodeResearchExecutor(),
+      ],
     }),
   );
   let interviewTasks: TaskService | null = null;
@@ -504,12 +518,8 @@ export function createProductionWorkerApplication(input: {
       clock,
       ids,
     });
-    const runner = new AgentRunner({
-      store: new SqliteAgentRunStore(database.client),
-      model: limitModel(createConfiguredModelClient(input.model), networkSemaphore),
-      createId: () => ids.generate(),
-      now: () => clock.now(),
-    });
+    const runner = configuredRunner;
+    if (!runner) throw new TypeError('Configured Agent runner is unavailable.');
     registry.register(
       createResumeProfileTaskHandler({
         runner,

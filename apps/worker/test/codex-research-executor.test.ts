@@ -5,18 +5,12 @@ import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  BrowserAssistedCodexResearchExecutor,
+  ClaudeCodeResearchExecutor,
   CodexLocalResearchExecutor,
   type CodexResearchChildProcess,
   type CodexResearchSpawn,
   type CodexResearchSpawnOptions,
 } from '../src/codex-research-executor.js';
-import type {
-  ResearchBrowserCollectedPage,
-  ResearchBrowserGateway,
-  ResearchBrowserGatewayOptions,
-  ResearchBrowserTraceEntry,
-} from '../src/research-browser-gateway.js';
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 interface SpawnCapture {
@@ -143,9 +137,36 @@ function successfulSpawn(
   };
 }
 
+/** 模拟只通过 stdout 返回最终 JSON 的 Claude Code 进程。 */
+function successfulClaudeSpawn(
+  output: string,
+  onCapture: (capture: SpawnCapture) => void,
+): CodexResearchSpawn {
+  return (command, args, options) => {
+    const child = new FakeChild();
+    const capture: SpawnCapture = {
+      command,
+      args: [...args],
+      options,
+      child,
+      prompt: '',
+      schema: null,
+    };
+    child.stdin.on('data', (chunk: Buffer) => {
+      capture.prompt += chunk.toString('utf8');
+    });
+    child.stdin.once('finish', () => {
+      child.stdout.end(output);
+      child.stderr.end();
+      onCapture(capture);
+      child.emit('exit', 0, null);
+    });
+    return child;
+  };
+}
+
 const browserSourceUrl = 'https://interviews.nowcoder.com/discuss/123456';
 const browserQuestion = 'SFT 训练不稳定时如何排查和优化？';
-const browserEvidence = `面试问题：${browserQuestion}`;
 
 function browserBundle(
   answerExcerpt: string | null = null,
@@ -184,76 +205,6 @@ function browserBundle(
     ],
     warnings: [],
   });
-}
-
-/** 构造测试输入或执行断言的辅助逻辑。 */
-function browserTrace(
-  bodyText = `原文上下文。${browserEvidence}后续上下文。`,
-): readonly ResearchBrowserTraceEntry[] {
-  const occurredAt = '2026-08-30T08:00:00.000Z';
-  return [
-    {
-      sequence: 1,
-      tool: 'open',
-      occurredAt,
-      ok: true,
-      finalUrl: browserSourceUrl,
-      title: '大模型算法面试经验',
-      retrievedAt: occurredAt,
-    },
-    {
-      sequence: 2,
-      tool: 'readPage',
-      occurredAt,
-      ok: true,
-      finalUrl: browserSourceUrl,
-      title: '大模型算法面试经验',
-      retrievedAt: occurredAt,
-      bodyText,
-    },
-  ];
-}
-
-/** 构造测试输入或执行断言的辅助逻辑。 */
-function fakeBrowserGateway(
-  trace: readonly ResearchBrowserTraceEntry[],
-  onClose: () => void,
-  pages: readonly ResearchBrowserCollectedPage[] = [
-    {
-      query: '大模型算法 面经 面试 技术问题',
-      searchRank: 1,
-      finalUrl: browserSourceUrl,
-      title: '大模型算法面试经验',
-      retrievedAt: '2026-08-30T08:00:00.000Z',
-      bodyText: `原文上下文。${browserEvidence}后续上下文。`,
-      bodySha256: 'b'.repeat(64),
-      bodyLength: 35,
-    },
-  ],
-): ResearchBrowserGateway {
-  return {
-    url: 'http://127.0.0.1:43210/mcp',
-    bearerToken: 'fixture-browser-token',
-    collectPages: () => Promise.resolve(pages),
-    readTrace: () => trace,
-    close: () => {
-      onClose();
-      return Promise.resolve();
-    },
-  };
-}
-
-/** 构造测试输入或执行断言的辅助逻辑。 */
-function configValues(args: readonly string[]): readonly string[] {
-  const values: string[] = [];
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === '--config') {
-      const value = args[index + 1];
-      if (!value) throw new Error('Expected a value after --config.');
-      values.push(value);
-    }
-  }
-  return values;
 }
 
 describe('CodexLocalResearchExecutor', () => {
@@ -678,415 +629,44 @@ describe('CodexLocalResearchExecutor', () => {
   });
 });
 
-describe('BrowserAssistedCodexResearchExecutor', () => {
-  it('collects evidence before spawning a Codex process with no browser credentials or tools', async () => {
+describe('ClaudeCodeResearchExecutor', () => {
+  it('只开放网页工具并接受单层 JSON 围栏', async () => {
     const root = await temporaryRoot();
-    const signal = new AbortController().signal;
     let capture: SpawnCapture | null = null;
-    let gatewayOptions: ResearchBrowserGatewayOptions | null = null;
-    let closeCount = 0;
     const bundle = browserBundle();
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      command: '/fixture/codex',
+    const executor = new ClaudeCodeResearchExecutor({
+      command: '/fixture/claude',
       temporaryRoot: root,
       platform: 'darwin',
       environment: {
         PATH: '/fixture/bin',
         HOME: '/Users/fixture',
-        CODEX_HOME: '/Users/fixture/.codex',
         LANG: 'en_US.UTF-8',
-        JOBHUNTER_BROWSER_MCP_TOKEN: 'stale-token-must-be-replaced',
         JOBHUNTER_MODEL_API_KEY: 'must-not-be-inherited',
       },
-      startBrowserGateway: (options) => {
-        gatewayOptions = options;
-        return Promise.resolve(
-          fakeBrowserGateway(browserTrace(), () => {
-            closeCount += 1;
-          }),
-        );
-      },
-      spawn: successfulSpawn(bundle, (value) => {
-        expect(closeCount).toBe(1);
+      spawn: successfulClaudeSpawn(`\`\`\`json\n${bundle}\n\`\`\``, (value) => {
         capture = value;
       }),
-    });
-
-    const result = await executor.execute(input(), signal);
-    const launched = capture as SpawnCapture | null;
-    if (!launched) throw new Error('Expected the Codex fixture process to launch.');
-
-    expect(executor.version).toBe('v2');
-    expect(executor.supportedPromptVersions).toEqual(['community-research-prompt@v4']);
-    expect(executor.capabilitySummary).toEqual({
-      liveWebSearch: false,
-      browserTools: [],
-      sandbox: 'isolated-evidence-local-process',
-    });
-    expect(gatewayOptions).toEqual({
-      allowedDomains: input().browserPolicy.allowedDomains,
-      blockedDomains: input().browserPolicy.blockedDomains,
-      limits: {
-        maximumSearches: 5,
-        maximumPages: 10,
-        maximumReadCalls: 20,
-        maximumPageCharacters: 60_000,
-        maximumTotalCharacters: 300_000,
-        navigationTimeoutMs: 20_000,
-      },
-      signal,
-    });
-    expect(configValues(launched.args)).toEqual(['shell_environment_policy.inherit=none']);
-    expect(launched.args).not.toContain('code_mode_host');
-    expect(launched.args).toContain('shell_tool');
-    expect(launched.args).toContain('unified_exec');
-    expect(launched.args).not.toContain('--search');
-    expect(launched.options.env).toEqual({
-      PATH: '/fixture/bin',
-      HOME: '/Users/fixture',
-      CODEX_HOME: '/Users/fixture/.codex',
-      LANG: 'en_US.UTF-8',
-      TMPDIR: launched.options.cwd,
-      TMP: launched.options.cwd,
-      TEMP: launched.options.cwd,
-      NO_COLOR: '1',
-      TERM: 'dumb',
-    });
-    expect(launched.prompt).toContain('Research public interview experiences and return JSON.');
-    expect(launched.prompt).toContain('JobHunter 预采集证据包');
-    expect(launched.prompt).toContain(browserEvidence);
-    expect(JSON.stringify(launched.args)).not.toContain(browserEvidence);
-    expect(JSON.stringify(launched.options.env)).not.toContain(browserEvidence);
-    expect(result.bundleText).toBe(bundle);
-    expect(closeCount).toBe(1);
-  });
-
-  it('rejects the frozen v2 prompt without starting a browser gateway', async () => {
-    const root = await temporaryRoot();
-    let startCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () => {
-        startCount += 1;
-        return Promise.resolve(fakeBrowserGateway(browserTrace(), () => undefined));
-      },
-    });
-
-    await expect(
-      executor.execute(
-        input({ promptVersion: 'community-research-prompt@v2' }),
-        new AbortController().signal,
-      ),
-    ).rejects.toMatchObject({
-      category: 'invalid_config',
-      message:
-        'Codex research executor browser-assisted-codex does not support prompt community-research-prompt@v2.',
-    });
-    expect(startCount).toBe(0);
-  });
-
-  it('accepts a bundle only when its source and evidence are present in the browser trace', async () => {
-    const root = await temporaryRoot();
-    let closeCount = 0;
-    const bundle = browserBundle();
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve(
-          fakeBrowserGateway(browserTrace(), () => {
-            closeCount += 1;
-          }),
-        ),
-      spawn: successfulSpawn(bundle, () => undefined),
-    });
-
-    await expect(executor.execute(input(), new AbortController().signal)).resolves.toEqual({
-      bundleText: bundle,
-      externalSessionId: null,
-      diagnosticSummary: null,
-    });
-    expect(closeCount).toBe(1);
-  });
-
-  it.each([
-    {
-      name: 'untraced source',
-      trace: browserTrace().filter((entry) => entry.tool !== 'open'),
-      message: 'Browser research result has no interview questions backed by this browser trace.',
-    },
-    {
-      name: 'untraced evidence',
-      trace: browserTrace('页面中没有模型所声称的证据摘要。'),
-      message: 'Browser research result has no interview questions backed by this browser trace.',
-    },
-  ])('rejects $name and closes the browser gateway', async ({ trace, message }) => {
-    const root = await temporaryRoot();
-    let closeCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve(
-          fakeBrowserGateway(trace, () => {
-            closeCount += 1;
-          }),
-        ),
-      spawn: successfulSpawn(browserBundle(), () => undefined),
-    });
-
-    await expect(executor.execute(input(), new AbortController().signal)).rejects.toMatchObject({
-      category: 'permanent',
-      message,
-    });
-    expect(closeCount).toBe(1);
-  });
-
-  it.each([
-    {
-      name: 'source',
-      bundle: browserBundle(null, browserQuestion, 'https://placeholder.invalid'),
-    },
-    {
-      name: 'experience source',
-      bundle: browserBundle(null, browserQuestion, browserSourceUrl, 'https://placeholder.invalid'),
-    },
-  ])('rejects a non-public $name URL as permanent browser evidence', async ({ bundle }) => {
-    const root = await temporaryRoot();
-    let closeCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve(
-          fakeBrowserGateway(browserTrace(), () => {
-            closeCount += 1;
-          }),
-        ),
-      spawn: successfulSpawn(bundle, () => undefined),
-    });
-
-    await expect(executor.execute(input(), new AbortController().signal)).rejects.toMatchObject({
-      category: 'permanent',
-      message: 'Browser research result has no interview questions backed by this browser trace.',
-    });
-    expect(closeCount).toBe(1);
-  });
-
-  it('clears an answer excerpt that is absent from the cited browser page', async () => {
-    const root = await temporaryRoot();
-    let closeCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve(
-          fakeBrowserGateway(browserTrace(), () => {
-            closeCount += 1;
-          }),
-        ),
-      spawn: successfulSpawn(browserBundle('这是模型自行补写的答案。'), () => undefined),
-    });
-
-    const result = await executor.execute(input(), new AbortController().signal);
-    const finalized = JSON.parse(result.bundleText) as {
-      readonly experiences: readonly {
-        readonly questions: readonly { readonly answerExcerpt: string | null }[];
-      }[];
-      readonly warnings: readonly string[];
-    };
-    expect(finalized.experiences[0]?.questions[0]?.answerExcerpt).toBeNull();
-    expect(finalized.warnings).toContainEqual(expect.stringContaining('清空 1 个'));
-    expect(closeCount).toBe(1);
-  });
-
-  it('rejects a fabricated question that does not exist on the page', async () => {
-    const root = await temporaryRoot();
-    let closeCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve(
-          fakeBrowserGateway(browserTrace(), () => {
-            closeCount += 1;
-          }),
-        ),
-      spawn: successfulSpawn(
-        browserBundle(null, '解释 PPO clipped objective 的推导。'),
-        () => undefined,
-      ),
-    });
-
-    await expect(executor.execute(input(), new AbortController().signal)).rejects.toMatchObject({
-      category: 'permanent',
-      message: 'Browser research result has no interview questions backed by this browser trace.',
-    });
-    expect(closeCount).toBe(1);
-  });
-
-  it('keeps the trace-backed subset and records deterministic pruning warnings', async () => {
-    const root = await temporaryRoot();
-    const bundle = JSON.parse(browserBundle()) as {
-      sources: { url: string; title: string; publishedAt: null; retrievedAt: string }[];
-      experiences: {
-        company: null;
-        role: string;
-        stage: null;
-        occurredAt: null;
-        sourceUrl: string;
-        questions: {
-          text: string;
-          answerExcerpt: string | null;
-          topics: string[];
-        }[];
-      }[];
-    };
-    const validSource = bundle.sources[0];
-    const validExperience = bundle.experiences[0];
-    if (!validSource || !validExperience) throw new Error('Expected a valid browser fixture.');
-    const untracedUrl = 'https://interviews.example.org/unread';
-    bundle.sources.push({ ...validSource, url: untracedUrl });
-    bundle.experiences.push({ ...validExperience, sourceUrl: untracedUrl });
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve(fakeBrowserGateway(browserTrace(), () => undefined)),
-      spawn: successfulSpawn(JSON.stringify(bundle), () => undefined),
     });
 
     const result = await executor.execute(
       input({ maximumOutputBytes: 4_096 }),
       new AbortController().signal,
     );
-    const finalized = JSON.parse(result.bundleText) as {
-      readonly sources: readonly { readonly url: string }[];
-      readonly experiences: readonly { readonly sourceUrl: string }[];
-      readonly warnings: readonly string[];
-    };
-    expect(finalized.sources).toEqual([expect.objectContaining({ url: browserSourceUrl })]);
-    expect(finalized.experiences).toEqual([
-      expect.objectContaining({ sourceUrl: browserSourceUrl }),
-    ]);
-    expect(finalized.warnings).toContainEqual(expect.stringContaining('未完成读取'));
-  });
+    const launched = capture as SpawnCapture | null;
+    if (!launched) throw new Error('Expected the Claude fixture process to launch.');
 
-  it('closes the browser gateway when execution is cancelled', async () => {
-    const root = await temporaryRoot();
-    const child = new FakeChild();
-    const started = deferred();
-    let closeCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      terminationGraceMs: 5,
-      startBrowserGateway: () =>
-        Promise.resolve(
-          fakeBrowserGateway(browserTrace(), () => {
-            closeCount += 1;
-          }),
-        ),
-      spawn: () => {
-        child.stdin.resume();
-        started.resolve();
-        return child;
-      },
-      signalProcess: (_process, signal) => {
-        if (signal === 'SIGTERM') queueMicrotask(() => child.emit('exit', null, 'SIGTERM'));
-      },
+    expect(launched.command).toBe('/fixture/claude');
+    expect(launched.args).toContain('--safe-mode');
+    expect(launched.args).not.toContain('--restricted');
+    expect(argumentAfter(launched.args, '--permission-mode')).toBe('auto');
+    expect(argumentAfter(launched.args, '--tools')).toBe('WebSearch,WebFetch');
+    expect(launched.args).not.toContain('Bash');
+    expect(launched.args).not.toContain('Read');
+    expect(launched.prompt).toContain('输出 JSON Schema');
+    expect(launched.options.env).not.toHaveProperty('JOBHUNTER_MODEL_API_KEY');
+    expect(JSON.parse(result.bundleText)).toMatchObject({
+      schemaVersion: 'community-research-bundle@v2',
     });
-    const controller = new AbortController();
-    const execution = executor.execute(input(), controller.signal);
-    await started.promise;
-    controller.abort();
-
-    await expect(execution).rejects.toMatchObject({ category: 'cancelled' });
-    expect(closeCount).toBe(1);
-  });
-
-  it('closes the browser gateway when the Codex process fails', async () => {
-    const root = await temporaryRoot();
-    let closeCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve(
-          fakeBrowserGateway(browserTrace(), () => {
-            closeCount += 1;
-          }),
-        ),
-      spawn: () => {
-        const child = new FakeChild();
-        child.stdin.resume();
-        queueMicrotask(() => {
-          child.stdout.end();
-          child.stderr.end('network unavailable');
-          child.emit('exit', 1, null);
-        });
-        return child;
-      },
-    });
-
-    await expect(executor.execute(input(), new AbortController().signal)).rejects.toMatchObject({
-      category: 'temporary',
-      message: 'Codex research execution failed because a temporary dependency was unavailable.',
-    });
-    expect(closeCount).toBe(1);
-  });
-
-  it('does not start Codex when the browser collector returns no readable pages', async () => {
-    const root = await temporaryRoot();
-    let spawnCount = 0;
-    let closeCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve(
-          fakeBrowserGateway(
-            [
-              {
-                sequence: 1,
-                tool: 'search',
-                occurredAt: '2026-08-30T08:00:00.000Z',
-                ok: true,
-                query: '大模型算法 面经',
-                resultCount: 0,
-              },
-            ],
-            () => {
-              closeCount += 1;
-            },
-            [],
-          ),
-        ),
-      spawn: () => {
-        spawnCount += 1;
-        return new FakeChild();
-      },
-    });
-
-    await expect(executor.execute(input(), new AbortController().signal)).rejects.toMatchObject({
-      category: 'permanent',
-      message: 'The anonymous research browser found no readable public interview pages.',
-    });
-    expect(spawnCount).toBe(0);
-    expect(closeCount).toBe(1);
-  });
-
-  it('does not start Codex when browser cleanup fails', async () => {
-    const root = await temporaryRoot();
-    let spawnCount = 0;
-    const executor = new BrowserAssistedCodexResearchExecutor({
-      temporaryRoot: root,
-      startBrowserGateway: () =>
-        Promise.resolve({
-          ...fakeBrowserGateway(browserTrace(), () => undefined),
-          close: () => Promise.reject(new Error('fixture gateway cleanup failed')),
-        }),
-      spawn: () => {
-        spawnCount += 1;
-        return new FakeChild();
-      },
-    });
-
-    await expect(executor.execute(input(), new AbortController().signal)).rejects.toMatchObject({
-      category: 'temporary',
-      message: 'The anonymous research browser could not be cleaned up.',
-    });
-    expect(spawnCount).toBe(0);
   });
 });

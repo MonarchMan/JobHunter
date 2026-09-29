@@ -41,7 +41,7 @@ const requestStateLabels = {
 
 const taskStateLabels = {
   pending: '等待 Worker',
-  running: 'Codex 执行中',
+  running: '研究执行中',
   succeeded: '任务已完成',
   failed: '任务失败',
   cancelled: '任务已取消',
@@ -49,10 +49,10 @@ const taskStateLabels = {
 
 const maximumBundleBytes = 2 * 1024 * 1024;
 const browserPromptVersion = 'community-research-prompt@v4';
-type ResearchExecutorKey = 'codex-local' | 'browser-assisted-codex';
+type ResearchExecutorKey = 'configured-model' | 'codex-local' | 'claude-local';
 
 function defaultExecutor(promptVersion: string): ResearchExecutorKey {
-  return promptVersion === browserPromptVersion ? 'browser-assisted-codex' : 'codex-local';
+  return promptVersion === browserPromptVersion ? 'configured-model' : 'codex-local';
 }
 
 function taskFailure(task: ResearchTaskView | null): string | null {
@@ -154,7 +154,7 @@ export function ResearchWorkbench({
       });
       const result = (await response.json()) as ApiEnvelope<AcceptedTask>;
       if (!response.ok || !result.data) {
-        throw new Error(result.error?.message ?? '无法发布 Codex 研究任务。');
+        throw new Error(result.error?.message ?? '无法发布研究任务。');
       }
       setCurrentTask({
         id: result.data.taskId,
@@ -164,13 +164,15 @@ export function ResearchWorkbench({
       report(
         result.data.deduplicated
           ? '相同研究任务已在队列中，将继续等待结果。'
-          : executorKey === 'browser-assisted-codex'
-            ? '研究任务已发布。Worker 将匿名采集公开网页，再交给无网络 Codex 筛选；离开此页不会中断。'
-            : '研究任务已发布给本机 Codex，仅使用原生网页搜索；离开此页不会中断。',
+          : executorKey === 'configured-model'
+            ? '研究任务已发布。Worker 将采集公开网页，再交给配置模型处理；离开此页不会中断。'
+            : executorKey === 'claude-local'
+              ? '研究任务已发布给 Claude Code，由其自行联网研究；离开此页不会中断。'
+              : '研究任务已发布给 Codex CLI，由其自行联网研究；离开此页不会中断。',
       );
       router.refresh();
     } catch (caught) {
-      report(caught instanceof Error ? caught.message : '无法发布 Codex 研究任务。', true);
+      report(caught instanceof Error ? caught.message : '无法发布研究任务。', true);
     } finally {
       setBusy(null);
     }
@@ -194,7 +196,7 @@ export function ResearchWorkbench({
       report(
         result.data.task.status === 'cancelled'
           ? '研究任务已取消，可以重新发布。'
-          : '取消请求已提交，Worker 正在停止 Codex。',
+          : '取消请求已提交，Worker 正在停止研究任务。',
       );
       router.refresh();
     } catch (caught) {
@@ -305,10 +307,11 @@ export function ResearchWorkbench({
   const browserCompatible = current.request.promptVersion === browserPromptVersion;
   const executorOptions = browserCompatible
     ? [
-        { value: 'browser-assisted-codex', label: '受限浏览器增强（推荐）' },
-        { value: 'codex-local', label: '仅原生网页搜索（兼容）' },
+        { value: 'configured-model', label: '配置模型（推荐）' },
+        { value: 'codex-local', label: 'Codex CLI' },
+        { value: 'claude-local', label: 'Claude Code' },
       ]
-    : [{ value: 'codex-local', label: '仅原生网页搜索' }];
+    : [{ value: 'codex-local', label: 'Codex CLI（兼容）' }];
 
   return (
     <div className={styles.root} aria-busy={busy !== null || taskPending}>
@@ -367,7 +370,7 @@ export function ResearchWorkbench({
           </header>
           <p>
             Prompt 说明研究目标，Schema 固定返回格式。你可以直接发布给本机
-            Codex，也可以把两份文件交给其他工具。
+            Agent，也可以把两份文件交给其他工具。
           </p>
           <div className={styles.assetRows}>
             <div>
@@ -419,13 +422,15 @@ export function ResearchWorkbench({
             <span className={styles.decisionCursor} aria-hidden="true" />
             <div className={styles.executionChoice}>
               <div>
-                <strong>本机 Codex</strong>
+                <strong>自动研究</strong>
                 <p>
-                  {executorKey === 'browser-assisted-codex'
-                    ? 'Worker 使用匿名隔离浏览器采集公开正文，Codex 仅离线筛选问题。'
-                    : browserCompatible
-                      ? '只使用 Codex 原生网页搜索，适合作为兼容路径。'
-                      : '该请求使用旧版 Prompt，只能使用原生网页搜索或手工导包。'}
+                  {executorKey === 'configured-model'
+                    ? 'Worker 统一采集公开正文，再由已配置模型筛选并归并问题。'
+                    : executorKey === 'claude-local'
+                      ? 'Claude Code 使用受限网页工具自行联网研究，不读取本地业务数据。'
+                      : browserCompatible
+                        ? 'Codex CLI 使用原生网页搜索自行联网研究。'
+                        : '该请求使用旧版 Prompt，只能使用 Codex 原生网页搜索或手工导包。'}
                 </p>
               </div>
               <div className={styles.executorSelector}>
@@ -437,7 +442,11 @@ export function ResearchWorkbench({
                   value={executorKey}
                   disabled={busy !== null || taskPending || !canExecute}
                   onValueChange={(value) => {
-                    if (value === 'codex-local' || value === 'browser-assisted-codex') {
+                    if (
+                      value === 'configured-model' ||
+                      value === 'codex-local' ||
+                      value === 'claude-local'
+                    ) {
                       setExecutorKey(value);
                     }
                   }}

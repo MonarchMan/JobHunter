@@ -7,9 +7,7 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background:
-    radial-gradient(circle at 88% 12%, var(--action-soft), transparent 17rem),
-    linear-gradient(135deg, var(--surface) 0%, var(--primary-soft) 100%);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
   color: var(--text-primary);
 }
@@ -29,8 +27,8 @@
 }
 
 .hero h1 em {
-  color: var(--action);
-  font-style: italic;
+  color: var(--primary);
+  font-style: normal;
 }
 
 .copy > p {
@@ -54,12 +52,9 @@
   min-height: 3.1rem;
   padding: 0 1.25rem;
   border-radius: 8px;
-  background: var(--action);
-  color: #fff;
 }
 
 .primaryAction:hover {
-  background: var(--action-hover);
   box-shadow: var(--shadow-md);
 }
 
@@ -70,7 +65,7 @@
 }
 
 .quietAction:hover {
-  color: var(--action);
+  color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 0.25rem;
 }
@@ -85,15 +80,13 @@
 
 .brandSymbol {
   display: flex;
-  width: 8rem;
-  height: 8rem;
+  width: 6.5rem;
+  height: 6.5rem;
   align-items: center;
   justify-content: flex-end;
   align-self: flex-end;
   overflow: hidden;
-  border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--surface);
 }
 
 .brandSymbol img {
@@ -178,12 +171,10 @@
 
 @keyframes hero-enter {
   from {
-    opacity: 0;
     transform: translateY(8px);
   }
 
   to {
-    opacity: 1;
     transform: translateY(0);
   }
 }
@@ -198,8 +189,8 @@
   }
 
   .brandSymbol {
-    width: 7rem;
-    height: 7rem;
+    width: 6rem;
+    height: 6rem;
     align-self: flex-start;
   }
 }

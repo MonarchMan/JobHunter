@@ -77,12 +77,8 @@ export interface CodexResearchExecutorOptions {
 /** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
 export type CodexLocalResearchExecutorOptions = CodexResearchExecutorOptions;
 
-/** Worker 运行时数据结构或执行契约。 */
-export interface BrowserAssistedCodexResearchExecutorOptions extends CodexResearchExecutorOptions {
-  readonly startBrowserGateway?: (
-    options: ResearchBrowserGatewayOptions,
-  ) => Promise<ResearchBrowserGateway>;
-}
+/** Claude Code 联网研究执行器的进程依赖。 */
+export type ClaudeCodeResearchExecutorOptions = CodexResearchExecutorOptions;
 
 /** Worker 运行时数据结构或执行契约。 */
 interface PreparedCodexResearchExecution {
@@ -95,7 +91,7 @@ interface PreparedCodexResearchExecution {
 }
 
 /** Worker 运行时数据结构或执行契约。 */
-interface BrowserResearchTraceEntry {
+export interface BrowserResearchTraceEntry {
   readonly tool: 'search' | 'open' | 'readPage';
   readonly ok: boolean;
   readonly collectionDecision?: 'accepted' | 'rejected';
@@ -343,7 +339,7 @@ function normalizedResearchResultSourceUrl(value: string): string {
 }
 
 /** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
-function finalizeBrowserResearchBundle(
+export function finalizeBrowserResearchBundle(
   bundleText: string,
   trace: readonly BrowserResearchTraceEntry[],
 ): string {
@@ -826,7 +822,7 @@ abstract class BaseCodexResearchExecutor implements ExternalResearchExecutor {
     if (!input.prompt.trim()) {
       throw new ExternalResearchExecutorError('invalid_config', 'Codex research prompt is empty.');
     }
-    if (!this.supportedPromptVersions.includes(input.promptVersion)) {
+    if (!this.supportedPromptVersions.some((version) => version === input.promptVersion)) {
       throw new ExternalResearchExecutorError(
         'invalid_config',
         `Codex research executor ${this.key} does not support prompt ${input.promptVersion}.`,
@@ -1090,8 +1086,210 @@ export class CodexLocalResearchExecutor extends BaseCodexResearchExecutor {
   }
 }
 
+/** 移除 Claude 偶尔添加的单层 JSON Markdown 围栏，不接受围栏外正文。 */
+function unwrapJsonFence(value: string): string {
+  const trimmed = value.trim();
+  const matched = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/iu.exec(trimmed);
+  return matched?.[1]?.trim() ?? trimmed;
+}
+
+/** 将 Claude Code 退出诊断转换为稳定且不泄露原文的任务错误。 */
+function classifyClaudeFailure(stderr: string): ExternalResearchExecutorError {
+  if (
+    /(?:not logged in|authentication|unauthorized|forbidden|api key|\b401\b|\b403\b)/iu.test(stderr)
+  ) {
+    return new ExternalResearchExecutorError(
+      'invalid_config',
+      'Claude Code authentication or local configuration is unavailable.',
+    );
+  }
+  if (/(?:unknown option|invalid option|unrecognized|configuration error)/iu.test(stderr)) {
+    return new ExternalResearchExecutorError(
+      'invalid_config',
+      'Claude Code does not support the required restricted research configuration.',
+    );
+  }
+  if (
+    /(?:rate.?limit|temporar|timed?\s*out|network|connection|unavailable|\b429\b|\b5\d\d\b)/iu.test(
+      stderr,
+    )
+  ) {
+    return new ExternalResearchExecutorError(
+      'temporary',
+      'Claude Code research is temporarily unavailable.',
+    );
+  }
+  return new ExternalResearchExecutorError(
+    'permanent',
+    'Claude Code exited without producing a usable research result.',
+  );
+}
+
+/** 使用 Claude Code 内建网页工具自行联网研究，不授予本地工具能力。 */
+export class ClaudeCodeResearchExecutor implements ExternalResearchExecutor {
+  public readonly key = 'claude-local' as const;
+  public readonly version = 'v1' as const;
+  public readonly supportedPromptVersions = Object.freeze([communityResearchPromptVersion]);
+  public readonly capabilitySummary = Object.freeze({
+    liveWebSearch: true,
+    browserTools: Object.freeze([]),
+    sandbox: 'web-search-only-local-process' as const,
+  });
+
+  readonly #command: string;
+  readonly #spawn: CodexResearchSpawn;
+  readonly #temporaryRoot: string;
+  readonly #environment: NodeJS.ProcessEnv;
+  readonly #platform: NodeJS.Platform;
+  readonly #diagnosticLimitBytes: number;
+  readonly #terminationGraceMs: number;
+  readonly #signalProcess: (child: CodexResearchChildProcess, signal: NodeJS.Signals) => void;
+
+  public constructor(options: ClaudeCodeResearchExecutorOptions = {}) {
+    this.#command = options.command?.trim() ?? 'claude';
+    if (!this.#command) {
+      throw new ExternalResearchExecutorError('invalid_config', 'Claude Code command is empty.');
+    }
+    this.#spawn = options.spawn ?? defaultSpawn;
+    this.#temporaryRoot = path.resolve(options.temporaryRoot ?? tmpdir());
+    this.#environment = options.environment ?? process.env;
+    this.#platform = options.platform ?? process.platform;
+    this.#diagnosticLimitBytes = options.diagnosticLimitBytes ?? defaultDiagnosticLimitBytes;
+    this.#terminationGraceMs = options.terminationGraceMs ?? defaultTerminationGraceMs;
+    this.#signalProcess =
+      options.signalProcess ??
+      ((child, signal) => {
+        defaultSignalProcess(child, signal, this.#platform);
+      });
+  }
+
+  /** 1、建立空临时工作区；2、只开放网页工具运行 Claude；3、校验并清理输出。 */
+  public async execute(
+    input: ExternalResearchInput,
+    signal: AbortSignal,
+  ): Promise<ExternalResearchOutput> {
+    validatePositiveInteger(
+      input.maximumOutputBytes,
+      maximumConfiguredOutputBytes,
+      'Claude result size limit',
+    );
+    validatePositiveInteger(input.timeoutMs, maximumConfiguredTimeoutMs, 'Claude timeout');
+    if (input.promptVersion !== communityResearchPromptVersion) {
+      throw new ExternalResearchExecutorError(
+        'invalid_config',
+        `Claude Code research does not support prompt ${input.promptVersion}.`,
+      );
+    }
+    assertNotCancelled(signal);
+    const release = await codexExecutionGate.acquire(signal);
+    let directory: string | null = null;
+    try {
+      directory = await mkdtemp(path.join(this.#temporaryRoot, 'jobhunter-claude-research-'));
+      const prompt = `${input.prompt}\n\n## 输出 JSON Schema\n\n严格返回单个 JSON 对象，不要输出解释。Schema：\n${JSON.stringify(input.outputSchema)}`;
+      const args = [
+        '--print',
+        '--output-format',
+        'text',
+        '--safe-mode',
+        '--no-chrome',
+        '--strict-mcp-config',
+        '--mcp-config',
+        '{"mcpServers":{}}',
+        '--disable-slash-commands',
+        '--no-session-persistence',
+        '--permission-mode',
+        'auto',
+        '--tools',
+        'WebSearch,WebFetch',
+      ] as const;
+      let child: CodexResearchChildProcess;
+      try {
+        child = this.#spawn(this.#command, args, {
+          cwd: directory,
+          env: minimalEnvironment(this.#environment, directory),
+          shell: false,
+          detached: this.#platform !== 'win32',
+          windowsHide: true,
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+      } catch (error) {
+        const code = errorCode(error);
+        throw code === 'ENOENT'
+          ? new ExternalResearchExecutorError(
+              'missing',
+              'Claude Code is not installed or is not available on PATH.',
+            )
+          : new ExternalResearchExecutorError(
+              code === 'EACCES' || code === 'EPERM' ? 'invalid_config' : 'temporary',
+              'Claude Code research process could not start.',
+            );
+      }
+      const completion = await waitForProcess({
+        child,
+        prompt,
+        signal,
+        timeoutMs: input.timeoutMs,
+        stdoutLimitBytes: input.maximumOutputBytes,
+        stderrLimitBytes: this.#diagnosticLimitBytes,
+        terminationGraceMs: this.#terminationGraceMs,
+        forceKillDetachedGroupAfterLeaderExit: this.#platform !== 'win32',
+        signalProcess: this.#signalProcess,
+      });
+      if (completion.stopReason === 'cancelled') {
+        throw new ExternalResearchExecutorError('cancelled', 'Claude Code research was cancelled.');
+      }
+      if (completion.stopReason === 'timeout') {
+        throw new ExternalResearchExecutorError('temporary', 'Claude Code research timed out.');
+      }
+      if (completion.stopReason === 'stdout_limit' || completion.stopReason === 'stderr_limit') {
+        throw new ExternalResearchExecutorError(
+          'permanent',
+          'Claude Code research output exceeded the configured size limit.',
+        );
+      }
+      if (completion.stopReason === 'stdin_error') {
+        throw new ExternalResearchExecutorError(
+          'temporary',
+          'Claude Code research prompt could not be delivered.',
+        );
+      }
+      if (completion.code !== 0 || completion.signal !== null) {
+        throw classifyClaudeFailure(completion.stderr.text());
+      }
+      const bundleText = unwrapJsonFence(completion.stdout.text());
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(bundleText) as unknown;
+      } catch {
+        throw new ExternalResearchExecutorError(
+          'permanent',
+          'Claude Code research result is not valid JSON.',
+        );
+      }
+      const bundle = communityResearchBundleSchema.safeParse(parsed);
+      if (!bundle.success) {
+        throw new ExternalResearchExecutorError(
+          'permanent',
+          'Claude Code research result does not match the research schema.',
+        );
+      }
+      return {
+        bundleText: JSON.stringify(bundle.data),
+        externalSessionId: null,
+        diagnosticSummary:
+          completion.stderr.receivedBytes > 0
+            ? `Claude Code emitted ${String(completion.stderr.receivedBytes)} bytes of diagnostic output.`
+            : null,
+      };
+    } finally {
+      release();
+      if (directory) await rm(directory, { recursive: true, force: true });
+    }
+  }
+}
+
 /** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
-function browserEvidencePrompt(
+export function browserEvidencePrompt(
   prompt: string,
   version: string,
   pages: readonly ResearchBrowserCollectedPage[],
@@ -1125,109 +1323,89 @@ function emptyCollectionError(
   );
 }
 
-/** 通过受限浏览器网关辅助 Codex 采集公开面经。 */
-export class BrowserAssistedCodexResearchExecutor extends BaseCodexResearchExecutor {
-  public readonly key = 'browser-assisted-codex' as const;
-  public readonly version = 'v2' as const;
-  public readonly supportedPromptVersions = Object.freeze([communityResearchPromptVersion]);
-  public readonly capabilitySummary = Object.freeze({
-    liveWebSearch: false,
-    browserTools: Object.freeze([]),
-    sandbox: 'isolated-evidence-local-process' as const,
-  });
+/** Worker 预采集完成后交给配置模型处理的有界证据。 */
+export interface CollectedBrowserResearchEvidence {
+  readonly prompt: string;
+  readonly trace: readonly BrowserResearchTraceEntry[];
+}
 
-  readonly #startBrowserGateway: (
+/** 由 Worker 完成确定性网页采集，并在返回前关闭浏览器资源。 */
+export async function collectBrowserResearchEvidence(
+  input: ExternalResearchInput,
+  signal: AbortSignal,
+  startBrowserGateway: (
     options: ResearchBrowserGatewayOptions,
-  ) => Promise<ResearchBrowserGateway>;
-
-  /** 执行Worker组件对外暴露的操作。 */
-  public constructor(options: BrowserAssistedCodexResearchExecutorOptions = {}) {
-    super(options);
-    this.#startBrowserGateway = options.startBrowserGateway ?? startResearchBrowserGateway;
-  }
-
-  /** 处理Worker类内部的辅助逻辑。 */
-  protected async prepareExecution(
-    input: ExternalResearchInput,
-    signal: AbortSignal,
-  ): Promise<PreparedCodexResearchExecution> {
-    let gateway: ResearchBrowserGateway;
-    try {
-      gateway = await this.#startBrowserGateway({
-        allowedDomains: input.browserPolicy.allowedDomains,
-        blockedDomains: input.browserPolicy.blockedDomains,
-        limits: {
-          maximumSearches: input.browserPolicy.maximumSearches,
-          maximumPages: input.browserPolicy.maximumPages,
-          maximumReadCalls: input.browserPolicy.maximumReadCalls,
-          maximumPageCharacters: input.browserPolicy.maximumPageCharacters,
-          maximumTotalCharacters: input.browserPolicy.maximumTotalCharacters,
-          navigationTimeoutMs: input.browserPolicy.navigationTimeoutMs,
-        },
-        signal,
-      });
-    } catch (error) {
-      if (signal.aborted) {
-        throw new ExternalResearchExecutorError(
-          'cancelled',
-          'Codex browser research execution was cancelled.',
-        );
-      }
-      const code = errorCode(error);
-      throw new ExternalResearchExecutorError(
-        code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' ? 'invalid_config' : 'temporary',
-        code === 'ENOENT'
-          ? 'The anonymous research browser runtime is not installed.'
-          : 'The anonymous research browser gateway could not start.',
-      );
-    }
-    let pages: readonly ResearchBrowserCollectedPage[] = [];
-    let trace: ReturnType<ResearchBrowserGateway['readTrace']> = [];
-    let collectionFailure: unknown = null;
-    try {
-      pages = await gateway.collectPages(
-        input.collectionPlan.queries,
-        input.collectionPlan.maximumSources,
-        input.collectionPlan.relevanceTerms,
-        input.collectionPlan.priorityQueryCount,
-      );
-      trace = gateway.readTrace();
-    } catch (error) {
-      collectionFailure = error;
-      trace = gateway.readTrace();
-    }
-    let cleanupFailure: unknown = null;
-    try {
-      await gateway.close();
-    } catch (error) {
-      cleanupFailure = error;
-    }
+  ) => Promise<ResearchBrowserGateway> = startResearchBrowserGateway,
+): Promise<CollectedBrowserResearchEvidence> {
+  // 1、启动受限网关；启动失败按运行时缺失或临时故障分类。
+  let gateway: ResearchBrowserGateway;
+  try {
+    gateway = await startBrowserGateway({
+      allowedDomains: input.browserPolicy.allowedDomains,
+      blockedDomains: input.browserPolicy.blockedDomains,
+      limits: {
+        maximumSearches: input.browserPolicy.maximumSearches,
+        maximumPages: input.browserPolicy.maximumPages,
+        maximumReadCalls: input.browserPolicy.maximumReadCalls,
+        maximumPageCharacters: input.browserPolicy.maximumPageCharacters,
+        maximumTotalCharacters: input.browserPolicy.maximumTotalCharacters,
+        navigationTimeoutMs: input.browserPolicy.navigationTimeoutMs,
+      },
+      signal,
+    });
+  } catch (error) {
     if (signal.aborted) {
-      throw new ExternalResearchExecutorError(
-        'cancelled',
-        'Codex browser research execution was cancelled.',
-      );
+      throw new ExternalResearchExecutorError('cancelled', 'Browser research was cancelled.');
     }
-    if (collectionFailure !== null) {
-      throw new ExternalResearchExecutorError(
-        'temporary',
-        'The anonymous research browser could not collect public interview pages.',
-      );
-    }
-    if (cleanupFailure !== null) {
-      throw new ExternalResearchExecutorError(
-        'temporary',
-        'The anonymous research browser could not be cleaned up.',
-      );
-    }
-    if (pages.length === 0) throw emptyCollectionError(trace);
-    return {
-      nativeWebSearch: false,
-      prompt: browserEvidencePrompt(input.prompt, input.collectionPlan.version, pages),
-      configArguments: [],
-      environmentVariables: {},
-      finalizeBundle: (bundleText) => finalizeBrowserResearchBundle(bundleText, trace),
-      close: () => undefined,
-    };
+    const code = errorCode(error);
+    throw new ExternalResearchExecutorError(
+      code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' ? 'invalid_config' : 'temporary',
+      code === 'ENOENT'
+        ? 'The anonymous research browser runtime is not installed.'
+        : 'The anonymous research browser gateway could not start.',
+    );
   }
+
+  // 2、按冻结计划采集页面并保留瞬时 trace；3、无论结果如何都先关闭浏览器。
+  let pages: readonly ResearchBrowserCollectedPage[] = [];
+  let trace: ReturnType<ResearchBrowserGateway['readTrace']> = [];
+  let collectionFailure: unknown = null;
+  try {
+    pages = await gateway.collectPages(
+      input.collectionPlan.queries,
+      input.collectionPlan.maximumSources,
+      input.collectionPlan.relevanceTerms,
+      input.collectionPlan.priorityQueryCount,
+    );
+    trace = gateway.readTrace();
+  } catch (error) {
+    collectionFailure = error;
+    trace = gateway.readTrace();
+  }
+  let cleanupFailure: unknown = null;
+  try {
+    await gateway.close();
+  } catch (error) {
+    cleanupFailure = error;
+  }
+  if (signal.aborted) {
+    throw new ExternalResearchExecutorError('cancelled', 'Browser research was cancelled.');
+  }
+  if (collectionFailure !== null) {
+    throw new ExternalResearchExecutorError(
+      'temporary',
+      'The anonymous research browser could not collect public interview pages.',
+    );
+  }
+  if (cleanupFailure !== null) {
+    throw new ExternalResearchExecutorError(
+      'temporary',
+      'The anonymous research browser could not be cleaned up.',
+    );
+  }
+  if (pages.length === 0) throw emptyCollectionError(trace);
+  return {
+    prompt: browserEvidencePrompt(input.prompt, input.collectionPlan.version, pages),
+    trace,
+  };
 }

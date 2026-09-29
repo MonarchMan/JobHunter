@@ -44,7 +44,7 @@
 }
 
 .textLink:hover {
-  color: #fff;
+  color: var(--primary);
   text-decoration: underline;
   text-underline-offset: 0.25rem;
 }

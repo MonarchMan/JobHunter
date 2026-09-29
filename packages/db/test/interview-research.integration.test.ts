@@ -946,7 +946,7 @@ describe('community interview research persistence', () => {
     });
   });
 
-  it.each(['codex-local', 'browser-assisted-codex'] as const)(
+  it.each(['configured-model', 'codex-local', 'claude-local'] as const)(
     'routes the %s executor result through the same validated bundle importer',
     async (executorKey) => {
       const { repository, service, queue, clock } = await setup();
@@ -969,11 +969,11 @@ describe('community interview research persistence', () => {
         version: 'fixture-v1',
         supportedPromptVersions: [created.detail.request.promptVersion],
         capabilitySummary: {
-          liveWebSearch: executorKey === 'codex-local',
+          liveWebSearch: executorKey !== 'configured-model',
           browserTools: [],
           sandbox:
-            executorKey === 'browser-assisted-codex'
-              ? 'isolated-evidence-local-process'
+            executorKey === 'configured-model'
+              ? 'isolated-evidence-model-api'
               : 'web-search-only-local-process',
         },
         execute(input) {
@@ -1012,18 +1012,18 @@ describe('community interview research persistence', () => {
       };
       const unusedExecutor: ExternalResearchExecutor = {
         ...executor,
-        key: executorKey === 'codex-local' ? 'browser-assisted-codex' : 'codex-local',
+        key: executorKey === 'configured-model' ? 'codex-local' : 'configured-model',
         capabilitySummary:
-          executorKey === 'codex-local'
+          executorKey === 'configured-model'
             ? {
-                liveWebSearch: false,
-                browserTools: [],
-                sandbox: 'isolated-evidence-local-process',
-              }
-            : {
                 liveWebSearch: true,
                 browserTools: [],
                 sandbox: 'web-search-only-local-process',
+              }
+            : {
+                liveWebSearch: false,
+                browserTools: [],
+                sandbox: 'isolated-evidence-model-api',
               },
         execute() {
           throw new Error('Handler selected the wrong research executor fixture.');

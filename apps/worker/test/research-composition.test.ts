@@ -9,7 +9,7 @@ import { createProductionWorkerApplication } from '../src/index.js';
 const taskType = 'interview.experience-research.execute';
 
 describe('production research composition', () => {
-  it.each(['codex-local', 'browser-assisted-codex'] as const)(
+  it.each(['configured-model', 'codex-local', 'claude-local'] as const)(
     'registers the real research handler for a stale %s request without invoking an executor',
     async (executorKey) => {
       const dataRoot = await mkdtemp(path.join(tmpdir(), 'jobhunter-worker-research-composition-'));

@@ -7,7 +7,7 @@ export const webCreateExperienceResearchSchema = experienceResearchBriefSchema;
 /** 执行网友面经研究请求。 */
 export const webExecuteExperienceResearchSchema = z
   .object({
-    executorKey: z.enum(['codex-local', 'browser-assisted-codex']),
+    executorKey: z.enum(['configured-model', 'codex-local', 'claude-local']),
     idempotencyToken: z.string().trim().min(8).max(200),
   })
   .strict();
