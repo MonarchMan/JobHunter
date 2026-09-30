@@ -62,6 +62,7 @@ interface FixtureJob {
   readonly description: string;
   readonly token?: string;
   readonly failNormalize?: boolean;
+  readonly publishedAt?: UtcInstant;
 }
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -154,7 +155,7 @@ function fixtureAdapter(
           description: input.detail?.description ?? raw.description,
           detailUrl: `https://careers.example.com/jobs/${raw.id}`,
           applyUrl: `https://careers.example.com/jobs/${raw.id}/apply`,
-          publishedAt: null,
+          publishedAt: raw.publishedAt ?? null,
         }),
         provenance: { title: '$.title', description: '$.description' },
         sourcePrivateJson: {},
@@ -307,6 +308,84 @@ function count(handle: SqliteDatabaseHandle, table: string): number {
 }
 
 describe('JobSyncService', () => {
+  it('repairs legacy content timestamps from revisions without changing source or observation data', async () => {
+    const fixture = await setup();
+    await run(fixture);
+    const db = fixture.handle.client;
+    const before = db.prepare('SELECT * FROM jobs ORDER BY id').all();
+    const revisions = db.prepare('SELECT * FROM job_revisions ORDER BY id').all();
+    // 1、模拟旧版同步将所有内容时间刷新为采集时间。
+    db.prepare('UPDATE jobs SET updated_at = 9_000').run();
+    const sql = await readFile(
+      new URL('../migrations/0038_job_content_updated_at.sql', import.meta.url),
+      'utf8',
+    );
+    db.transaction(() => db.exec(sql))();
+    expect(db.prepare('SELECT * FROM jobs ORDER BY id').all()).toEqual(before);
+    expect(db.prepare('SELECT * FROM job_revisions ORDER BY id').all()).toEqual(revisions);
+    // 2、迁移可重入，不产生新内容或观察；缺少修订证据时不猜测日期。
+    db.transaction(() => db.exec(sql))();
+    expect(db.prepare('SELECT changes()').pluck().get()).toBe(0);
+    expect(count(fixture.handle, 'job_observations')).toBe(3);
+    db.prepare(
+      "DELETE FROM job_revisions WHERE job_id = (SELECT id FROM jobs WHERE external_job_id = 'job-3')",
+    ).run();
+    db.prepare("UPDATE jobs SET updated_at = 9_000 WHERE external_job_id = 'job-3'").run();
+    db.transaction(() => db.exec(sql))();
+    expect(
+      db.prepare("SELECT updated_at FROM jobs WHERE external_job_id = 'job-3'").pluck().get(),
+    ).toBe(9_000);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+  });
+
+  it('separates source publication, content changes and observations through lifecycle transitions', async () => {
+    const fixture = await setup();
+    const original = fixture.scenario.jobs[0];
+    if (!original) throw new Error('Missing fixture job');
+    fixture.scenario.jobs = [{ ...original, publishedAt: utcInstant(100) }];
+    const dates = (): unknown =>
+      fixture.handle.client
+        .prepare('SELECT updated_at, last_seen_at, published_at, status FROM jobs')
+        .get();
+    // 1、重复观察只推进 lastSeen，保留真实内容时间及来源发布时间。
+    await run(fixture);
+    await run(fixture);
+    expect(dates()).toEqual({
+      updated_at: 1_000,
+      last_seen_at: 2_000,
+      published_at: 100,
+      status: 'active',
+    });
+    // 2、官网日期变化写入新内容；正文变化不以观察时间冒充发布时间。
+    fixture.scenario.jobs = [{ ...original, publishedAt: utcInstant(200) }];
+    await run(fixture);
+    expect(dates()).toMatchObject({ updated_at: 3_000, published_at: 200 });
+    fixture.scenario.jobs = [
+      { ...original, description: 'New content.', publishedAt: utcInstant(200) },
+    ];
+    await run(fixture);
+    expect(dates()).toMatchObject({ updated_at: 4_000, published_at: 200 });
+    const changed = fixture.scenario.jobs[0];
+    if (!changed) throw new Error('Missing changed fixture job');
+    // 3、完整缺失、关闭、恢复及可归属解析隔离均不是内容更新。
+    fixture.scenario.jobs = [];
+    await run(fixture);
+    expect(dates()).toMatchObject({ updated_at: 4_000, status: 'stale' });
+    await run(fixture);
+    expect(dates()).toMatchObject({ updated_at: 4_000, status: 'closed' });
+    fixture.scenario.jobs = [changed];
+    await run(fixture);
+    expect(dates()).toMatchObject({ updated_at: 4_000, last_seen_at: 7_000, status: 'active' });
+    fixture.scenario.jobs = [{ ...changed, failNormalize: true }];
+    await run(fixture);
+    expect(dates()).toEqual({
+      updated_at: 4_000,
+      last_seen_at: 8_000,
+      published_at: 200,
+      status: 'active',
+    });
+  });
+
   it.each([false, true])(
     'retires old content and dependent results atomically (migration=%s)',
     async (migration) => {
@@ -557,6 +636,22 @@ describe('JobSyncService', () => {
     await details.run(command(0), new AbortController().signal);
     expect(count(fixture.handle, 'job_revisions')).toBe(3);
     expect(count(fixture.handle, 'source_job_details')).toBe(1);
+    // 1、详情补全属于内容变化，但不改写列表观察时间或虚构来源发布时间。
+    expect(
+      fixture.handle.client
+        .prepare(
+          "SELECT updated_at, last_seen_at, published_at FROM jobs WHERE external_job_id = 'job-1'",
+        )
+        .get(),
+    ).toEqual({ updated_at: 2_000, last_seen_at: 1_000, published_at: null });
+    fixture.clock.advance();
+    await details.run(command(0), new AbortController().signal);
+    expect(
+      fixture.handle.client
+        .prepare("SELECT updated_at FROM jobs WHERE external_job_id = 'job-1'")
+        .pluck()
+        .get(),
+    ).toBe(2_000);
 
     fixture.scenario.detailFailure = true;
     await expect(details.run(command(1), new AbortController().signal)).rejects.toMatchObject({

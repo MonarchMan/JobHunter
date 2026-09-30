@@ -222,7 +222,7 @@ export const webJobQuerySchema = z
     recruitmentCategory: z.enum(['all', 'internship', 'campus', 'social']).optional(),
     minimumScore: z.number().min(0).max(100).optional(),
     profileVersionId: z.uuid().optional(),
-    sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('updated_desc'),
+    sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('published_desc'),
     page: z.number().int().positive().default(1),
     pageSize: z.number().int().min(1).max(100).default(25),
     cursor: z.string().max(1_000).optional(),

@@ -29,7 +29,7 @@ const filterSchema = z
     recruitmentCategory: z.enum(['internship', 'campus', 'social']).optional(),
     minimumScore: z.number().min(0).max(100).optional(),
     profileVersionId: id.optional(),
-    sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('updated_desc'),
+    sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('published_desc'),
     page: z.number().int().positive().optional(),
     pageSize: z.number().int().min(1).max(100).optional(),
     cursor: z.string().max(1_000).optional(),
@@ -188,11 +188,12 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     }
 
     const sort = filter.sort;
+    // 发布时间非负，-1 保证未知日期始终排在已知日期后；同值仍以 ID 稳定分页。
     const sortExpression =
       sort === 'updated_desc'
         ? 'updated_at'
         : sort === 'published_desc'
-          ? 'COALESCE(published_at, 0)'
+          ? 'COALESCE(published_at, -1)'
           : 'COALESCE(score, -1)';
     const outerConditions: string[] = [];
     const outerParameters: unknown[] = [];

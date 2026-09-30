@@ -11,6 +11,18 @@ import { TruncatedText } from '../components/lists/truncated-text.js';
 import { CompanyLogo } from '../components/company-logo.js';
 import styles from './jobs-table.module.css';
 
+/** 桌面与移动共用来源发布时间；空值保持未知，不能回退到采集时间。 */
+function PublishedDate({ value }: Readonly<{ value: string | null }>): ReactElement {
+  // 1、没有来源日期时明确展示缺失，不生成虚假的 time 元素。
+  if (value === null) return <span>未提供</span>;
+  // 2、沿用中文日期格式，固定时区使服务端与浏览器展示一致。
+  return (
+    <time dateTime={value}>
+      {new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai' }).format(new Date(value))}
+    </time>
+  );
+}
+
 /** 表格行与移动记录卡的指针增强；真正的链接仍负责键盘和路由语义。 */
 function openLinkedRow(event: MouseEvent<HTMLElement>): void {
   // 1、保留子控件、portal、文本选择及浏览器修饰键操作，不吞掉原有行为。
@@ -92,7 +104,7 @@ export function JobsTable({
               <th scope="col">公司</th>
               <th scope="col">地点</th>
               <th scope="col">匹配</th>
-              <th scope="col">更新时间</th>
+              <th scope="col">发布时间</th>
               <th scope="col">操作</th>
             </tr>
           </thead>
@@ -156,9 +168,7 @@ export function JobsTable({
                   </a>
                 </td>
                 <td>
-                  <time dateTime={job.updatedAt}>
-                    {new Intl.DateTimeFormat('zh-CN').format(new Date(job.updatedAt))}
-                  </time>
+                  <PublishedDate value={job.publishedAt} />
                 </td>
                 <td>
                   <div className={styles.rowActions} data-row-navigation-ignore>
@@ -222,7 +232,8 @@ export function JobsTable({
               >
                 {job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`}
               </a>{' '}
-              · 更新于 {new Intl.DateTimeFormat('zh-CN').format(new Date(job.updatedAt))}
+              · 发布时间：
+              <PublishedDate value={job.publishedAt} />
             </small>
             <div className={styles.rowActions} data-row-navigation-ignore>
               <a

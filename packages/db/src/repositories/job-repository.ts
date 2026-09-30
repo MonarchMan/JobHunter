@@ -275,14 +275,15 @@ export class SqliteJobRepository implements JobRepository {
       .run(input.syncRunId, input.jobId);
   }
 
-  /** 执行数据库组件对外暴露的操作。 */
+  /** 保存观察与生命周期；内容时间只由内容写入路径更新，不能随同步刷新。 */
   public persistStatus(input: PersistJobStatus): void {
+    // 1、真实状态变化仍要求事件证据；重复观察只推进生命周期字段。
     if (input.fromStatus !== input.lifecycle.status && (!input.eventId || !input.reason)) {
       throw new Error('A status change requires an event ID and reason.');
     }
     this.#client
       .prepare(
-        `UPDATE jobs SET status = ?, missing_count = ?, last_seen_at = ?, closed_at = ?, updated_at = ?
+        `UPDATE jobs SET status = ?, missing_count = ?, last_seen_at = ?, closed_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -290,9 +291,9 @@ export class SqliteJobRepository implements JobRepository {
         input.lifecycle.missingCount,
         input.lifecycle.lastSeenAt,
         input.lifecycle.closedAt,
-        input.occurredAt,
         input.jobId,
       );
+    // 2、关闭或恢复的发生时间记录在事件中，不覆盖职位内容更新时间。
     if (input.eventId && input.reason) {
       this.#client
         .prepare(

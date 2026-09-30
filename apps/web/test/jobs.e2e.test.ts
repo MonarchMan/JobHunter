@@ -156,6 +156,89 @@ function seedJobs(dataRoot: string): void {
 }
 
 describe('Web job listing', () => {
+  it('returns and sorts source dates independently of local content and observation times', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-web-job-dates-');
+    try {
+      seedJobs(root.path);
+      const database = openSqliteDatabase({ dataRoot: root.path });
+      const bootstrap = resolveBootstrapConfig({
+        cli: { dataRoot: root.path },
+        environment: {},
+        cwd: root.path,
+      });
+      const container = createLocalWebContainer(
+        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
+      );
+      try {
+        // 1、来源日期决定 published_desc 顺序，不能受本地写入时间影响。
+        database.client
+          .prepare("UPDATE jobs SET published_at = 100 WHERE external_job_id = 'web-job-1'")
+          .run();
+        database.client
+          .prepare("UPDATE jobs SET published_at = 200 WHERE external_job_id = 'web-job-2'")
+          .run();
+        const query = parseWebJobQuery({});
+        expect(query.sort).toBe('published_desc');
+        expect(container.services.settings.get().jobListPreferences.defaultSort).toBe(
+          'published_desc',
+        );
+        expect(container.services.webJobs.list(query).items).toMatchObject([
+          {
+            title: '大模型应用工程师',
+            publishedAt: new Date(200).toISOString(),
+            updatedAt: new Date(2).toISOString(),
+          },
+          {
+            title: 'Agent 开发工程师',
+            publishedAt: new Date(100).toISOString(),
+            updatedAt: new Date(3).toISOString(),
+          },
+        ]);
+        // 1.a、显式排序仍优先，不能被默认发布时间顺序覆盖。
+        expect(
+          container.services.webJobs.list(parseWebJobQuery({ sort: 'updated_desc' })).items[0]
+            ?.title,
+        ).toBe('Agent 开发工程师');
+        // 2、来源更新日期后读取新值；缺失值保持 null 并排后，不用本地日期补齐。
+        database.client
+          .prepare("UPDATE jobs SET published_at = 300 WHERE external_job_id = 'web-job-1'")
+          .run();
+        database.client
+          .prepare("UPDATE jobs SET published_at = NULL WHERE external_job_id = 'web-job-2'")
+          .run();
+        expect(container.services.webJobs.list(query).items).toMatchObject([
+          { title: 'Agent 开发工程师', publishedAt: new Date(300).toISOString() },
+          { title: '大模型应用工程师', publishedAt: null },
+        ]);
+        // 2.a、合法的零时间也排在未知之前，并验证跨页仍按新到旧连续。
+        database.client
+          .prepare("UPDATE jobs SET published_at = 0 WHERE external_job_id = 'web-job-2'")
+          .run();
+        database.client
+          .prepare("UPDATE jobs SET published_at = NULL WHERE external_job_id = 'web-job-1'")
+          .run();
+        const firstPage = container.services.webJobs.list(parseWebJobQuery({ limit: '1' }));
+        expect(firstPage.items[0]).toMatchObject({
+          title: '大模型应用工程师',
+          publishedAt: new Date(0).toISOString(),
+        });
+        expect(
+          container.services.webJobs.list(parseWebJobQuery({ limit: '1', page: '2' })).items[0],
+        ).toMatchObject({ title: 'Agent 开发工程师', publishedAt: null });
+        expect(
+          container.services.webJobs
+            .list(parseWebJobQuery({ source: 'platform' }))
+            .items.every((item) => item.publishedAt === null),
+        ).toBe(true);
+      } finally {
+        container.close();
+        database.close();
+      }
+    } finally {
+      await root.cleanup();
+    }
+  });
+
   it('keeps filters in URLs and uses stable forward cursors with closed hidden by default', async () => {
     const root = await createTemporaryDataRoot('jobhunter-web-jobs-');
     try {

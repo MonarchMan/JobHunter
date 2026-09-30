@@ -80,6 +80,8 @@
 
 ## Dataset navigation
 
+- Job dates: 职位桌面表格与移动卡片显示“发布时间”，只取来源 `publishedAt`；空值显示“未提供”，不以同步或入库日期兜底。官网更新日期变化时跟随，未变化则保留。日期按 zh-CN／Asia/Shanghai 格式化，发布时间排序与显示字段一致。依据 SYNC-004/005、WEB-002。
+
 - Admin tables: 服务端数字分页。
 - Exploratory lists: 同样使用规格要求的数字分页，不使用无限滚动。
 - URL state: 保存已提交搜索、筛选、排序和页码；敏感值不得进入 URL。

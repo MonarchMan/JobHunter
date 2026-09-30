@@ -66,7 +66,7 @@ const campusJobs = [
     description: '参与 Agent 应用开发、评测和工具调用链路建设。',
     detailUrl: 'https://careers.tencent.com/campus/agent-intern',
     applyUrl: 'https://careers.tencent.com/campus/agent-intern/apply',
-    publishedAt: null,
+    publishedAt: Date.parse('2026-08-01T16:30:00.000Z'),
   }),
   parseNormalizedJob({
     sourceId: ids.source,
@@ -167,8 +167,8 @@ function insertJob(
        (id, company_id, source_id, external_job_id, title, department, job_family,
         locations_json, employment_type, recruitment_category, experience_text, education_text, description,
         detail_url, apply_url, status, missing_count, content_hash, first_seen_at,
-        last_seen_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, 1, ?)`,
+        last_seen_at, created_at, updated_at, published_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 1, ?, 1, ?, ?)`,
     )
     .run(
       input.id,
@@ -190,6 +190,7 @@ function insertJob(
       'a'.repeat(64),
       input.updatedAt,
       input.updatedAt,
+      job.publishedAt,
     );
   database.client
     .prepare(

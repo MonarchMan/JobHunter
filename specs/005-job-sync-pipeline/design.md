@@ -24,6 +24,8 @@ Revision 是时序事实而不是内容集合：只对“与当前 Revision 相�
 
 ## 事务边界
 
+职位有三种独立时间：`published_at` 是来源发布／更新日期，`updated_at` 是当前标准化内容写入时间，`last_seen_at` 是最后一次成功观察。`persistMutation` 与 `persistDetailRevision` 写入内容时间；`persistStatus` 仅保存生命周期，不写内容时间，即使关闭／恢复也不例外。迁移 0038 从当前 `job_revisions.created_at` 恢复被重复同步污染的 `jobs.updated_at`，保留发布时间、观察时间、内容及状态，缺少修订证据的记录不猜测。
+
 - 创建/完成 SyncRun：各一个短事务。
 - 每个职位合并：一个短事务。
 - 未观察状态处理：按固定批次（默认 100）事务。

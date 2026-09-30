@@ -67,7 +67,7 @@ const defaultSourceAutomationSetting = {
 } as const;
 const defaultMatchingAutomationSetting = { scoreEnabled: true, adviceEnabled: false } as const;
 const defaultJobListPreferencesSetting = {
-  defaultSort: 'updated_desc',
+  defaultSort: 'published_desc',
   rememberFilters: false,
 } as const;
 

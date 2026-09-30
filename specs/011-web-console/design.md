@@ -4,6 +4,10 @@
 
 > 状态：Implemented
 
+职位日期列及移动卡片统一读取 DTO 的 `publishedAt`，复用同一日期展示函数，采用 zh-CN／Asia/Shanghai 与原生 `time` 语义；空值显示“未提供”，不输出无效 time 元素。保持现有 `published_desc` 数据库排序、分页与默认排序设置，不用 `updatedAt` 兜底，也不覆盖用户已保存的排序偏好。
+
+默认设置、Web 查询 Schema 和仓储查询 Schema 均使用 `published_desc`；SQL 使用发布时间 DESC、ID ASC，空日期映射为低于所有合法非负时间的 -1，确保空值最后且游标／数字分页一致。已有显式排序和保存偏好不被重置。
+
 设置表单保留显式保存：复选框 checked 与 automaticScoringEnabled 同向映射，提交前只是本地草稿；页面说明必须提示点击“保存设置”，不宣称即时保存。浏览器验证 Chromium/WebKit 的勾选、取消、保存和重载，后端集成测试验证新修订的评分任务开关。
 
 职位行导航使用共享 `openLinkedRow` 渐进增强，委托给行内真实详情链接；保留 table/article 语义，不把整行改成嵌套按钮。排除交互元素、操作区域、portal 冒泡、已阻止事件、非主键/修饰键及文本选择。详情链接携带列表查询串作为 returnTo，服务端只接受 `/jobs` 或 `/jobs?...`，避免开放重定向。

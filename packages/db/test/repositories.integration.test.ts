@@ -379,6 +379,22 @@ describe('SqliteJobQueryRepository', () => {
     ).toMatchObject({
       id: '018f0000-0000-7000-8000-000000000001',
     });
+    // 默认按来源发布时间从新到旧，数字页与游标页均不能沿用本地更新时间顺序。
+    handle.client
+      .prepare(
+        "UPDATE jobs SET published_at = CASE external_job_id WHEN 'query-job-1' THEN 100 ELSE 200 END",
+      )
+      .run();
+    const newest = repository.query({ limit: 1 });
+    expect(newest.items[0]?.publishedAt).toBe(200);
+    if (!newest.nextCursor) throw new Error('Expected a publication cursor');
+    expect(repository.query({ limit: 1, cursor: newest.nextCursor }).items[0]?.publishedAt).toBe(
+      100,
+    );
+    expect(repository.query({ search: '工程师', page: 1, pageSize: 1 }).items[0]?.publishedAt).toBe(
+      200,
+    );
+    expect(repository.query({ sort: 'updated_desc', limit: 1 }).items[0]?.publishedAt).toBe(100);
   });
 
   it('requires a profile for score filters and returns matching scores', async () => {

@@ -210,7 +210,7 @@ describe('Web source management', () => {
           sourceSync: { channel: 'intern' },
           sourceAutomation: { enabled: true, frequency: 'daily', time: '03:00' },
           matchingAutomation: { scoreEnabled: true, adviceEnabled: false },
-          jobListPreferences: { defaultSort: 'updated_desc', rememberFilters: false },
+          jobListPreferences: { defaultSort: 'published_desc', rememberFilters: false },
         });
         container.services.sources.enqueueSync({
           sourceIds: [parseId(sourceId, 'JobSource')],

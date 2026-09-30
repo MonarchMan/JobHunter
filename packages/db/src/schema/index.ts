@@ -316,6 +316,7 @@ export const jobs = sqliteTable(
     description: text().notNull(),
     detailUrl: text('detail_url').notNull(),
     applyUrl: text('apply_url').notNull(),
+    // 来源提供的发布／更新日期；缺失时不能用本地时间补齐。
     publishedAt: epoch('published_at'),
     status: text().notNull(),
     missingCount: integer('missing_count').notNull().default(0),
@@ -325,6 +326,7 @@ export const jobs = sqliteTable(
     lastInteractedAt: epoch('last_interacted_at'),
     closedAt: epoch('closed_at'),
     createdAt: epoch('created_at').notNull(),
+    // 当前内容写入时间，独立于 lastSeenAt 和生命周期事件时间。
     updatedAt: epoch('updated_at').notNull(),
   },
   (table) => [
