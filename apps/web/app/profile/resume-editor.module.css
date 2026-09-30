@@ -36,7 +36,7 @@
 }
 
 .resume-editor-layout.is-outline-collapsed {
-  grid-template-columns: minmax(0, 1fr) 3.75rem;
+  grid-template-columns: minmax(0, 1fr) 5.25rem;
 }
 
 .resume-edit-outline {
@@ -76,11 +76,12 @@
   font-weight: 750;
 }
 
-.resume-edit-outline-toggle:hover,
+.resume-edit-outline-toggle:hover:not(:disabled),
 .resume-edit-outline-toggle:focus-visible {
   background: var(--primary-soft);
   box-shadow: none;
   color: var(--primary-hover);
+  transform: none;
 }
 
 .resume-edit-outline-links {
@@ -135,6 +136,7 @@
 
 .is-outline-collapsed .resume-edit-outline-heading strong {
   line-height: 1.35;
+  white-space: nowrap;
 }
 
 .resume-edit-document {

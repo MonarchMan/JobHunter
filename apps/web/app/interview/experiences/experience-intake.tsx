@@ -3,9 +3,10 @@
 import type { ExperienceDocumentSummary } from '@jobhunter/application/web';
 import { useRouter } from 'next/navigation.js';
 import type { DragEvent, ReactElement, SyntheticEvent } from 'react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../src/client/csrf.js';
 import { DatePicker } from '../../components/forms/date-picker.js';
+import { Icon } from '../../components/ui-icon.js';
 import styles from './experience-intake.module.css';
 
 interface ApiEnvelope<T> {
@@ -36,6 +37,60 @@ function formValue(form: FormData, name: string): string {
   return typeof value === 'string' ? value : '';
 }
 
+/** 在应用内模态层中展示只读模板，并在关闭后恢复预览入口的焦点。 */
+function TemplatePreviewDialog({
+  markdown,
+  version,
+  onClose,
+  returnFocusTo,
+}: Readonly<{
+  markdown: string;
+  version: string;
+  onClose: () => void;
+  returnFocusTo: HTMLButtonElement | null;
+}>): ReactElement {
+  const dialog = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    // 1. 由浏览器建立模态焦点范围，避免页面其他控件在预览期间被误操作。
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+
+    // 2. 不论通过按钮、Escape 或遮罩退出，都把键盘上下文还给原触发按钮。
+    return () => {
+      returnFocusTo?.focus();
+    };
+  }, [returnFocusTo]);
+
+  return (
+    <dialog
+      ref={dialog}
+      className={styles.templateDialog}
+      aria-labelledby="experience-template-dialog-title"
+      aria-describedby="experience-template-dialog-description"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <header>
+        <div>
+          <h2 id="experience-template-dialog-title">个人面经 Markdown 模板</h2>
+          <p id="experience-template-dialog-description">{version} · 预览内容与下载文件一致</p>
+        </div>
+        <button type="button" className="button-secondary" autoFocus onClick={onClose}>
+          关闭
+        </button>
+      </header>
+      <pre aria-label="个人面经模板内容" tabIndex={0}>
+        {markdown}
+      </pre>
+    </dialog>
+  );
+}
+
 export function ExperienceIntake({
   template,
   documents,
@@ -49,7 +104,9 @@ export function ExperienceIntake({
 }>): ReactElement {
   const router = useRouter();
   const firstError = useRef<HTMLParagraphElement>(null);
+  const templatePreviewTrigger = useRef<HTMLButtonElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [templatePreviewOpen, setTemplatePreviewOpen] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [onlineBusy, setOnlineBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -183,15 +240,37 @@ export function ExperienceIntake({
             </header>
             <p>适合先在本地整理，也可以交给其他文本工具生成后再导入。</p>
             <div className={styles.templateActions}>
-              <a className="button-secondary" href="/api/interview/experiences/template">
-                下载模板
+              <a
+                className={['button-secondary', styles.templateAction].join(' ')}
+                href="/api/interview/experiences/template"
+              >
+                <Icon name="download" />
+                下载
               </a>
-              <details>
-                <summary>查看模板内容</summary>
-                <pre>{template.markdown}</pre>
-              </details>
+              <button
+                ref={templatePreviewTrigger}
+                type="button"
+                className={['button-secondary', styles.templateAction].join(' ')}
+                onClick={() => {
+                  setTemplatePreviewOpen(true);
+                }}
+              >
+                <Icon name="search" />
+                预览
+              </button>
             </div>
           </article>
+
+          {templatePreviewOpen ? (
+            <TemplatePreviewDialog
+              markdown={template.markdown}
+              version={template.version}
+              returnFocusTo={templatePreviewTrigger.current}
+              onClose={() => {
+                setTemplatePreviewOpen(false);
+              }}
+            />
+          ) : null}
 
           <form
             className={styles.uploadForm}

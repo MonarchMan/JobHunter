@@ -128,7 +128,7 @@ test.describe('校招实习管理台核心流程', () => {
       .getByText(/^筛选职位/)
       .click();
     await page.getByLabel('关键词').fill('大模型');
-    await page.getByRole('button', { name: '应用筛选' }).click();
+    await page.getByRole('button', { name: '搜索', exact: true }).click();
     await expect(page).toHaveURL(/q=%E5%A4%A7%E6%A8%A1%E5%9E%8B/);
 
     const link = page.getByRole('link', { name: '大模型应用实习生', exact: true }).first();
@@ -181,7 +181,16 @@ test.describe('校招实习管理台核心流程', () => {
     await page.getByRole('option', { name: '最近发布', exact: true }).click();
     await filterPanel.getByRole('combobox', { name: '个人资料版本' }).click();
     await page.getByRole('option', { name: '不使用资料匹配', exact: true }).click();
-    await filterPanel.getByRole('button', { name: '应用筛选' }).click();
+    const search = filterPanel.getByRole('button', { name: '搜索', exact: true });
+    const clear = filterPanel.getByRole('link', { name: '清除', exact: true });
+    const fieldBox = await filterPanel.getByRole('combobox', { name: '排序' }).boundingBox();
+    const searchBox = await search.boundingBox();
+    const clearBox = await clear.boundingBox();
+    expect(searchBox?.width ?? Infinity).toBeLessThan(fieldBox?.width ?? 0);
+    expect(clearBox?.width ?? Infinity).toBeLessThan(fieldBox?.width ?? 0);
+    expect(searchBox?.height ?? Infinity).toBeLessThan(fieldBox?.height ?? 0);
+    expect(clearBox?.height ?? Infinity).toBeLessThan(fieldBox?.height ?? 0);
+    await search.click();
     await expect
       .poll(() => {
         const parameters = new URL(page.url()).searchParams;
@@ -559,10 +568,15 @@ test.describe('校招实习管理台核心流程', () => {
       .toBe('resume-works');
 
     const collapseOutline = outline.getByRole('button', { name: '收起章节目录' });
+    await collapseOutline.hover();
+    await expect(collapseOutline).toHaveCSS('background-color', 'rgb(231, 240, 234)');
+    await expect(collapseOutline).toHaveCSS('color', 'rgb(22, 58, 40)');
     await collapseOutline.focus();
     await page.keyboard.press('Enter');
     await expect(outline.getByRole('link')).toHaveCount(0);
     const expandOutline = outline.getByRole('button', { name: '展开章节目录' });
+    expect((await outline.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(80);
+    expect((await outline.locator('strong').boundingBox())?.height ?? Infinity).toBeLessThan(24);
     await expect(expandOutline).toBeFocused();
     await expandOutline.click();
     await expect(outline.getByRole('link')).toHaveCount(11);
@@ -1133,8 +1147,6 @@ test.describe('校招实习管理台核心流程', () => {
     await maintenanceRemote.click();
     await page.getByRole('option', { name: '是', exact: true }).click();
     await expect(page.locator('input[name="preferencesRemoteAccepted"]')).toHaveValue('true');
-  });
-});
 
     // 3、保存前拦截测试请求，核对类别和具体意向独立提交，不改写共享夹具。
     let submitted: { targetRoles: string[]; intendedRoles: string[] } | null = null;
@@ -1156,3 +1168,5 @@ test.describe('校招实习管理台核心流程', () => {
         targetRoles: [selectedCategory],
         intendedRoles: ['大模型算法工程师', 'Agent 开发工程师'],
       });
+  });
+});

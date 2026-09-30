@@ -12,11 +12,14 @@ test('jobs default to official and isolate platform provider, categories and pag
   await page.goto('/jobs');
   const source = page.getByRole('combobox', { name: '来源类型', exact: true });
   await expect(source).toHaveText('官网来源');
-  // 1、来源范围属于列表标题级操作，保持紧凑且不再独占内容行。
+  // 1、来源范围属于列表标题级操作；控件自带可访问名称，不再重复显示标签。
+  const sourceSwitcher = page.locator('[data-job-source-switcher]');
   await expect(
     page.locator('main > header').getByRole('combobox', { name: '来源类型' }),
   ).toHaveCount(1);
+  await expect(sourceSwitcher.locator('label')).toHaveCount(0);
   expect((await source.boundingBox())?.width ?? Infinity).toBeLessThanOrEqual(176);
+  const officialSourceBox = await source.boundingBox();
   await expect(page.getByRole('link', { name: 'BOSS 平台工程师 1', exact: true })).toHaveCount(0);
   // 2、共享选择器支持键盘与等宽弹层，切换不会残留实习默认筛选。
   await source.focus();
@@ -31,11 +34,16 @@ test('jobs default to official and isolate platform provider, categories and pag
   await expect(page.getByRole('option', { name: '招聘平台', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/source=platform/);
+  const provider = page.getByRole('combobox', { name: '招聘平台', exact: true });
+  const platformSourceBox = await source.boundingBox();
+  const providerBox = await provider.boundingBox();
+  expect(Math.abs((officialSourceBox?.x ?? 0) - (platformSourceBox?.x ?? 0))).toBeLessThan(1);
+  expect(providerBox?.x ?? Infinity).toBeLessThan(platformSourceBox?.x ?? 0);
   await expect(page.getByText('共 3 个职位', { exact: false })).toBeVisible();
   await expect(
     page.getByRole('link', { name: 'BOSS 平台工程师 1', exact: true }).first(),
   ).toBeVisible();
-  await page.getByRole('combobox', { name: '招聘平台', exact: true }).click();
+  await provider.click();
   await page.getByRole('option', { name: 'BOSS 直聘', exact: true }).click();
   await expect(page).toHaveURL(/provider=boss/);
   await expect(page.getByText('共 2 个职位', { exact: false })).toBeVisible();

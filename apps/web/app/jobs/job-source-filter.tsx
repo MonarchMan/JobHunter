@@ -31,9 +31,33 @@ export function JobSourceFilter({
     });
   };
   return (
-    <section className={styles.sourceSwitcher} aria-label="职位来源" aria-busy={pending}>
-      <label>
-        来源类型
+    <section
+      className={styles.sourceSwitcher}
+      aria-label="职位来源"
+      aria-busy={pending}
+      data-job-source-switcher
+    >
+      <div className={styles.sourceControl}>
+        {sourceKind === 'platform' ? (
+          <SelectField
+            name="provider"
+            label="招聘平台"
+            value={providerKey ?? ''}
+            disabled={pending}
+            onValueChange={(value) => {
+              change('provider', value);
+            }}
+            options={[
+              { value: '', label: '全部平台' },
+              { value: 'boss', label: 'BOSS 直聘' },
+              { value: 'zhilian', label: '智联招聘' },
+              { value: '51job', label: '前程无忧' },
+              { value: 'liepin', label: '猎聘' },
+            ]}
+          />
+        ) : null}
+      </div>
+      <div className={styles.sourceControl}>
         <SelectField
           name="source"
           label="来源类型"
@@ -47,30 +71,7 @@ export function JobSourceFilter({
             { value: 'platform', label: '招聘平台' },
           ]}
         />
-      </label>
-      {sourceKind === 'platform' && (
-        <>
-          <label>
-            招聘平台
-            <SelectField
-              name="provider"
-              label="招聘平台"
-              value={providerKey ?? ''}
-              disabled={pending}
-              onValueChange={(value) => {
-                change('provider', value);
-              }}
-              options={[
-                { value: '', label: '全部平台' },
-                { value: 'boss', label: 'BOSS 直聘' },
-                { value: 'zhilian', label: '智联招聘' },
-                { value: '51job', label: '前程无忧' },
-                { value: 'liepin', label: '猎聘' },
-              ]}
-            />
-          </label>
-        </>
-      )}
+      </div>
     </section>
   );
 }

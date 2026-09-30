@@ -55,7 +55,7 @@ test('keyboard can skip navigation, filter jobs and return to the list', async (
     .getByText(/^筛选职位/)
     .click();
   await page.getByLabel('关键词').fill('Agent');
-  await page.getByRole('button', { name: '应用筛选' }).press('Enter');
+  await page.getByRole('button', { name: '搜索', exact: true }).press('Enter');
   await expect(page).toHaveURL(/q=Agent/);
   await expect(page.getByRole('heading', { name: '职位列表' })).toBeVisible();
   await page.getByRole('link', { name: 'JobHunter' }).focus();

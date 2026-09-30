@@ -210,10 +210,12 @@ export default async function JobsPage({
               ]}
             />
           </label>
-          <button type="submit">应用筛选</button>
-          <a className="button-secondary" href={clearHref}>
-            清除
-          </a>
+          <div className={styles.filterActions}>
+            <button type="submit">搜索</button>
+            <a className="button-secondary" href={clearHref}>
+              清除
+            </a>
+          </div>
         </form>
       </details>
       <div className={styles.resultToolbar}>

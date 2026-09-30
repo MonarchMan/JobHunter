@@ -4,14 +4,10 @@
   justify-content: space-between;
   gap: 1rem;
   min-height: 4rem;
-  margin-top: 0.75rem;
-  padding: 0.65rem 0.85rem;
-  border: 1px solid var(--border);
-  border-bottom: 0;
-  border-radius: 8px 8px 0 0;
+  margin: 0.75rem 0;
+  padding: 0.65rem 0;
   background: transparent;
   color: var(--text-secondary);
-  box-shadow: var(--shadow-sm);
   font-size: 0.85rem;
   font-weight: 700;
 }
@@ -23,10 +19,6 @@
   background: var(--surface);
   box-shadow: var(--shadow-sm);
   scrollbar-gutter: stable;
-}
-
-.selectionToolbar + .tableScroll {
-  border-radius: 0 0 8px 8px;
 }
 
 .tableScroll table {
@@ -51,7 +43,8 @@
 .tableScroll th {
   background: var(--table-header-bg);
   color: var(--table-header-ink);
-  font-size: 0.78rem;
+  font-size: 1rem;
+  font-weight: 750;
   letter-spacing: 0.035em;
   text-transform: uppercase;
 }

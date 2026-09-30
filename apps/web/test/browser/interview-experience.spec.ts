@@ -10,10 +10,30 @@ test.describe('个人面经导入', () => {
       'aria-current',
       'page',
     );
-    const download = page.getByRole('link', { name: '下载模板' });
+    const download = page.getByRole('link', { name: '下载', exact: true });
     await expect(download).toHaveAttribute('href', '/api/interview/experiences/template');
-    await page.getByText('查看模板内容').click();
-    await expect(page.locator('pre')).toContainText('模板版本：personal-experience@v1');
+    await expect(download.locator('svg')).toBeVisible();
+
+    const previewTrigger = page.getByRole('button', { name: '预览', exact: true });
+    await previewTrigger.click();
+    const templateDialog = page.getByRole('dialog', { name: '个人面经 Markdown 模板' });
+    await expect(templateDialog).toBeVisible();
+    await expect(templateDialog.getByLabel('个人面经模板内容')).toContainText(
+      '模板版本：personal-experience@v1',
+    );
+    await templateDialog.getByRole('button', { name: '关闭' }).click();
+    await expect(templateDialog).toBeHidden();
+    await expect(previewTrigger).toBeFocused();
+
+    await previewTrigger.click();
+    await page.keyboard.press('Escape');
+    await expect(templateDialog).toBeHidden();
+    await expect(previewTrigger).toBeFocused();
+
+    await previewTrigger.click();
+    await page.mouse.click(4, 4);
+    await expect(templateDialog).toBeHidden();
+    await expect(previewTrigger).toBeFocused();
 
     const online = page.getByRole('form', { name: '在线填写' });
     await online.getByLabel('公司', { exact: true }).fill('浏览器测试公司');

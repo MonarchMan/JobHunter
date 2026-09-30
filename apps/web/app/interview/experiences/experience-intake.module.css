@@ -84,39 +84,61 @@
 
 .templateActions {
   display: flex;
-  align-items: start;
   flex-wrap: wrap;
   gap: 0.7rem;
 }
 
-.templateActions details {
-  flex: 1 1 12rem;
+.templateAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.templateActions summary {
-  min-height: 2.6rem;
-  padding: 0.63rem 0.8rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  color: var(--primary-hover);
-  cursor: pointer;
-  font-weight: 750;
-  list-style-position: inside;
-}
-
-.templateActions summary:hover {
-  background: var(--canvas-tint);
-}
-
-.templateActions pre {
-  max-height: 25rem;
-  margin: 0.75rem 0 0;
-  padding: 1rem;
+.templateDialog {
+  width: min(48rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--canvas);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
   color: var(--ink);
+  box-shadow: var(--shadow-dialog);
+}
+
+.templateDialog::backdrop {
+  background: var(--overlay-backdrop);
+  backdrop-filter: blur(3px);
+}
+
+.templateDialog > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.templateDialog h2,
+.templateDialog p {
+  margin: 0;
+}
+
+.templateDialog p {
+  margin-top: 0.35rem;
+  color: var(--muted-ink);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.templateDialog pre {
+  max-height: calc(100dvh - 8.5rem);
+  margin: 0;
+  padding: 1.25rem 1.5rem 1.5rem;
+  overflow: auto;
+  background: var(--canvas);
   font: 0.78rem/1.65 var(--font-mono);
   white-space: pre-wrap;
 }
@@ -324,6 +346,14 @@
   .archiveHeading {
     align-items: start;
     flex-direction: column;
+  }
+
+  .templateDialog > header {
+    align-items: stretch;
+  }
+
+  .templateDialog > header > button {
+    width: 100%;
   }
 
   .archiveList a {
