@@ -48,13 +48,12 @@ for (const width of [1280, 768, 390]) {
       await route.fulfill({ status: 503, json: { error: { message: '测试评分暂不可用' } } });
     });
     await record.getByRole('button', { name: '评分', exact: true }).click();
-    // 弹层沿用滚动关闭契约，键盘激活避免测试框架为点击目标滚动页面。
+    // 弹层沿用滚动关闭契约，原生激活避免测试框架为点击目标滚动页面。
     await page
       .getByRole('button', { name: /LLM 深度评分/ })
       .evaluate((button: HTMLButtonElement) => {
-        button.focus({ preventScroll: true });
+        button.click();
       });
-    await page.keyboard.press('Enter');
     await expect(page.getByText('测试评分暂不可用', { exact: true })).toBeVisible();
     expect(page.url()).toBe(listUrl);
     for (const name of ['大模型应用实习生', '官网投递']) {

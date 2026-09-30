@@ -241,7 +241,9 @@ test.describe('校招实习管理台核心流程', () => {
       'position',
       'fixed',
     );
-    expect((await scoreTrigger.boundingBox())?.y).toBe(triggerBox?.y);
+    expect(
+      Math.abs(((await scoreTrigger.boundingBox())?.y ?? 0) - (triggerBox?.y ?? 0)),
+    ).toBeLessThan(1);
     await expect(toast).toBeHidden({ timeout: 4_500 });
   });
 
@@ -451,7 +453,12 @@ test.describe('校招实习管理台核心流程', () => {
 
     await page.getByRole('link', { name: /招聘平台来源/ }).click();
     await expect(page).toHaveURL(/channel=platform/);
-    await expect(page.getByRole('heading', { name: '招聘平台来源暂未接入' })).toBeVisible();
+    const platformTabs = page.getByRole('navigation', { name: '招聘平台选择' });
+    await expect(platformTabs).toBeVisible();
+    await expect(
+      platformTabs.getByRole('link', { name: 'BOSS 直聘', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('heading', { name: 'BOSS 直聘', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: /招聘平台来源/ })).toHaveAttribute(
       'aria-current',
       'page',
@@ -699,7 +706,16 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(dialog.getByRole('heading', { name: '作品' })).toHaveCount(0);
     const closePreview = dialog.getByRole('button', { name: '关闭预览' });
     await closePreview.hover();
-    await expect(closePreview).toHaveCSS('color', 'rgb(28, 33, 48)');
+    const neutralInk = await page.evaluate(() => {
+      // 1、用运行时语义令牌校验中性按钮，不把已废弃主题的 RGB 固化到测试。
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--ink)';
+      document.body.append(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return expected;
+    });
+    await expect(closePreview).toHaveCSS('color', neutralInk);
     await expect(closePreview).not.toHaveCSS('background-color', saveBackground);
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();

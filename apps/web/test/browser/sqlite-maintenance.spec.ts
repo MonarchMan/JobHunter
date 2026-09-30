@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 for (const width of [1280, 390]) {
   test(`maintenance audit is read-only at ${String(width)}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/tasks?taskType=maintenance.sqlite');
+    await page.goto('/tasks?type=maintenance.sqlite');
     const record =
       width === 1280
         ? page.getByRole('row').filter({ hasText: '数据库空间整理' })

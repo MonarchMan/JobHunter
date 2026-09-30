@@ -49,6 +49,7 @@ export function CompanyLogo({
     <span
       className={[styles.logo, sizeClass, variantClass].filter(Boolean).join(' ')}
       aria-hidden="true"
+      data-company-logo
     >
       {source ? (
         <img src={source} alt="" width={32} height={32} />

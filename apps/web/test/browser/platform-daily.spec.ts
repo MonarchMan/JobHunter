@@ -35,13 +35,24 @@ for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
     await expect(page.getByLabel('调试描述文件绝对路径')).not.toBeVisible();
     await expect(page.getByLabel('目标标签页 ID')).toHaveCount(0);
     await expect(page.getByRole('combobox', { name: '选择平台页面' })).toHaveCount(0);
-    await expect(page.getByText(/由 Worker 新建专用标签页/)).toBeVisible();
+    await expect(page.getByText(/创建平台专用页/)).toBeVisible();
     await expect(page.getByRole('button', { name: '获取职位', exact: true })).toBeDisabled();
     expect(commands).toEqual([]);
+    if (provider === 'zhilian') await page.getByLabel('搜索关键词').fill('后端');
     await page.getByRole('checkbox', { name: /允许自动连接/ }).check();
     await page.getByRole('button', { name: '获取职位', exact: true }).click();
     await expect(page.getByRole('button', { name: '获取职位', exact: true })).toBeDisabled();
-    await expect.poll(() => commands).toEqual([{ action: 'acquire', generation: null }]);
+    await expect
+      .poll(() => commands)
+      .toEqual([
+        provider === 'zhilian'
+          ? {
+              action: 'acquire',
+              generation: null,
+              search: { keyword: '后端', city: '' },
+            }
+          : { action: 'acquire', generation: null },
+      ]);
     // 2、完成后只刷新本地结果，不发布第二个任务；下一次点击携带当前代次。
     state = {
       ...state,

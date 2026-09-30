@@ -31,7 +31,7 @@ export function JobSourceFilter({
     });
   };
   return (
-    <section className={styles.filters} aria-label="职位来源" aria-busy={pending}>
+    <section className={styles.sourceSwitcher} aria-label="职位来源" aria-busy={pending}>
       <label>
         来源类型
         <SelectField
@@ -69,7 +69,6 @@ export function JobSourceFilter({
               ]}
             />
           </label>
-          {!providerKey && <p>请选择一个招聘平台，再获取一批职位。</p>}
         </>
       )}
     </section>

@@ -81,5 +81,11 @@ test.describe('深档项目文档拷打', () => {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
+
+    // 3、恢复共享浏览器夹具的已完成状态，避免后续会话恢复用例依赖执行顺序。
+    await page.getByRole('button', { name: '完成会话' }).click();
+    await expect(
+      page.locator('button[data-status="completed"][aria-pressed="true"]'),
+    ).toBeVisible();
   });
 });

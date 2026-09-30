@@ -1,20 +1,48 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
 // 简历制作独占画像，避免核心流程的偏好修改污染初始草稿。
 const profileId = '018f0000-0000-7000-8000-000000000621';
+const studioTargetRoles = ['研发', '大模型应用实习生', 'Agent 实习生'];
+
+/** 把独占画像恢复为本组用例的固定输入，避免前序画像写入改变新草稿快照。 */
+async function restoreStudioTargetRoles(page: Page): Promise<void> {
+  // 1、读取当前版本与 CSRF 令牌，用乐观锁仅恢复简历制作专用画像。
+  const [profileResponse, csrfResponse] = await Promise.all([
+    page.request.get(`/api/profile?profile=${profileId}`),
+    page.request.get('/api/csrf'),
+  ]);
+  const profile = (await profileResponse.json()) as {
+    data: { detail: { current: { id: string } } };
+  };
+  const csrf = (await csrfResponse.json()) as { data: { token: string } };
+  const response = await page.request.patch('/api/profile', {
+    headers: { 'x-jobhunter-csrf': csrf.data.token, origin: new URL(page.url()).origin },
+    data: {
+      kind: 'set',
+      profileId,
+      expectedVersionId: profile.data.detail.current.id,
+      pointer: '/targetRoles',
+      value: studioTargetRoles,
+    },
+  });
+  expect(response.ok()).toBe(true);
+}
 
 test.describe('多模板简历制作', () => {
   test('keeps project paragraphs and bullets in one editor and supports multiline columns', async ({
     page,
   }) => {
     await page.goto(`/profile?profile=${profileId}`);
+    await restoreStudioTargetRoles(page);
     const entry = page.locator('[data-resume-template-entry]');
     await entry.getByRole('combobox', { name: '简历模板' }).click();
     await page.getByRole('option', { name: '标准单页' }).click();
     await entry.getByRole('button', { name: '导出', exact: true }).click();
     await page.waitForURL(/\/resume-studio\//u);
     const canvas = page.locator('iframe').contentFrame();
+    const saveStatus = page.locator('[data-resume-save-state]');
+    await page.getByRole('button', { name: '新增项目经历', exact: true }).click();
     await page.getByRole('button', { name: '项目经历', exact: true }).click();
     await page.getByRole('button', { name: '添加一项' }).click();
     const descriptionBlock = canvas
@@ -26,21 +54,33 @@ test.describe('多模板简历制作', () => {
     await expect(descriptionBlock.locator('.row-actions')).toHaveCSS('opacity', '1');
     await expect(descriptionBlock.locator('.row-actions')).toHaveCSS('position', 'absolute');
     await description.fill('项目介绍');
+    await description.press('Home');
+    await page.keyboard.press('Backspace');
     await description.press('End');
     await description.press('Enter');
     await description.pressSequentially('第一条职责');
     await description.press('ControlOrMeta+Shift+8');
-    await description.press('End');
     await description.press('Enter');
     await description.pressSequentially('第二条职责');
     await expect(description.locator('li')).toHaveCount(2);
-    await description.press('Home');
-    await description.press('Backspace');
+    await description
+      .locator('li')
+      .last()
+      .evaluate((item) => {
+        // 1、把选区精确放到第二条职责行首，避免 Home 落到整个 contenteditable 的开头。
+        const selection = item.ownerDocument.getSelection();
+        const range = item.ownerDocument.createRange();
+        range.selectNodeContents(item);
+        range.collapse(true);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      });
+    await page.keyboard.press('Backspace');
     await expect(description.locator('li')).toHaveCount(1);
     const addCertificate = page.getByRole('button', { name: '新增证书', exact: true });
     if (await addCertificate.isEnabled()) await addCertificate.click();
     await page.getByRole('button', { name: '证书', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('已保存');
+    await expect(saveStatus).toContainText('已保存');
     await canvas.locator('[data-section-id="certificates"] .resume-block').last().hover();
     await canvas
       .locator('[data-section-id="certificates"]')
@@ -59,7 +99,7 @@ test.describe('多模板简历制作', () => {
       .contentFrame();
     await expect(preview.getByText('完整章节第二段')).toBeVisible();
     await page.getByRole('button', { name: '关闭预览' }).click();
-    await expect(page.getByRole('status')).toContainText('已保存');
+    await expect(saveStatus).toContainText('已保存');
     await page.reload();
     await expect(description).toContainText('项目介绍');
     await expect(description.locator('li')).toHaveCount(1);
@@ -84,6 +124,7 @@ test.describe('多模板简历制作', () => {
     test.setTimeout(60_000);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`/profile?profile=${profileId}`);
+    await restoreStudioTargetRoles(page);
 
     const entry = page.locator('[data-resume-template-entry]');
     await entry.getByRole('combobox', { name: '简历模板' }).click();
@@ -154,6 +195,7 @@ test.describe('多模板简历制作', () => {
     await expect(previewDialog).toBeHidden();
     await expect(previewButton).toBeFocused();
 
+    await page.getByRole('button', { name: '新增工作经历', exact: true }).click();
     await page.getByRole('button', { name: '工作经历', exact: true }).click();
     await page.getByRole('button', { name: '添加一项' }).click();
     const organization = canvas.locator('[data-field$=".organization"]').last();

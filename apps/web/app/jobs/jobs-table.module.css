@@ -213,6 +213,18 @@
   color: var(--text-tertiary);
 }
 
+.cardCompany {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.cardCompany > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .cardSelection {
   display: inline-grid;
   min-height: 2.25rem;

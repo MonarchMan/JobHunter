@@ -207,8 +207,11 @@ export function JobsTable({
               </a>
               <JobStatus status={job.status} />
             </div>
-            <p>
-              {job.companyName} · {job.locations.join('、') || '地点未注明'}
+            <p className={styles.cardCompany}>
+              <CompanyLogo name={job.companyName} size="small" />
+              <span>
+                {job.companyName} · {job.locations.join('、') || '地点未注明'}
+              </span>
             </p>
             <small>
               <a

@@ -66,14 +66,12 @@ export default async function JobsPage({
   return (
     <main id="main-content" tabIndex={-1}>
       <JobsFilterMemory enabled={jobListPreferences.rememberFilters} />
-      <PageHeader
-        title="职位列表"
-        description="默认显示官网来源，隐藏已关闭职位。可切换招聘平台，筛选与分页只查询本地职位库。"
-      />
-      <JobSourceFilter
-        sourceKind={query.sourceKind}
-        {...(query.providerKey ? { providerKey: query.providerKey } : {})}
-      />
+      <PageHeader title="职位列表">
+        <JobSourceFilter
+          sourceKind={query.sourceKind}
+          {...(query.providerKey ? { providerKey: query.providerKey } : {})}
+        />
+      </PageHeader>
       {query.sourceKind === 'platform' && query.providerKey && (
         <PlatformBrowser
           key={query.providerKey}

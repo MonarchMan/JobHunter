@@ -12,8 +12,13 @@ test('jobs default to official and isolate platform provider, categories and pag
   await page.goto('/jobs');
   const source = page.getByRole('combobox', { name: '来源类型', exact: true });
   await expect(source).toHaveText('官网来源');
+  // 1、来源范围属于列表标题级操作，保持紧凑且不再独占内容行。
+  await expect(
+    page.locator('main > header').getByRole('combobox', { name: '来源类型' }),
+  ).toHaveCount(1);
+  expect((await source.boundingBox())?.width ?? Infinity).toBeLessThanOrEqual(176);
   await expect(page.getByRole('link', { name: 'BOSS 平台工程师 1', exact: true })).toHaveCount(0);
-  // 1、共享选择器支持键盘与等宽弹层，切换不会残留实习默认筛选。
+  // 2、共享选择器支持键盘与等宽弹层，切换不会残留实习默认筛选。
   await source.focus();
   const triggerBox = await source.boundingBox();
   await page.keyboard.press('Enter');
@@ -47,10 +52,17 @@ test('jobs default to official and isolate platform provider, categories and pag
   await expect(page.getByRole('heading', { name: '职位描述' })).toBeVisible();
   await page.goBack();
   await expect(page).toHaveURL(/source=platform.*provider=boss.*page=2/);
-  // 2、窄屏沿用职位卡片；无结果仍保留同一来源的恢复入口。
+  // 3、窄屏沿用职位卡片；标题操作自然换行且无结果仍保留同一来源的恢复入口。
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/jobs?source=platform&provider=zhilian');
   await expect(page.getByText('共 1 个职位', { exact: false })).toBeVisible();
+  expect((await source.boundingBox())?.width ?? Infinity).toBeLessThanOrEqual(176);
+  await expect(
+    page
+      .getByRole('article')
+      .filter({ hasText: '智联 平台工程师 1' })
+      .locator('[data-company-logo]'),
+  ).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({
