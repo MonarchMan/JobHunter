@@ -55,7 +55,9 @@ class CdpSessionProvider implements PlatformSessionProvider {
     const browserPacer = new PlatformRequestPacer(this.requestIntervalMs);
     // 1.a、自建智联页必须先有明确条件，不把实验关键词或用户旧页面条件当默认值。
     const homeSearch = this.provider === 'zhilian' && !input.targetId;
-    if (input.search && (this.provider !== 'zhilian' || input.targetId))
+    if (input.search && this.provider === 'boss' && !browserMode)
+      throw new PlatformError('session_unavailable', null, 'search_unsupported');
+    if (input.search && input.targetId)
       throw new PlatformError('session_unavailable', null, 'query_changed');
     if (homeSearch && !zhilianHomeSearchSchema.safeParse(input.search).success)
       throw new PlatformError('session_unavailable', null, 'query_required');
@@ -210,6 +212,15 @@ class CdpSessionProvider implements PlatformSessionProvider {
           '51job': 'https://we.51job.com/pc/search',
           liepin: 'https://c.liepin.com/',
         }[this.provider];
+        // 2.a、必须由官网搜索页自然生成该关键词的实际请求模板。
+        const ownedEntryUrl =
+          this.provider === '51job' && input.search
+            ? `https://we.51job.com/pc/search?keyword=${encodeURIComponent(input.search.keyword)}`
+            : this.provider === 'liepin' && input.search
+              ? `https://www.liepin.com/zhaopin/?key=${encodeURIComponent(input.search.keyword)}`
+              : this.provider === 'boss' && input.search
+                ? `https://www.zhipin.com/web/geek/jobs?query=${encodeURIComponent(input.search.keyword)}`
+                : entryUrl;
         // 2.b、默认只创建自己的页，共享默认配置，不枚举或接管用户页面。
         let ownedTarget: string | undefined;
         let releasing: Promise<void> | undefined;
@@ -261,7 +272,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
               (item) => item.targetId === input.targetId && item.type === 'page',
             )
           : ownedTarget
-            ? { targetId: ownedTarget, type: 'page', url: entryUrl }
+            ? { targetId: ownedTarget, type: 'page', url: ownedEntryUrl }
             : undefined;
         if (!target)
           throw new PlatformError('session_unavailable', null, 'platform_page_not_found');
@@ -272,7 +283,10 @@ class CdpSessionProvider implements PlatformSessionProvider {
           this.provider === 'boss'
             ? targetUrl.origin !== 'https://www.zhipin.com'
             : this.provider === 'liepin'
-              ? targetUrl.origin !== 'https://c.liepin.com' || targetUrl.pathname !== '/'
+              ? input.search
+                ? targetUrl.origin !== 'https://www.liepin.com' ||
+                  targetUrl.pathname !== '/zhaopin/'
+                : targetUrl.origin !== 'https://c.liepin.com' || targetUrl.pathname !== '/'
               : this.provider === '51job'
                 ? targetUrl.origin !== 'https://we.51job.com' || targetUrl.pathname !== '/pc/search'
                 : !social &&
@@ -288,7 +302,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
           if (!ownedTarget) return;
           const result = z
             .object({ errorText: z.string().optional() })
-            .parse(await call('Page.navigate', { url: entryUrl }, attached.sessionId));
+            .parse(await call('Page.navigate', { url: ownedEntryUrl }, attached.sessionId));
           if (result.errorText) throw new PlatformError('session_unavailable');
         };
         // 3、BOSS 两种传输共用只读页面探针，生命周期不接触凭据或正文。
@@ -317,8 +331,9 @@ class CdpSessionProvider implements PlatformSessionProvider {
           // 3.a、BOSS 默认浏览器模式不读 Cookie；仅观察当前页固定端点。
           const browser = new BossBrowserSession({
             sessionId: attached.sessionId,
+            ...(input.search ? { searchKeyword: input.search.keyword } : {}),
             activateForNext: !(ownedTarget && this.backgroundWindow),
-            ...(ownedTarget ? { initialNavigationUrl: entryUrl } : {}),
+            ...(ownedTarget ? { initialNavigationUrl: ownedEntryUrl } : {}),
             ...(lifecycle ? { lifecycle } : {}),
             call: (method, params, operationSignal) =>
               call(method, params, attached.sessionId, operationSignal),
@@ -375,12 +390,16 @@ class CdpSessionProvider implements PlatformSessionProvider {
           await call('Page.enable', {}, attached.sessionId);
           await call(
             'Network.enable',
-            { maxTotalBufferSize: 4 * 1024 * 1024, maxResourceBufferSize: 2 * 1024 * 1024 },
+            {
+              maxTotalBufferSize: 4 * 1024 * 1024,
+              maxResourceBufferSize: 2 * 1024 * 1024,
+              maxPostDataSize: 32_768,
+            },
             attached.sessionId,
           );
           await openOwnedPage();
         } else if (this.provider === 'liepin') {
-          // 3.a、只观察一次正常推荐请求，后续 HTTP 借用 Cookie 而不持续操作页面。
+          // 3.a、只观察所选搜索或推荐协议，后续 HTTP 借用 Cookie 而不持续操作页面。
           const observed = new Promise<PlatformSession>((resolve, reject) => {
             rejectObservation = () => {
               reject(new PlatformError('session_unavailable'));
@@ -412,7 +431,9 @@ class CdpSessionProvider implements PlatformSessionProvider {
               if (
                 request?.method !== 'POST' ||
                 request.url !==
-                  'https://api-c.liepin.com/api/com.liepin.csearch.home-recommend-job-new' ||
+                  (input.search
+                    ? 'https://api-c.liepin.com/api/com.liepin.searchfront4c.pc-search-job'
+                    : 'https://api-c.liepin.com/api/com.liepin.csearch.home-recommend-job-new') ||
                 !request.postData
               )
                 return;
@@ -420,9 +441,10 @@ class CdpSessionProvider implements PlatformSessionProvider {
                 const headers = liepinRequestHeaders(request.headers);
                 const session = new LiepinRecommendationHttpSession({
                   requestIntervalMs: this.requestIntervalMs,
+                  ...(input.search ? { expectedKeyword: input.search.keyword } : {}),
                   template: { url: request.url, body: request.postData },
                   readHeaders: async (url, operationSignal) => {
-                    // 3.a.i、所选页离开首页时不借用别的标签或沿用旧 Cookie。
+                    // 3.a.i、所选页离开固定入口或改词后，不借用其他标签或沿用旧 Cookie。
                     const current = z
                       .object({
                         targetInfos: z.array(z.object({ targetId: z.string(), url: z.string() })),
@@ -433,8 +455,10 @@ class CdpSessionProvider implements PlatformSessionProvider {
                     );
                     if (
                       !page ||
-                      new URL(page.url).origin !== 'https://c.liepin.com' ||
-                      new URL(page.url).pathname !== '/'
+                      new URL(page.url).origin !== targetUrl.origin ||
+                      new URL(page.url).pathname !== targetUrl.pathname ||
+                      (input.search &&
+                        new URL(page.url).searchParams.get('key') !== input.search.keyword)
                     )
                       throw new PlatformError('session_unavailable');
                     const temporary = z
@@ -487,6 +511,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
           // 3.a、仅自建页可在显式下一批时点击一次官网分页；借用页仍由用户操作。
           const session = new Job51HttpSession({
             requestIntervalMs: this.requestIntervalMs,
+            ...(input.search ? { expectedKeyword: input.search.keyword } : {}),
             ...(ownedTarget
               ? {
                   loadNextPage: async (currentPage: number, operationSignal: AbortSignal) => {
@@ -851,6 +876,9 @@ class CdpSessionProvider implements PlatformSessionProvider {
           },
           readNext: (requestSignal) => session.readNext(requestSignal),
           readDetail: (id, requestSignal) => session.readDetail(id, requestSignal),
+          ...(session.discardDetail
+            ? { discardDetail: (id: string) => session.discardDetail?.(id) }
+            : {}),
           ...(resume ? { resume } : {}),
           disconnect: () => {
             clearObservation?.();

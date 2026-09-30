@@ -3,14 +3,22 @@ import type { PlatformProviderKey } from '@jobhunter/platform-core';
 import { bossCommandSchema, bossResultSchema, type BossResult } from './platforms.js';
 import type { TaskService } from './tasks/task-service.js';
 import type { TaskStatus, EnqueueTaskResult } from './tasks/model.js';
-import { platformFailureMessage, type PlatformProgress } from './platform-progress.js';
+import {
+  platformFailure,
+  platformFailureMessage,
+  type PlatformProgress,
+} from './platform-progress.js';
+import { platformProfileSearchPlan } from './platform-profile-search.js';
+import type { CandidateProfileRepository } from './ports/profiles.js';
 
-/** 页面状态仅含非敏感连接信息及受验证的推荐结果。 */
+/** 页面状态仅含非敏感连接信息、资料词集及受验证的批次结果。 */
 export interface WebBossSnapshot {
   connection: { generation: number; status: string } | null;
   batch: BossResult | null;
   targets?: BossResult['targets'];
   saved: Record<string, string>;
+  /** 仅投影默认资料的搜索词及修正提示，不传递简历正文。 */
+  profileSearch?: { keywords: readonly string[]; error: string | null };
   task: {
     id: string;
     status: TaskStatus;
@@ -38,6 +46,10 @@ export class WebPlatformService {
     private readonly repository: PlatformConnectionReader,
     private readonly tasks: TaskService,
     private readonly providerKey: PlatformProviderKey = 'boss',
+    private readonly profiles?: Pick<
+      CandidateProfileRepository,
+      'listProfiles' | 'getCurrentVersion'
+    >,
   ) {}
 
   /** 从有限历史恢复最近一批；刷新页面不会执行网络采集。 */
@@ -73,8 +85,24 @@ export class WebPlatformService {
       current.success && current.data.generation === connection?.generation
         ? (current.data.progress ?? null)
         : null;
+    // 3、只投影可搜索的意向词或固定修正说明，绝不传递原始简历正文。
+    let profileSearch: WebBossSnapshot['profileSearch'];
+    if (this.profiles) {
+      try {
+        profileSearch = {
+          keywords: platformProfileSearchPlan(this.profiles).keywords,
+          error: null,
+        };
+      } catch (error) {
+        profileSearch = {
+          keywords: [],
+          error: platformFailureMessage(platformFailure(error, false)),
+        };
+      }
+    }
     return {
       connection,
+      ...(profileSearch ? { profileSearch } : {}),
       ...(current.success &&
       current.data.generation === connection?.generation &&
       current.data.status === 'selection_required'

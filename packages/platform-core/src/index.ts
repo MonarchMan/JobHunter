@@ -67,6 +67,12 @@ export interface PlatformJobDetail extends PlatformCandidate {
 export interface PlatformBatch {
   readonly candidates: readonly PlatformCandidate[];
   readonly hasMore: boolean;
+  /** 资料搜索的词级批次摘要，不包含认证或私有游标。 */
+  readonly searchBatches?: readonly {
+    readonly keyword: string;
+    readonly count: number;
+    readonly hasMore: boolean;
+  }[];
   /** 缺少可靠公司身份而未进入候选集的条目数，不代表来源末页。 */
   readonly skippedMissingCompanyId?: number;
 }
@@ -79,6 +85,8 @@ export interface PlatformSession {
   onDisconnected?(listener: () => void): () => void;
   readNext(signal: AbortSignal): Promise<PlatformBatch>;
   readDetail(externalJobId: string, signal: AbortSignal): Promise<PlatformJobDetail>;
+  /** 跨关键词身份已去重时释放本批重复候选，不发详情请求。 */
+  discardDetail?(externalJobId: string): void;
   disconnect(): void;
 }
 
@@ -96,7 +104,7 @@ export interface PlatformSessionProvider {
       readonly targetId?: string | undefined;
       /** 仅 BOSS 支持显式浏览器辅助；省略时保持原平台行为。 */
       readonly acquisitionMode?: 'http' | 'browser' | undefined;
-      /** 智联自动搜索的非敏感条件；认证字段只能来自浏览器内存。 */
+      /** 单个词的非敏感搜索条件；认证字段只能来自浏览器内存。 */
       readonly search?: { readonly keyword: string; readonly city: string } | undefined;
     },
     signal: AbortSignal,

@@ -121,6 +121,7 @@ export function mergeProfileVersion(
     effective: parsed,
     contentHash: contentHash(parsed, [
       '/targetRoles',
+      '/intendedRoles',
       '/preferences/locations',
       '/preferences/companySizes',
       '/preferences/employmentTypes',

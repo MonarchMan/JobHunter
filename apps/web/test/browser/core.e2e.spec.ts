@@ -1055,31 +1055,67 @@ test.describe('校招实习管理台核心流程', () => {
     }
   });
 
-  test('uses shared authored selects throughout the profile page', async ({ page }) => {
+  test('keeps category select and independent intended roles with placeholder only', async ({
+    page,
+  }) => {
     await page.goto('/profile');
     await expect(page.locator('select:not([aria-hidden="true"])')).toHaveCount(0);
-    // 原有六项加上细分岗位、学籍身份和每周实习天数，全部由共享组件承载。
-    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(9);
+    // 1、类别下拉框保持原值；旧资料的新增意向为空，只在框内显示指定提示。
+    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(8);
+    const category = page.getByRole('combobox', { name: '职位类别', exact: true });
+    await expect(category).toHaveText('研发 / 不限');
+    const intendedRoles = page.getByRole('textbox', { name: '意向岗位', exact: true });
+    const placeholder = '填写具体职位名称，多个岗位用逗号分隔';
+    await expect(intendedRoles).toHaveValue('');
+    await expect(intendedRoles).toHaveAttribute('placeholder', placeholder);
+    await expect(intendedRoles).toHaveJSProperty('name', 'intendedRoles');
+    await expect(page.getByText(placeholder, { exact: false })).toHaveCount(0);
+    expect(await intendedRoles.evaluate((input) => input.matches(':placeholder-shown'))).toBe(true);
+    await intendedRoles.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: test.info().outputPath('profile-intentions-desktop.png'),
+      animations: 'disabled',
+    });
 
-    const targetRole = page.getByRole('combobox', { name: '目标岗位' });
-    await expect(targetRole).not.toHaveText('');
-    await targetRole.click();
-    const targetRoleBox = await page
-      .locator('[data-authored-select-trigger][aria-label="目标岗位"]')
-      .boundingBox();
-    const targetRoleContent = page.locator('[data-authored-select-content]');
-    const targetRoleContentBox = await targetRoleContent.boundingBox();
-    expect(targetRoleBox).not.toBeNull();
-    expect(targetRoleContentBox).not.toBeNull();
-    if (targetRoleBox && targetRoleContentBox) {
-      expect(Math.abs(targetRoleContentBox.width - targetRoleBox.width)).toBeLessThanOrEqual(1);
-      expect(targetRoleContentBox.y).toBeGreaterThan(targetRoleBox.y + targetRoleBox.height);
-    }
-    await expect(page.getByRole('option', { name: '请选择职位大类' })).toHaveCount(1);
-    await expect(page.getByRole('option', { name: '其他', exact: true })).toHaveCount(0);
-    await page.getByRole('option', { name: '产品', exact: true }).click();
-    await expect(targetRole).toHaveText(/产品/);
-    await expect(page.locator('input[name="targetRole"]')).toHaveValue('产品');
+    // 2、共享下拉弹层保持等宽，键盘修改类别不覆盖意向；填值后占位提示消失。
+    const triggerBox = await category.boundingBox();
+    await category.focus();
+    await page.keyboard.press('ArrowDown');
+    const listbox = page.getByRole('listbox');
+    await expect(listbox).toBeVisible();
+    const popupBox = await listbox.boundingBox();
+    expect(Math.abs((triggerBox?.width ?? 0) - (popupBox?.width ?? 0))).toBeLessThanOrEqual(1);
+    await expect(page.getByRole('option', { name: '请选择职位大类', exact: true })).toBeFocused();
+    await page.screenshot({
+      path: test.info().outputPath('profile-category-open.png'),
+      animations: 'disabled',
+    });
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('option', { name: '研发', exact: true })).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('option', { name: '产品', exact: true })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('listbox', { name: '职位类别：产品' })).toBeVisible();
+    await page.getByRole('option', { name: '不限', exact: true }).press('Enter');
+    const selectedCategory = '产品';
+    await expect(page.locator('input[name="jobCategory"]')).toHaveValue(`${selectedCategory}/`);
+    await expect(intendedRoles).toHaveValue('');
+    await intendedRoles.fill('大模型算法工程师，Agent 开发工程师');
+    await expect(intendedRoles).toHaveValue('大模型算法工程师，Agent 开发工程师');
+    expect(await intendedRoles.evaluate((input) => input.matches(':placeholder-shown'))).toBe(
+      false,
+    );
+    await expect(page.locator('input[name="jobCategory"]')).toHaveValue(`${selectedCategory}/`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(intendedRoles).toBeVisible();
+    await intendedRoles.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: test.info().outputPath('profile-intentions-mobile.png'),
+      animations: 'disabled',
+    });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      390,
+    );
 
     const remoteAccepted = page.getByRole('combobox', { name: '接受远程' }).first();
     await remoteAccepted.click();
@@ -1099,3 +1135,24 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(page.locator('input[name="preferencesRemoteAccepted"]')).toHaveValue('true');
   });
 });
+
+    // 3、保存前拦截测试请求，核对类别和具体意向独立提交，不改写共享夹具。
+    let submitted: { targetRoles: string[]; intendedRoles: string[] } | null = null;
+    await page.route('**/api/profile', async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue();
+      const payload = route.request().postDataJSON() as {
+        profile: { targetRoles: string[]; intendedRoles: string[] };
+      };
+      submitted = {
+        targetRoles: payload.profile.targetRoles,
+        intendedRoles: payload.profile.intendedRoles,
+      };
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.getByRole('button', { name: '保存简历' }).click();
+    await expect
+      .poll(() => submitted)
+      .toEqual({
+        targetRoles: [selectedCategory],
+        intendedRoles: ['大模型算法工程师', 'Agent 开发工程师'],
+      });

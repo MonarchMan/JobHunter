@@ -150,8 +150,18 @@ describe('candidate profile versioning', () => {
     const corrected = service.applyManualCorrection({
       profileId: candidate.id,
       expectedCurrentVersionId: first.id,
-      patch: { preferences: { ...first.effective.preferences, locations: ['上海'] } },
+      patch: {
+        targetRoles: ['研发'],
+        intendedRoles: ['算法工程师', 'Agent 开发工程师'],
+        preferences: { ...first.effective.preferences, locations: ['上海'] },
+      },
       lockedPaths: ['/preferences/locations'],
+    });
+    // 两字段独立往返 SQLite；人工意向不需要额外锁定即可跨重新提取保留。
+    expect(
+      new SqliteCandidateProfileRepository(handle.client).getCurrentVersion(candidate.id),
+    ).toMatchObject({
+      effective: { targetRoles: ['研发'], intendedRoles: ['算法工程师', 'Agent 开发工程师'] },
     });
     const refreshed = service.applyExtraction({
       profileId: candidate.id,
@@ -175,6 +185,7 @@ describe('candidate profile versioning', () => {
     expect(refreshed.versionNo).toBe(3);
     expect(refreshed.effective.preferences.locations).toEqual(['上海']);
     expect(refreshed.effective.targetRoles).toEqual(['大模型算法']);
+    expect(refreshed.effective.intendedRoles).toEqual(['算法工程师', 'Agent 开发工程师']);
     expect(refreshed.effective.skills.map((skill) => skill.name)).toEqual(['TypeScript', 'Python']);
     expect(service.history(candidate.id).map((version) => version.versionNo)).toEqual([3, 2, 1]);
     expect(handle.client.prepare('SELECT count(*) FROM profile_versions').pluck().get()).toBe(3);

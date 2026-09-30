@@ -11,6 +11,7 @@ import {
 import type { BrowserCookie } from './cookies.js';
 
 const endpoint = 'https://api-c.liepin.com/api/com.liepin.csearch.home-recommend-job-new';
+const searchEndpoint = 'https://api-c.liepin.com/api/com.liepin.searchfront4c.pc-search-job';
 const id = z
   .union([z.number().int().positive().max(Number.MAX_SAFE_INTEGER), z.string().regex(/^[1-9]\d*$/)])
   .transform(String);
@@ -63,6 +64,56 @@ const requestSchema = z
       .strict(),
   })
   .strict();
+/** 搜索条件固定，续批仅改变页码及服务器返回的关联字段。 */
+const searchRequestSchema = z
+  .object({
+    data: z
+      .object({
+        mainSearchPcConditionForm: z
+          .object({
+            key: z.string().trim().min(1).max(200),
+            currentPage: z.number().int().min(0),
+            pageSize: z.number().int().min(1).max(100),
+          })
+          .loose(),
+        passThroughForm: z
+          .object({
+            scene: z.string(),
+            skId: z.string(),
+            fkId: z.string(),
+            ckId: z.string(),
+          })
+          .loose(),
+      })
+      .strict(),
+  })
+  .strict();
+const searchListSchema = z.object({
+  flag: z.literal(1),
+  data: z.object({
+    data: z.object({
+      jobCardList: z
+        .array(
+          rowSchema.extend({
+            job: rowSchema.shape.job.extend({ requireEduLevel: text.optional().default('') }),
+          }),
+        )
+        .max(100),
+    }),
+    pagination: z.object({
+      currentPage: z.number().int().min(0),
+      pageSize: z.number().int().min(1).max(100),
+      totalPage: z.number().int().min(0),
+      hasNext: z.boolean(),
+    }),
+    passThroughData: z.object({
+      scene: z.string(),
+      skId: z.string(),
+      fkId: z.string(),
+      ckId: z.string(),
+    }),
+  }),
+});
 const headerNames = new Set(
   'accept content-type x-xsrf-token x-client-type x-requested-with x-fscp-std-info x-fscp-fe-version x-fscp-version x-fscp-trace-id x-fscp-bi-stat referer origin cookie'.split(
     ' ',
@@ -200,6 +251,9 @@ function listSchemaStage(
 
 /** 只接受官网已返回的稳定职位 URL；不同公开路径空间不合并身份。 */
 function jobIdentity(value: string): string {
+  // 1、搜索还包含 lptjob 命名空间；实测其 JSON-LD 同样提供完整的双重身份。
+  const campus = /^https:\/\/www\.liepin\.com\/lptjob\/([1-9]\d*)$/.exec(value);
+  if (campus?.[1]) return `lptjob:${campus[1]}`;
   const match = /^https:\/\/www\.liepin\.com\/(job|a)\/([1-9]\d*)\.shtml$/.exec(value);
   if (!match?.[1] || !match[2]) throw new LiepinParseError('identity');
   return `${match[1]}:${match[2]}`;
@@ -300,11 +354,11 @@ function redirectReason(location: string | null, sourceUrl: string): string {
   if (/(^|\/)(login|passport|signin|register)(\/|$)/.test(path)) return 'redirect_login';
   if (/(^|\/)(verify|verification|security|captcha|risk|safe)(\/|$)/.test(path))
     return 'redirect_challenge';
-  if (/^\/(job|a)\/[1-9]\d*\.shtml$/.test(path)) return 'redirect_job';
+  if (/^\/(?:(job|a)\/[1-9]\d*\.shtml|lptjob\/[1-9]\d*)$/.test(path)) return 'redirect_job';
   return 'redirect_internal_other';
 }
 
-/** 猎聘固定条件的 HTTP 推荐流；每次显式读取一批，LOGIN 后以 UP 续批。 */
+/** 猎聘固定条件的 HTTP 会话；搜索按零基页码，兼容推荐流 LOGIN→UP。 */
 export class LiepinRecommendationHttpSession implements PlatformSession {
   readonly #fetch: typeof fetch;
   readonly #pacer: PlatformRequestPacer;
@@ -316,6 +370,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
   #closed = false;
   #busy = false;
   #consumed = false;
+  readonly #search: boolean;
   #hasMore = true;
   readonly #seen = new Set<string>();
   readonly #abort = new AbortController();
@@ -329,10 +384,24 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     fetch?: typeof fetch;
     now?: () => number;
     requestIntervalMs?: number;
+    /** 必须与浏览器实际搜索模板一致，不接受推荐流冒充关键词搜索。 */
+    expectedKeyword?: string;
   }) {
+    this.#search = input.expectedKeyword !== undefined;
     try {
-      if (input.template.url !== endpoint || input.template.body.length > 20000) throw new Error();
-      requestSchema.parse(JSON.parse(input.template.body));
+      if (
+        input.template.url !== (this.#search ? searchEndpoint : endpoint) ||
+        input.template.body.length > 20000
+      )
+        throw new Error();
+      if (this.#search) {
+        const parsed = searchRequestSchema.parse(JSON.parse(input.template.body));
+        if (
+          parsed.data.mainSearchPcConditionForm.key !== input.expectedKeyword ||
+          parsed.data.mainSearchPcConditionForm.currentPage !== 0
+        )
+          throw new Error();
+      } else requestSchema.parse(JSON.parse(input.template.body));
     } catch {
       throw new LiepinParseError('template');
     }
@@ -343,15 +412,21 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     this.#pacer = new PlatformRequestPacer(input.requestIntervalMs, input.now);
   }
 
-  /** 原始查询固定，只修改官网已验证的普通续批操作类型，不生成私有游标。 */
+  /** 查询固定；搜索只推进普通页码并承接服务端上下文，推荐只修改续批类型。 */
   public async readNext(signal: AbortSignal): Promise<PlatformBatch> {
     return this.#operation(signal, async (combined) => {
       if (!this.#hasMore || !this.#template || this.#seen.size >= 2000)
         throw new PlatformError('session_unavailable');
-      // 1、不能原样重复 LOGIN 冒充下一页，排序和求职条件始终保持首次模板值。
-      const request = requestSchema.parse(JSON.parse(this.#template.body));
-      const payload = { data: { ...request.data, operateKind: this.#consumed ? 'UP' : 'LOGIN' } };
-      const body = await this.#request(endpoint, JSON.stringify(payload), combined);
+      // 1、不能重复首页冒充下一页，排序和求职条件始终保持首次模板值。
+      const payload = this.#search
+        ? searchRequestSchema.parse(JSON.parse(this.#template.body))
+        : {
+            data: {
+              ...requestSchema.parse(JSON.parse(this.#template.body)).data,
+              operateKind: this.#consumed ? 'UP' : 'LOGIN',
+            },
+          };
+      const body = await this.#request(this.#template.url, JSON.stringify(payload), combined);
       let raw: unknown;
       try {
         raw = JSON.parse(body);
@@ -366,7 +441,37 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
         const code = Number(envelope.data.code);
         throw new PlatformError('upstream_error', Number.isSafeInteger(code) ? code : null);
       }
-      const parsed = parseList(raw);
+      // 1.a、搜索响应使用显式页码；推荐仍保持 LOGIN→UP，不能混用两个协议。
+      let nextTemplate: string | undefined;
+      let parsed: ReturnType<typeof parseList>;
+      if (this.#search) {
+        const result = searchListSchema.safeParse(raw);
+        if (!result.success) throw new LiepinParseError('list_schema');
+        const request = searchRequestSchema.parse(payload);
+        const { pagination, passThroughData, data } = result.data.data;
+        const conditions = request.data.mainSearchPcConditionForm;
+        if (
+          pagination.currentPage !== conditions.currentPage ||
+          pagination.pageSize !== conditions.pageSize ||
+          (pagination.totalPage > 0 && pagination.currentPage >= pagination.totalPage)
+        )
+          throw new LiepinParseError('list_pagination');
+        // 官网分页控件依据 totalPage；真实首批 hasNext=false 但仍显示多个页码。
+        parsed = parseList({
+          flag: 1,
+          data: {
+            data: data.jobCardList,
+            addData: [],
+            hasNextPage: pagination.currentPage + 1 < pagination.totalPage,
+          },
+        });
+        nextTemplate = JSON.stringify({
+          data: {
+            mainSearchPcConditionForm: { ...conditions, currentPage: conditions.currentPage + 1 },
+            passThroughForm: { ...request.data.passThroughForm, ...passThroughData },
+          },
+        });
+      } else parsed = parseList(raw);
       // 2、全批核验成功后推进工作集；异常与重复批次不能覆盖已完成批次。
       for (const key of parsed.ids.keys())
         if (this.#seen.has(key)) throw new LiepinParseError('identity');
@@ -377,6 +482,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
         parsed.batch.candidates.map((candidate) => [candidate.externalJobId, candidate]),
       );
       this.#consumed = true;
+      if (nextTemplate) this.#template = { ...this.#template, body: nextTemplate };
       this.#hasMore = parsed.batch.hasMore;
       return parsed.batch;
     });

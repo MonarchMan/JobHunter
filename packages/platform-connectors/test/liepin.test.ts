@@ -38,6 +38,148 @@ const template = {
   }),
 };
 
+/** 依据真实搜索信封构造脱敏样本，推荐模板仍使用独立测试。 */
+const searchTemplate = {
+  url: 'https://api-c.liepin.com/api/com.liepin.searchfront4c.pc-search-job',
+  body: JSON.stringify({
+    data: {
+      mainSearchPcConditionForm: {
+        key: 'AI应用开发',
+        currentPage: 0,
+        pageSize: 40,
+        city: '410',
+        dq: '410',
+      },
+      passThroughForm: { scene: 'input', skId: '', fkId: '', ckId: 'sample', suggest: null },
+    },
+  }),
+};
+
+it('搜索从零页开始，保持关键词并消费服务端分页与关联上下文', async () => {
+  const response = (page: number): Response =>
+    Response.json({
+      flag: 1,
+      data: {
+        data: {
+          jobCardList: [
+            {
+              ...row,
+              job: {
+                ...row.job,
+                jobId: 80000001 + page,
+                link: `https://www.liepin.com/job/${String(1980000001 + page)}.shtml`,
+              },
+            },
+          ],
+        },
+        pagination: { currentPage: page, pageSize: 40, totalPage: 2, hasNext: page === 0 },
+        passThroughData: { scene: 'input', skId: `next-${String(page)}`, fkId: '', ckId: 'sample' },
+      },
+    });
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(response(0))
+    .mockResolvedValueOnce(response(1));
+  const session = new LiepinRecommendationHttpSession({
+    template: searchTemplate,
+    expectedKeyword: 'AI应用开发',
+    readHeaders: () => Promise.resolve({}),
+    fetch: fetcher,
+  });
+  expect(await session.readNext(signal)).toMatchObject({
+    hasMore: true,
+    candidates: [{ externalJobId: 'job:1980000001' }],
+  });
+  expect(await session.readNext(signal)).toMatchObject({
+    hasMore: false,
+    candidates: [{ externalJobId: 'job:1980000002' }],
+  });
+  const secondBody = fetcher.mock.calls[1]?.[1]?.body;
+  if (typeof secondBody !== 'string') throw new Error('Missing request body');
+  expect(JSON.parse(secondBody)).toMatchObject({
+    data: {
+      mainSearchPcConditionForm: { key: 'AI应用开发', currentPage: 1, pageSize: 40 },
+      passThroughForm: { skId: 'next-0' },
+    },
+  });
+  await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'session_unavailable' });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('搜索模板关键词错配、非首页或推荐接口不得通过初始化', () => {
+  for (const invalid of [
+    template,
+    { ...searchTemplate, body: searchTemplate.body.replace('AI应用开发', 'Python') },
+    { ...searchTemplate, body: searchTemplate.body.replace('"currentPage":0', '"currentPage":1') },
+  ]) {
+    expect(
+      () =>
+        new LiepinRecommendationHttpSession({
+          template: invalid,
+          expectedKeyword: 'AI应用开发',
+          readHeaders: () => Promise.resolve({}),
+        }),
+    ).toThrow();
+  }
+});
+
+it('搜索返回错误页码或者空页仍声明有下一页时拒绝推进', async () => {
+  for (const page of [0, 1]) {
+    const session = new LiepinRecommendationHttpSession({
+      template: searchTemplate,
+      expectedKeyword: 'AI应用开发',
+      readHeaders: () => Promise.resolve({}),
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          flag: 1,
+          data: {
+            data: { jobCardList: [] },
+            pagination: { currentPage: page, pageSize: 40, totalPage: 2, hasNext: true },
+            passThroughData: { scene: 'input', skId: '', fkId: '', ckId: 'sample' },
+          },
+        }),
+      ),
+    });
+    await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'parse_changed' });
+  }
+});
+
+it('搜索 lptjob 卡片允许缺省学历，详情仍核对完整 JSON-LD 身份', async () => {
+  const link = 'https://www.liepin.com/lptjob/80000001';
+  const { requireEduLevel: _education, ...job } = row.job;
+  void _education;
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      Response.json({
+        flag: 1,
+        data: {
+          data: { jobCardList: [{ ...row, job: { ...job, link } }] },
+          pagination: { currentPage: 0, pageSize: 40, totalPage: 1, hasNext: false },
+          passThroughData: { scene: 'input', skId: '', fkId: '', ckId: 'sample' },
+        },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        `<script type="application/ld+json">${JSON.stringify({ ...posting, url: link })}</script>`,
+        { headers: { 'content-type': 'text/html' } },
+      ),
+    );
+  const session = new LiepinRecommendationHttpSession({
+    template: searchTemplate,
+    expectedKeyword: 'AI应用开发',
+    readHeaders: () => Promise.resolve({}),
+    fetch: fetcher,
+  });
+  expect(await session.readNext(signal)).toMatchObject({
+    candidates: [{ externalJobId: 'lptjob:80000001', education: '' }],
+  });
+  expect(await session.readDetail('lptjob:80000001', signal)).toMatchObject({
+    description: posting.description,
+  });
+});
+
 /** 合成 JSON 和 HTML 替身，不需要浏览器或真实账号。 */
 function fixture(
   list: unknown = { flag: 1, data: { data: [], addData: [row], hasNextPage: true } },
@@ -144,31 +286,41 @@ it('首次 LOGIN、续批 UP 保留查询与排序，末批之后不再请求', 
 });
 
 it('猎聘按传入配置执行间隔，连接器不写死平台下限', async () => {
-  const calledAt: number[] = [];
-  const fetcher = vi.fn<typeof fetch>().mockImplementation((target) => {
-    calledAt.push(Date.now());
-    return Promise.resolve(
-      target === template.url
-        ? Response.json({ flag: 1, data: { data: [row], addData: [], hasNextPage: false } })
-        : new Response(`<script type="application/ld+json">${JSON.stringify(posting)}</script>`, {
-            headers: { 'content-type': 'text/html' },
-          }),
-    );
-  });
-  const session = new LiepinRecommendationHttpSession({
-    template,
-    fetch: fetcher,
-    requestIntervalMs: 1000,
-    readHeaders: () => Promise.resolve({ cookie: 'session=private' }),
-  });
-  await session.readNext(signal);
-  await expect(session.readDetail('job:1980000001', signal)).resolves.toMatchObject({
-    externalJobId: 'job:1980000001',
-  });
-  expect(fetcher).toHaveBeenCalledTimes(2);
-  const [first, second] = calledAt;
-  if (first === undefined || second === undefined) throw new Error('Missing request timestamps');
-  expect(second - first).toBeGreaterThanOrEqual(1000);
+  // 1、真实时钟下放行与 fetch 回调可能跨毫秒边界；用受控时钟验证完整间隔。
+  vi.useFakeTimers();
+  try {
+    const calledAt: number[] = [];
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((target) => {
+      calledAt.push(Date.now());
+      return Promise.resolve(
+        target === template.url
+          ? Response.json({ flag: 1, data: { data: [row], addData: [], hasNextPage: false } })
+          : new Response(`<script type="application/ld+json">${JSON.stringify(posting)}</script>`, {
+              headers: { 'content-type': 'text/html' },
+            }),
+      );
+    });
+    const session = new LiepinRecommendationHttpSession({
+      template,
+      fetch: fetcher,
+      requestIntervalMs: 1000,
+      readHeaders: () => Promise.resolve({ cookie: 'session=private' }),
+    });
+    await session.readNext(signal);
+    const detail = session.readDetail('job:1980000001', signal);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(detail).resolves.toMatchObject({
+      externalJobId: 'job:1980000001',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const [first, second] = calledAt;
+    if (first === undefined || second === undefined) throw new Error('Missing request timestamps');
+    expect(second - first).toBeGreaterThanOrEqual(1000);
+  } finally {
+    vi.useRealTimers();
+  }
 }, 4000);
 
 it('跨批重复身份冻结且不请求旧详情', async () => {

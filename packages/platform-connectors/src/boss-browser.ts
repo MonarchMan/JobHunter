@@ -10,7 +10,8 @@ import type { BossPageState } from './boss-page-state.js';
 import { BossPageLifecycle } from './boss-page-lifecycle.js';
 
 const origin = 'https://www.zhipin.com';
-const listPath = '/wapi/zpgeek/pc/recommend/job/list.json';
+const recommendationPath = '/wapi/zpgeek/pc/recommend/job/list.json';
+const searchPath = '/wapi/zpgeek/search/joblist.json';
 const detailPath = '/wapi/zpgeek/job/detail.json';
 const maxBytes = 2 * 1024 * 1024;
 const eventSchema = z.object({
@@ -22,6 +23,7 @@ const eventSchema = z.object({
 /** 仅保留所选页已发出请求的关联信息；原始正文不进入持久层。 */
 interface ObservedRequest {
   readonly url: URL;
+  readonly actualUrl: string;
   readonly epoch: number;
   status?: number;
 }
@@ -47,6 +49,7 @@ export class BossBrowserSession implements PlatformSession {
   #hasMore = true;
   #lastJobId: string | undefined;
   readonly #lifecycle: BossPageLifecycle;
+  readonly #listPath: string;
   #detail:
     | { securityId: string; resolve(response: Response): void; reject(error: unknown): void }
     | undefined;
@@ -54,6 +57,7 @@ export class BossBrowserSession implements PlatformSession {
   public constructor(
     private readonly input: {
       readonly sessionId: string;
+      readonly searchKeyword?: string;
       /** 仅 Worker 自建页允许首批消费前的同源初始化导航。 */
       readonly initialNavigationUrl?: string;
       readonly inspectPage?: (signal: AbortSignal) => Promise<BossPageState>;
@@ -70,6 +74,7 @@ export class BossBrowserSession implements PlatformSession {
       readonly activateForNext?: boolean;
     },
   ) {
+    this.#listPath = input.searchKeyword ? searchPath : recommendationPath;
     this.#lifecycle =
       input.lifecycle ??
       new BossPageLifecycle({
@@ -130,18 +135,34 @@ export class BossBrowserSession implements PlatformSession {
           .object({
             requestId: z.string(),
             redirectResponse: z.unknown().optional(),
-            request: z.object({ url: z.string().max(32_768), method: z.string() }),
+            request: z.object({
+              url: z.string().max(32_768),
+              method: z.string(),
+              postData: z.string().max(32_768).optional(),
+            }),
           })
           .parse(params);
         const url = new URL(request.request.url);
-        if (url.origin !== origin || ![listPath, detailPath].includes(url.pathname)) return;
-        if (request.request.method !== 'GET' || request.redirectResponse)
+        if (url.origin !== origin || ![this.#listPath, detailPath].includes(url.pathname)) return;
+        const searchList = !!this.input.searchKeyword && url.pathname === this.#listPath;
+        if (request.request.method !== (searchList ? 'POST' : 'GET') || request.redirectResponse)
           throw new PlatformError('parse_changed');
-        if (url.pathname === listPath) {
+        // 2.a、搜索 POST 表单仅转换为内存解析上下文，绝不改写或重放官网请求。
+        if (searchList) {
+          if (!request.request.postData) throw new PlatformError('parse_changed');
+          const form = new URLSearchParams(request.request.postData);
+          if (form.get('query') !== this.input.searchKeyword)
+            throw new PlatformError('session_unavailable', null, 'query_changed');
+          for (const [key, value] of form) {
+            if (url.searchParams.has(key)) throw new PlatformError('parse_changed');
+            url.searchParams.append(key, value);
+          }
+        }
+        if (url.pathname === this.#listPath) {
           if (
             this.#remaining.size > 0 ||
             this.#page ||
-            [...this.#requests.values()].some((value) => value.url.pathname === listPath)
+            [...this.#requests.values()].some((value) => value.url.pathname === this.#listPath)
           )
             throw new PlatformError('session_unavailable', null, 'duplicate_list');
           const query = new URLSearchParams(url.searchParams);
@@ -157,11 +178,15 @@ export class BossBrowserSession implements PlatformSession {
           (!this.#detail &&
             !this.#page &&
             this.#remaining.size === 0 &&
-            ![...this.#requests.values()].some((value) => value.url.pathname === listPath))
+            ![...this.#requests.values()].some((value) => value.url.pathname === this.#listPath))
         )
           return;
         if (this.#requests.size >= 8) throw new PlatformError('session_unavailable');
-        this.#requests.set(request.requestId, { url, epoch: this.#lifecycle.epoch });
+        this.#requests.set(request.requestId, {
+          url,
+          actualUrl: request.request.url,
+          epoch: this.#lifecycle.epoch,
+        });
       } else if (method === 'Network.responseReceived') {
         const response = z
           .object({
@@ -171,7 +196,7 @@ export class BossBrowserSession implements PlatformSession {
           .parse(params);
         const pending = this.#requests.get(response.requestId);
         if (pending) {
-          if (response.response.url !== pending.url.href) throw new PlatformError('parse_changed');
+          if (response.response.url !== pending.actualUrl) throw new PlatformError('parse_changed');
           pending.status = response.response.status;
         }
       } else if (method === 'Network.loadingFinished') {
@@ -234,7 +259,7 @@ export class BossBrowserSession implements PlatformSession {
           envelope.code === 37 ? 'security_check' : 'envelope',
         );
       const response = new Response(bytes, { status: 200 });
-      if (request.url.pathname === listPath)
+      if (request.url.pathname === this.#listPath)
         this.#page = { url: request.url, response, observedAt: Date.now() };
       else {
         const securityId = request.url.searchParams.get('securityId');
@@ -291,6 +316,7 @@ export class BossBrowserSession implements PlatformSession {
           this.#client = new BossHttpSession({
             cookies: [],
             observedListUrl: this.#page.url.href,
+            ...(this.input.searchKeyword ? { searchKeyword: this.input.searchKeyword } : {}),
             browserResponse: (url, requestSignal, jobId) =>
               this.#response(url, requestSignal, jobId),
           });
@@ -312,8 +338,15 @@ export class BossBrowserSession implements PlatformSession {
     // 1、异步 CDP 回调会在 await 期间更新状态，须重新读取而非沿用先前判断。
     return (
       this.#page !== undefined ||
-      [...this.#requests.values()].some((request) => request.url.pathname === listPath)
+      [...this.#requests.values()].some((request) => request.url.pathname === this.#listPath)
     );
+  }
+
+  /** 去重候选只释放本地待处理状态，不点击页面或请求详情。 */
+  public discardDetail(id: string): void {
+    // 1、仅释放本批真实候选，不能用任意 ID 跳过尚未取得的列表。
+    this.#lifecycle.assertCurrent();
+    if (this.#busy || !this.#remaining.delete(id)) throw new PlatformError('session_unavailable');
   }
 
   /** 只允许当前批次详情，正常点击后等待同请求的真实 JSON。 */

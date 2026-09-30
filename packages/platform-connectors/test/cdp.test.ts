@@ -564,16 +564,33 @@ it('底层断线通知可以退订，晚订阅立即通知且不重连或访问�
   expect(FakeSocket.instances).toHaveLength(1);
 });
 
-it.each([false, true])('猎聘初始化后通过 HTTP 获取，专用页模式=%s', async (owned) => {
+it.each([
+  { owned: false, search: false },
+  { owned: true, search: false },
+  { owned: true, search: true },
+])('猎聘初始化后通过 HTTP 获取，%j', async ({ owned, search }) => {
   FakeSocket.targetUrl = 'https://c.liepin.com/';
-  const fetcher = vi
-    .fn<typeof fetch>()
-    .mockResolvedValue(
-      Response.json({ flag: 1, data: { data: [], addData: [], hasNextPage: false } }),
-    );
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+    Response.json(
+      search
+        ? {
+            flag: 1,
+            data: {
+              data: { jobCardList: [] },
+              pagination: { currentPage: 0, pageSize: 40, totalPage: 0, hasNext: false },
+              passThroughData: { scene: 'input', skId: '', fkId: '', ckId: 'fixture' },
+            },
+          }
+        : { flag: 1, data: { data: [], addData: [], hasNextPage: false } },
+    ),
+  );
   vi.stubGlobal('fetch', fetcher);
   const pending = new LiepinCdpSessionProvider().connect(
-    owned ? {} : { portFile: '/fixture/DevToolsActivePort', targetId: 'valid' },
+    search
+      ? { search: { keyword: '算法工程师', city: '' } }
+      : owned
+        ? {}
+        : { portFile: '/fixture/DevToolsActivePort', targetId: 'valid' },
     new AbortController().signal,
   );
   await vi.advanceTimersByTimeAsync(1);
@@ -585,16 +602,27 @@ it.each([false, true])('猎聘初始化后通过 HTTP 获取，专用页模式=%
     params: {
       request: {
         method: 'POST',
-        url: 'https://api-c.liepin.com/api/com.liepin.csearch.home-recommend-job-new',
+        url: search
+          ? 'https://api-c.liepin.com/api/com.liepin.searchfront4c.pc-search-job'
+          : 'https://api-c.liepin.com/api/com.liepin.csearch.home-recommend-job-new',
         headers: { Accept: 'application/json', Cookie: 'do-not-reuse' },
-        postData: JSON.stringify({
-          data: {
-            operateKind: 'LOGIN',
-            sortType: 'PC_STU_HP_NEW',
-            selectedExpect: '{}',
-            existFallbackResult: false,
-          },
-        }),
+        postData: JSON.stringify(
+          search
+            ? {
+                data: {
+                  mainSearchPcConditionForm: { key: '算法工程师', currentPage: 0, pageSize: 40 },
+                  passThroughForm: { scene: 'input', skId: '', fkId: '', ckId: 'fixture' },
+                },
+              }
+            : {
+                data: {
+                  operateKind: 'LOGIN',
+                  sortType: 'PC_STU_HP_NEW',
+                  selectedExpect: '{}',
+                  existFallbackResult: false,
+                },
+              },
+        ),
       },
     },
   };
@@ -605,6 +633,10 @@ it.each([false, true])('猎聘初始化后通过 HTTP 获取，专用页模式=%
   expect(fetcher).not.toHaveBeenCalled();
   socket.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(event) }));
   const session = await pending;
+  if (search)
+    expect(socket.ownedUrl).toBe(
+      'https://www.liepin.com/zhaopin/?key=' + encodeURIComponent('算法工程师'),
+    );
   expect(socket.methods).toEqual([
     owned ? 'Target.createTarget' : 'Target.getTargets',
     'Target.attachToTarget',
@@ -633,55 +665,84 @@ it.each([false, true])('猎聘初始化后通过 HTTP 获取，专用页模式=%
   expect(socket.methods.includes('Target.closeTarget')).toBe(owned);
 });
 
-it.each([undefined, false, true])(
-  'BOSS browser 新页观察真实列表，后台窗口=%s',
-  async (backgroundWindow) => {
-    const fetcher = vi.fn();
-    vi.stubGlobal('fetch', fetcher);
-    const pending = new BossCdpSessionProvider(
-      backgroundWindow === undefined ? {} : { backgroundWindow },
-    ).connect({}, new AbortController().signal);
-    await vi.advanceTimersByTimeAsync(1);
-    const session = await pending;
-    const socket = FakeSocket.instances[0];
-    if (!socket) throw new Error('Missing socket');
-    expect(
-      socket.commands.find((command) => command.method === 'Target.createTarget'),
-    ).toMatchObject({
+it.each([
+  { backgroundWindow: undefined, search: false },
+  { backgroundWindow: false, search: false },
+  { backgroundWindow: true, search: false },
+  { backgroundWindow: true, search: true },
+])('BOSS browser 新页观察真实列表，%j', async ({ backgroundWindow, search }) => {
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  const pending = new BossCdpSessionProvider(
+    backgroundWindow === undefined ? {} : { backgroundWindow },
+  ).connect(
+    search ? { search: { keyword: '算法工程师', city: '' } } : {},
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  expect(socket.commands.find((command) => command.method === 'Target.createTarget')).toMatchObject(
+    {
       params: {
         url: 'about:blank',
         ...(backgroundWindow !== false ? { newWindow: true, background: true } : {}),
       },
-    });
-    const url = 'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1';
-    // 1、专用页的首次导航和列表响应均经过生产观察器，不使用历史模板替代。
-    for (const [method, params] of [
-      ['Page.frameNavigated', { frame: { url: 'https://www.zhipin.com/web/geek/jobs' } }],
-      ['Network.requestWillBeSent', { requestId: 'list', request: { url, method: 'GET' } }],
-      ['Network.responseReceived', { requestId: 'list', response: { url, status: 200 } }],
-      ['Network.loadingFinished', { requestId: 'list', encodedDataLength: 100 }],
-    ])
-      socket.dispatchEvent(
-        new MessageEvent('message', {
-          data: JSON.stringify({ sessionId: 'attached', method, params }),
-        }),
-      );
-    await vi.advanceTimersByTimeAsync(1);
-    const firstBatch = session.readNext(new AbortController().signal);
-    await vi.advanceTimersByTimeAsync(1100);
-    await expect(firstBatch).resolves.toMatchObject({ candidates: [], hasMore: false });
-    expect(socket.methods.indexOf('Network.enable')).toBeLessThan(
-      socket.methods.indexOf('Page.navigate'),
+    },
+  );
+  const url = search
+    ? 'https://www.zhipin.com/wapi/zpgeek/search/joblist.json?_=123'
+    : 'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1';
+  const entryUrl =
+    'https://www.zhipin.com/web/geek/jobs' +
+    (search ? '?query=' + encodeURIComponent('算法工程师') : '');
+  expect(socket.ownedUrl).toBe(entryUrl);
+  // 1、专用页的首次导航和列表响应均经过生产观察器，不使用历史模板替代。
+  for (const [method, params] of [
+    ['Page.frameNavigated', { frame: { url: entryUrl } }],
+    [
+      'Network.requestWillBeSent',
+      {
+        requestId: 'list',
+        request: {
+          url,
+          method: search ? 'POST' : 'GET',
+          ...(search
+            ? {
+                postData: new URLSearchParams({
+                  page: '1',
+                  pageSize: '15',
+                  query: '算法工程师',
+                }).toString(),
+              }
+            : {}),
+        },
+      },
+    ],
+    ['Network.responseReceived', { requestId: 'list', response: { url, status: 200 } }],
+    ['Network.loadingFinished', { requestId: 'list', encodedDataLength: 100 }],
+  ])
+    socket.dispatchEvent(
+      new MessageEvent('message', {
+        data: JSON.stringify({ sessionId: 'attached', method, params }),
+      }),
     );
-    expect(socket.methods.filter((method) => method === 'Page.navigate')).toHaveLength(1);
-    expect(socket.methods).not.toContain('Network.getCookies');
-    expect(socket.methods).not.toContain('Page.reload');
-    expect(fetcher).not.toHaveBeenCalled();
-    expect('resume' in session).toBe(false);
-    session.disconnect();
-    await vi.advanceTimersByTimeAsync(1);
-  },
-);
+  await vi.advanceTimersByTimeAsync(1);
+  const firstBatch = session.readNext(new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(1100);
+  await expect(firstBatch).resolves.toMatchObject({ candidates: [], hasMore: false });
+  expect(socket.methods.indexOf('Network.enable')).toBeLessThan(
+    socket.methods.indexOf('Page.navigate'),
+  );
+  expect(socket.methods.filter((method) => method === 'Page.navigate')).toHaveLength(1);
+  expect(socket.methods).not.toContain('Network.getCookies');
+  expect(socket.methods).not.toContain('Page.reload');
+  expect(fetcher).not.toHaveBeenCalled();
+  expect('resume' in session).toBe(false);
+  session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
+});
 
 it('BOSS 后台下一批只派发一次普通滚动事件，不刷新或激活页面', async () => {
   const pending = new BossCdpSessionProvider().connect({}, new AbortController().signal);
@@ -789,6 +850,32 @@ it('不将 BOSS 新模式隐式应用于其他平台', async () => {
     ),
   ).rejects.toMatchObject({ category: 'session_unavailable' });
   expect(FakeSocket.instances).toHaveLength(0);
+});
+
+it.each([new BossCdpSessionProvider()])(
+  '未验证搜索协议的平台在连接前拒绝关键词，不能回退推荐流',
+  async (provider) => {
+    await expect(
+      provider.connect(
+        { search: { keyword: '算法工程师', city: '' }, acquisitionMode: 'http' },
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ reason: 'search_unsupported' });
+    expect(FakeSocket.instances).toHaveLength(0);
+  },
+);
+
+it('前程无忧资料搜索在专用页打开指定关键词', async () => {
+  const pending = new Job51CdpSessionProvider().connect(
+    { search: { keyword: '算法工程师', city: '' } },
+    new AbortController().signal,
+  );
+  await vi.advanceTimersByTimeAsync(1);
+  const session = await pending;
+  expect(FakeSocket.instances[0]?.ownedUrl).toBe(
+    'https://we.51job.com/pc/search?keyword=%E7%AE%97%E6%B3%95%E5%B7%A5%E7%A8%8B%E5%B8%88',
+  );
+  session.disconnect();
 });
 
 it('retains the selected 51job observer beyond initialization without another authorization', async () => {

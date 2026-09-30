@@ -75,8 +75,8 @@ test('Liepin UI keeps explicit batches and uses unified jobs', async ({ page }) 
   });
   await page.goto('/sources?channel=platform&provider=liepin');
   await page.getByText('高级连接设置', { exact: true }).click();
-  await expect(page.getByRole('heading', { name: '猎聘 · 学生推荐' })).toBeVisible();
-  await expect(page.getByText('后续批次和详情通过 HTTP 获取', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '猎聘', exact: true })).toBeVisible();
+  await expect(page.getByText('后续列表和详情通过独立 HTTP 获取', { exact: false })).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();

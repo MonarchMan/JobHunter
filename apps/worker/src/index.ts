@@ -361,6 +361,8 @@ export function createProductionWorkerApplication(input: {
         input.platformRequestIntervalMsByProvider?.boss ?? input.platformRequestIntervalMs ?? 0,
     }),
     new SqlitePlatformRepository(database.client),
+    Date.now,
+    profileRepository,
   );
   registry.register(createBossPlatformTaskHandler(boss));
   const zhilian = new PlatformBrowsingService(
@@ -369,6 +371,8 @@ export function createProductionWorkerApplication(input: {
         input.platformRequestIntervalMsByProvider?.zhilian ?? input.platformRequestIntervalMs ?? 0,
     }),
     new SqlitePlatformRepository(database.client, 'zhilian'),
+    Date.now,
+    profileRepository,
   );
   registry.register(createPlatformTaskHandler('zhilian', zhilian));
   const job51 = new PlatformBrowsingService(
@@ -379,6 +383,8 @@ export function createProductionWorkerApplication(input: {
         0,
     }),
     new SqlitePlatformRepository(database.client, '51job'),
+    Date.now,
+    profileRepository,
   );
   registry.register(createPlatformTaskHandler('51job', job51));
   const liepin = new PlatformBrowsingService(
@@ -388,6 +394,8 @@ export function createProductionWorkerApplication(input: {
         input.platformRequestIntervalMsByProvider?.liepin ?? input.platformRequestIntervalMs ?? 0,
     }),
     new SqlitePlatformRepository(database.client, 'liepin'),
+    Date.now,
+    profileRepository,
   );
   registry.register(createPlatformTaskHandler('liepin', liepin));
   registry.register(

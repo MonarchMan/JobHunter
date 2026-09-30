@@ -1,13 +1,14 @@
 'use client';
 
-import { canonicalJobSubfamilies, type CandidateProfileData } from '@jobhunter/domain';
+import type { CandidateProfileData } from '@jobhunter/domain';
 import type { ReactElement } from 'react';
 import { SelectField } from '../components/forms/select-field.js';
 
 /** 用户确认的资格事实；空值表示未知，不根据当前日期自动推断。 */
 type Constraints = NonNullable<CandidateProfileData['matchingConstraints']>;
 
-const emptyConstraints: Constraints = {
+/** 两级类别选择和资格字段共用缺省值，未填写的事实仍为未知。 */
+export const emptyConstraints: Constraints = {
   targetSubfamily: null,
   graduationYear: null,
   studentStatus: null,
@@ -34,21 +35,6 @@ export function MatchingConstraintsFields({
     facts.internshipMonths !== null && (facts.internshipMonths < 0 || facts.internshipMonths > 60);
   return (
     <>
-      <label>
-        细分岗位（可选）
-        <SelectField
-          name="targetSubfamily"
-          label="细分岗位（可选）"
-          value={facts.targetSubfamily ?? ''}
-          options={[
-            { value: '', label: '不限 / 待确认' },
-            ...canonicalJobSubfamilies.map((item) => ({ value: item, label: item })),
-          ]}
-          onValueChange={(value) => {
-            onChange({ ...facts, targetSubfamily: value || null });
-          }}
-        />
-      </label>
       <label>
         学籍 / 应届身份
         <SelectField

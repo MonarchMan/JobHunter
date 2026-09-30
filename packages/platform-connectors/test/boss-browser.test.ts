@@ -54,9 +54,16 @@ function fixture(
   inspectPage?: (signal: AbortSignal) => Promise<BossPageState>,
   loadNext?: (lastJobId: string, signal: AbortSignal) => Promise<void>,
   activateForNext = true,
+  searchKeyword?: string,
 ): {
   session: BossBrowserSession;
-  emit: (url: string, body: unknown, status?: number, sessionId?: string) => Promise<void>;
+  emit: (
+    url: string,
+    body: unknown,
+    status?: number,
+    sessionId?: string,
+    postData?: string,
+  ) => Promise<void>;
   event: (method: string, params: unknown, sessionId?: string) => void;
   call: Mock<
     (
@@ -85,6 +92,7 @@ function fixture(
     ...(inspectPage ? { inspectPage } : {}),
     ...(loadNext ? { loadNext } : {}),
     activateForNext,
+    ...(searchKeyword ? { searchKeyword } : {}),
   });
   const event = (method: string, params: unknown, sessionId = 'selected'): void => {
     session.accept({ sessionId, method, params });
@@ -95,10 +103,18 @@ function fixture(
     body: unknown,
     status = 200,
     sessionId = 'selected',
+    postData?: string,
   ): Promise<void> {
     const requestId = String(++ordinal);
     bodies.set(requestId, body);
-    event('Network.requestWillBeSent', { requestId, request: { url, method: 'GET' } }, sessionId);
+    event(
+      'Network.requestWillBeSent',
+      {
+        requestId,
+        request: { url, method: postData ? 'POST' : 'GET', ...(postData ? { postData } : {}) },
+      },
+      sessionId,
+    );
     event('Network.responseReceived', { requestId, response: { url, status } }, sessionId);
     event('Network.loadingFinished', { requestId, encodedDataLength: 100 }, sessionId);
     await Promise.resolve();
@@ -106,6 +122,56 @@ function fixture(
   }
   return { session, emit, event, call, clickJob };
 }
+
+it('搜索只消费匹配关键词的真实 POST JSON，详情仍走正常点击', async () => {
+  const f = fixture(detail, undefined, undefined, undefined, false, 'AI应用开发');
+  await f.emit(
+    'https://www.zhipin.com/wapi/zpgeek/search/joblist.json?_=123',
+    list,
+    200,
+    'selected',
+    'page=1&pageSize=15&query=AI应用开发&city=101280600&scene=1',
+  );
+  expect(await f.session.readNext(signal())).toMatchObject({
+    candidates: [{ externalJobId: 'a' }],
+  });
+  expect(await f.session.readDetail('a', signal())).toMatchObject({
+    description: '负责开发与维护。',
+  });
+  expect(f.clickJob).toHaveBeenCalledOnce();
+  f.session.disconnect();
+});
+
+it('关键词错配不能消费另一个搜索结果', async () => {
+  const f = fixture(detail, undefined, undefined, undefined, false, 'AI应用开发');
+  await f.emit(
+    'https://www.zhipin.com/wapi/zpgeek/search/joblist.json?_=123',
+    list,
+    200,
+    'selected',
+    'page=1&query=Java',
+  );
+  await expect(f.session.readNext(signal())).rejects.toMatchObject({ reason: 'query_changed' });
+  expect(f.clickJob).not.toHaveBeenCalled();
+});
+
+it('跨词去重释放当前候选后允许下一批，不额外点击重复详情', async () => {
+  const next = vi.fn(async () => {
+    await f.emit(listUrl.replace('page=1', 'page=2'), {
+      code: 0,
+      zpData: { hasMore: false, lid: 'test', jobList: [{ ...row, encryptJobId: 'b' }] },
+    });
+  });
+  const f = fixture(detail, undefined, undefined, next, false);
+  await f.emit(listUrl, { ...list, zpData: { ...list.zpData, hasMore: true } });
+  await f.session.readNext(signal());
+  f.session.discardDetail('a');
+  await expect(f.session.readNext(signal())).resolves.toMatchObject({
+    candidates: [{ externalJobId: 'b' }],
+  });
+  expect(f.clickJob).not.toHaveBeenCalled();
+  f.session.disconnect();
+});
 
 afterEach(() => {
   vi.useRealTimers();

@@ -109,8 +109,8 @@ test('Job51 UI completes explicit browsing, preserves idempotency and separates 
   );
   await page.goto('/sources?channel=platform&provider=51job');
   await page.getByText('高级连接设置', { exact: true }).click();
-  await expect(page.getByRole('heading', { name: '前程无忧 · 官网辅助' })).toBeVisible();
-  await expect(page.getByText('连接后在专用页正常搜索或翻页', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '前程无忧' })).toBeVisible();
+  await expect(page.getByText('专用页提供官网自然生成的请求模板', { exact: false })).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();

@@ -60,6 +60,15 @@ const allowedQuery = new Set([
   'scale',
   '_',
 ]);
+const searchQuery = new Set([
+  ...allowedQuery,
+  'query',
+  'multiSubway',
+  'multiBusinessDistrict',
+  'position',
+  'stage',
+  'scene',
+]);
 
 /** 浏览器当前的最小认证上下文；不包含签名生成器或任意请求头。 */
 interface BossRequestContext {
@@ -183,6 +192,8 @@ export class BossHttpSession {
     readonly lifecycle?: BossPageLifecycle;
     /** 显式浏览器模式只提供实际 JSON 响应；不走认证同步或 Node HTTP。 */
     readonly browserResponse?: (url: URL, signal: AbortSignal, jobId?: string) => Promise<Response>;
+    /** 搜索表单只在浏览器 JSON 模式归一化复用解析，禁止伪装为 GET 发出。 */
+    readonly searchKeyword?: string;
   }) {
     // 1、仅接受已经观察到的固定列表端点和已知查询字段，不允许任意网络代理。
     let url: URL;
@@ -193,11 +204,17 @@ export class BossHttpSession {
     }
     if (
       url.origin !== origin ||
-      url.pathname !== listPath ||
+      (input.searchKeyword
+        ? !input.browserResponse ||
+          url.pathname !== '/wapi/zpgeek/search/joblist.json' ||
+          url.searchParams.get('query') !== input.searchKeyword
+        : url.pathname !== listPath) ||
       url.username ||
       url.password ||
       url.hash ||
-      [...url.searchParams.keys()].some((key) => !allowedQuery.has(key))
+      [...url.searchParams.keys()].some(
+        (key) => !(input.searchKeyword ? searchQuery : allowedQuery).has(key),
+      )
     )
       throw new PlatformError('parse_changed');
     // 2、复制会话数据，调用方后续修改不能扩大本会话授权范围。
@@ -638,7 +655,10 @@ export class BossHttpSession {
       }
       throw new BossSecurityCheckError({
         transport: this.#browserResponse ? 'browser' : 'http',
-        endpoint: url.pathname === listPath ? 'list' : 'detail',
+        endpoint:
+          url.pathname === listPath || url.pathname === '/wapi/zpgeek/search/joblist.json'
+            ? 'list'
+            : 'detail',
         request: this.#requestCount,
         successes: this.#successfulResponses,
         data: parsed.data.zpData,

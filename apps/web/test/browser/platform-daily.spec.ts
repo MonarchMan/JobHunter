@@ -5,7 +5,13 @@ import type { WebBossSnapshot } from '@jobhunter/application/web';
 /** 日常入口使用本地状态替身；不连接用户浏览器，也不访问招聘网站。 */
 for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
   test(`${provider} 在职位页自动连接获取，复用会话并保留筛选`, async ({ page }) => {
-    let state: WebBossSnapshot = { connection: null, batch: null, saved: {}, task: null };
+    let state: WebBossSnapshot = {
+      connection: null,
+      batch: null,
+      saved: {},
+      task: null,
+      profileSearch: { keywords: ['后端开发工程师', '算法工程师'], error: null },
+    };
     const commands: unknown[] = [];
     await page.route(`**/api/platforms/${provider}`, async (route) => {
       if (route.request().method() === 'GET') return route.fulfill({ json: { data: state } });
@@ -38,25 +44,31 @@ for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
     await expect(page.getByText(/创建平台专用页/)).toBeVisible();
     await expect(page.getByRole('button', { name: '获取职位', exact: true })).toBeDisabled();
     expect(commands).toEqual([]);
-    if (provider === 'zhilian') await page.getByLabel('搜索关键词').fill('后端');
+    await expect(
+      page.getByText('默认第一份资料的意向岗位：后端开发工程师、算法工程师。', { exact: false }),
+    ).toBeVisible();
+    await expect(page.getByLabel('搜索关键词')).toHaveCount(0);
     await page.getByRole('checkbox', { name: /允许自动连接/ }).check();
     await page.getByRole('button', { name: '获取职位', exact: true }).click();
     await expect(page.getByRole('button', { name: '获取职位', exact: true })).toBeDisabled();
     await expect
       .poll(() => commands)
-      .toEqual([
-        provider === 'zhilian'
-          ? {
-              action: 'acquire',
-              generation: null,
-              search: { keyword: '后端', city: '' },
-            }
-          : { action: 'acquire', generation: null },
-      ]);
+      .toEqual([{ action: 'acquire', generation: null, profileSearch: true }]);
     // 2、完成后只刷新本地结果，不发布第二个任务；下一次点击携带当前代次。
     state = {
       ...state,
       connection: { generation: 2, status: 'available' },
+      batch: {
+        generation: 2,
+        candidates: [],
+        savedCount: 2,
+        hasMore: true,
+        searchKeywords: ['后端开发工程师', '算法工程师'],
+        searchBatches: [
+          { keyword: '后端开发工程师', count: 2, hasMore: true },
+          { keyword: '算法工程师', count: 1, hasMore: false },
+        ],
+      },
       task: {
         id: 'daily-1',
         status: 'succeeded',
@@ -71,11 +83,14 @@ for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
         },
       },
     };
-    await expect(page.getByText('已入库 2 条', { exact: false })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('有效候选 2 条', { exact: false })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('算法工程师（1 条，已到末批）', { exact: false })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`provider=${provider}&q=existing-filter`));
     expect(commands).toHaveLength(1);
     await page.getByRole('button', { name: '获取职位', exact: true }).click();
-    await expect.poll(() => commands[1]).toEqual({ action: 'acquire', generation: 2 });
+    await expect
+      .poll(() => commands[1])
+      .toEqual({ action: 'acquire', generation: 2, profileSearch: true });
   });
 }
 
@@ -119,7 +134,9 @@ test('连接失败可原地重试，不选择已有页面，窄屏键盘可操�
   await expect(page.getByRole('combobox', { name: '选择平台页面' })).toHaveCount(0);
   await page.getByRole('button', { name: '获取职位', exact: true }).focus();
   await page.keyboard.press('Enter');
-  await expect.poll(() => commands[1]).toEqual({ action: 'acquire', generation: 3 });
+  await expect
+    .poll(() => commands[1])
+    .toEqual({ action: 'acquire', generation: 3, profileSearch: true });
   state = {
     ...state,
     targets: [],

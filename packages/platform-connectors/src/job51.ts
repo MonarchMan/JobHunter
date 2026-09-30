@@ -146,11 +146,14 @@ export class Job51HttpSession implements PlatformSession {
   readonly #fetch: typeof fetch;
   readonly #pacer: PlatformRequestPacer;
   readonly #loadNextPage: ((currentPage: number, signal: AbortSignal) => Promise<void>) | undefined;
+  readonly #expectedKeyword: string | undefined;
 
   public constructor(
     input: {
       readonly fetch?: typeof fetch;
       readonly requestIntervalMs?: number;
+      /** 资料搜索连接须核对官网签名模板确实属于所选词。 */
+      readonly expectedKeyword?: string;
       /** 仅 Worker 自建页可通过官网正常分页产生下一批签名模板。 */
       readonly loadNextPage?: (currentPage: number, signal: AbortSignal) => Promise<void>;
     } = {},
@@ -158,6 +161,7 @@ export class Job51HttpSession implements PlatformSession {
     this.#fetch = input.fetch ?? fetch;
     this.#pacer = new PlatformRequestPacer(input.requestIntervalMs);
     this.#loadNextPage = input.loadNextPage;
+    this.#expectedKeyword = input.expectedKeyword;
   }
 
   /** 观察器在冻结后不再收集认证数据，连接本身仍可保留至显式断开。 */
@@ -170,6 +174,11 @@ export class Job51HttpSession implements PlatformSession {
     if (this.#abort.signal.aborted || this.#ended) return;
     try {
       const next = checkedTemplate(input);
+      if (
+        this.#expectedKeyword !== undefined &&
+        new URL(next.template.url).searchParams.get('keyword') !== this.#expectedKeyword
+      )
+        throw new Job51ParseError('query_changed');
       if (this.#fingerprint !== undefined && this.#fingerprint !== next.fingerprint)
         throw new Job51ParseError('query_changed');
       if (next.page <= this.#page) return;

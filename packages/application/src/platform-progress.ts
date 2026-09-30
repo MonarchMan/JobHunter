@@ -39,6 +39,11 @@ const reasonSchema = z.enum([
   'template_required',
   'query_changed',
   'query_required',
+  'query_invalid',
+  'query_too_broad',
+  'search_unsupported',
+  'profile_required',
+  'duplicate_identity',
   'content_type',
   'missing_body',
   'body_limit',
@@ -91,7 +96,7 @@ export const platformProgressSchema = z
       .min(1)
       .max(512)
       // 猎聘身份带资源命名空间，只开放已知前缀，不能放行 URL 或任意冒号载荷。
-      .regex(/^(?:[\w~-]+|(?:job|a):[1-9]\d*)$/)
+      .regex(/^(?:[\w~-]+|(?:job|a|lptjob):[1-9]\d*)$/)
       .optional(),
     failure: z
       .object({
@@ -143,9 +148,23 @@ export function platformFailureMessage(failure: NonNullable<PlatformProgress['fa
     case 'too_many_targets':
       return '该平台打开的页面过多，请关闭不需要的页面后重新获取。';
     case 'query_required':
-      return '请先填写智联搜索关键词，再重新获取职位。';
+      return '缺少搜索词。日常获取请先在默认第一份个人资料填写具体意向岗位；显式调试请填写关键词。';
+    case 'profile_required':
+      return '未找到默认个人资料的当前版本。请先保存个人资料，再获取平台职位。';
+    case 'query_invalid':
+      return '个人资料中的意向岗位过长或多于 10 个，请调整为具体职位名称后重新连接。';
+    case 'query_too_broad':
+      return '意向岗位填写的是职位大类。请在独立的意向岗位输入框填写具体职位名称后重新连接，职位类别无需修改。';
+    case 'search_unsupported':
+      return '该平台的关键词搜索协议尚未通过真实验收；本次没有改用推荐流，请等待搜索能力接入。';
+    case 'query_changed':
+      return '搜索条件已改变，请显式重新连接；旧批次不会混入新查询。';
     case 'auth_context_missing':
       return '未取得完整认证上下文。请在官网确认登录状态后重新连接，无需反复刷新或搜索职位。';
+    case 'verification_required':
+      return '官网页面要求验证，已停止本批请求。请在官网自行完成验证，确认职位页正常后重新连接；已入库职位保留。';
+    case 'content_type':
+      return '职位接口未声明 JSON 响应类型，已停止读取。请检查官网是否要求登录或验证，恢复后重新连接；不要连续重试。';
   }
   // 2、没有专属恢复提示时按错误类别返回通用说明。
   return {

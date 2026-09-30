@@ -6,7 +6,7 @@ test('任务类型筛选完整覆盖四个平台', async ({ page }) => {
   // 1、检查真实下拉选项，再提交猎聘范围；该页面只查询本地队列。
   await page.goto('/tasks');
   await page.getByRole('combobox', { name: '类型', exact: true }).click();
-  for (const name of ['BOSS 平台浏览', '智联平台浏览', '前程无忧官网辅助浏览', '猎聘平台浏览']) {
+  for (const name of ['BOSS 平台浏览', '智联平台浏览', '前程无忧', '猎聘平台浏览']) {
     await expect(page.getByRole('option', { name, exact: true })).toBeVisible();
   }
   await expect(page.getByRole('option', { name: '智联校园浏览', exact: true })).toHaveCount(0);

@@ -216,6 +216,26 @@ describe('job lifecycle', () => {
 });
 
 describe('profile version merge', () => {
+  it('keeps intended roles optional and independent from job categories', () => {
+    const legacy = profile({ targetRoles: ['研发'] });
+    expect(legacy.intendedRoles).toBeUndefined();
+    expect(legacy).not.toHaveProperty('intendedRoles');
+    const corrected = mergeProfileVersion(null, legacy, [], {
+      intendedRoles: [' 算法工程师 ', 'Agent 开发工程师'],
+    });
+    expect(corrected.effective.targetRoles).toEqual(['研发']);
+    expect(corrected.effective.intendedRoles).toEqual(['算法工程师', 'Agent 开发工程师']);
+    const reordered = mergeProfileVersion(null, legacy, [], {
+      intendedRoles: ['Agent 开发工程师', '算法工程师'],
+    });
+    expect(reordered.contentHash).toBe(corrected.contentHash);
+    const locked = mergeProfileVersion(corrected.effective, legacy, ['/intendedRoles']);
+    expect(locked.ignoredLockedPaths).toEqual([]);
+    expect(locked.effective.intendedRoles).toEqual(corrected.effective.intendedRoles);
+    expect(() => profile({ intendedRoles: [' '] })).toThrow();
+    expect(() => profile({ intendedRoles: '算法工程师' })).toThrow();
+  });
+
   it('preserves parent and child locked paths while updating unlocked fields', () => {
     const previous = profile();
     const extracted = profile({

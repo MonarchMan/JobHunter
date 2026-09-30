@@ -94,6 +94,8 @@ export class CandidateProfileService {
       ? parseCandidateProfile({
           ...input.extracted,
           preferences: current.effective.preferences,
+          // 1.a、具体意向由用户确认，重新提取简历事实不得清空或覆盖它。
+          intendedRoles: current.effective.intendedRoles,
         })
       : input.extracted;
     const merge = mergeProfileVersion(

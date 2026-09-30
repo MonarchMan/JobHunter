@@ -2,6 +2,7 @@
 
 import {
   canonicalJobFamilies,
+  canonicalJobSubfamilies,
   normalizeJobTaxonomy,
   type CandidateProfileData,
 } from '@jobhunter/domain';
@@ -13,7 +14,7 @@ import { SelectField } from '../components/forms/select-field.js';
 import { useToast } from '../components/toast-provider.js';
 import { ResumePolish } from './resume-polish.js';
 import { ResumeTemplateEntry } from './resume-template-entry.js';
-import { MatchingConstraintsFields } from './matching-constraints.js';
+import { emptyConstraints, MatchingConstraintsFields } from './matching-constraints.js';
 import styles from './resume-editor.module.css';
 
 function classNames(...names: readonly (string | false | undefined)[]): string {
@@ -52,7 +53,16 @@ const dateInputValue = (value: string | null): string =>
 const selectableJobFamilies = canonicalJobFamilies.filter((family) => family !== '其他');
 const targetRoleOptions = [
   { value: '', label: '请选择职位大类' },
-  ...selectableJobFamilies.map((family) => ({ value: family, label: family })),
+  ...selectableJobFamilies.map((family) => ({
+    value: family,
+    label: family,
+    children: [
+      { value: `${family}/`, label: '不限' },
+      ...canonicalJobSubfamilies
+        .filter((subfamily) => normalizeJobTaxonomy(subfamily).jobFamily === family)
+        .map((subfamily) => ({ value: `${family}/${subfamily}`, label: subfamily })),
+    ],
+  })),
 ];
 const remoteAcceptedOptions = [
   { value: 'unknown', label: '未设置' },
@@ -137,8 +147,11 @@ function cleanDraft(profile: Draft): Draft {
   };
 }
 
+/** 旧类别值只归一化到下拉选项，独立意向保留原词、不从类别补齐。 */
 function prepareDraft(profile: Draft): Draft {
+  // 1、沿用官网同步类别的兼容映射，不改变新增意向字段。
   const targetFamily = normalizeJobTaxonomy(profile.targetRoles[0]).jobFamily;
+  // 2、日期与展示草稿继续使用原有规范化规则。
   return {
     ...profile,
     targetRoles: targetFamily === '其他' ? [] : [targetFamily],
@@ -424,6 +437,7 @@ function ResumePreview({ draft: source }: Readonly<{ draft: Draft }>): ReactElem
   ].filter(filled);
   const intentions = [
     ...draft.targetRoles,
+    ...(draft.intendedRoles ?? []),
     ...draft.preferences.locations,
     ...draft.preferences.employmentTypes,
   ];
@@ -618,6 +632,9 @@ export function ResumeEditor({
 }: Readonly<{ profileId: string; versionId: string; profile: Draft }>): ReactElement {
   const { showToastAfterReload } = useToast();
   const [draft, setDraft] = useState<Draft>(() => prepareDraft(profile));
+  const [intendedRolesText, setIntendedRolesText] = useState(() =>
+    (profile.intendedRoles ?? []).join('，'),
+  );
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [preview, setPreview] = useState(false);
@@ -846,15 +863,42 @@ export function ResumeEditor({
             description="用于职位筛选和匹配排序。资格信息可留空，留空表示待确认；保存简历后生效。"
           >
             <div className={styles['resume-field-grid']}>
+              <label className={styles['resume-wide-field']}>
+                意向岗位
+                <input
+                  name="intendedRoles"
+                  value={intendedRolesText}
+                  maxLength={1000}
+                  placeholder="填写具体职位名称，多个岗位用逗号分隔"
+                  onChange={(event) => {
+                    const value = event.currentTarget.value;
+                    setIntendedRolesText(value);
+                    updateArray('intendedRoles', list(value));
+                  }}
+                />
+              </label>
               <label>
-                目标岗位
+                职位类别
                 <SelectField
-                  name="targetRole"
-                  label="目标岗位"
+                  name="jobCategory"
+                  label="职位类别"
                   options={targetRoleOptions}
-                  value={draft.targetRoles[0] ?? ''}
+                  value={
+                    draft.targetRoles[0]
+                      ? `${draft.targetRoles[0]}/${draft.matchingConstraints?.targetSubfamily ?? ''}`
+                      : ''
+                  }
                   onValueChange={(value) => {
-                    updateArray('targetRoles', value ? [value] : []);
+                    // 1、只有两级选择完成才同步更新类别与细分，不携带旧类别的子项。
+                    const [family, subfamily] = value.split('/');
+                    setDraft((current) => ({
+                      ...current,
+                      targetRoles: family ? [family] : [],
+                      matchingConstraints: {
+                        ...(current.matchingConstraints ?? emptyConstraints),
+                        targetSubfamily: text(subfamily ?? ''),
+                      },
+                    }));
                   }}
                 />
               </label>

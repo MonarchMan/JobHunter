@@ -31,21 +31,19 @@ export function PlatformBrowser({
     provider === 'boss'
       ? 'BOSS 直聘'
       : provider === '51job'
-        ? '前程无忧 · 官网辅助'
+        ? '前程无忧'
         : provider === 'liepin'
-          ? '猎聘 · 学生推荐'
+          ? '猎聘'
           : '智联招聘 · 校园／社招';
-  const batchLabel = provider === 'boss' ? '推荐' : '职位';
+  const batchLabel = '职位';
   const endpoint = `/api/platforms/${provider}`;
   const [state, setState] = useState(initial);
   const [portFile, setPortFile] = useState('');
-  const [keyword, setKeyword] = useState('');
-  const keywordInput = useRef<HTMLInputElement>(null);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [readError, setReadError] = useState(false);
-  const [fieldError, setFieldError] = useState<'portFile' | 'keyword' | null>(null);
+  const [fieldError, setFieldError] = useState<'portFile' | null>(null);
   const portInput = useRef<HTMLInputElement>(null);
   const intent = useRef<{ command: BossCommand; idempotencyToken: string } | null>(null);
   const submitting = useRef(false);
@@ -133,19 +131,9 @@ export function PlatformBrowser({
   /** 提交结果不明时保留同一令牌，恢复确认不能重复创建任务。 */
   const submit = async (command?: BossCommand): Promise<void> => {
     if (submitting.current) return;
-    // 1、首次智联连接必须明确关键词；活动连接的后续批次不替换既有查询。
-    if (
-      command &&
-      provider === 'zhilian' &&
-      (command.action === 'connect' || (command.action === 'acquire' && !usable))
-    ) {
-      if (!keyword.trim()) {
-        setFieldError('keyword');
-        keywordInput.current?.focus();
-        return;
-      }
-      command = { ...command, search: { keyword: keyword.trim(), city: '' } };
-    }
+    // 1、四平台日常动作由 Worker 读取默认资料；页面不复制关键词形成另一份真相。
+    if (command?.action === 'connect' || command?.action === 'acquire')
+      command = { ...command, profileSearch: true };
     setFieldError(null);
     const signal = lifetime.current?.signal;
     if (!signal || signal.aborted) return;
@@ -207,7 +195,7 @@ export function PlatformBrowser({
       <header className={styles.header}>
         <div>
           <h2 id={`${provider}-title`}>{label}</h2>
-          <p>每次只读取一批，后台串行补齐本批详情并自动入库。不自动翻页、投递或发消息。</p>
+          <p>每个意向岗位各读取一批，合并去重后补齐详情并入库。不遍历全部结果、投递或发消息。</p>
         </div>
         <span
           role="status"
@@ -226,46 +214,14 @@ export function PlatformBrowser({
         新建独立后台窗口的专用页，共享当前配置的登录态，不接管已有页面；后续复用专用页。Chrome
         如提示授权，请点击允许，不需要刷新。
       </p>
-      {provider === 'zhilian' && (
-        <div className={styles.form}>
-          <label>
-            搜索关键词
-            <input
-              ref={keywordInput}
-              value={keyword}
-              maxLength={200}
-              disabled={disabled || usable}
-              aria-invalid={fieldError === 'keyword'}
-              aria-describedby={`${provider}-search-help${fieldError === 'keyword' ? ` ${provider}-search-error` : ''}`}
-              onChange={(event) => {
-                setKeyword(event.target.value);
-                setFieldError(null);
-              }}
-            />
-          </label>
-          {keyword && !usable && (
-            <button
-              type="button"
-              className="button-secondary"
-              disabled={disabled}
-              onClick={() => {
-                setKeyword('');
-                keywordInput.current?.focus();
-              }}
-            >
-              清除关键词
-            </button>
-          )}
-          <p id={`${provider}-search-help`}>
-            城市不限，使用默认排序。查询随连接固定；切换关键词请先断开连接。活动连接继续使用原查询。
-          </p>
-          {fieldError === 'keyword' && (
-            <p id={`${provider}-search-error`} role="alert">
-              请先填写搜索关键词，再获取职位。
-            </p>
-          )}
-        </div>
-      )}
+      <p className={styles.guidance}>
+        默认第一份资料的意向岗位：
+        {state.profileSearch?.keywords.length
+          ? state.profileSearch.keywords.join('、')
+          : '尚未填写具体岗位'}
+        。<a href="/profile#resume-intention">编辑意向岗位</a>；修改后请重新连接。
+      </p>
+      {state.profileSearch?.error && <p role="alert">{state.profileSearch.error}</p>}
       {
         <label className={styles.consent}>
           <input
@@ -285,7 +241,12 @@ export function PlatformBrowser({
         <button
           type="button"
           className="button-primary"
-          disabled={disabled || (!usable && !consent) || (usable && state.batch?.hasMore === false)}
+          disabled={
+            disabled ||
+            !!state.profileSearch?.error ||
+            (!usable && !consent) ||
+            (usable && state.batch?.hasMore === false)
+          }
           onClick={() =>
             void submit(
               frozen
@@ -299,7 +260,17 @@ export function PlatformBrowser({
         >
           {frozen ? '重新连接' : '获取职位'}
         </button>
-        {usable && <span>复用当前连接，仅获取一批</span>}
+        {usable && <span>复用当前连接，每个关键词各获取一批</span>}
+        {usable && (
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={disabled || !!state.profileSearch?.error || !consent}
+            onClick={() => void submit({ action: 'connect' })}
+          >
+            按当前资料重新连接
+          </button>
+        )}
       </div>
       {frozen && (
         <p className={styles.guidance}>
@@ -317,10 +288,10 @@ export function PlatformBrowser({
             ? '授权后仅打开首页提取认证上下文，列表与详情使用 HTTP 获取，无需在官网搜索或点击详情。初始化最多等待 120 秒；未取得上下文会明确提示，不会自动反复刷新。'
             : ''}
           {provider === '51job'
-            ? '连接后在专用页正常搜索或翻页，再读取官网批次。只观察专用页的职位请求，不自动翻页；最多等待新批次 90 秒，不自行生成签名。更换查询请重新连接。'
+            ? '专用页提供官网自然生成的请求模板，职位仍通过独立 HTTP 获取。点击获取下一批时，Worker 只执行一次正常分页；最多等待新模板 90 秒，不自行生成签名。更换查询请重新连接。'
             : ''}
           {provider === 'liepin'
-            ? '若新页未产生推荐请求，请在专用页正常切换一次综合／最新排序，初始化最多等待 120 秒，不需要刷新。后续批次和详情通过 HTTP 获取，每次只取一批。查询条件和排序随连接固定，改动后请重新连接；暂不支持社招身份推荐或搜索。'
+            ? '专用搜索页提供固定关键词的请求模板；后续列表和详情通过独立 HTTP 获取。初始化最多等待 120 秒，不需要手动切换推荐排序。'
             : ''}
         </p>
         <form
@@ -349,7 +320,11 @@ export function PlatformBrowser({
               请输入以 DevToolsActivePort 结尾的绝对文件路径。
             </p>
           )}
-          <button className="button-primary" disabled={disabled || !consent} type="submit">
+          <button
+            className="button-primary"
+            disabled={disabled || !consent || !!state.profileSearch?.error}
+            type="submit"
+          >
             {usable ? '重新连接' : '连接 Chrome'}
           </button>
         </form>
@@ -367,11 +342,7 @@ export function PlatformBrowser({
         </button>
       </div>
       <p className={styles.guidance}>
-        {provider === 'boss'
-          ? 'BOSS 当前仅接入推荐流，不提供搜索排序；本次仅处理一批，不遍历全部结果。'
-          : provider === 'zhilian'
-            ? '按连接时填写的关键词获取一批 HTTP 搜索结果，不沿用官网页面筛选，不遍历全部结果。'
-            : '请在 Worker 专用页设置支持的查询条件，不沿用你原页面的筛选；本次仅处理一页，不遍历全部结果。'}
+        只使用意向岗位原词搜索，不额外搜索职位大类或细分岗位。排序与页面默认条件随词级连接固定，不继承你原标签页的手动筛选。
         详情失败或取消会停止后续请求，已入库职位保留；每次网络请求沿用平台连接器的间隔限制。
       </p>
       {provider === 'zhilian' && (
@@ -379,16 +350,10 @@ export function PlatformBrowser({
           首页只提供必要认证上下文，认证失效时请先在官网确认登录，再重新连接。
         </p>
       )}
-      {provider === 'liepin' && (
-        <p className={styles.guidance}>
-          若新页未产生推荐请求，请在 Worker 专用的学生首页切换一次综合／最新排序；初始化最多等待 120
-          秒。目前不支持社招首页。
-        </p>
-      )}
       {provider === '51job' && (
         <p className={styles.guidance}>
-          先在 Worker 专用页搜索或翻页，再读取该批。详情使用该批 JSON
-          中的完整正文，不额外请求详情接口；自动翻页和长期稳定性尚未验证。
+          首批需要官网产生请求模板；后续获取会在 Worker 专用页正常翻页一次。详情使用该批 JSON
+          中的完整正文，不额外请求详情接口；长期稳定性尚未验证。
         </p>
       )}
       {state.task && (
@@ -453,6 +418,18 @@ export function PlatformBrowser({
             : `最近成功批次已入库 ${String(state.batch.savedCount)} 条职位。`}
           排除缺少公司身份的记录 {state.batch.skippedMissingCompanyId ?? 0} 条。
           {state.batch.hasMore === false ? `已无更多${batchLabel}。` : ''}
+        </p>
+      )}
+      {state.batch?.searchBatches && (
+        <p className={styles.guidance}>
+          最近成功批次搜索词：
+          {state.batch.searchBatches
+            .map(
+              ({ keyword, count, hasMore }) =>
+                `${keyword}（${String(count)} 条${hasMore ? '' : '，已到末批'}）`,
+            )
+            .join('；')}
+          。 各词数量为合并前候选，入库数量已去重。
         </p>
       )}
       {placement !== 'jobs' && (

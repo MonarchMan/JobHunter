@@ -9,6 +9,7 @@ import {
   bossCommandSchema,
   BossPlatformService,
   createBossPlatformTaskHandler,
+  createPlatformTaskHandler,
   type BossResult,
   type PlatformRepository,
 } from '../src/platforms.js';
@@ -22,7 +23,27 @@ it('正常 Worker 领取不套用手动重连策略', () => {
     reconnect: true,
   });
 });
-import { platformFailure, platformProgressSchema } from '../src/platform-progress.js';
+
+it.each(['boss', 'zhilian', '51job', 'liepin'] as const)(
+  '%s 的失败获取任务手动重试显式重连',
+  (provider) => {
+    const handler = createPlatformTaskHandler(provider, { execute: vi.fn() });
+    expect(handler.manualRetryPayload?.({ action: 'acquire', generation: 1 }, null)).toEqual({
+      action: 'acquire',
+      generation: 1,
+      reconnect: true,
+    });
+    expect(handler.manualRetryPayload?.({ action: 'next', generation: 1 }, null)).toEqual({
+      action: 'next',
+      generation: 1,
+    });
+  },
+);
+import {
+  platformFailure,
+  platformFailureMessage,
+  platformProgressSchema,
+} from '../src/platform-progress.js';
 
 it.each([
   ['access_blocked', 'redirect_login'],
@@ -52,6 +73,23 @@ it('动态上游重定向目标不进入任务进度', () => {
       false,
     ),
   ).toEqual({ category: 'access_blocked', businessCode: 302, reason: null });
+});
+
+it('验证页与非 JSON 响应类型给出明确且不猜测正文的恢复提示', () => {
+  expect(
+    platformFailureMessage({
+      category: 'access_blocked',
+      businessCode: null,
+      reason: 'verification_required',
+    }),
+  ).toContain('官网自行完成验证');
+  expect(
+    platformFailureMessage({
+      category: 'parse_changed',
+      businessCode: null,
+      reason: 'content_type',
+    }),
+  ).toContain('未声明 JSON 响应类型');
 });
 
 /** 批次测试的可观察端口，用于验证请求和提交顺序。 */
@@ -157,6 +195,43 @@ function batchFixture(now: () => number = Date.now): BatchFixture {
     );
   return { repository, session, save, controller, events, detail, connect, next, resume, acquire };
 }
+
+it('旧失败任务手动重试不能关闭后续健康代次', async () => {
+  const fixture = batchFixture();
+  await fixture.connect();
+  await fixture.connect();
+  fixture.session.disconnect.mockClear();
+  await expect(fixture.acquire(1, true)).rejects.toMatchObject({
+    category: 'session_unavailable',
+  });
+  expect(fixture.session.disconnect).not.toHaveBeenCalled();
+  expect(fixture.repository.generation()).toBe(2);
+  await expect(fixture.next()).resolves.toMatchObject({ status: 'available' });
+});
+
+it('持久代次已被其他连接替换时拒绝旧重试', async () => {
+  const fixture = batchFixture();
+  await fixture.connect();
+  fixture.repository.reset(Date.now());
+  fixture.session.disconnect.mockClear();
+  await expect(fixture.acquire(1, true)).rejects.toMatchObject({
+    category: 'session_unavailable',
+  });
+  expect(fixture.session.disconnect).not.toHaveBeenCalled();
+});
+
+it('当前代次失败后显式重连获取，不沿用冻结会话', async () => {
+  const fixture = batchFixture();
+  await fixture.connect();
+  fixture.session.readNext.mockRejectedValueOnce(new PlatformError('parse_changed'));
+  await expect(fixture.acquire()).rejects.toMatchObject({ category: 'parse_changed' });
+  await expect(fixture.acquire(1, true)).resolves.toMatchObject({
+    generation: 2,
+    status: 'available',
+  });
+  expect(fixture.session.disconnect).toHaveBeenCalled();
+  expect(fixture.session.readNext).toHaveBeenCalledTimes(2);
+});
 
 it('上下文观察回调保留当前任务进度，更新后才同任务继续', async () => {
   const f = batchFixture();

@@ -66,6 +66,8 @@ export const candidateProfileSchema = z
       .readonly()
       .default({ name: null, phone: null, email: null, location: null, website: null }),
     targetRoles: z.array(normalizedText),
+    // 具体平台搜索意向独立于职位类别；可缺省以兼容旧画像，禁止自动复制大类。
+    intendedRoles: z.array(normalizedText).optional(),
     preferences: candidatePreferencesSchema,
     education: z.array(
       z

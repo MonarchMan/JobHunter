@@ -55,6 +55,27 @@ it('fetches the exact observed URL and consumes full JSON detail without another
   });
 });
 
+it('资料搜索拒绝其他关键词的官网签名模板，不发送 HTTP', async () => {
+  const fetcher = vi.fn<typeof fetch>();
+  const session = new Job51HttpSession({ fetch: fetcher, expectedKeyword: 'Python' });
+  session.offer(template());
+  await expect(session.readNext(new AbortController().signal)).rejects.toMatchObject({
+    category: 'parse_changed',
+    reason: 'query_changed',
+  });
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it('资料搜索只消费所选关键词的官网模板', async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response());
+  const session = new Job51HttpSession({ fetch: fetcher, expectedKeyword: 'Java' });
+  session.offer(template());
+  await expect(session.readNext(new AbortController().signal)).resolves.toMatchObject({
+    hasMore: false,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
 it('reads observed first and last pages with a configured gap and no invented signature', async () => {
   const fetcher = vi
     .fn<typeof fetch>()

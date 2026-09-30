@@ -10,13 +10,18 @@ import {
 } from '@jobhunter/platform-core';
 import type { TaskHandler } from './tasks/model.js';
 import { TaskExecutionError } from './tasks/retry-policy.js';
+import type { CandidateProfileRepository } from './ports/profiles.js';
+import {
+  connectPlatformProfileSearch,
+  platformProfileSearchPlan,
+} from './platform-profile-search.js';
 import {
   platformProgressSchema,
   platformFailure,
   type PlatformProgress,
 } from './platform-progress.js';
 
-/** 智联首页初始化使用显式普通查询，不从实验记录推断用户意图。 */
+/** 四平台只接受显式普通查询；不从实验记录或用户原标签页推断意图。 */
 const platformSearchSchema = z
   .object({
     keyword: z.string().trim().min(1).max(200),
@@ -35,6 +40,7 @@ export const bossCommandSchema = z.discriminatedUnion('action', [
       targetId: z.string().min(1).optional(),
       acquisitionMode: z.enum(['http', 'browser']).optional(),
       search: platformSearchSchema.optional(),
+      profileSearch: z.literal(true).optional(),
     })
     .strict(),
   z
@@ -43,6 +49,7 @@ export const bossCommandSchema = z.discriminatedUnion('action', [
       generation: z.number().int().positive().nullable(),
       reconnect: z.literal(true).optional(),
       search: platformSearchSchema.optional(),
+      profileSearch: z.literal(true).optional(),
       targetId: z
         .string()
         .regex(/^[\w-]{1,128}$/)
@@ -84,6 +91,18 @@ export const bossResultSchema = z
     skippedMissingCompanyId: z.number().int().nonnegative().optional(),
     jobId: z.string().optional(),
     savedCount: z.number().int().nonnegative().optional(),
+    searchKeywords: z.array(z.string().min(1).max(200)).optional(),
+    searchBatches: z
+      .array(
+        z
+          .object({
+            keyword: z.string().min(1).max(200),
+            count: z.number().int().nonnegative(),
+            hasMore: z.boolean(),
+          })
+          .strict(),
+      )
+      .optional(),
     progress: platformProgressSchema.optional(),
     resumedFromTaskId: z.uuid().optional(),
     candidates: z
@@ -133,6 +152,8 @@ export class PlatformBrowsingService {
   #generation: number | null = null;
   #busy = false;
   #failed = false;
+  #profileVersionId: string | null = null;
+  #searchKeywords: readonly string[] = [];
   #unsubscribe: (() => void) | undefined;
   #pending: {
     taskId: string;
@@ -145,6 +166,10 @@ export class PlatformBrowsingService {
     private readonly provider: PlatformSessionProvider,
     private readonly repository: PlatformRepository,
     private readonly now: () => number = Date.now,
+    private readonly profiles?: Pick<
+      CandidateProfileRepository,
+      'listProfiles' | 'getCurrentVersion'
+    >,
   ) {}
 
   /** Worker 停止时立即取消网络并释放凭据。 */
@@ -157,6 +182,8 @@ export class PlatformBrowsingService {
     this.#session = null;
     this.#generation = null;
     this.#failed = false;
+    this.#profileVersionId = null;
+    this.#searchKeywords = [];
     this.#pending = null;
   }
 
@@ -185,8 +212,18 @@ export class PlatformBrowsingService {
       this.repository.generation() !== command.generation
     )
       throw new PlatformError('session_unavailable');
-    // 0、仅显式重试授权替换冻结／丢失的会话；不自动处理安全验证。
-    if (command.action === 'acquire' && command.reconnect) this.close();
+    // 0、显式重试可替换冻结会话；旧任务不得关闭随后建立的健康连接。
+    if (command.action === 'acquire' && command.reconnect) {
+      if (
+        this.#session &&
+        !this.#failed &&
+        this.#generation !== null &&
+        (command.generation !== this.#generation ||
+          this.repository.generation() !== this.#generation)
+      )
+        throw new PlatformError('session_unavailable');
+      this.close();
+    }
     if (
       this.#failed &&
       (command.action === 'next' ||
@@ -197,6 +234,7 @@ export class PlatformBrowsingService {
     // 0.a、日常动作复用现存会话，不允许选页参数悄悄替换正在使用的账号。
     if (command.action === 'acquire' && this.#session && (command.targetId || command.search))
       throw new PlatformError('session_unavailable');
+    const profileAcquisition = command.action === 'acquire' && command.profileSearch;
     const acquire = command.action === 'acquire';
     if (command.action === 'acquire') {
       command =
@@ -206,6 +244,7 @@ export class PlatformBrowsingService {
               action: 'connect',
               ...(command.targetId ? { targetId: command.targetId } : {}),
               ...(command.search ? { search: command.search } : {}),
+              ...(command.profileSearch ? { profileSearch: true as const } : {}),
             };
     }
     // 0、恢复只消费原失败任务的当前内存工作集；错误引用不改变现有状态。
@@ -246,18 +285,34 @@ export class PlatformBrowsingService {
     };
     try {
       signal.throwIfAborted();
+      // 0.b、旧推荐连接不能被日常搜索复用；在进度边界内拒绝，提供明确重连提示。
+      if (profileAcquisition && this.#session && !this.#profileVersionId)
+        throw new PlatformError('session_unavailable', null, 'query_changed');
       // 1、连接总是新代次，旧游标不能用于另一个账号或重启后的进程。
       if (command.action === 'connect') {
         this.close();
         const generation = this.repository.reset(this.now());
         this.#generation = generation;
         report();
-        const session = await this.provider.connect(command, signal);
+        if (command.profileSearch && command.search)
+          throw new PlatformError('session_unavailable', null, 'query_changed');
+        const plan = command.profileSearch
+          ? this.profiles
+            ? platformProfileSearchPlan(this.profiles)
+            : null
+          : null;
+        if (command.profileSearch && !plan)
+          throw new PlatformError('session_unavailable', null, 'profile_required');
+        const session = plan
+          ? await connectPlatformProfileSearch(this.provider, plan, command, signal)
+          : await this.provider.connect(command, signal);
         if (signal.aborted || this.repository.generation() !== generation) {
           session.disconnect();
           throw new PlatformError('session_unavailable');
         }
         this.#session = session;
+        this.#profileVersionId = plan?.profileVersionId ?? null;
+        this.#searchKeywords = plan?.keywords ?? [];
         this.repository.setStatus(generation, 'connected', this.now());
         // 1.a、只响应当前会话的本地断线事件，不探活、不重连；订阅处理断线竞争。
         this.#unsubscribe = session.onDisconnected?.(() => {
@@ -272,7 +327,12 @@ export class PlatformBrowsingService {
           this.repository.setStatus(generation, 'unavailable', this.now());
         });
         if (this.#failed) throw new PlatformError('session_unavailable');
-        if (!acquire) return { generation, status: 'connected' };
+        if (!acquire)
+          return {
+            generation,
+            status: 'connected',
+            ...(plan ? { searchKeywords: [...plan.keywords] } : {}),
+          };
         // 1.b、连接和获取属于同一显式任务；不依赖页面轮询追加 next。
         command = { action: 'next', generation };
         progress.stage = 'list';
@@ -280,6 +340,14 @@ export class PlatformBrowsingService {
       const generation = command.generation;
       if (this.repository.generation() !== generation)
         throw new PlatformError('session_unavailable');
+      // 1.c、显式 next 与日常 acquire 一样，不得在资料修改后悄悄沿用旧查询。
+      if (command.action === 'next' && this.#profileVersionId) {
+        if (
+          !this.profiles ||
+          platformProfileSearchPlan(this.profiles).profileVersionId !== this.#profileVersionId
+        )
+          throw new PlatformError('session_unavailable', null, 'query_changed');
+      }
       if (command.action === 'disconnect') {
         this.close();
         const next = this.repository.reset(this.now());
@@ -449,6 +517,10 @@ export class PlatformBrowsingService {
             hasMore: result.hasMore,
             savedCount,
             progress,
+            ...(this.#searchKeywords.length > 0
+              ? { searchKeywords: [...this.#searchKeywords] }
+              : {}),
+            ...(result.searchBatches ? { searchBatches: [...result.searchBatches] } : {}),
             candidates: [...result.candidates],
             skippedMissingCompanyId: result.skippedMissingCompanyId,
             ...(command.action === 'resume' ? { resumedFromTaskId: command.sourceTaskId } : {}),
@@ -540,11 +612,9 @@ export function createPlatformTaskHandler(
     outputSchema: bossResultSchema,
     defaultMaxAttempts: 1,
     manualRetryPayload: (payload) => {
-      // 1、重试输入也在边界校验；只有 BOSS 日常获取明确授权重连。
+      // 1、失败任务的手动重试显式重连；普通 Worker 领取不得重建连接。
       const command = bossCommandSchema.parse(payload);
-      return command.action === 'acquire' && providerKey === 'boss'
-        ? { ...command, reconnect: true }
-        : command;
+      return command.action === 'acquire' ? { ...command, reconnect: true } : command;
     },
     leaseDurationMs: 60_000,
     concurrencyKey: () => `platform:${providerKey}`,

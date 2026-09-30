@@ -1,5 +1,7 @@
 # 招聘平台来源与按需浏览架构
 
+2026-09-30 的日常获取目标改为[资料意向岗位逐词搜索](../adr/0053-profile-driven-platform-search.md)：应用层从默认第一份资料新增的 `intendedRoles` 冻结具体意向词，原 `targetRoles` 职位类别与官网同步职责不变，不作为平台缺词时的替代。一个逻辑平台连接维护多个词级搜索游标；每次显式获取每词至多一批，按平台职位身份合并后补齐详情。四平台旧推荐／已打开页面批次仍是历史能力，不可作为新搜索能力的验收证据。搜索连接器未逐家真实通过前，日常入口须明确报告能力未就绪，不能默默退回推荐。
+
 当前有效决策分见 [职位生命周期与任务](../adr/0045-platform-job-lifecycle-and-tasks.md)、[浏览器会话与窗口](../adr/0046-platform-browser-session-and-windows.md)、[智联／前程无忧 HTTP 初始化](../adr/0047-platform-http-protocol-initialization.md)、[BOSS 默认 browser](../adr/0048-boss-browser-default-and-page-lifecycle.md) 和 [BOSS 显式 HTTP 恢复](../adr/0049-boss-http-recovery-and-retries.md)。下文保留部分历史实验记录；遇到旧默认值、旧重试语义时，以这五份整合 ADR 和当前 028 规格为准。
 
 前程无忧 Worker 自建页的后续批次分页责任由 [ADR-0050](../adr/0050-job51-owned-page-pagination.md) 补充：仅在用户显式获取下一批时执行一次官网普通分页，官网产生签名模板，职位事实仍由独立 HTTP 获取；借用页不自动操作。

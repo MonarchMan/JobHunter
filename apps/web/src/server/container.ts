@@ -287,21 +287,29 @@ export function createLocalWebContainer(
     });
     sourceSchedules.reconcile();
     const services: WebApplicationServices = {
-      boss: new WebBossService(new SqlitePlatformRepository(database.client), tasks),
+      boss: new WebBossService(
+        new SqlitePlatformRepository(database.client),
+        tasks,
+        'boss',
+        profileRepository,
+      ),
       liepin: new WebPlatformService(
         new SqlitePlatformRepository(database.client, 'liepin'),
         tasks,
         'liepin',
+        profileRepository,
       ),
       '51job': new WebPlatformService(
         new SqlitePlatformRepository(database.client, '51job'),
         tasks,
         '51job',
+        profileRepository,
       ),
       zhilian: new WebPlatformService(
         new SqlitePlatformRepository(database.client, 'zhilian'),
         tasks,
         'zhilian',
+        profileRepository,
       ),
       platformActivity: new PlatformActivityService(
         new SqlitePlatformActivityRepository(database.client),

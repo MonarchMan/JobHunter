@@ -20,10 +20,7 @@ async function run(): Promise<void> {
     .name('platform')
     .option('--data-root <path>')
     .addOption(
-      new Option(
-        '--provider <provider>',
-        '招聘平台（智联：校园／主站；51job：官网辅助；猎聘：学生推荐，连接时切换一次排序）',
-      )
+      new Option('--provider <provider>', '招聘平台（默认按第一份个人资料的具体意向岗位搜索）')
         .choices(['boss', 'zhilian', '51job', 'liepin'])
         .default('boss'),
     );
@@ -81,12 +78,10 @@ async function run(): Promise<void> {
   };
   program
     .command('connect')
-    .description(
-      '自动创建平台专用页；智联通过首页认证后使用 HTTP 搜索，需提供 keyword；target-id 仅供旧协议调试',
-    )
+    .description('自动创建平台专用搜索页，默认读取个人资料；keyword 与 target-id 仅供显式调试')
     .option('--port-file <path>')
     .option('--target-id <id>')
-    .option('--keyword <text>', '智联 HTTP 搜索关键词')
+    .option('--keyword <text>', '调试单个搜索关键词，覆盖本次资料词集')
     .option('--city <code>', '智联城市编号，省略表示不限城市')
     .addOption(
       new Option(
@@ -105,19 +100,22 @@ async function run(): Promise<void> {
         // 1、BOSS 默认由连接器选择浏览器辅助，不改变其他平台原有连接方式。
         if (options.acquisitionMode && provider() !== 'boss')
           throw new Error('acquisition-mode is only available for BOSS');
-        // 2、查询仅支持智联自动连接，不能把认证或任意命令行字段透传到任务。
+        // 2、日常从资料取得词集；显式调试词不能与借用旧标签页混用。
         const { keyword, city, ...connection } = options;
-        if (
-          (keyword !== undefined || city !== undefined) &&
-          (provider() !== 'zhilian' || options.targetId)
-        )
-          throw new Error('Search options require Zhilian automatic connection');
-        if (provider() === 'zhilian' && !options.targetId && !keyword?.trim())
-          throw new Error('Zhilian automatic connection requires --keyword');
+        if ((keyword !== undefined || city !== undefined) && options.targetId)
+          throw new Error('Search options require automatic connection');
+        if (city !== undefined && (provider() !== 'zhilian' || keyword === undefined))
+          throw new Error('--city requires Zhilian --keyword');
+        if (options.acquisitionMode === 'http' && keyword !== undefined)
+          throw new Error('BOSS keyword search requires browser mode');
         await submit({
           action: 'connect',
           ...connection,
-          ...(keyword !== undefined ? { search: { keyword, city: city ?? '' } } : {}),
+          ...(keyword !== undefined
+            ? { search: { keyword, city: city ?? '' } }
+            : options.targetId || options.acquisitionMode === 'http'
+              ? {}
+              : { profileSearch: true }),
         });
       },
     );

@@ -68,7 +68,11 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
   };
   let state: object = { connection: null, batch: null, saved: {}, task: null };
   const commands: {
-    command: { action: string; search?: { keyword: string; city: string } | undefined };
+    command: {
+      action: string;
+      profileSearch?: true;
+      search?: { keyword: string; city: string } | undefined;
+    };
     idempotencyToken: string;
   }[] = [];
   let reads = 0;
@@ -82,6 +86,7 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
       .object({
         command: z.object({
           action: z.string(),
+          profileSearch: z.literal(true).optional(),
           search: z.object({ keyword: z.string(), city: z.string() }).optional(),
         }),
         idempotencyToken: z.string(),
@@ -118,14 +123,11 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
   await page.goto('/sources?channel=platform&provider=zhilian');
   await page.getByText('高级连接设置', { exact: true }).click();
   await expect(page.getByRole('heading', { name: '智联招聘 · 校园／社招' })).toBeVisible();
-  await expect(page.getByText('查询随连接固定', { exact: false })).toBeVisible();
+  await expect(page.getByText('只使用意向岗位原词搜索', { exact: false })).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();
   await page.getByLabel('调试描述文件绝对路径').fill('/fixture/DevToolsActivePort');
-  await page.getByRole('button', { name: '连接 Chrome' }).click();
-  await expect(page.getByLabel('搜索关键词', { exact: true })).toBeFocused();
-  await page.getByLabel('搜索关键词', { exact: true }).fill('研发');
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByRole('button', { name: '确认上次提交' })).toBeVisible();
   await page.getByRole('button', { name: '确认上次提交' }).focus();
@@ -146,7 +148,8 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
     { timeout: 10000 },
   );
   expect(commands.map((x) => x.command.action)).toEqual(['connect', 'connect', 'acquire']);
-  expect(commands[0]?.command.search).toEqual({ keyword: '研发', city: '' });
+  expect(commands[0]?.command.profileSearch).toBe(true);
+  expect(commands[2]?.command.profileSearch).toBe(true);
   expect(commands[2]?.command.search).toBeUndefined();
   for (const width of [1280, 768, 390]) {
     await page.setViewportSize({ width, height: 900 });
@@ -178,33 +181,66 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
   expect(commands).toHaveLength(3);
 });
 
-/** 日常入口直接传普通条件，不要求调试参数，也不在输入时自动采集。 */
-test('智联日常获取从本地关键词直接初始化，错误保留草稿', async ({ page }) => {
+/** 日常入口只提交使用资料的意图，不复制关键词或认证字段。 */
+test('智联日常获取使用资料词集，拒绝提交时仍保留预览', async ({ page }) => {
   const commands: unknown[] = [];
   await page.route('**/api/platforms/zhilian', (route) => {
     if (route.request().method() === 'GET')
       return route.fulfill({
-        json: { data: { connection: null, batch: null, saved: {}, task: null } },
+        json: {
+          data: {
+            connection: null,
+            batch: null,
+            saved: {},
+            task: null,
+            profileSearch: { keywords: ['Java开发工程师'], error: null },
+          },
+        },
       });
     commands.push(route.request().postDataJSON());
     return route.fulfill({ status: 400, json: { error: { message: '测试拒绝，保留输入' } } });
   });
   await page.goto('/sources?channel=platform&provider=zhilian');
   await page.getByRole('checkbox').check();
-  await page.getByRole('button', { name: '获取职位' }).click();
-  await expect(page.getByLabel('搜索关键词', { exact: true })).toBeFocused();
+  await expect(
+    page.getByText('默认第一份资料的意向岗位：Java开发工程师。', { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByLabel('搜索关键词')).toHaveCount(0);
   expect(commands).toHaveLength(0);
-  await page.getByLabel('搜索关键词', { exact: true }).fill('Java');
-  expect(commands).toHaveLength(0);
-  await page.getByRole('button', { name: '清除关键词' }).click();
-  await expect(page.getByLabel('搜索关键词', { exact: true })).toHaveValue('');
-  await expect(page.getByLabel('搜索关键词', { exact: true })).toBeFocused();
-  await page.getByLabel('搜索关键词', { exact: true }).fill('研发');
   await page.getByRole('button', { name: '获取职位' }).click();
   await expect(page.getByText('测试拒绝，保留输入')).toBeVisible();
   expect(commands).toHaveLength(1);
   expect(commands[0]).toMatchObject({
-    command: { action: 'acquire', generation: null, search: { keyword: '研发', city: '' } },
+    command: { action: 'acquire', generation: null, profileSearch: true },
   });
-  await expect(page.getByLabel('搜索关键词', { exact: true })).toHaveValue('研发');
+  await expect(
+    page.getByText('默认第一份资料的意向岗位：Java开发工程师。', { exact: false }),
+  ).toBeVisible();
+});
+
+test('资料缺少具体意向词时禁止请求并提供资料编辑入口', async ({ page }) => {
+  const mutations: unknown[] = [];
+  await page.route('**/api/platforms/zhilian', (route) => {
+    if (route.request().method() !== 'GET') mutations.push(route.request().postDataJSON());
+    return route.fulfill({
+      json: {
+        data: {
+          connection: null,
+          batch: null,
+          saved: {},
+          task: null,
+          profileSearch: { keywords: [], error: '请先填写具体意向岗位。' },
+        },
+      },
+    });
+  });
+  await page.goto('/jobs?source=platform&provider=zhilian');
+  await expect(page.getByText('请先填写具体意向岗位。')).toBeVisible();
+  await page.getByRole('checkbox', { name: /允许自动连接/ }).check();
+  await expect(page.getByRole('button', { name: '获取职位', exact: true })).toBeDisabled();
+  await expect(page.getByRole('link', { name: '编辑意向岗位' })).toHaveAttribute(
+    'href',
+    '/profile#resume-intention',
+  );
+  expect(mutations).toEqual([]);
 });

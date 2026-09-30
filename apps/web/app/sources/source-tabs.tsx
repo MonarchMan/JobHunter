@@ -11,7 +11,7 @@ export function PlatformTabs({
   const platforms = [
     ['boss', 'BOSS 直聘'],
     ['zhilian', '智联招聘 · 校园／社招'],
-    ['51job', '前程无忧 · 官网辅助'],
+    ['51job', '前程无忧'],
     ['liepin', '猎聘 · 学生推荐'],
   ] as const;
   return (

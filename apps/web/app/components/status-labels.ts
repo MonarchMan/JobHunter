@@ -22,7 +22,7 @@ export const agentRunStatusLabels = {
 
 export const taskTypeLabels: Readonly<Record<string, string>> = {
   'platform.boss': 'BOSS 平台浏览',
-  'platform.51job': '前程无忧官网辅助浏览',
+  'platform.51job': '前程无忧',
   'platform.zhilian': '智联平台浏览',
   'platform.liepin': '猎聘平台浏览',
   'source.sync': '来源同步',
