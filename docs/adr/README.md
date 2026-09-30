@@ -35,3 +35,4 @@ ADR 一经 Accepted 通常不直接改写历史结论；后续决策变更通过
 - [ADR-0048：BOSS 默认浏览器辅助传输与页面生命周期](./0048-boss-browser-default-and-page-lifecycle.md)
 - [ADR-0049：BOSS 显式 HTTP 的有界重试与会话恢复](./0049-boss-http-recovery-and-retries.md)
 - [ADR-0052：网友面经采用三种研究执行模式](./0052-community-research-execution-modes.md)
+- [ADR-0054：Worker 共享浏览器 CDP 传输](./0054-worker-shared-cdp-transport.md)

@@ -36,6 +36,7 @@ class FakeSocket extends EventTarget {
     params?: { targetId?: string; url?: string; expression?: string };
   }[] = [];
   ownedUrl: string | undefined;
+  attachedCount = 0;
   constructor() {
     super();
     FakeSocket.instances.push(this);
@@ -84,6 +85,7 @@ class FakeSocket extends EventTarget {
           );
       });
     if (request.method === 'Page.navigate') this.ownedUrl = request.params?.url;
+    if (request.method === 'Target.attachToTarget') this.attachedCount += 1;
     const responses: Record<string, unknown> = {
       'Target.getTargets': {
         targetInfos: [
@@ -94,7 +96,9 @@ class FakeSocket extends EventTarget {
             : []),
         ],
       },
-      'Target.attachToTarget': { sessionId: 'attached' },
+      'Target.attachToTarget': {
+        sessionId: this.attachedCount === 1 ? 'attached' : `attached-${String(this.attachedCount)}`,
+      },
       'Target.createTarget': { targetId: 'worker-owned' },
       'Target.closeTarget': { success: true },
       'Page.navigate': {},
@@ -839,6 +843,7 @@ it('BOSS 显式浏览器模式不读取凭据、不刷新且保持同一授权�
   expect(socket?.readyState).toBe(1);
   expect(FakeSocket.instances).toHaveLength(1);
   session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
   expect(socket?.readyState).toBe(3);
 });
 
@@ -933,6 +938,7 @@ it('retains the selected 51job observer beyond initialization without another au
   expect(FakeSocket.instances).toHaveLength(1);
   expect(socket.readyState).toBe(1);
   session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
   expect(socket.readyState).toBe(3);
 });
 
@@ -1025,6 +1031,7 @@ it('keeps one authorized socket across HTTP actions and ignores completed connec
   expect(socket.methods.filter((method) => method === 'Page.enable')).toHaveLength(1);
   expect(FakeSocket.instances).toHaveLength(1);
   session.disconnect();
+  await vi.advanceTimersByTimeAsync(1);
   expect(socket.readyState).toBe(3);
 });
 

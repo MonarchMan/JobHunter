@@ -1,4 +1,5 @@
 export { BossHttpSession } from './boss.js';
+export { CdpConnectionManager } from './cdp-connection.js';
 export { LiepinRecommendationHttpSession, type LiepinRecommendationTemplate } from './liepin.js';
 export { Job51HttpSession, type Job51RequestTemplate } from './job51.js';
 export { ZhilianSearchHttpSession, type ZhilianSearchTemplates } from './zhilian-search.js';

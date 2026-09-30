@@ -68,6 +68,8 @@ BOSS 当前按 [ADR-0048](../adr/0048-boss-browser-default-and-page-lifecycle.md
 
 ## 4. 最小会话借用
 
+按 [ADR-0054](../adr/0054-worker-shared-cdp-transport.md)，浏览器级连接由 Worker 创建的管理器统一拥有，四个平台及多个搜索词复用同一 Chrome 端点的 CDP WebSocket。页面与业务会话仍独立，基础设施按命令 ID／sessionId 分发；单平台释放不关闭共享传输，已授权空闲连接保留至 Worker 退出。底层断线广播失效但不自动重连，不改变应用端口、认证内存边界或职位传输选择。下文及 ADR-0046 的 Socket 释放规则以本决策为准。
+
 连接必须由用户明确发起；日常自动定位本机默认 Chrome 配置并创建 Worker 专用页，显式借用目标页仅用于调试。CDP 仅连接已核验的本机回环端点，按允许域名选择页面和 Cookie；不读取其他网站、完整 LocalStorage 或浏览器磁盘 Cookie 数据库。必要数据由逐平台协议实验确定，不将实验 Cookie 集合宣称为最小集合。
 
 会话凭据保存在 Worker 内存，由 sessionRef 与 sessionGeneration 引用；不写任务 payload/result、SQLite、事件、日志、异常、备份或模型输入。持久配置仅含非敏感连接选项和脱敏状态。请求中的个性化期望标识与职位访问参数也留在有界内存工作集中，原始 URL 的敏感查询参数不得作为来源链接保存。

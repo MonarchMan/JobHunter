@@ -30,9 +30,11 @@ it.each(pacingCases)('生产统一间隔 %s 与平台覆盖分别传递', async 
     ['liepin', LiepinCdpSessionProvider],
   ] as const;
   const received: unknown[] = [];
+  const connectionManagers: unknown[] = [];
   for (const [, Provider] of providers)
     vi.spyOn(Provider.prototype, 'connect').mockImplementation(function (this: object) {
       received.push(Reflect.get(this, 'requestIntervalMs'));
+      connectionManagers.push(Reflect.get(this, 'connections'));
       return Promise.resolve({
         readNext: () => Promise.resolve({ candidates: [], hasMore: false }),
         readDetail: () => Promise.reject(new Error('Unexpected detail')),
@@ -77,6 +79,9 @@ it.each(pacingCases)('生产统一间隔 %s 与平台覆盖分别传递', async 
       overrides['51job'] ?? interval,
       overrides.liepin ?? interval,
     ]);
+    // 2、四平台必须由生产装配注入同一个管理器，而不是只在诊断中共享 Socket。
+    expect(connectionManagers[0]).toBeDefined();
+    expect(new Set(connectionManagers).size).toBe(1);
   } finally {
     // 2、只清理本测试独占临时目录，不接触日常库或真实连接。
     await worker.close();

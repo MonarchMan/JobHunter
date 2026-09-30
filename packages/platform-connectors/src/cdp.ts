@@ -1,4 +1,3 @@
-import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   PlatformError,
@@ -7,6 +6,7 @@ import {
 } from '@jobhunter/platform-core';
 import { z } from 'zod';
 import { chromePortFile } from './browser-discovery.js';
+import { CdpConnectionManager, type CdpConnectionLease } from './cdp-connection.js';
 import { BossHttpSession } from './boss.js';
 import { BossBrowserSession } from './boss-browser.js';
 import { bossPageStateExpression, bossPageStateSchema } from './boss-page-state.js';
@@ -39,6 +39,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
     private readonly provider: 'boss' | 'zhilian' | '51job' | 'liepin',
     private readonly backgroundWindow = true,
     private readonly requestIntervalMs = 0,
+    private readonly connections?: CdpConnectionManager,
   ) {}
 
   public async connect(
@@ -71,7 +72,8 @@ class CdpSessionProvider implements PlatformSessionProvider {
     )
       throw new PlatformError('session_unavailable');
     const signal = AbortSignal.any([callerSignal, AbortSignal.timeout(120_000)]);
-    let socket: WebSocket | undefined;
+    const connections = this.connections ?? new CdpConnectionManager();
+    let connection: CdpConnectionLease | undefined;
     let handedOff = false;
     let http: PlatformSession | undefined;
     let onEvent: ((message: unknown) => void) | undefined;
@@ -79,48 +81,23 @@ class CdpSessionProvider implements PlatformSessionProvider {
     let clearObservation: (() => void) | undefined;
     let release: (() => Promise<void>) | undefined;
     let creatingOwned = false;
-    const pending = new Map<
-      number,
-      { resolve(value: unknown): void; reject(error: Error): void }
-    >();
-    let nextId = 0;
     try {
-      const data = await readFile(portFile, { encoding: 'utf8', signal }).catch(() => {
-        throw new PlatformError('session_unavailable', null, 'browser_not_found');
-      });
-      if (data.length > 1_024) throw new Error('invalid descriptor');
-      const [port, endpoint] = data.trim().split(/\r?\n/);
-      if (
-        !port ||
-        !/^\d{1,5}$/.test(port) ||
-        Number(port) < 1 ||
-        Number(port) > 65535 ||
-        !endpoint ||
-        !/^\/devtools\/browser\/[\w-]+$/.test(endpoint)
-      )
-        throw new Error('invalid descriptor');
-      signal.throwIfAborted();
-      const ws = new WebSocket(`ws://127.0.0.1:${port}${endpoint}`);
-      socket = ws;
+      // 2、Worker 注入的管理器跨平台／关键词复用 Socket，租约独占页面与观察器。
+      const lease = await connections.acquire(portFile, signal);
+      connection = lease;
       let disconnected = false;
       const disconnectListeners = new Set<() => void>();
-      const rejectAll = (): void => {
-        rejectObservation?.();
-        for (const request of pending.values())
-          request.reject(new PlatformError('session_unavailable'));
-        pending.clear();
-      };
       const abort = (): void => {
         // 2.a、创建命令已发出时短暂等待返回 ID，取消后仍能只清理自己的页。
         if (creatingOwned) return;
-        rejectAll();
+        rejectObservation?.();
         http?.disconnect();
         if (release) void release();
-        else ws.close();
+        else void lease.release();
       };
       signal.addEventListener('abort', abort, { once: true });
-      ws.addEventListener('close', () => {
-        rejectAll();
+      lease.onDisconnected(() => {
+        rejectObservation?.();
         clearObservation?.();
         http?.disconnect();
         // 2.a、底层关闭只通知本地订阅者；不请求官网或建立新连接。
@@ -128,84 +105,16 @@ class CdpSessionProvider implements PlatformSessionProvider {
         for (const listener of disconnectListeners) listener();
         disconnectListeners.clear();
       });
-      ws.addEventListener('error', abort);
-      ws.addEventListener('message', (event) => {
-        // 2、CDP 错误原文可能包含 URL，边界只返回固定脱敏错误。
-        try {
-          if (typeof event.data !== 'string' || event.data.length > 4_000_000)
-            throw new Error('invalid message');
-          const raw: unknown = JSON.parse(event.data);
-          const message = z
-            .object({
-              id: z.number().optional(),
-              result: z.unknown().optional(),
-              error: z.unknown().optional(),
-            })
-            .parse(raw);
-          if (message.id === undefined) {
-            onEvent?.(raw);
-            return;
-          }
-          const request = pending.get(message.id);
-          pending.delete(message.id);
-          if (message.error) request?.reject(new PlatformError('session_unavailable'));
-          else request?.resolve(message.result);
-        } catch {
-          rejectAll();
-          ws.close();
-        }
+      lease.observe((raw) => {
+        onEvent?.(raw);
       });
       try {
-        await new Promise<void>((resolve, reject) => {
-          const fail = (): void => {
-            cleanup();
-            reject(new PlatformError('session_unavailable'));
-          };
-          const ready = (): void => {
-            cleanup();
-            resolve();
-          };
-          const cleanup = (): void => {
-            signal.removeEventListener('abort', fail);
-            ws.removeEventListener('error', fail);
-            ws.removeEventListener('close', fail);
-            ws.removeEventListener('open', ready);
-          };
-          ws.addEventListener('open', ready, { once: true });
-          ws.addEventListener('error', fail, { once: true });
-          ws.addEventListener('close', fail, { once: true });
-          signal.addEventListener('abort', fail, { once: true });
-          if (signal.aborted) fail();
-        });
         const call = (
           method: string,
           params: unknown,
           sessionId?: string,
           operationSignal: AbortSignal = signal,
-        ): Promise<unknown> => {
-          operationSignal.throwIfAborted();
-          let timer: ReturnType<typeof setTimeout>;
-          let cancel: (() => void) | undefined;
-          return new Promise<unknown>((resolve, reject) => {
-            const id = ++nextId;
-            cancel = () => {
-              pending.delete(id);
-              reject(new PlatformError('session_unavailable'));
-            };
-            operationSignal.addEventListener('abort', cancel, { once: true });
-            // 2.a、人工确认等待与已授权后的命令超时分离。
-            timer = setTimeout(() => {
-              pending.delete(id);
-              reject(new PlatformError('session_unavailable'));
-              if (operationSignal === signal) abort();
-            }, 20_000);
-            pending.set(id, { resolve, reject });
-            ws.send(JSON.stringify({ id, method, params, sessionId }));
-          }).finally(() => {
-            clearTimeout(timer);
-            if (cancel) operationSignal.removeEventListener('abort', cancel);
-          });
-        };
+        ): Promise<unknown> => lease.call(method, params, sessionId, operationSignal);
         const entryUrl = {
           boss: 'https://www.zhipin.com/web/geek/jobs',
           zhilian: 'https://www.zhaopin.com/jobs',
@@ -224,16 +133,23 @@ class CdpSessionProvider implements PlatformSessionProvider {
         // 2.b、默认只创建自己的页，共享默认配置，不枚举或接管用户页面。
         let ownedTarget: string | undefined;
         let releasing: Promise<void> | undefined;
+        lease.setCleanup(async () => {
+          // 2.c、只关闭本租约自建页；借用页和临时 attach 由租约统一 detach。
+          clearObservation?.();
+          http?.disconnect();
+          if (ownedTarget)
+            await call(
+              'Target.closeTarget',
+              { targetId: ownedTarget },
+              undefined,
+              AbortSignal.timeout(5_000),
+            ).catch(() => undefined);
+        });
         release = () => {
           releasing ??= (async () => {
-            if (ownedTarget && ws.readyState === WebSocket.OPEN)
-              await call(
-                'Target.closeTarget',
-                { targetId: ownedTarget },
-                undefined,
-                AbortSignal.timeout(5_000),
-              ).catch(() => undefined);
-            ws.close();
+            await lease.release();
+            // 2.d、独立诊断仍独占 Socket；共享 Worker 只释放租约、不关闭管理器。
+            if (!this.connections) await connections.close();
           })();
           return releasing;
         };
@@ -864,11 +780,11 @@ class CdpSessionProvider implements PlatformSessionProvider {
         const resume =
           this.provider === 'boss' && !browserMode ? session.resume?.bind(session) : undefined;
         // 4、BOSS 两模式保留页面生命周期监听；所有模式均不自动重连或刷新。
-        if (ws.readyState !== WebSocket.OPEN) throw new Error('connection closed');
+        if (!lease.available) throw new Error('connection closed');
         handedOff = true;
         return {
           onDisconnected: (listener) => {
-            if (disconnected || ws.readyState !== WebSocket.OPEN) listener();
+            if (disconnected || !lease.available) listener();
             else disconnectListeners.add(listener);
             return () => {
               disconnectListeners.delete(listener);
@@ -900,11 +816,9 @@ class CdpSessionProvider implements PlatformSessionProvider {
         clearObservation?.();
         http?.disconnect();
         await release?.();
-        socket?.close();
+        await connection?.release();
+        if (!this.connections) await connections.close();
       }
-      for (const request of pending.values())
-        request.reject(new PlatformError('session_unavailable'));
-      pending.clear();
     }
   }
 }
@@ -912,15 +826,25 @@ class CdpSessionProvider implements PlatformSessionProvider {
 /** 猎聘只借用首页查询和实时登录上下文，列表与详情使用独立 HTTP。 */
 export class LiepinCdpSessionProvider extends CdpSessionProvider {
   /** 固定猎聘学生首页协议，不接受任意站点或搜索模板。 */
-  public constructor(options: { readonly requestIntervalMs?: number } = {}) {
-    super('liepin', true, options.requestIntervalMs);
+  public constructor(
+    options: {
+      readonly requestIntervalMs?: number;
+      readonly connections?: CdpConnectionManager;
+    } = {},
+  ) {
+    super('liepin', true, options.requestIntervalMs, options.connections);
   }
 }
 
 /** 前程无忧采用官网辅助的搜索批次观察，同一连接贯穿用户活动会话。 */
 export class Job51CdpSessionProvider extends CdpSessionProvider {
-  public constructor(options: { readonly requestIntervalMs?: number } = {}) {
-    super('51job', true, options.requestIntervalMs);
+  public constructor(
+    options: {
+      readonly requestIntervalMs?: number;
+      readonly connections?: CdpConnectionManager;
+    } = {},
+  ) {
+    super('51job', true, options.requestIntervalMs, options.connections);
   }
 }
 
@@ -928,15 +852,24 @@ export class Job51CdpSessionProvider extends CdpSessionProvider {
 export class BossCdpSessionProvider extends CdpSessionProvider {
   /** 默认独立后台窗口共享登录态；显式 false 保留旧专用标签页供调试。 */
   public constructor(
-    options: { readonly backgroundWindow?: boolean; readonly requestIntervalMs?: number } = {},
+    options: {
+      readonly backgroundWindow?: boolean;
+      readonly requestIntervalMs?: number;
+      readonly connections?: CdpConnectionManager;
+    } = {},
   ) {
-    super('boss', options.backgroundWindow ?? true, options.requestIntervalMs);
+    super('boss', options.backgroundWindow ?? true, options.requestIntervalMs, options.connections);
   }
 }
 
 /** 智联按目标页面选择校园推荐或主站搜索，仅借用正常浏览产生的请求模板。 */
 export class ZhilianCdpSessionProvider extends CdpSessionProvider {
-  public constructor(options: { readonly requestIntervalMs?: number } = {}) {
-    super('zhilian', true, options.requestIntervalMs);
+  public constructor(
+    options: {
+      readonly requestIntervalMs?: number;
+      readonly connections?: CdpConnectionManager;
+    } = {},
+  ) {
+    super('zhilian', true, options.requestIntervalMs, options.connections);
   }
 }

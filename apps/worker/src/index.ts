@@ -83,6 +83,7 @@ import {
 import { createConfiguredModelClient } from '@jobhunter/llm';
 import {
   BossCdpSessionProvider,
+  CdpConnectionManager,
   ZhilianCdpSessionProvider,
   Job51CdpSessionProvider,
   LiepinCdpSessionProvider,
@@ -355,8 +356,11 @@ export function createProductionWorkerApplication(input: {
     options: { normalizerVersion: 'normalize-v1' },
   });
   const registry = new HandlerRegistry();
+  // 1、浏览器传输属于 Worker；平台和关键词只借用隔离的页面租约。
+  const cdpConnections = new CdpConnectionManager();
   const boss = new BossPlatformService(
     new BossCdpSessionProvider({
+      connections: cdpConnections,
       requestIntervalMs:
         input.platformRequestIntervalMsByProvider?.boss ?? input.platformRequestIntervalMs ?? 0,
     }),
@@ -367,6 +371,7 @@ export function createProductionWorkerApplication(input: {
   registry.register(createBossPlatformTaskHandler(boss));
   const zhilian = new PlatformBrowsingService(
     new ZhilianCdpSessionProvider({
+      connections: cdpConnections,
       requestIntervalMs:
         input.platformRequestIntervalMsByProvider?.zhilian ?? input.platformRequestIntervalMs ?? 0,
     }),
@@ -377,6 +382,7 @@ export function createProductionWorkerApplication(input: {
   registry.register(createPlatformTaskHandler('zhilian', zhilian));
   const job51 = new PlatformBrowsingService(
     new Job51CdpSessionProvider({
+      connections: cdpConnections,
       requestIntervalMs:
         input.platformRequestIntervalMsByProvider?.['51job'] ??
         input.platformRequestIntervalMs ??
@@ -389,6 +395,7 @@ export function createProductionWorkerApplication(input: {
   registry.register(createPlatformTaskHandler('51job', job51));
   const liepin = new PlatformBrowsingService(
     new LiepinCdpSessionProvider({
+      connections: cdpConnections,
       // 1、每个平台优先采用自身配置；缺失时沿用统一间隔，避免连接器隐藏常量。
       requestIntervalMs:
         input.platformRequestIntervalMsByProvider?.liepin ?? input.platformRequestIntervalMs ?? 0,
@@ -667,6 +674,8 @@ export function createProductionWorkerApplication(input: {
       if (runtimeMetrics) clearInterval(runtimeMetrics);
       eventLoopDelay?.disable();
       await engine.shutdown();
+      // 2、等待初始化任务响应取消并登记自建页 ID，再统一释放授权连接。
+      await cdpConnections.close();
       database.close();
     },
   };
