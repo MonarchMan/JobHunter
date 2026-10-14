@@ -18,4 +18,5 @@
   - 2026-08-20：Provider Registry 与无 Provider 启动能力已完成；具体线上 Provider 待按官方 API 文档复核请求/工具调用结构后接入。
   - 接入 OpenAI 兼容 Chat Completions Provider，支持本地 `.env` 别名、结构化输出、工具调用、错误分类和显式在线烟测。（AGT-001,011, AGT-Q02）
 - [x] **AGT-T010** 接入 Anthropic Messages Provider，并让 Worker/CLI 按 provider 装配客户端；覆盖结构化输出、工具调用、错误分类、配置别名和 OpenAI 回归测试。（AGT-001,012, AGT-Q02, AGT-Q04）
+  - 2026-10-13：移除显式 Provider 与供应商专用环境变量，统一使用 `BASE_URL`、`API_KEY`、`MODEL`，并按 URL 主机标签或路径段自动选择协议。（AGT-011,012）
 - [x] **AGT-T011** 为 DeepSeek 接入 `json_object` 优先协商、代码围栏规范化和非 JSON/空正文单次 Runner 修复链路。（AGT-004,009,013, AGT-Q02）

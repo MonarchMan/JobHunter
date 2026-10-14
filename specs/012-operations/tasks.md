@@ -17,3 +17,4 @@
 - [x] **OPS-T008** 实现敏感数据删除影响计划和审计事件。（OPS-009）
 - [x] **OPS-T009** 添加 Windows 路径、篡改备份、日志秘密和配置优先级端到端测试。（OPS-Q01..04）
 - [x] **OPS-T010** 统一 CLI、Web 与 Worker 的工作区 `.env` 和本地配置加载入口，并覆盖启动目录无关性与环境覆盖优先级。（OPS-001,011, OPS-Q02）
+  - 2026-10-13：将模型环境配置收敛为 `BASE_URL`、`MODEL`、`API_KEY`，为 Base URL 增加 OpenAI 官方默认值并自动推断 Provider。（OPS-001,011, OPS-Q02）

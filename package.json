@@ -4,10 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Personal job discovery and matching agent",
-  "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=24 <25",
-    "pnpm": ">=11 <12"
+    "pnpm": ">=11.0.0"
   },
   "scripts": {
     "boss": "tsx apps/cli/src/platform-main.ts",

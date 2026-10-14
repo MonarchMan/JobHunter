@@ -10,7 +10,7 @@
 
 <p align="center">
   <img alt="Node.js 24" src="https://img.shields.io/badge/Node.js-24.x-4E5FBB?logo=nodedotjs&logoColor=white">
-  <img alt="pnpm 11" src="https://img.shields.io/badge/pnpm-11.x-E06C5D?logo=pnpm&logoColor=white">
+  <img alt="pnpm 11+" src="https://img.shields.io/badge/pnpm-%3E%3D11.0.0-E06C5D?logo=pnpm&logoColor=white">
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-4E5FBB?logo=typescript&logoColor=white">
   <img alt="Local first" src="https://img.shields.io/badge/data-local--first-596275">
 </p>
@@ -61,7 +61,7 @@ JobHunter 帮助个人求职者减少重复搜索和信息整理：先从简历�
 | 环境                     | 版本或建议                     | 是否必需 |
 | ------------------------ | ------------------------------ | -------- |
 | Node.js                  | `24.x`                         | 必需     |
-| pnpm                     | `11.x`                         | 必需     |
+| pnpm                     | `>=11.0.0`                     | 必需     |
 | Edge、Chrome 或 Chromium | 动态来源采集或浏览器测试时使用 | 可选     |
 | 模型服务                 | OpenAI 兼容接口或 Anthropic    | 可选     |
 

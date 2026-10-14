@@ -26,11 +26,11 @@ packages/llm/
 
 ModelClient 使用项目自有 DTO，不向上暴露供应商 SDK 类型。Provider adapter 将供应商错误映射为 `rate_limited`、`temporary`、`invalid_auth`、`invalid_request`、`content_rejected`、`cancelled`。
 
-首个 Provider 使用 OpenAI 兼容的 `POST {baseUrl}/chat/completions` 边界，不向 Agent Core 暴露供应商 DTO。配置在组合根归一化：`JOBHUNTER_MODEL_BASE_URL`、`JOBHUNTER_MODEL_API_KEY`、`JOBHUNTER_MODEL_NAME` 优先，个人本地 `.env` 可使用 `BASE_URL`、`API_KEY`、`MODEL` 别名。API Key 仅保存在 `SecretString` 和请求头中，Provider metadata、异常与日志不得包含密钥。在线烟测通过显式脚本执行，不进入默认测试集合。
+首个 Provider 使用 OpenAI 兼容的 `POST {baseUrl}/chat/completions` 边界，不向 Agent Core 暴露供应商 DTO。配置在组合根归一化，只接受 `.env` 的 `BASE_URL`、`API_KEY`、`MODEL`；`BASE_URL` 缺省为 `https://api.openai.com/v1`。API Key 仅保存在 `SecretString` 和请求头中，Provider metadata、异常与日志不得包含密钥。在线烟测通过显式脚本执行，不进入默认测试集合。
 
 DeepSeek 的 Chat Completions 直接以 `json_object` 发起结构化请求，避免先发送该端点不支持的 `json_schema`。其他 OpenAI 兼容端点仍优先协商 `json_schema`，400 时依次回退到 `json_object` 和无格式参数。响应正文先尝试严格 JSON，再仅剥离包裹整个正文的单层 `json` 代码围栏；仍无法解析或正文为空时以 `unparsed_output` 交给 Runner，不持久化或记录原文。Runner 将其视为首次 Schema 失败并消耗唯一一次无工具修复；修复响应仍未解析或不满足 Schema 时以 `invalid_output` 结束。
 
-Anthropic Provider 使用原生 `POST {baseUrl}/v1/messages` 边界和 `2023-06-01` API 版本，通过顶层 `system`、`output_config.format`、`tools[].input_schema` 及响应 `content` block 转换项目 DTO。为兼容尚未支持结构化输出的模型或网关，仅在 `output_config` 返回 400 时重试不带该字段的请求。组合根必须根据 `model.provider` 创建客户端；`ANTHROPIC_API_KEY`、`ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL` 可作为个人本地别名，官方 Base URL 缺省为 `https://api.anthropic.com`。
+Anthropic Provider 使用原生 `POST {baseUrl}/v1/messages` 边界和 `2023-06-01` API 版本，通过顶层 `system`、`output_config.format`、`tools[].input_schema` 及响应 `content` block 转换项目 DTO。为兼容尚未支持结构化输出的模型或网关，仅在 `output_config` 返回 400 时重试不带该字段的请求。组合根根据标准化 `BASE_URL` 自动创建客户端：主机名标签或路径段存在独立 `anthropic` 时使用 Anthropic，其余地址使用 OpenAI 兼容协议；无法从无标识的通用代理地址判断协议，因此 Anthropic 代理地址必须保留 `anthropic` 主机标签或路径段。
 
 ## Runner
 

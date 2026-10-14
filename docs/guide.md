@@ -32,7 +32,7 @@ BOSS 通过浏览器正常搜索和点击详情取得 JSON；智联从主站首�
 | 环境                     | 版本或建议                               | 是否必需 | 用途                                                       |
 | ------------------------ | ---------------------------------------- | -------- | ---------------------------------------------------------- |
 | Node.js                  | `24.x`                                   | 必需     | 运行 CLI、Worker、Web 和项目脚本                           |
-| pnpm                     | `11.x`                                   | 必需     | 安装依赖并执行 workspace 命令                              |
+| pnpm                     | `>=11.0.0`                               | 必需     | 安装依赖并执行 workspace 命令                              |
 | Microsoft Edge 或 Chrome | 使用仍受支持的稳定版本，可自动探测       | 可选     | 采集需要真实浏览器的动态招聘来源                           |
 | Playwright Chromium      | 使用项目当前 Playwright 版本对应的浏览器 | 可选     | 没有可用系统浏览器时作为采集运行时，也用于浏览器自动化测试 |
 
@@ -122,24 +122,23 @@ pnpm --filter @jobhunter/web dev
 
 ## 4. 按需启用模型能力
 
-只有简历画像、岗位理解、润色或匹配建议等模型任务需要模型服务。编辑 `.env`，填写 OpenAI 兼容配置：
+只有简历画像、岗位理解、润色或匹配建议等模型任务需要模型服务。编辑 `.env`，填写统一模型配置：
 
 ```dotenv
-JOBHUNTER_MODEL_PROVIDER=openai-compatible
-JOBHUNTER_MODEL_BASE_URL=https://your-model-endpoint/v1
-JOBHUNTER_MODEL_API_KEY=your-api-key
-JOBHUNTER_MODEL_NAME=your-model-name
+BASE_URL=https://your-model-endpoint/v1
+API_KEY=your-api-key
+MODEL=your-model-name
 ```
 
-使用 Anthropic 原生 Messages API 时：
+`BASE_URL` 留空时默认使用 OpenAI 官方地址 `https://api.openai.com/v1`。主机名标签或路径段包含独立的 `anthropic` 时，系统自动使用 Anthropic Messages API；其他地址使用 OpenAI 兼容接口。例如：
 
 ```dotenv
-JOBHUNTER_MODEL_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your-api-key
-ANTHROPIC_MODEL=your-claude-model
+BASE_URL=https://api.anthropic.com
+API_KEY=your-api-key
+MODEL=your-claude-model
 ```
 
-`ANTHROPIC_BASE_URL` 留空时使用官方地址。修改配置后重启 Web，使 Web 与 Worker 使用同一份环境变量。
+Anthropic 通用代理的地址应保留独立的 `anthropic` 主机标签或路径段，例如 `https://gateway.example.com/anthropic`，否则无法仅根据 URL 区分协议。修改配置后重启 Web，使 Web 与 Worker 使用同一份环境变量。
 
 不要把 `.env`、密钥、简历或 `var/` 中的运行数据提交到版本库。
 

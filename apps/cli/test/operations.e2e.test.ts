@@ -21,7 +21,7 @@ describe('operations composition', () => {
       cli: { logLevel: 'debug' },
       environment: {
         JOBHUNTER_LOG_LEVEL: 'warn',
-        JOBHUNTER_MODEL_API_KEY: 'e2e-api-secret',
+        API_KEY: 'e2e-api-secret',
       },
       file: { logLevel: 'error', worker: { pollIntervalMs: 2_000 } },
     });

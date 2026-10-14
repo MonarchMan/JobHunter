@@ -701,10 +701,9 @@ const child = spawn(process.execPath, [nextBin, 'dev', '--hostname', '127.0.0.1'
     ...process.env,
     JOBHUNTER_DATA_ROOT: dataRoot,
     JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
-    JOBHUNTER_MODEL_PROVIDER: 'openai-compatible',
-    JOBHUNTER_MODEL_BASE_URL: `http://127.0.0.1:${String(modelAddress.port)}/v1`,
-    JOBHUNTER_MODEL_NAME: 'browser-fixture',
-    JOBHUNTER_MODEL_API_KEY: 'browser-fixture-key',
+    BASE_URL: `http://127.0.0.1:${String(modelAddress.port)}/v1`,
+    MODEL: 'browser-fixture',
+    API_KEY: 'browser-fixture-key',
     NEXT_DIST_DIR: process.env.NEXT_DIST_DIR ?? '.next-browser-fixture',
   },
 });

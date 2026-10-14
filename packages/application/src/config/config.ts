@@ -11,6 +11,9 @@ export interface SourcedValue<T> {
   readonly source: ConfigSource;
 }
 
+/** 根据模型 Base URL 推断出的传输协议类型。 */
+export type ModelProvider = 'openai-compatible' | 'anthropic';
+
 /** A secret can only be exposed through an explicit call and serializes as redacted text. */
 /** 防止密钥在日志、JSON 和字符串插值中意外泄露。 */
 export class SecretString {
@@ -58,8 +61,8 @@ export interface AppConfig {
     readonly taskTypeConcurrency: SourcedValue<Readonly<Record<string, number>>>;
   };
   readonly model: {
-    readonly provider: SourcedValue<string | null>;
-    readonly baseUrl: SourcedValue<string | null>;
+    readonly provider: SourcedValue<ModelProvider>;
+    readonly baseUrl: SourcedValue<string>;
     readonly modelName: SourcedValue<string | null>;
     readonly apiKey: SourcedValue<SecretString | null>;
   };
@@ -74,7 +77,6 @@ export interface ConfigOverrides {
   readonly workerPollIntervalMs?: number;
   readonly maxConcurrentNetworkTasks?: number;
   readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
-  readonly modelProvider?: string;
   readonly modelBaseUrl?: string;
   readonly modelName?: string;
   readonly modelApiKey?: string;
@@ -108,12 +110,10 @@ const localConfigSchema = z
       })
       .strict()
       .optional(),
-    model: z
-      .object({ provider: z.string().trim().min(1).optional() })
-      .strict()
-      .optional(),
   })
   .strict();
+
+const defaultOpenAiBaseUrl = 'https://api.openai.com/v1';
 
 const defaultTaskTypeConcurrency: Readonly<Record<string, number>> = {
   'source.sync': 3,
@@ -168,6 +168,30 @@ function environmentConcurrency(
   }
 }
 
+/** 根据标准化 Base URL 自动选择模型协议，避免用户重复声明 Provider。 */
+function inferModelProvider(baseUrl: string): ModelProvider {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch (error) {
+    throw new TypeError('model base URL must be a valid absolute URL.', { cause: error });
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new TypeError('model base URL must use HTTP or HTTPS.');
+  }
+
+  // 1. 官方域名和带 anthropic 独立主机标签的网关使用 Anthropic Messages 协议。
+  const hostLabels = parsed.hostname.toLowerCase().split('.');
+  if (hostLabels.includes('anthropic')) return 'anthropic';
+
+  // 2. 通用代理可通过独立 `/anthropic/` 路径段声明协议，其余地址统一视为 OpenAI 兼容接口。
+  const pathSegments = parsed.pathname
+    .toLowerCase()
+    .split('/')
+    .filter((segment) => segment.length > 0);
+  return pathSegments.includes('anthropic') ? 'anthropic' : 'openai-compatible';
+}
+
 /** 解析启动阶段数据目录、配置文件和迁移目录。 */
 export function resolveBootstrapConfig(input: {
   readonly cli?: Pick<ConfigOverrides, 'dataRoot' | 'configPath'>;
@@ -212,46 +236,25 @@ export function resolveAppConfig(input: {
     'info',
   );
   const parsedLogLevel = z.enum(['debug', 'info', 'warn', 'error']).parse(logLevel.value);
-  const configuredProvider =
-    nonEmpty(input.cli?.modelProvider) ??
-    nonEmpty(environment.JOBHUNTER_MODEL_PROVIDER) ??
-    file.model?.provider;
-  const useAnthropicAliases =
-    configuredProvider === 'anthropic' ||
-    (configuredProvider === undefined &&
-      nonEmpty(environment.ANTHROPIC_API_KEY) !== undefined &&
-      nonEmpty(environment.ANTHROPIC_MODEL) !== undefined);
   const modelApiKey = choose(
     nonEmpty(input.cli?.modelApiKey),
-    nonEmpty(environment.JOBHUNTER_MODEL_API_KEY) ??
-      (useAnthropicAliases
-        ? nonEmpty(environment.ANTHROPIC_API_KEY)
-        : nonEmpty(environment.API_KEY)),
+    nonEmpty(environment.API_KEY),
     undefined,
     null,
   );
   const modelBaseUrl = choose(
     nonEmpty(input.cli?.modelBaseUrl),
-    nonEmpty(environment.JOBHUNTER_MODEL_BASE_URL) ??
-      (useAnthropicAliases
-        ? nonEmpty(environment.ANTHROPIC_BASE_URL)
-        : nonEmpty(environment.BASE_URL)),
+    nonEmpty(environment.BASE_URL),
     undefined,
-    useAnthropicAliases ? 'https://api.anthropic.com' : null,
+    defaultOpenAiBaseUrl,
   );
   const modelName = choose(
     nonEmpty(input.cli?.modelName),
-    nonEmpty(environment.JOBHUNTER_MODEL_NAME) ??
-      (useAnthropicAliases ? nonEmpty(environment.ANTHROPIC_MODEL) : nonEmpty(environment.MODEL)),
+    nonEmpty(environment.MODEL),
     undefined,
     null,
   );
-  const inferredProvider =
-    modelApiKey.value && modelBaseUrl.value && modelName.value
-      ? useAnthropicAliases
-        ? 'anthropic'
-        : 'openai-compatible'
-      : null;
+  const inferredProvider = inferModelProvider(modelBaseUrl.value);
   const pollIntervalMs = choose(
     input.cli?.workerPollIntervalMs,
     environmentInteger(environment.JOBHUNTER_WORKER_POLL_INTERVAL_MS, 'poll interval'),
@@ -304,12 +307,7 @@ export function resolveAppConfig(input: {
       taskTypeConcurrency,
     },
     model: {
-      provider: choose(
-        nonEmpty(input.cli?.modelProvider),
-        nonEmpty(environment.JOBHUNTER_MODEL_PROVIDER),
-        file.model?.provider,
-        inferredProvider,
-      ),
+      provider: { value: inferredProvider, source: modelBaseUrl.source },
       baseUrl: modelBaseUrl,
       modelName,
       apiKey: {
