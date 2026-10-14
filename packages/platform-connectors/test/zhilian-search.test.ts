@@ -71,6 +71,8 @@ afterEach(() => {
 });
 
 it('keeps the session after a Worker finishes its first task and honors an explicit interval', async () => {
+  vi.useFakeTimers();
+  let now = 0;
   const fetcher = vi
     .fn<typeof fetch>()
     .mockResolvedValueOnce(Response.json(batch([fixture.row], 0)))
@@ -79,17 +81,20 @@ it('keeps the session after a Worker finishes its first task and honors an expli
     templates: fixture.templates,
     fetch: fetcher,
     requestIntervalMs: 50,
+    now: () => now,
   });
   const first = new AbortController();
   await session.readNext(first.signal);
   first.abort('finished');
-  const started = Date.now();
+  // 1、第二个请求先进入等待，验证间隔约束作用于相邻请求的开始时间。
   const next = session.readNext(new AbortController().signal);
   expect(fetcher).toHaveBeenCalledTimes(1);
+  // 2、推进可控时钟与计时器，避免墙钟精度和全量测试负载影响断言。
+  now = 50;
+  await vi.advanceTimersByTimeAsync(50);
   expect((await next).candidates[0]?.externalJobId).toBe('NEXT');
-  expect(Date.now() - started).toBeGreaterThanOrEqual(40);
   expect(fetcher).toHaveBeenCalledTimes(2);
-}, 10000);
+});
 
 it('preserves search filters across pages and requests independent verified detail', async () => {
   const second = { ...fixture.row, number: 'CC_NEXT' };

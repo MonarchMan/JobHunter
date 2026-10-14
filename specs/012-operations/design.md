@@ -14,7 +14,7 @@ database_maintenance 单例保存检查摘要与 owner_pid。所有标准连接�
 
 `packages/application/config` 定义 BootstrapConfig、AppConfig 和唯一的运行时配置加载器。CLI、Web 与 Worker 都显式传入工作区根目录；加载器先读取 `<workspaceRoot>/.env`，再以进程环境覆盖同名值，随后执行两阶段解析：第一阶段只从 CLI、合并环境和内置默认值解析 dataRoot/configPath；第二阶段从该路径加载非敏感文件，再合并普通配置。这样配置结果不受进程当前工作目录影响，也不依赖 Next、tsx 或 Shell 各自的环境文件行为。
 
-配置文件不得改变自己的路径或 dataRoot，避免循环解析。环境变量使用 `JOBHUNTER_` 前缀；秘密字段使用 `SecretString` 包装，禁止默认 `toString/toJSON`。本地配置文件默认 `<dataRoot>/config.json`，只允许 Settings Registry 中的非敏感字段。显式进程环境继续高于 `.env`，CLI 临时参数继续拥有最高优先级。
+配置文件不得改变自己的路径或 dataRoot，避免循环解析。项目运行参数继续使用 `JOBHUNTER_` 前缀，模型连接参数例外，统一使用 `BASE_URL`、`MODEL`、`API_KEY`，不再提供显式 Provider 或供应商专用别名。`BASE_URL` 缺省为 `https://api.openai.com/v1`，配置加载器根据主机名标签或路径段中的独立 `anthropic` 标识推断协议。秘密字段使用 `SecretString` 包装，禁止默认 `toString/toJSON`。本地配置文件默认 `<dataRoot>/config.json`，只允许 Settings Registry 中的非敏感字段。显式进程环境继续高于 `.env`，CLI 临时参数继续拥有最高优先级。
 
 ## 日志
 

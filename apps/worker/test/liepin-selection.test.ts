@@ -32,6 +32,32 @@ import { SystemIdGenerator, utcInstant, parseId } from '@jobhunter/domain';
 /** 上游采用合成协议，真实 Worker／隔离 SQLite／职位页查询覆盖正式生命周期。 */
 it('猎聘 HTTP 批次自动入库，官网和其他平台查询保持隔离', async () => {
   const dataRoot = await mkdtemp(path.join(tmpdir(), 'liepin-flow-'));
+  const portFile = path.join(dataRoot, 'DevToolsActivePort');
+  // 1、CLI 使用宿主平台临时绝对路径，并在进程内连接 SQLite 前完成任务发布。
+  // 1.a、Vitest 将 BASE_URL 用作内部路由；子进程覆盖为空闲模型配置，避免污染 CLI 配置边界。
+  const childEnvironment = {
+    ...process.env,
+    BASE_URL: 'https://api.openai.com/v1',
+    MODEL: '',
+    API_KEY: '',
+  };
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    [
+      path.resolve('apps/cli/dist/platform-main.js'),
+      '--data-root',
+      dataRoot,
+      '--provider',
+      'liepin',
+      'connect',
+      '--port-file',
+      portFile,
+      '--target-id',
+      'fixture',
+    ],
+    { env: childEnvironment },
+  );
+  const submitted = JSON.parse(stdout) as { task: { id: string } };
   const db = openSqliteDatabase({ dataRoot });
   let now = 0;
   let requests = 0;
@@ -110,20 +136,6 @@ it('猎聘 HTTP 批次自动入库，官网和其他平台查询保持隔离', a
     expect(tasks.get(parseId(submitted.taskId, 'Task'))?.status).toBe('succeeded');
   };
   try {
-    // 1、仅显式 next 自动补齐正文，保存后无需再次点击收藏或详情。
-    const { stdout } = await promisify(execFile)(process.execPath, [
-      path.resolve('apps/cli/dist/platform-main.js'),
-      '--data-root',
-      dataRoot,
-      '--provider',
-      'liepin',
-      'connect',
-      '--port-file',
-      '/synthetic/DevToolsActivePort',
-      '--target-id',
-      'fixture',
-    ]);
-    const submitted = JSON.parse(stdout) as { task: { id: string } };
     expect(await production.engine.runOnce('platform.liepin')).toBe(true);
     expect(tasks.get(parseId(submitted.task.id, 'Task'))?.status).toBe('succeeded');
     expect(connect).toHaveBeenCalledTimes(1);
@@ -168,4 +180,4 @@ it('猎聘 HTTP 批次自动入库，官网和其他平台查询保持隔离', a
     db.close();
     await rm(dataRoot, { recursive: true, force: true });
   }
-});
+}, 20_000);

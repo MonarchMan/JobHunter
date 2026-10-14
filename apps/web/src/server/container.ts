@@ -216,10 +216,7 @@ export function createLocalWebContainer(
     const profileRepository = new SqliteCandidateProfileRepository(database.client);
     const agentRuns = new SqliteAgentRunStore(database.client);
     const configuredModel =
-      config.model.provider.value &&
-      config.model.baseUrl.value &&
-      config.model.modelName.value &&
-      config.model.apiKey.value
+      config.model.modelName.value && config.model.apiKey.value
         ? createConfiguredModelClient({
             provider: config.model.provider.value,
             baseUrl: config.model.baseUrl.value,

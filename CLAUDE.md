@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 JobHunter is a personal job hunting workbench that syncs job postings from company career sites, imports resumes, generates candidate profiles, and provides job matching. It runs locally with SQLite storage and an optional AI model integration.
 
-**Tech Stack:** Node.js 24.x, TypeScript (strict mode), pnpm 11.x workspace, SQLite, Next.js, Playwright
+**Tech Stack:** Node.js 24.x, TypeScript (strict mode), pnpm >=11.0.0 workspace, SQLite, Next.js, Playwright
 
 **Languages:** Chinese UI with English technical identifiers
 
@@ -164,7 +164,7 @@ Copy `.env.example` to `.env` and configure:
 - `JOBHUNTER_LOG_LEVEL=info` - Logging level
 - Model provider (optional, only for AI features):
   - OpenAI-compatible: `BASE_URL`, `API_KEY`, `MODEL`
-  - Anthropic: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_BASE_URL`
+  - Anthropic: set `BASE_URL` to `https://api.anthropic.com` (or retain an `anthropic` host/path segment), then use `API_KEY` and `MODEL`
 - Browser path (optional): `JOBHUNTER_BROWSER_EXECUTABLE` - Auto-detects Chrome/Edge on macOS/Windows
 
 Install Playwright Chromium if system browser not available:

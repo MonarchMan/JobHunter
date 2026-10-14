@@ -221,7 +221,7 @@ describe('CodexLocalResearchExecutor', () => {
         HOME: '/Users/fixture',
         CODEX_HOME: '/Users/fixture/.codex',
         LANG: 'en_US.UTF-8',
-        JOBHUNTER_MODEL_API_KEY: 'must-not-be-inherited',
+        API_KEY: 'must-not-be-inherited',
       },
       spawn: successfulSpawn(bundle, (value) => {
         capture = value;
@@ -335,7 +335,7 @@ describe('CodexLocalResearchExecutor', () => {
       NO_COLOR: '1',
       TERM: 'dumb',
     });
-    expect(launched.options.env).not.toHaveProperty('JOBHUNTER_MODEL_API_KEY');
+    expect(launched.options.env).not.toHaveProperty('API_KEY');
     expect(launched.prompt).toBe(input().prompt);
     expect(launched.schema).toEqual(input().outputSchema);
     expect(result).toEqual({
@@ -642,7 +642,7 @@ describe('ClaudeCodeResearchExecutor', () => {
         PATH: '/fixture/bin',
         HOME: '/Users/fixture',
         LANG: 'en_US.UTF-8',
-        JOBHUNTER_MODEL_API_KEY: 'must-not-be-inherited',
+        API_KEY: 'must-not-be-inherited',
       },
       spawn: successfulClaudeSpawn(`\`\`\`json\n${bundle}\n\`\`\``, (value) => {
         capture = value;
@@ -664,7 +664,7 @@ describe('ClaudeCodeResearchExecutor', () => {
     expect(launched.args).not.toContain('Bash');
     expect(launched.args).not.toContain('Read');
     expect(launched.prompt).toContain('输出 JSON Schema');
-    expect(launched.options.env).not.toHaveProperty('JOBHUNTER_MODEL_API_KEY');
+    expect(launched.options.env).not.toHaveProperty('API_KEY');
     expect(JSON.parse(result.bundleText)).toMatchObject({
       schemaVersion: 'community-research-bundle@v2',
     });

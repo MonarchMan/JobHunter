@@ -10,15 +10,15 @@ export function chromePortFile(): string {
   const home = homedir();
   switch (platform()) {
     case 'darwin':
-      return path.join(home, 'Library/Application Support/Google/Chrome/DevToolsActivePort');
+      return path.posix.join(home, 'Library/Application Support/Google/Chrome/DevToolsActivePort');
     case 'win32':
-      return path.join(
-        process.env.LOCALAPPDATA ?? path.join(home, 'AppData/Local'),
+      return path.win32.join(
+        process.env.LOCALAPPDATA ?? path.win32.join(home, 'AppData/Local'),
         'Google/Chrome/User Data/DevToolsActivePort',
       );
     case 'linux':
-      return path.join(
-        process.env.XDG_CONFIG_HOME ?? path.join(home, '.config'),
+      return path.posix.join(
+        process.env.XDG_CONFIG_HOME ?? path.posix.join(home, '.config'),
         'google-chrome/DevToolsActivePort',
       );
     default:

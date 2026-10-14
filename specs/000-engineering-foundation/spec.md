@@ -9,7 +9,7 @@
 
 ## 功能需求
 
-- **ENG-001**：仓库必须声明并校验 Node.js 24 LTS、pnpm workspace 和锁文件，其他 Node 主版本不得作为受支持运行环境静默通过。
+- **ENG-001**：仓库必须声明并校验 Node.js 24 LTS、pnpm >=11.0.0、pnpm workspace 和锁文件；其他 Node 主版本或低于最低版本的 pnpm 不得作为受支持运行环境静默通过。
 - **ENG-002**：所有包必须继承严格 TypeScript 基础配置，启用 `strict`、`noUncheckedIndexedAccess`、`exactOptionalPropertyTypes` 和一致模块解析。
 - **ENG-003**：根命令必须提供 format、lint、typecheck、test、test:integration、test:e2e、build 和 docs:check。
 - **ENG-004**：包只能从其他包公开入口导入；领域包不得依赖应用层或基础设施包，自动边界检查必须阻止违规。

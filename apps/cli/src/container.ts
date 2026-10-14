@@ -250,10 +250,7 @@ export function createLocalCliContainer(
     const resumeDocuments = new SqliteResumeDocumentRepository(database.client);
     const matchingRepository = new SqliteMatchingRepository(database.client);
     const modelMetadata =
-      config.model.provider.value &&
-      config.model.baseUrl.value &&
-      config.model.modelName.value &&
-      config.model.apiKey.value
+      config.model.modelName.value && config.model.apiKey.value
         ? createConfiguredModelClient({
             provider: config.model.provider.value,
             baseUrl: config.model.baseUrl.value,
@@ -388,10 +385,7 @@ export function createLocalCliContainer(
             dataRootCheck(config.bootstrap.dataRoot.value),
             sqliteFileDoctorCheck(config.bootstrap.dataRoot.value),
             modelConfigurationCheck(
-              config.model.provider.value !== null &&
-                config.model.baseUrl.value !== null &&
-                config.model.modelName.value !== null &&
-                config.model.apiKey.value !== null,
+              config.model.modelName.value !== null && config.model.apiKey.value !== null,
             ),
           ],
           versions,
@@ -444,10 +438,7 @@ export function createLocalCliContainer(
               taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
               logger,
               pageClient,
-              ...(config.model.provider.value &&
-              config.model.baseUrl.value &&
-              config.model.modelName.value &&
-              config.model.apiKey.value
+              ...(config.model.modelName.value && config.model.apiKey.value
                 ? {
                     model: {
                       provider: config.model.provider.value,

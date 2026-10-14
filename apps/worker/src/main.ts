@@ -28,10 +28,7 @@ try {
     taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
     logger,
     pageClient,
-    ...(config.model.provider.value &&
-    config.model.baseUrl.value &&
-    config.model.modelName.value &&
-    config.model.apiKey.value
+    ...(config.model.modelName.value && config.model.apiKey.value
       ? {
           model: {
             provider: config.model.provider.value,

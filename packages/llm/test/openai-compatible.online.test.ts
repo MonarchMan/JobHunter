@@ -8,10 +8,9 @@ const online = process.env.JOBHUNTER_ONLINE_MODEL === '1';
 describe.skipIf(!online)('OpenAI-compatible controlled online smoke', () => {
   it('returns one minimal structured response using explicit local credentials', async () => {
     const local = parseEnv(readFileSync('.env', 'utf8'));
-    const baseUrl = local.JOBHUNTER_MODEL_BASE_URL ?? local.BASE_URL;
-    const apiKey = local.JOBHUNTER_MODEL_API_KEY ?? local.API_KEY;
-    const model = local.JOBHUNTER_MODEL_NAME ?? local.MODEL;
-    expect(baseUrl, 'BASE_URL is required for online model smoke').toBeTruthy();
+    const baseUrl = local.BASE_URL ?? 'https://api.openai.com/v1';
+    const apiKey = local.API_KEY;
+    const model = local.MODEL;
     expect(apiKey, 'API_KEY is required for online model smoke').toBeTruthy();
     expect(model, 'MODEL is required for online model smoke').toBeTruthy();
     if (!baseUrl || !apiKey || !model) return;

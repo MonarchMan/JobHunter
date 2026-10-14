@@ -135,10 +135,9 @@ describe('two-stage configuration', () => {
       environment: {
         JOBHUNTER_LOG_LEVEL: 'warn',
         JOBHUNTER_WORKER_POLL_INTERVAL_MS: '2500',
-        JOBHUNTER_MODEL_PROVIDER: 'test-provider',
-        JOBHUNTER_MODEL_BASE_URL: 'https://models.example.test/v1',
-        JOBHUNTER_MODEL_NAME: 'test-model',
-        JOBHUNTER_MODEL_API_KEY: 'secret-value',
+        BASE_URL: 'https://models.example.test/v1',
+        MODEL: 'test-model',
+        API_KEY: 'secret-value',
       },
       file: {
         logLevel: 'error',
@@ -156,7 +155,7 @@ describe('two-stage configuration', () => {
       value: { 'source.sync': 2 },
       source: 'file',
     });
-    expect(config.model.provider).toEqual({ value: 'test-provider', source: 'environment' });
+    expect(config.model.provider).toEqual({ value: 'openai-compatible', source: 'environment' });
     expect(config.model.baseUrl.value).toBe('https://models.example.test/v1');
     expect(config.model.modelName.value).toBe('test-model');
     expect(config.model.apiKey.value?.reveal()).toBe('secret-value');
@@ -192,7 +191,7 @@ describe('two-stage configuration', () => {
     });
   });
 
-  it('accepts personal OpenAI-compatible aliases without exposing the secret', () => {
+  it('uses the unified model variables without exposing the secret', () => {
     const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
     const config = resolveAppConfig({
       bootstrap,
@@ -208,19 +207,35 @@ describe('two-stage configuration', () => {
     expect(JSON.stringify(config.model.apiKey)).not.toContain('local-secret');
   });
 
-  it('infers Anthropic from its local aliases and supplies the official base URL', () => {
+  it.each(['https://api.anthropic.com', 'https://gateway.example.test/anthropic'])(
+    'infers Anthropic from base URL %s',
+    (baseUrl) => {
+      const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
+      const config = resolveAppConfig({
+        bootstrap,
+        environment: {
+          BASE_URL: baseUrl,
+          API_KEY: 'anthropic-secret',
+          MODEL: 'claude-test',
+        },
+      });
+      expect(config.model.provider.value).toBe('anthropic');
+      expect(config.model.baseUrl.value).toBe(baseUrl);
+      expect(config.model.modelName.value).toBe('claude-test');
+      expect(config.model.apiKey.value?.reveal()).toBe('anthropic-secret');
+    },
+  );
+
+  it('defaults the base URL and provider to OpenAI while leaving credentials optional', () => {
     const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
-    const config = resolveAppConfig({
-      bootstrap,
-      environment: {
-        ANTHROPIC_API_KEY: 'anthropic-secret',
-        ANTHROPIC_MODEL: 'claude-test',
-      },
+    const config = resolveAppConfig({ bootstrap, environment: {} });
+    expect(config.model.provider).toEqual({ value: 'openai-compatible', source: 'default' });
+    expect(config.model.baseUrl).toEqual({
+      value: 'https://api.openai.com/v1',
+      source: 'default',
     });
-    expect(config.model.provider.value).toBe('anthropic');
-    expect(config.model.baseUrl.value).toBe('https://api.anthropic.com');
-    expect(config.model.modelName.value).toBe('claude-test');
-    expect(config.model.apiKey.value?.reveal()).toBe('anthropic-secret');
+    expect(config.model.modelName.value).toBeNull();
+    expect(config.model.apiKey.value).toBeNull();
   });
 
   it('rejects bootstrap fields and secrets in the local non-sensitive file', () => {

@@ -15,8 +15,8 @@ it('按系统固定位置发现描述文件，允许显式覆盖，不扫描磁�
   vi.stubEnv('XDG_CONFIG_HOME', '/fixture-config');
   expect(chromePortFile()).toBe('/fixture-config/google-chrome/DevToolsActivePort');
   machine.system = 'win32';
-  vi.stubEnv('LOCALAPPDATA', '/fixture-local');
-  expect(chromePortFile()).toBe('/fixture-local/Google/Chrome/User Data/DevToolsActivePort');
+  vi.stubEnv('LOCALAPPDATA', 'C:\\fixture-local');
+  expect(chromePortFile()).toBe('C:\\fixture-local\\Google\\Chrome\\User Data\\DevToolsActivePort');
   vi.stubEnv('JOBHUNTER_CHROME_PORT_FILE', '/custom/DevToolsActivePort');
   expect(chromePortFile()).toBe('/custom/DevToolsActivePort');
 });
