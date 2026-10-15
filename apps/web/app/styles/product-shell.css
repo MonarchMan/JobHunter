@@ -1,3 +1,4 @@
+/* 原生按钮只提供低优先级基础，交互视觉由显式操作变体或局部组件拥有。 */
 /* 014 UI redesign: clean minimalist product shell and shared interaction states. */
 html {
   min-height: 100%;
@@ -27,7 +28,7 @@ main {
   box-shadow: var(--shadow-sm);
 }
 
-button,
+:where(button),
 .button-primary,
 .button-secondary,
 .button-muted {
@@ -40,28 +41,25 @@ button,
     transform var(--motion-fast) var(--ease-out);
 }
 
-button,
+:where(button),
 .button-primary {
   background: var(--button-primary);
 }
 
-button:hover:not(:disabled),
-.button-primary:hover,
-.button-secondary:hover,
-.button-muted:hover {
+.button-primary:hover:not(:disabled),
+.button-secondary:hover:not(:disabled),
+.button-muted:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
-button:active:not(:disabled),
-.button-primary:active,
-.button-secondary:active,
-.button-muted:active {
+.button-primary:active:not(:disabled),
+.button-secondary:active:not(:disabled),
+.button-muted:active:not(:disabled) {
   box-shadow: none;
   transform: scale(0.98);
 }
 
-.button-primary:hover,
-button:hover:not(:disabled) {
+.button-primary:hover:not(:disabled) {
   background: var(--button-primary-hover);
 }
 
@@ -76,8 +74,8 @@ button:hover:not(:disabled) {
   color: var(--text-secondary);
 }
 
-.button-secondary:hover,
-.button-muted:hover {
+.button-secondary:hover:not(:disabled),
+.button-muted:hover:not(:disabled) {
   border-color: var(--action);
   background: var(--surface-muted);
 }

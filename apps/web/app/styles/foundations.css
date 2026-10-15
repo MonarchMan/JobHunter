@@ -1,3 +1,4 @@
+/* 原生按钮只提供低优先级基础，交互视觉由显式操作变体或局部组件拥有。 */
 * {
   box-sizing: border-box;
 }
@@ -75,7 +76,7 @@ h2 {
   color: var(--muted-ink);
 }
 
-button {
+:where(button) {
   min-height: 2.75rem;
   padding: 0 1.25rem;
   border: 0;
@@ -88,15 +89,13 @@ button {
   letter-spacing: -0.01em;
 }
 
-button:hover:not(:disabled),
-.button-primary:hover,
-.button-secondary:hover {
+.button-primary:hover:not(:disabled),
+.button-secondary:hover:not(:disabled) {
   box-shadow: var(--shadow-md);
 }
 
-button:active:not(:disabled),
-.button-primary:active,
-.button-secondary:active {
+.button-primary:active:not(:disabled),
+.button-secondary:active:not(:disabled) {
   box-shadow: var(--shadow-sm);
 }
 
@@ -142,12 +141,12 @@ textarea {
   text-decoration: none;
 }
 
-.button-secondary:hover {
+.button-secondary:hover:not(:disabled) {
   border-color: var(--primary);
   background: var(--primary-soft);
 }
 
-button,
+:where(button),
 .button-primary,
 .button-secondary,
 .button-muted {
@@ -173,7 +172,7 @@ button,
   text-decoration: none;
 }
 
-.button-primary:hover {
+.button-primary:hover:not(:disabled) {
   background: var(--button-primary-hover);
   box-shadow: var(--shadow-md);
 }

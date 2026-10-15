@@ -14,6 +14,13 @@ test('shows the compact calendar above overview and expands into an accessible d
   if (!calendarBox || !overviewBox) throw new Error('Dashboard calendar layout did not render.');
   expect(calendarBox.y).toBeLessThan(overviewBox.y);
 
+  // 1、缩略日期继承组件反馈，不能被全局按钮悬停染黑或产生位移。
+  const miniDay = calendar.locator('[class*="miniDay"]').nth(10);
+  await miniDay.hover();
+  await expect(miniDay).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(miniDay).toHaveCSS('transform', 'none');
+  await expect(miniDay).toHaveCSS('box-shadow', 'none');
+
   await calendar.getByRole('button', { name: '展开招聘日程' }).click();
   const dialog = page.getByRole('dialog', { name: '招聘日程' });
   await expect(dialog).toBeVisible();
