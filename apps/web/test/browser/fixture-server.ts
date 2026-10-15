@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -634,7 +634,31 @@ async function seedFixture(dataRoot: string): Promise<void> {
 // 1、在创建夹具数据前核验地址，直接启动也不能回退到日常 Web 端口。
 const fixtureAddress = browserFixtureAddress(process.env);
 const dataRoot = await mkdtemp(path.join(os.tmpdir(), 'jobhunter-web-browser-'));
+const fixtureCredentialRef = 'os:jobhunter/mail/browser-fixture-qq';
 await seedFixture(dataRoot);
+await mkdir(path.join(dataRoot, 'mail'), { recursive: true });
+await writeFile(
+  path.join(dataRoot, 'mail', 'mailboxes.json'),
+  `${JSON.stringify(
+    {
+      version: 1,
+      mailboxes: [
+        {
+          mailboxKey: 'browser-fixture-qq',
+          providerKey: 'imap',
+          maskedAddress: 'f***@qq.com',
+          credentialRef: fixtureCredentialRef,
+          folders: ['INBOX'],
+          initialLookbackDays: 90,
+          enabled: true,
+        },
+      ],
+    },
+    null,
+    2,
+  )}\n`,
+  'utf8',
+);
 
 // 浏览器用例使用本地 OpenAI 兼容端点，验证 Web 同步生成链路且不依赖公网模型。
 const modelServer = createServer((request, response) => {

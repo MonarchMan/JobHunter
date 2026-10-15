@@ -48,6 +48,7 @@ import {
   WebSourceService,
   WebDiagnosticsService,
   type AppConfig,
+  MailboxSettingsService,
   loadRuntimeAppConfig,
 } from '@jobhunter/application/web';
 import { AgentRunner, type ModelClient } from '@jobhunter/agent-core';
@@ -83,8 +84,15 @@ import {
 import { firstPartySourceCatalog } from '@jobhunter/sources';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
 import { createConfiguredModelClient } from '@jobhunter/llm';
+import {
+  createMailConnectorRegistry,
+  EncryptedFileCredentialVault,
+  FileMailboxConfigStore,
+  MailRuntimeStateStore,
+} from '@jobhunter/mail-connectors';
 import path from 'node:path';
 import { createRetryableSingleton } from './retryable-singleton.js';
+import { browserFixtureIdentity } from './browser-test-isolation.js';
 
 /** 模块数据结构或契约。 */
 export interface WebApplicationServices {
@@ -109,6 +117,7 @@ export interface WebApplicationServices {
   readonly resumeTemplates: ResumeTemplateService;
   readonly matches: MatchWorkflowService;
   readonly settings: SystemSettingsService;
+  readonly mailboxes: MailboxSettingsService;
   readonly sourceSchedules: SourceScheduleReconciliationService;
   readonly interview: InterviewProjectService;
   readonly experiences: InterviewExperienceService;
@@ -118,6 +127,19 @@ export interface WebApplicationServices {
 /** 模块数据结构或契约。 */
 export interface WebApplicationContainer {
   readonly services: WebApplicationServices;
+  readonly mailOAuth: {
+    readonly gmail: {
+      readonly clientId: string;
+      readonly clientSecret?: string;
+      readonly redirectUri: string;
+    } | null;
+    readonly microsoftGraph: {
+      readonly clientId: string;
+      readonly clientSecret?: string;
+      readonly redirectUri: string;
+      readonly tenant: string;
+    } | null;
+  };
   close(): void;
 }
 
@@ -143,6 +165,28 @@ export function createLocalWebContainer(
       clock,
     });
     settings.applySourceSyncChannelSelection();
+    const mailRegistry = createMailConnectorRegistry(() => {
+      throw new Error('Mailbox credentials are only available inside the Worker.');
+    });
+    const mailboxStore = new FileMailboxConfigStore(config.bootstrap.mailboxConfigPath.value);
+    const mailboxRuntimeState = new MailRuntimeStateStore(config.bootstrap.dataRoot.value);
+    const fixtureIdentity = browserFixtureIdentity(process.env);
+    const encryptedCredentialVault = new EncryptedFileCredentialVault({
+      filePath: config.bootstrap.mailboxCredentialPath.value,
+      keyFilePath: config.bootstrap.mailboxCredentialKeyPath.value,
+      ...(config.mail.credentialMasterKey.value
+        ? { masterKey: config.mail.credentialMasterKey.value.reveal() }
+        : {}),
+    });
+    const credentialVault =
+      fixtureIdentity !== null ? createBrowserFixtureCredentialVault() : encryptedCredentialVault;
+    const mailboxes = new MailboxSettingsService({
+      configs: mailboxStore,
+      credentials: credentialVault,
+      runtimeState: mailboxRuntimeState,
+      metadata: mailRegistry.metadata(),
+      createMailboxKey: () => ids.generate().replaceAll('-', '').slice(0, 16).toLowerCase(),
+    });
     const registry = new HandlerRegistry();
     registry.register(
       createPlatformRetentionTaskHandler({
@@ -360,6 +404,7 @@ export function createLocalWebContainer(
         ids,
       }),
       settings,
+      mailboxes,
       sourceSchedules,
       interview: new InterviewProjectService({
         profiles: profileRepository,
@@ -390,8 +435,33 @@ export function createLocalWebContainer(
         ids,
       }),
     };
+    const gmailClientId = config.mail.gmail.clientId.value;
+    const microsoftClientId = config.mail.microsoftGraph.clientId.value;
     return {
       services,
+      mailOAuth: {
+        gmail:
+          gmailClientId === null
+            ? null
+            : {
+                clientId: gmailClientId,
+                ...(config.mail.gmail.clientSecret.value
+                  ? { clientSecret: config.mail.gmail.clientSecret.value.reveal() }
+                  : {}),
+                redirectUri: `${config.mail.webBaseUrl.value}/api/mailboxes/oauth/gmail/callback`,
+              },
+        microsoftGraph:
+          microsoftClientId === null
+            ? null
+            : {
+                clientId: microsoftClientId,
+                ...(config.mail.microsoftGraph.clientSecret.value
+                  ? { clientSecret: config.mail.microsoftGraph.clientSecret.value.reveal() }
+                  : {}),
+                redirectUri: `${config.mail.webBaseUrl.value}/api/mailboxes/oauth/microsoft-graph/callback`,
+                tenant: config.mail.microsoftGraph.tenant.value,
+              },
+      },
       close: () => {
         database.close();
       },
@@ -414,4 +484,31 @@ const loadSharedContainer = createRetryableSingleton(async () => {
 /** 获取进程级单例 Web 容器，避免每个请求重复打开数据库。 */
 export function getWebContainer(): Promise<WebApplicationContainer> {
   return loadSharedContainer();
+}
+
+/** 浏览器夹具专用内存凭据库，避免端到端测试访问用户的系统凭据。 */
+function createBrowserFixtureCredentialVault(): {
+  put(ref: string, values: Readonly<Record<string, string>>): Promise<void>;
+  get(ref: string): Promise<Readonly<Record<string, string>>>;
+  revoke(ref: string): Promise<void>;
+} {
+  const values = new Map<string, Readonly<Record<string, string>>>([
+    ['os:jobhunter/mail/browser-fixture-qq', { password: 'fixture-authorization-code' }],
+  ]);
+  return {
+    put(ref, credential) {
+      values.set(ref, { ...credential });
+      return Promise.resolve();
+    },
+    get(ref) {
+      const credential = values.get(ref);
+      return credential
+        ? Promise.resolve({ ...credential })
+        : Promise.reject(new Error('Fixture credential is unavailable.'));
+    },
+    revoke(ref) {
+      values.delete(ref);
+      return Promise.resolve();
+    },
+  };
 }

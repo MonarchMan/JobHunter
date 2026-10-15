@@ -1,10 +1,13 @@
 .settingsPanel {
   display: grid;
   gap: 2rem;
+  width: 100%;
+  min-width: 0;
   max-width: 54rem;
 }
 
 .sectionHeading {
+  min-width: 0;
   max-width: 42rem;
 }
 
@@ -159,6 +162,272 @@
 
 .settingsToggle small {
   color: var(--muted-ink);
+}
+
+.mailboxSettings {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  width: min(100%, 46rem);
+}
+
+.mailboxHeading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.mailboxAddMenu {
+  position: relative;
+  flex: 0 0 auto;
+  margin-inline-end: 0.5rem;
+}
+
+.mailboxAddButton {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0;
+}
+
+.mailboxProviderPicker {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: grid;
+  width: min(19rem, calc(100vw - 3rem));
+  gap: 0.2rem;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  box-shadow: 0 0.75rem 2rem rgb(15 23 42 / 16%);
+}
+
+.mailboxProviderOption {
+  display: flex;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  align-items: center;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0.65rem 0.7rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.mailboxProviderPicker .mailboxProviderOption:hover:not(:disabled),
+.mailboxProviderPicker .mailboxProviderOption:focus-visible {
+  outline: 0;
+  border-color: transparent;
+  background: var(--primary-soft);
+  color: var(--ink);
+}
+
+.mailboxProviderOption > span:last-child {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.mailboxProviderOption small {
+  color: var(--muted-ink);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.mailboxProviderIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.25rem;
+  min-height: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.65rem;
+  background: var(--surface);
+  object-fit: contain;
+}
+
+.mailboxList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.mailboxCard {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+}
+
+.mailboxCard > div:first-child {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.mailboxCard strong,
+.mailboxCard p,
+.mailboxCard small {
+  overflow-wrap: anywhere;
+}
+
+.mailboxEditForm {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  flex-basis: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.mailboxEditForm > p,
+.mailboxEditForm > label:last-of-type,
+.mailboxEditForm > div {
+  grid-column: 1 / -1;
+}
+
+.mailboxEditForm label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted-ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.mailboxCard p,
+.mailboxCard small {
+  display: block;
+  margin: 0.25rem 0 0;
+}
+
+.mailboxAction {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0;
+}
+
+.mailboxForm {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface-muted);
+}
+
+.mailboxForm h3 {
+  margin: 0;
+}
+
+.mailboxFormHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.mailboxForm label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted-ink);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.secretInput {
+  position: relative;
+  display: block;
+}
+
+.secretInput input {
+  width: 100%;
+  padding-right: 2.75rem;
+}
+
+.savedCredential {
+  position: relative;
+  display: block;
+  max-width: 20rem;
+  margin-top: 0.35rem;
+}
+
+.savedCredential input {
+  width: 100%;
+  min-width: 0;
+  padding-right: 2.75rem;
+}
+
+.secretToggle {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted-ink);
+  transform: translateY(-50%);
+}
+
+.secretToggle:hover:not(:disabled),
+.secretToggle:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  color: var(--primary);
+  transform: translateY(-50%);
+}
+
+@media (max-width: 560px) {
+  .settingsPanel {
+    padding: 1rem;
+  }
+
+  .mailboxHeading {
+    align-items: flex-start;
+  }
+
+  .mailboxCard {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .mailboxCard > div:first-child {
+    width: 100%;
+  }
+
+  .mailboxCard .inline-actions {
+    width: 100%;
+  }
+
+  .mailboxEditForm {
+    flex: 0 0 auto;
+    flex-basis: auto;
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .savedCredential {
+    max-width: 100%;
+  }
 }
 
 @media (max-width: 720px) {

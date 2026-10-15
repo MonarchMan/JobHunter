@@ -61,3 +61,19 @@ export * from './platform-progress.js';
 export * from './web-platforms.js';
 export * from './platform-retention.js';
 export * from './platform-activity.js';
+export {
+  imapMailboxCreateSchema,
+  oauthMailboxCreateSchema,
+  mailboxSettingsUpdateSchema,
+  MailboxSettingsService,
+  MailboxSettingsError,
+} from './mail/mailbox-settings-service.js';
+export type {
+  ImapMailboxCreateInput,
+  OAuthMailboxCreateInput,
+  MailboxConfigStorePort,
+  MailboxRuntimeStatePort,
+  MailboxSettingsSnapshot,
+  MailboxSettingsUpdate,
+  MailboxSettingsView,
+} from './mail/mailbox-settings-service.js';

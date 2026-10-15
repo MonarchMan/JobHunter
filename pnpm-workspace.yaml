@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - packages/mail/*
 
 allowBuilds:
   better-sqlite3: true

@@ -17,6 +17,7 @@
     { "path": "../../packages/domain" },
     { "path": "../../packages/matching" },
     { "path": "../../packages/resume-template" },
-    { "path": "../../packages/sources" }
+    { "path": "../../packages/sources" },
+    { "path": "../../packages/mail/connectors" }
   ]
 }

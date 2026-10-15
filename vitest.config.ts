@@ -9,6 +9,7 @@ export default defineConfig({
           name: 'unit',
           include: [
             'packages/*/test/**/*.test.ts',
+            'packages/mail/*/test/**/*.test.ts',
             'apps/worker/test/**/*.test.ts',
             'scripts/test/**/*.test.mjs',
           ],

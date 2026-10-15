@@ -1,0 +1,26 @@
+{
+  "name": "@jobhunter/mail-connectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@jobhunter/mail-core": "workspace:*",
+    "imapflow": "^1.0.181",
+    "mailparser": "^3.7.4",
+    "zod": "^4.4.3"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false"
+  }
+}

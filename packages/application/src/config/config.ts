@@ -43,6 +43,9 @@ export class SecretString {
 export interface BootstrapConfig {
   readonly dataRoot: SourcedValue<string>;
   readonly configPath: SourcedValue<string>;
+  readonly mailboxConfigPath: SourcedValue<string>;
+  readonly mailboxCredentialPath: SourcedValue<string>;
+  readonly mailboxCredentialKeyPath: SourcedValue<string>;
 }
 
 /** 应用层数据结构或端口契约。 */
@@ -65,6 +68,19 @@ export interface AppConfig {
     readonly baseUrl: SourcedValue<string>;
     readonly modelName: SourcedValue<string | null>;
     readonly apiKey: SourcedValue<SecretString | null>;
+  };
+  readonly mail: {
+    readonly webBaseUrl: SourcedValue<string>;
+    readonly credentialMasterKey: SourcedValue<SecretString | null>;
+    readonly gmail: {
+      readonly clientId: SourcedValue<string | null>;
+      readonly clientSecret: SourcedValue<SecretString | null>;
+    };
+    readonly microsoftGraph: {
+      readonly clientId: SourcedValue<string | null>;
+      readonly clientSecret: SourcedValue<SecretString | null>;
+      readonly tenant: SourcedValue<string>;
+    };
   };
 }
 
@@ -192,6 +208,16 @@ function inferModelProvider(baseUrl: string): ModelProvider {
   return pathSegments.includes('anthropic') ? 'anthropic' : 'openai-compatible';
 }
 
+/** 校验 Web 对外基址，OAuth 回调只能使用 HTTP(S) 且不包含查询参数或片段。 */
+function normalizeWebBaseUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new TypeError('web base URL must use HTTP or HTTPS.');
+  }
+  if (url.search || url.hash) throw new TypeError('web base URL must not contain query or hash.');
+  return url.toString().replace(/\/$/, '');
+}
+
 /** 解析启动阶段数据目录、配置文件和迁移目录。 */
 export function resolveBootstrapConfig(input: {
   readonly cli?: Pick<ConfigOverrides, 'dataRoot' | 'configPath'>;
@@ -213,9 +239,39 @@ export function resolveBootstrapConfig(input: {
     undefined,
     resolve(dataRoot.value, 'config.json'),
   );
+  const mailboxConfigPathChoice = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_MAILBOX_CONFIG_PATH),
+    undefined,
+    resolve(dataRoot.value, 'mail', 'mailboxes.json'),
+  );
+  const mailboxCredentialPathChoice = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_PATH),
+    undefined,
+    resolve(dataRoot.value, 'mail', 'credentials.enc.json'),
+  );
+  const mailboxCredentialKeyPathChoice = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_KEY_PATH),
+    undefined,
+    resolve(dataRoot.value, 'mail', 'credentials.key'),
+  );
   return {
     dataRoot,
     configPath: { ...configPathChoice, value: resolve(cwd, configPathChoice.value) },
+    mailboxConfigPath: {
+      ...mailboxConfigPathChoice,
+      value: resolve(cwd, mailboxConfigPathChoice.value),
+    },
+    mailboxCredentialPath: {
+      ...mailboxCredentialPathChoice,
+      value: resolve(cwd, mailboxCredentialPathChoice.value),
+    },
+    mailboxCredentialKeyPath: {
+      ...mailboxCredentialKeyPathChoice,
+      value: resolve(cwd, mailboxCredentialKeyPathChoice.value),
+    },
   };
 }
 
@@ -285,6 +341,48 @@ export function resolveAppConfig(input: {
   const requestIntervalMsByProvider = choose<
     Readonly<Partial<Record<PlatformProviderKey, number | undefined>>>
   >(undefined, undefined, file.platforms?.requestIntervalMsByProvider, {});
+  const mailWebBaseUrl = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_WEB_BASE_URL),
+    undefined,
+    'http://127.0.0.1:3210',
+  );
+  const mailboxCredentialMasterKey = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_KEY),
+    undefined,
+    null,
+  );
+  const gmailClientId = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_GMAIL_CLIENT_ID),
+    undefined,
+    null,
+  );
+  const gmailClientSecret = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_GMAIL_CLIENT_SECRET),
+    undefined,
+    null,
+  );
+  const microsoftClientId = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_MICROSOFT_CLIENT_ID),
+    undefined,
+    null,
+  );
+  const microsoftClientSecret = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_MICROSOFT_CLIENT_SECRET),
+    undefined,
+    null,
+  );
+  const microsoftTenant = choose(
+    undefined,
+    nonEmpty(environment.JOBHUNTER_MICROSOFT_TENANT),
+    undefined,
+    'common',
+  );
   return {
     bootstrap: input.bootstrap,
     logLevel: { ...logLevel, value: parsedLogLevel },
@@ -313,6 +411,35 @@ export function resolveAppConfig(input: {
       apiKey: {
         source: modelApiKey.source,
         value: modelApiKey.value === null ? null : new SecretString(modelApiKey.value),
+      },
+    },
+    mail: {
+      webBaseUrl: { ...mailWebBaseUrl, value: normalizeWebBaseUrl(mailWebBaseUrl.value) },
+      credentialMasterKey: {
+        source: mailboxCredentialMasterKey.source,
+        value:
+          mailboxCredentialMasterKey.value === null
+            ? null
+            : new SecretString(mailboxCredentialMasterKey.value),
+      },
+      gmail: {
+        clientId: gmailClientId,
+        clientSecret: {
+          source: gmailClientSecret.source,
+          value:
+            gmailClientSecret.value === null ? null : new SecretString(gmailClientSecret.value),
+        },
+      },
+      microsoftGraph: {
+        clientId: microsoftClientId,
+        clientSecret: {
+          source: microsoftClientSecret.source,
+          value:
+            microsoftClientSecret.value === null
+              ? null
+              : new SecretString(microsoftClientSecret.value),
+        },
+        tenant: microsoftTenant,
       },
     },
   };

@@ -124,7 +124,53 @@ describe('two-stage configuration', () => {
     expect(bootstrap).toEqual({
       dataRoot: { value: resolve('C:/workspace', 'cli-data'), source: 'cli' },
       configPath: { value: resolve('C:/workspace', 'env-config.json'), source: 'environment' },
+      mailboxConfigPath: {
+        value: resolve('C:/workspace', 'cli-data', 'mail', 'mailboxes.json'),
+        source: 'default',
+      },
+      mailboxCredentialPath: {
+        value: resolve('C:/workspace', 'cli-data', 'mail', 'credentials.enc.json'),
+        source: 'default',
+      },
+      mailboxCredentialKeyPath: {
+        value: resolve('C:/workspace', 'cli-data', 'mail', 'credentials.key'),
+        source: 'default',
+      },
     });
+  });
+
+  it('allows the mailbox configuration file to be placed through the workspace environment', () => {
+    const bootstrap = resolveBootstrapConfig({
+      cwd: 'C:/workspace',
+      environment: { JOBHUNTER_MAILBOX_CONFIG_PATH: './private/mailboxes.json' },
+    });
+    expect(bootstrap.mailboxConfigPath).toEqual({
+      value: resolve('C:/workspace', 'private/mailboxes.json'),
+      source: 'environment',
+    });
+  });
+
+  it('configures the encrypted mailbox credential files and redacts an optional master key', () => {
+    const bootstrap = resolveBootstrapConfig({
+      cwd: 'C:/workspace',
+      environment: {
+        JOBHUNTER_MAILBOX_CREDENTIAL_PATH: './private/credentials.enc.json',
+        JOBHUNTER_MAILBOX_CREDENTIAL_KEY_PATH: './private/credentials.key',
+      },
+    });
+    const config = resolveAppConfig({
+      bootstrap,
+      environment: { JOBHUNTER_MAILBOX_CREDENTIAL_KEY: 'credential-master-key' },
+    });
+
+    expect(bootstrap.mailboxCredentialPath.value).toBe(
+      resolve('C:/workspace', 'private/credentials.enc.json'),
+    );
+    expect(bootstrap.mailboxCredentialKeyPath.value).toBe(
+      resolve('C:/workspace', 'private/credentials.key'),
+    );
+    expect(config.mail.credentialMasterKey.value?.reveal()).toBe('credential-master-key');
+    expect(JSON.stringify(config.mail.credentialMasterKey)).not.toContain('credential-master-key');
   });
 
   it('applies CLI then environment then file then default precedence', () => {
@@ -205,6 +251,30 @@ describe('two-stage configuration', () => {
     expect(config.model.baseUrl.value).toBe('https://models.example.test/v1');
     expect(config.model.modelName.value).toBe('test-model');
     expect(JSON.stringify(config.model.apiKey)).not.toContain('local-secret');
+  });
+
+  it('loads OAuth clients only from the environment and redacts their secrets', () => {
+    const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
+    const config = resolveAppConfig({
+      bootstrap,
+      environment: {
+        JOBHUNTER_WEB_BASE_URL: 'http://127.0.0.1:4321/',
+        JOBHUNTER_GMAIL_CLIENT_ID: 'gmail-client',
+        JOBHUNTER_GMAIL_CLIENT_SECRET: 'gmail-secret',
+        JOBHUNTER_MICROSOFT_CLIENT_ID: 'microsoft-client',
+        JOBHUNTER_MICROSOFT_CLIENT_SECRET: 'microsoft-secret',
+        JOBHUNTER_MICROSOFT_TENANT: 'organizations',
+      },
+    });
+
+    expect(config.mail.webBaseUrl.value).toBe('http://127.0.0.1:4321');
+    expect(config.mail.gmail.clientId.value).toBe('gmail-client');
+    expect(config.mail.gmail.clientSecret.value?.reveal()).toBe('gmail-secret');
+    expect(config.mail.microsoftGraph.clientId.value).toBe('microsoft-client');
+    expect(config.mail.microsoftGraph.clientSecret.value?.reveal()).toBe('microsoft-secret');
+    expect(config.mail.microsoftGraph.tenant.value).toBe('organizations');
+    expect(JSON.stringify(config.mail)).not.toContain('gmail-secret');
+    expect(JSON.stringify(config.mail)).not.toContain('microsoft-secret');
   });
 
   it.each(['https://api.anthropic.com', 'https://gateway.example.test/anthropic'])(

@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { getWebContainer } from '../../src/server/container.js';
 import { PageHeader } from '../components/layout/page-header.js';
 import { SettingsForm } from './settings-form.js';
+import { MailboxSettings } from './mailbox-settings.js';
 import styles from './settings.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -25,6 +26,18 @@ export default async function SettingsPage(): Promise<ReactElement> {
           <p className="muted">设置同步范围、自动匹配和职位列表的默认展示方式。</p>
         </div>
         <SettingsForm settings={container.services.settings.get()} />
+      </section>
+      <section
+        className={[styles.settingsPanel, 'panel'].join(' ')}
+        aria-labelledby="mailbox-title"
+      >
+        <MailboxSettings
+          initial={await container.services.mailboxes.snapshot()}
+          oauthAvailability={{
+            gmail: container.mailOAuth.gmail !== null,
+            microsoftGraph: container.mailOAuth.microsoftGraph !== null,
+          }}
+        />
       </section>
     </main>
   );
