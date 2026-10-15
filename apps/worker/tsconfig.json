@@ -10,6 +10,7 @@
     { "path": "../../packages/platform-connectors" },
     { "path": "../../packages/agent-core" },
     { "path": "../../packages/domain" },
+    { "path": "../../packages/mail/connectors" },
     { "path": "../../packages/application" },
     { "path": "../../packages/db" },
     { "path": "../../packages/llm" },

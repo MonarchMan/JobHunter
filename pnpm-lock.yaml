@@ -156,6 +156,9 @@ importers:
       '@jobhunter/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@jobhunter/mail-connectors':
+        specifier: workspace:*
+        version: link:../../packages/mail/connectors
       '@jobhunter/matching':
         specifier: workspace:*
         version: link:../../packages/matching
@@ -225,9 +228,16 @@ importers:
       cron-parser:
         specifier: ^5.4.0
         version: 5.10.0
+      html-to-text:
+        specifier: ^10.0.1
+        version: 10.0.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+    devDependencies:
+      '@types/html-to-text':
+        specifier: ^9.0.4
+        version: 9.0.4
 
   packages/db:
     dependencies:
@@ -1360,6 +1370,9 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
+
+  '@types/html-to-text@9.0.4':
+    resolution: {integrity: sha512-pUY3cKH/Nm2yYrEmDlPR1mR7yszjGx4DrwPjQ702C4/D5CwHuZTgZdIdwPkRbcuhs7BAh2L5rg3CL5cbRiGTCQ==}
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
@@ -3673,6 +3686,8 @@ snapshots:
   '@types/deep-eql@4.0.2': {}
 
   '@types/estree@1.0.9': {}
+
+  '@types/html-to-text@9.0.4': {}
 
   '@types/json-schema@7.0.15': {}
 

@@ -281,6 +281,20 @@
       "when": 1791955200000,
       "tag": "0039_recruitment_mail",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792041600000,
+      "tag": "0040_agent_run_output_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792128000000,
+      "tag": "0041_mail_message_folder",
+      "breakpoints": true
     }
   ]
 }

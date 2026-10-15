@@ -26,6 +26,12 @@ import {
   createSourceJobDetailTaskHandler,
   createSourceSyncTaskHandler,
   createSourceHealthTaskHandler,
+  createMailboxScanTaskHandler,
+  createMailboxSyncTaskHandler,
+  createMailClassifyTaskHandler,
+  MailSyncService,
+  RecruitmentMailClassifier,
+  recruitmentMailPolicyVersion,
   DeterministicMatchingService,
   ExperienceResearchService,
   HandlerRegistry,
@@ -72,6 +78,10 @@ import {
   SqliteSyncRepository,
   SqliteTaskRepository,
   SqliteUnitOfWork,
+  SqliteRecruitmentMailRepository,
+  createRecruitmentMailSyncRepository,
+  createRecruitmentMailProcessingRepository,
+  recruitmentMailMessageRefId,
 } from '@jobhunter/db';
 import {
   parseId,
@@ -107,6 +117,12 @@ import {
 import { ConfiguredModelResearchExecutor } from './configured-model-research-executor.js';
 import { PlaywrightResumePdfRenderer } from './resume-pdf-renderer.js';
 import { createSqliteMaintenanceTick } from './sqlite-maintenance.js';
+import {
+  createMailConnectorRegistry,
+  EncryptedFileCredentialVault,
+  FileMailboxConfigStore,
+  MailRuntimeStateStore,
+} from '@jobhunter/mail-connectors';
 
 export {
   createPlaywrightSourcePageClient,
@@ -296,6 +312,15 @@ export function createProductionWorkerApplication(input: {
     readonly baseUrl: string;
     readonly apiKey: string;
     readonly model: string;
+  };
+  /** 邮箱运行时配置；缺省时仍注册空闲邮件任务，便于测试和无邮箱部署。 */
+  readonly mail?: {
+    readonly modelMode?: 'off' | 'configured';
+    readonly mailboxConfigPath: string;
+    readonly credentialPath: string;
+    readonly credentialKeyPath: string;
+    readonly credentialMasterKey?: string;
+    readonly defaultTimezone?: string;
   };
   readonly pageClient?: SourcePageClient;
 }): WorkerApplication {
@@ -610,6 +635,82 @@ export function createProductionWorkerApplication(input: {
   );
   const queue = new SqliteTaskRepository(database.client);
   interviewTasks = new TaskService({ queue, clock, ids }, registry);
+  if (input.mail) {
+    // 1、读取非敏感配置；2、使用加密文件凭据和独立运行状态；3、先登记引用再发布分类任务。
+    const mailboxConfigs = new FileMailboxConfigStore(input.mail.mailboxConfigPath);
+    const mailboxRuntimeState = new MailRuntimeStateStore(input.dataRoot);
+    const credentialVault = new EncryptedFileCredentialVault({
+      filePath: input.mail.credentialPath,
+      keyFilePath: input.mail.credentialKeyPath,
+      ...(input.mail.credentialMasterKey ? { masterKey: input.mail.credentialMasterKey } : {}),
+    });
+    const connectorRegistry = createMailConnectorRegistry((ref) => credentialVault.get(ref));
+    const recruitmentRepository = new SqliteRecruitmentMailRepository(database.client);
+    const syncRepository = createRecruitmentMailSyncRepository({
+      repository: recruitmentRepository,
+      now: () => Date.now(),
+      enqueueClassification: (refs) => {
+        for (const reference of refs) {
+          const messageRefId = recruitmentMailMessageRefId(
+            reference.mailboxKey,
+            reference.externalMessageKey,
+          );
+          interviewTasks.enqueue({
+            taskType: 'mail.classify@v1',
+            payload: { messageRefId },
+            idempotencyKey: `mail.classify:${messageRefId}:${reference.contentVersion}:${recruitmentMailPolicyVersion}`,
+          });
+        }
+        return Promise.resolve();
+      },
+    });
+    const mailSync = new MailSyncService(syncRepository, mailboxRuntimeState);
+    const classifier = new RecruitmentMailClassifier({
+      // 邮件提取包含结构化修复，单独设置请求时限并复用全局网络并发额度。
+      runner:
+        input.model && input.mail.modelMode === 'configured'
+          ? new AgentRunner({
+              store: new SqliteAgentRunStore(database.client),
+              model: limitModel(
+                createConfiguredModelClient({ ...input.model, timeoutMs: 120_000 }),
+                networkSemaphore,
+              ),
+              createId: () => ids.generate(),
+              now: () => clock.now(),
+            })
+          : null,
+      defaultTimezone: input.mail.defaultTimezone ?? 'Asia/Shanghai',
+    });
+    registry.register(
+      createMailboxScanTaskHandler({
+        configs: mailboxConfigs,
+        enqueue: (mailbox) => {
+          interviewTasks.enqueue({
+            taskType: 'mailbox.sync@v1',
+            payload: { mailboxKey: mailbox.mailboxKey },
+            // 每个扫描时间窗允许再次同步；邮箱级并发键仍阻止重叠执行。
+            idempotencyKey: `mailbox.sync:${mailbox.mailboxKey}:${String(Math.floor(clock.now() / 300_000))}`,
+          });
+        },
+      }),
+    );
+    registry.register(
+      createMailboxSyncTaskHandler({
+        configs: mailboxConfigs,
+        connectorFor: (config) => connectorRegistry.get(config.providerKey),
+        service: mailSync,
+      }),
+    );
+    registry.register(
+      createMailClassifyTaskHandler({
+        configs: mailboxConfigs,
+        connectorFor: (config) => connectorRegistry.get(config.providerKey),
+        classifier,
+        repository: createRecruitmentMailProcessingRepository(recruitmentRepository),
+        createId: () => ids.generate(),
+      }),
+    );
+  }
   const scheduleService = new ScheduleService({ queue, clock, ids }, registry);
   scheduleService.upsert({
     id: ids.generate(),
@@ -627,6 +728,16 @@ export function createProductionWorkerApplication(input: {
     cronExpression: '15 * * * *',
     timezone: 'Asia/Shanghai',
   });
+  if (input.mail) {
+    scheduleService.upsert({
+      id: ids.generate(),
+      scheduleKey: 'mailbox-scan-every-five-minutes',
+      taskType: 'mailbox.scan@v1',
+      payload: {},
+      cronExpression: '*/5 * * * *',
+      timezone: 'Asia/Shanghai',
+    });
+  }
   settings.applySourceSyncChannelSelection();
   new SourceScheduleReconciliationService({
     sources: new SqliteSourceManagementRepository(database.client),

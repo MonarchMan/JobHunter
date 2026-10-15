@@ -20,6 +20,7 @@
     "@jobhunter/db": "workspace:*",
     "@jobhunter/domain": "workspace:*",
     "@jobhunter/llm": "workspace:*",
+    "@jobhunter/mail-connectors": "workspace:*",
     "@jobhunter/matching": "workspace:*",
     "@jobhunter/observability": "workspace:*",
     "@jobhunter/resume": "workspace:*",

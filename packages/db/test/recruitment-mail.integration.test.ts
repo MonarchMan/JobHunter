@@ -23,6 +23,7 @@ describe('recruitment mail persistence', () => {
         mailboxKey: 'personal',
         providerKey: 'imap',
         externalMessageKey: 'INBOX:1:2',
+        folderId: 'INBOX',
         threadKeyHash: null,
         sourceUrl: null,
         receivedAt: 100,

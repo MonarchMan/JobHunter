@@ -18,6 +18,7 @@ interface AgentRunRow {
   readonly cache_key: string;
   readonly status: string;
   readonly output_json: string | null;
+  readonly output_hash: string | null;
   readonly error_category: string | null;
   readonly error_summary: string | null;
   readonly input_tokens: number | null;
@@ -30,7 +31,7 @@ interface AgentRunRow {
 }
 
 const columns = `id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
-                 cache_key, status, output_json, error_category, error_summary, input_tokens,
+                 cache_key, status, output_json, output_hash, error_category, error_summary, input_tokens,
                  output_tokens, estimated_cost_micros, cost_currency, pricing_version,
                  started_at, finished_at`;
 
@@ -67,6 +68,7 @@ function toRecord(row: AgentRunRow): AgentRunRecord {
     cacheKey: row.cache_key,
     status: row.status,
     output: parseJson(row.output_json),
+    outputHash: row.output_hash,
     errorCategory: row.error_category,
     errorSummary: row.error_summary,
     inputTokens: row.input_tokens,
@@ -154,12 +156,13 @@ export class SqliteAgentRunStore implements AgentRunStore {
       const changed = this.#client
         .prepare(
           `UPDATE agent_runs
-           SET status = 'succeeded', output_json = ?, input_tokens = ?, output_tokens = ?,
+           SET status = 'succeeded', output_json = ?, output_hash = ?, input_tokens = ?, output_tokens = ?,
                estimated_cost_micros = ?, cost_currency = ?, pricing_version = ?, finished_at = ?
            WHERE id = ? AND status = 'running'`,
         )
         .run(
-          JSON.stringify(input.output),
+          input.output === null ? null : JSON.stringify(input.output),
+          input.outputHash,
           input.usage.inputTokens,
           input.usage.outputTokens,
           input.usage.estimatedCostMicros,

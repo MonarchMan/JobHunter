@@ -42,6 +42,7 @@ function running(id: string, cacheKey = 'cache-key'): AgentRunRecord {
     cacheKey,
     status: 'running',
     output: null,
+    outputHash: null,
     errorCategory: null,
     errorSummary: null,
     inputTokens: null,
@@ -70,6 +71,7 @@ describe('SQLite agent run store', () => {
       id: 'invalid',
       cacheKey: 'cache-key',
       output: { bad: true },
+      outputHash: 'c'.repeat(64),
       usage,
       finishedAt: 2,
     });
@@ -86,6 +88,7 @@ describe('SQLite agent run store', () => {
         id: 'valid',
         cacheKey: 'cache-key',
         output: { valid: true },
+        outputHash: 'd'.repeat(64),
         usage,
         finishedAt: 3,
       }).kind,
@@ -109,6 +112,7 @@ describe('SQLite agent run store', () => {
       id: 'run-success',
       cacheKey: 'cache-key',
       output: { skills: ['TypeScript'] },
+      outputHash: 'e'.repeat(64),
       usage,
       finishedAt: 3,
     });
@@ -125,6 +129,7 @@ describe('SQLite agent run store', () => {
       id: 'run-one',
       cacheKey: 'cache-key',
       output: { winner: 1 },
+      outputHash: 'f'.repeat(64),
       usage,
       finishedAt: 2,
     });
@@ -132,6 +137,7 @@ describe('SQLite agent run store', () => {
       id: 'run-two',
       cacheKey: 'cache-key',
       output: { winner: 2 },
+      outputHash: '0'.repeat(64),
       usage,
       finishedAt: 3,
     });

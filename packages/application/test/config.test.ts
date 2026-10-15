@@ -10,6 +10,24 @@ import {
 } from '../src/index.js';
 
 describe('two-stage configuration', () => {
+  it('requires explicit mail model consent and lets environment override the local file', () => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    expect(resolveAppConfig({ bootstrap, environment: {} }).mail.classification.modelMode).toEqual({
+      value: 'off',
+      source: 'default',
+    });
+    const file = { mail: { classification: { modelMode: 'configured' } } };
+    expect(
+      resolveAppConfig({ bootstrap, environment: {}, file }).mail.classification.modelMode,
+    ).toEqual({ value: 'configured', source: 'file' });
+    expect(
+      resolveAppConfig({ bootstrap, environment: { JOBHUNTER_MAIL_MODEL_MODE: 'off' }, file }).mail
+        .classification.modelMode,
+    ).toEqual({ value: 'off', source: 'environment' });
+    expect(() =>
+      resolveAppConfig({ bootstrap, environment: { JOBHUNTER_MAIL_MODEL_MODE: 'invalid' } }),
+    ).toThrow();
+  });
   it('平台统一间隔默认零，保留显式零覆盖及配置优先级', () => {
     const bootstrap = resolveBootstrapConfig({ environment: {} });
     expect(resolveAppConfig({ bootstrap, environment: {} }).platforms.requestIntervalMs).toEqual({
