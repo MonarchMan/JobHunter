@@ -5,6 +5,13 @@ import { DashboardHighlightJobs } from './_dashboard/dashboard-highlight-jobs.js
 import { DashboardSteps } from './_dashboard/dashboard-steps.js';
 import { DashboardResources } from './_dashboard/dashboard-resources.js';
 import { MetricCard } from './_dashboard/metric-card.js';
+import { DashboardCalendar } from './_dashboard/dashboard-calendar.js';
+import {
+  addDays,
+  calendarGrid,
+  dateInTimezone,
+  monthStart,
+} from './_dashboard/dashboard-calendar-date.js';
 import { labelStatus, syncRunStatusLabels } from './components/status-labels.js';
 import { getWebContainer } from '../src/server/container.js';
 import panelStyles from './dashboard-panel.module.css';
@@ -17,12 +24,29 @@ export default async function DashboardPage(): Promise<ReactElement> {
   const dashboard = container.services.dashboard.get();
   const hasSources = dashboard.sources.total > 0;
   const hasJobs = dashboard.activeJobs > 0;
+  const calendarTimezone = 'Asia/Shanghai';
+  const today = dateInTimezone(Date.now(), calendarTimezone);
+  const initialMonth = monthStart(today);
+  const calendarStart = calendarGrid(initialMonth).dateFrom;
+  const calendarEnd = addDays(today, 90);
+  const calendar = container.services.calendar.list({
+    dateFrom: calendarStart,
+    dateTo: calendarEnd,
+    timezone: calendarTimezone,
+  });
 
   return (
     <main id="main-content" className={styles.page} tabIndex={-1}>
       <DashboardHero />
 
       {dashboard.nextAction ? <DashboardNextAction action={dashboard.nextAction} /> : null}
+
+      <DashboardCalendar
+        initialItems={calendar.items}
+        initialMonth={initialMonth}
+        today={today}
+        timezone={calendarTimezone}
+      />
 
       <section className={styles.overview} aria-labelledby="snapshot-title">
         <div className="section-heading">

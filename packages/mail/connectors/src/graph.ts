@@ -83,7 +83,7 @@ export class MicrosoftGraphConnector implements MailboxConnector {
       let url =
         cursor?.deltaLink ??
         cursor?.nextLink ??
-        `${this.#baseUrl}/mailFolders/${encodeURIComponent(folderId)}/messages/delta?$select=id,changeKey,receivedDateTime,subject,conversationId,parentFolderId,webLink,from&$top=${String(Math.min(request.pageSize ?? 100, 500))}`;
+        initialDeltaUrl(this.#baseUrl, folderId, request.lookbackDays, request.pageSize);
       do {
         let page: GraphPage<GraphMessage>;
         try {
@@ -187,6 +187,25 @@ export class MicrosoftGraphConnector implements MailboxConnector {
       timeoutMs: context.timeoutMs ?? 30_000,
     };
   }
+}
+
+/** Graph 初始 delta 使用接收时间过滤，避免为建立游标而遍历完整邮箱历史。 */
+function initialDeltaUrl(
+  baseUrl: string,
+  folderId: string,
+  lookbackDays: number,
+  pageSize: number | undefined,
+): string {
+  const url = new URL(`${baseUrl}/mailFolders/${encodeURIComponent(folderId)}/messages/delta`);
+  const boundedDays = Math.min(Math.max(lookbackDays, 1), 365);
+  const receivedAfter = new Date(Date.now() - boundedDays * 86_400_000).toISOString();
+  url.searchParams.set(
+    '$select',
+    'id,changeKey,receivedDateTime,subject,conversationId,parentFolderId,webLink,from',
+  );
+  url.searchParams.set('$top', String(Math.min(pageSize ?? 100, 500)));
+  url.searchParams.set('$filter', `receivedDateTime ge ${receivedAfter}`);
+  return url.toString();
 }
 
 function graphFolderCursors(

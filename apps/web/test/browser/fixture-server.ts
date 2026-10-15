@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { makeCandidateProfile, FakeModel } from '@jobhunter/testkit';
-import { openSqliteDatabase } from '@jobhunter/db';
+import { openSqliteDatabase, SqliteRecruitmentMailRepository } from '@jobhunter/db';
 import { seedPlatformJobs } from '../fixtures/platform-jobs.js';
 import { browserFixtureAddress } from '../../src/server/browser-test-isolation.js';
 import { calculateDeterministicMatch, matchRulesetV2 } from '@jobhunter/matching';
@@ -15,6 +15,7 @@ import {
   contentHash,
   drillCoverageDimensions,
   parseNormalizedJob,
+  utcInstant,
   type CandidateProfileData,
   type NormalizedJob,
 } from '@jobhunter/domain';
@@ -49,6 +50,9 @@ const ids = {
   task: '018f0000-0000-7000-8000-000000000701',
   agentRun: '018f0000-0000-7000-8000-000000000801',
   toolCall: '018f0000-0000-7000-8000-000000000802',
+  calendarMail: '018f0000-0000-7000-8000-000000000811',
+  calendarApplication: '018f0000-0000-7000-8000-000000000812',
+  calendarEvent: '018f0000-0000-7000-8000-000000000813',
 } as const;
 
 const campusJobs = [
@@ -283,6 +287,64 @@ async function seedFixture(dataRoot: string): Promise<void> {
           '{"discovered":3,"created":3}', 1, 2)`,
       )
       .run(ids.syncRun, ids.source);
+
+    // 工作台日历夹具使用相对当前时间，确保任意测试日期都能看到近期安排。
+    const calendarRepository = new SqliteRecruitmentMailRepository(database.client);
+    const calendarStart = utcInstant(Date.now() + 24 * 60 * 60 * 1000);
+    calendarRepository.upsertMessageRef({
+      id: ids.calendarMail,
+      mailboxKey: 'browser-fixture',
+      providerKey: 'imap',
+      externalMessageKey: 'calendar-interview',
+      folderId: 'INBOX',
+      threadKeyHash: null,
+      sourceUrl: null,
+      receivedAt: Date.now(),
+      contentVersion: 'calendar-v1',
+      contentHash: '7'.repeat(64),
+      processingStatus: 'accepted',
+      lastClassifierKind: 'agent',
+      lastClassifierVersion: 'fixture-v1',
+      lastSeenAt: Date.now(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    calendarRepository.appendAcceptedApplicationEvent({
+      applicationId: ids.calendarApplication,
+      companyName: '未来科技',
+      roleTitle: 'AI 应用工程师',
+      mailMessageRefId: ids.calendarMail,
+      sourceContentHash: '7'.repeat(64),
+      sourceEventNo: 1,
+      acceptanceKind: 'automatic',
+      classifierKind: 'agent',
+      classifierVersion: 'fixture-v1',
+      eventType: 'interview_invited',
+      effectiveAt: Date.now(),
+      receivedAt: Date.now(),
+      confidence: 0.98,
+      schedule: {
+        activityType: 'interview',
+        scheduledStartAt: calendarStart,
+        scheduledEndAt: null,
+        deadlineAt: null,
+        scheduledStartLocalDate: null,
+        scheduledEndLocalDate: null,
+        deadlineLocalDate: null,
+        previousScheduledStartAt: null,
+        previousScheduledStartLocalDate: null,
+        timePrecision: 'exact_time',
+        timezoneSource: 'explicit',
+        timezoneText: 'Asia/Shanghai',
+        stageLabel: '技术一面',
+      },
+      location: '腾讯会议',
+      meetingUrl: 'https://meeting.example.com/fixture',
+      actionUrl: null,
+      payloadJson: JSON.stringify({ fixture: true }),
+      eventId: ids.calendarEvent,
+      now: Date.now(),
+    });
 
     const [activeJob, staleJob, closedJob] = adapter.jobs.map((job) => adapter.normalize(job));
     if (!activeJob || !staleJob || !closedJob)

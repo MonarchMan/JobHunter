@@ -18,6 +18,10 @@ export type IconName =
   | 'sparkles'
   | 'chevronDown'
   | 'chevronUp'
+  | 'chevronLeft'
+  | 'chevronRight'
+  | 'expand'
+  | 'close'
   | 'check'
   | 'plus'
   | 'pause'
@@ -119,6 +123,15 @@ const paths: Readonly<Record<IconName, ReactElement>> = {
   ),
   chevronDown: <path d="m6 9 6 6 6-6" />,
   chevronUp: <path d="m6 15 6-6 6 6" />,
+  chevronLeft: <path d="m15 18-6-6 6-6" />,
+  chevronRight: <path d="m9 18 6-6-6-6" />,
+  expand: (
+    <>
+      <path d="M8 3H3v5M16 3h5v5M8 21H3v-5M21 16v5h-5" />
+      <path d="M3 8l5-5m8 0 5 5M3 16l5 5m8 0 5-5" />
+    </>
+  ),
+  close: <path d="M6 6l12 12M18 6 6 18" />,
   check: <path d="m5 12 4 4L19 6" />,
   plus: <path d="M12 5v14M5 12h14" />,
   pause: (

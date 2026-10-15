@@ -99,18 +99,38 @@ export class ImapConnector implements MailboxConnector {
         const lastUid = state?.lastUid ?? 0;
         const start = Math.max(lastUid + 1, 1);
         const refs: ExternalMailMessageRef[] = [];
-        if (mailbox.exists > 0 && start < mailbox.uidNext) {
+        const boundedDays = Math.min(Math.max(request.lookbackDays, 1), 365);
+        const receivedAfter = Date.now() - boundedDays * 86_400_000;
+        // 1、已有游标时只读新增 UID；2、首次或重建时由服务器按日期搜索，禁止从 UID 1 扫完整邮箱。
+        let range: string | number[];
+        if (state) {
+          range = start < mailbox.uidNext ? `${String(start)}:*` : [];
+        } else {
+          const initialUids = await client.search(
+            { since: new Date(receivedAfter) },
+            { uid: true },
+          );
+          range = initialUids === false ? [] : initialUids;
+        }
+        if (mailbox.exists > 0 && (typeof range === 'string' || range.length > 0)) {
           for await (const item of client.fetch(
-            `${String(start)}:*`,
+            range,
             { uid: true, envelope: true, internalDate: true, flags: true },
             { uid: true },
           ))
-            refs.push(this.#ref(context, folder, uidValidity, item));
+            if (state || new Date(item.internalDate ?? Date.now()).valueOf() >= receivedAfter) {
+              refs.push(this.#ref(context, folder, uidValidity, item));
+            }
         }
         const discoveredLastUid = refs.at(-1)?.externalMessageKey.split(':').at(-1);
         nextFolders[folder] = {
           uidValidity,
-          lastUid: discoveredLastUid ? Number(discoveredLastUid) : lastUid,
+          // 初始扫描完成后直接锚定打开邮箱时的末尾，下一轮只读取此后到达的 UID。
+          lastUid: state
+            ? discoveredLastUid
+              ? Number(discoveredLastUid)
+              : lastUid
+            : Math.max(mailbox.uidNext - 1, 0),
           ...(mailbox.highestModseq ? { highestModSeq: String(mailbox.highestModseq) } : {}),
         };
         yield {

@@ -31,7 +31,7 @@ export const mailboxConfigSchema = z.object({
   maskedAddress: z.string().min(1).max(320),
   credentialRef: z.string().min(1).max(512),
   folders: z.array(z.string().min(1).max(512)).min(1),
-  initialLookbackDays: z.number().int().min(1).max(365).default(90),
+  initialLookbackDays: z.number().int().min(1).max(365).default(30),
   enabled: z.boolean().default(true),
 });
 export type MailboxConfig = z.infer<typeof mailboxConfigSchema>;
@@ -58,7 +58,7 @@ export type MailboxConfigDocument = z.infer<typeof mailboxConfigDocumentSchema>;
 export const mailboxRuntimeStateSchema = z.object({
   generation: z.number().int().nonnegative(),
   connectorVersion: z.string().min(1),
-  cursor: z.unknown().nullable(),
+  cursor: z.unknown(),
   lastSuccessAt: z.number().int().nonnegative().nullable(),
   lastFailureAt: z.number().int().nonnegative().nullable(),
   lastErrorCategory: z.string().nullable(),
@@ -84,7 +84,7 @@ export const externalMailMessageRefSchema = z.object({
   threadKey: z.string().nullable(),
   receivedAt: z.number().int().nonnegative(),
   contentVersion: z.string().min(1),
-  sourceUrl: z.string().url().nullable(),
+  sourceUrl: z.url().nullable(),
   changeKind: z.enum(['added', 'updated', 'removed']).default('added'),
 });
 export type ExternalMailMessageRef = z.infer<typeof externalMailMessageRefSchema>;
@@ -103,7 +103,7 @@ export type ExternalMailMessage = z.infer<typeof externalMailMessageSchema>;
 /** 单页增量结果。nextCursor 为不透明连接器游标。 */
 export interface MailChangePage {
   readonly messages: readonly ExternalMailMessageRef[];
-  readonly nextCursor: unknown | null;
+  readonly nextCursor: unknown;
   readonly hasMore: boolean;
 }
 
@@ -111,7 +111,7 @@ export interface MailChangePage {
 export interface MailChangeRequest {
   readonly mailboxKey: string;
   readonly folders: readonly string[];
-  readonly cursor: unknown | null;
+  readonly cursor: unknown;
   readonly lookbackDays: number;
   readonly pageSize?: number;
   readonly signal?: AbortSignal;

@@ -44,7 +44,7 @@ export async function GET(
       scope: tokens.scope,
       tokenType: tokens.tokenType,
       folders: [provider === 'gmail' ? 'INBOX' : 'inbox'],
-      initialLookbackDays: 90,
+      initialLookbackDays: 30,
     });
     return redirectToSettings(requestUrl, secure, 'mailboxConnected', provider);
   } catch (error) {

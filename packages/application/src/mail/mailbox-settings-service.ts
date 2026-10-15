@@ -22,7 +22,7 @@ export const imapMailboxCreateSchema = z
     port: z.coerce.number().int().min(1).max(65_535).default(993),
     tls: z.enum(['ssl', 'starttls']).default('ssl'),
     folders: z.array(z.string().trim().min(1).max(512)).min(1).max(20).default(['INBOX']),
-    initialLookbackDays: z.number().int().min(1).max(365).default(90),
+    initialLookbackDays: z.number().int().min(1).max(365).default(30),
   })
   .superRefine((input, context) => {
     if (input.preset === 'custom' && !input.host) {
@@ -46,7 +46,7 @@ export const oauthMailboxCreateSchema = z
     scope: z.string().max(4096),
     tokenType: z.string().min(1).max(128),
     folders: z.array(z.string().trim().min(1).max(512)).min(1).max(20),
-    initialLookbackDays: z.number().int().min(1).max(365).default(90),
+    initialLookbackDays: z.number().int().min(1).max(365).default(30),
   })
   .strict();
 export type OAuthMailboxCreateInput = z.infer<typeof oauthMailboxCreateSchema>;

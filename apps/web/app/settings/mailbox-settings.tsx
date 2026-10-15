@@ -39,11 +39,11 @@ export function MailboxSettings({
   const [host, setHost] = useState('');
   const [port, setPort] = useState('993');
   const [folders, setFolders] = useState('INBOX');
-  const [lookback, setLookback] = useState('90');
+  const [lookback, setLookback] = useState('30');
   const [busy, setBusy] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editFolders, setEditFolders] = useState('INBOX');
-  const [editLookback, setEditLookback] = useState('90');
+  const [editLookback, setEditLookback] = useState('30');
   const [editPassword, setEditPassword] = useState('');
   const [showEditPassword, setShowEditPassword] = useState(false);
   const [savedPassword, setSavedPassword] = useState<string | null>(null);
