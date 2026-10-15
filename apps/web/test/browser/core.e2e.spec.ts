@@ -10,6 +10,92 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(page.getByLabel('执行时间')).toBeVisible();
     await expect(page.getByRole('combobox', { name: '默认职位排序' })).toBeVisible();
     await expect(page.getByText('记住筛选条件', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('QQ 邮箱授权码')).toBeHidden();
+    await page.getByRole('button', { name: '添加邮箱连接' }).click();
+    const providers = page.getByRole('menu', { name: '选择邮箱类型' });
+    await expect(providers.getByRole('menuitem', { name: /Gmail/ })).toBeVisible();
+    await expect(providers.getByRole('menuitem', { name: /Microsoft 365/ })).toBeVisible();
+    await expect(providers.getByRole('menuitem', { name: /IMAP 邮箱/ })).toBeVisible();
+    await providers.getByRole('menuitem', { name: /Gmail/ }).click();
+    await expect(page.getByRole('heading', { name: '添加 Gmail' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '使用 Google 账号连接' })).toBeDisabled();
+    await page.getByRole('button', { name: '取消' }).click();
+    await page.getByRole('button', { name: '添加邮箱连接' }).click();
+    await page
+      .getByRole('menu', { name: '选择邮箱类型' })
+      .getByRole('menuitem', { name: /IMAP 邮箱/ })
+      .click();
+    const credential = page.getByLabel('QQ 邮箱授权码');
+    await credential.fill('fixture-authorization-code');
+    await expect(credential).toHaveAttribute('type', 'password');
+    const showCredential = page.getByRole('button', { name: '显示授权码' });
+    await showCredential.hover();
+    await expect
+      .poll(() => showCredential.evaluate((element) => getComputedStyle(element).backgroundColor))
+      .toBe('rgba(0, 0, 0, 0)');
+    await showCredential.click();
+    await expect(credential).toHaveAttribute('type', 'text');
+    await expect(credential).toHaveValue('fixture-authorization-code');
+    await page.getByRole('button', { name: '隐藏授权码' }).click();
+    await expect(credential).toHaveAttribute('type', 'password');
+    const mailbox = page.getByRole('article').filter({ hasText: 'f***@qq.com' });
+    await expect(mailbox.getByText('授权码：已保存')).toBeVisible();
+    const savedCredential = mailbox.getByLabel('已保存授权码 f***@qq.com');
+    await expect(savedCredential).toHaveAttribute('type', 'password');
+    await expect(savedCredential).toHaveValue('••••••••');
+    await mailbox.getByRole('button', { name: '显示已保存授权码' }).click();
+    await expect(savedCredential).toHaveAttribute('type', 'text');
+    await expect(savedCredential).toHaveValue('fixture-authorization-code');
+    await mailbox.getByRole('button', { name: '隐藏已保存授权码' }).click();
+    await expect(savedCredential).toHaveAttribute('type', 'password');
+    await expect(mailbox.getByRole('button', { name: '暂停邮箱同步 f***@qq.com' })).toBeVisible();
+    await expect(mailbox.getByRole('button', { name: '删除邮箱连接 f***@qq.com' })).toBeVisible();
+    await mailbox.getByRole('button', { name: '编辑邮箱连接 f***@qq.com' }).click();
+    await expect(mailbox.getByLabel('文件夹（逗号分隔）')).toHaveValue('INBOX');
+    await expect(mailbox.getByLabel('初次回溯天数')).toHaveValue('90');
+    const replacement = mailbox.getByLabel('新授权码（不修改请留空）');
+    await expect(replacement).toHaveValue('');
+    await replacement.fill('replacement-code');
+    await mailbox.getByRole('button', { name: '显示新授权码' }).click();
+    await expect(replacement).toHaveAttribute('type', 'text');
+    await mailbox.getByRole('button', { name: '取消' }).click();
+    await expect(mailbox.getByRole('button', { name: '编辑邮箱连接 f***@qq.com' })).toBeVisible();
+  });
+
+  test('keeps the mailbox settings panel within a narrow viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/settings');
+
+    const panel = page.getByRole('region', { name: '邮箱连接' });
+    const heading = panel.getByRole('heading', { name: '邮箱连接' });
+    const addButton = panel.getByRole('button', { name: '添加邮箱连接' });
+    const panelBox = await panel.boundingBox();
+    const headingBox = await heading.boundingBox();
+    const addButtonBox = await addButton.boundingBox();
+    if (!panelBox || !headingBox || !addButtonBox) throw new Error('Mailbox panel did not render.');
+    expect(panelBox.x).toBeGreaterThanOrEqual(0);
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(390);
+    expect(headingBox.x + headingBox.width).toBeLessThanOrEqual(390);
+    expect(addButtonBox.x + addButtonBox.width).toBeLessThanOrEqual(390);
+    expect(
+      panelBox.x + panelBox.width - (addButtonBox.x + addButtonBox.width),
+    ).toBeGreaterThanOrEqual(8);
+
+    await addButton.click();
+    const menu = panel.getByRole('menu', { name: '选择邮箱类型' });
+    const menuBox = await menu.boundingBox();
+    if (!menuBox) throw new Error('Mailbox provider menu did not render.');
+    expect(menuBox.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox.x + menuBox.width).toBeLessThanOrEqual(390);
+
+    const mailbox = panel.getByRole('article').filter({ hasText: 'f***@qq.com' });
+    await mailbox.getByRole('button', { name: '编辑邮箱连接 f***@qq.com' }).click();
+    await expect(mailbox.getByLabel('文件夹（逗号分隔）')).toBeVisible();
+    const foldersBox = await mailbox.getByLabel('文件夹（逗号分隔）').boundingBox();
+    const lookbackBox = await mailbox.getByLabel('初次回溯天数').last().boundingBox();
+    if (!foldersBox || !lookbackBox) throw new Error('Mailbox edit form did not render.');
+    expect(foldersBox.x + foldersBox.width).toBeLessThanOrEqual(390);
+    expect(lookbackBox.x + lookbackBox.width).toBeLessThanOrEqual(390);
   });
 
   test('renders the JobHunter mark in navigation and the dashboard hero', async ({ page }) => {

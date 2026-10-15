@@ -31,6 +31,7 @@ export * from './repositories/resume-draft-repository.js';
 export * from './repositories/sync-repository.js';
 export * from './repositories/source-management-repository.js';
 export * from './repositories/task-repository.js';
+export * from './repositories/recruitment-mail-repository.js';
 export * from './schema/index.js';
 export * from './seeding/source-catalog.js';
 export * from './settings.js';

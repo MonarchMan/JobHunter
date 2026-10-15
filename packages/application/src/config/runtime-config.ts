@@ -36,7 +36,7 @@ export async function loadRuntimeAppConfig(input: RuntimeAppConfigInput): Promis
     ...(input.environment ?? process.env),
   };
 
-  // 2、先解析数据与配置文件路径，再读取仅包含非敏感项的本地 JSON 配置。
+  // 2、先解析数据、普通配置和邮箱配置文件路径，再读取仅包含非敏感项的本地 JSON 配置。
   const bootstrap = resolveBootstrapConfig({
     cwd: workspaceRoot,
     environment,

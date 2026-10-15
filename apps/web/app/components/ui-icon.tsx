@@ -20,9 +20,14 @@ export type IconName =
   | 'chevronUp'
   | 'check'
   | 'plus'
+  | 'pause'
+  | 'play'
+  | 'edit'
   | 'trash'
   | 'download'
-  | 'search';
+  | 'search'
+  | 'eye'
+  | 'eyeOff';
 
 const paths: Readonly<Record<IconName, ReactElement>> = {
   dashboard: (
@@ -116,6 +121,18 @@ const paths: Readonly<Record<IconName, ReactElement>> = {
   chevronUp: <path d="m6 15 6-6 6 6" />,
   check: <path d="m5 12 4 4L19 6" />,
   plus: <path d="M12 5v14M5 12h14" />,
+  pause: (
+    <>
+      <path d="M8 5v14M16 5v14" />
+    </>
+  ),
+  play: <path d="m8 5 11 7-11 7V5Z" />,
+  edit: (
+    <>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z" />
+    </>
+  ),
   trash: <path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7" />,
   download: (
     <>
@@ -127,6 +144,18 @@ const paths: Readonly<Record<IconName, ReactElement>> = {
     <>
       <circle cx="10.5" cy="10.5" r="7.5" />
       <path d="m16 16 5 5" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </>
+  ),
+  eyeOff: (
+    <>
+      <path d="m3 3 18 18" />
+      <path d="M10.6 6.2A10.7 10.7 0 0 1 12 6c6 0 9.5 6 9.5 6a17.6 17.6 0 0 1-3.1 3.7M6.2 6.9C3.8 8.3 2.5 12 2.5 12s3.5 6 9.5 6a9.8 9.8 0 0 0 2-.2" />
     </>
   ),
 };

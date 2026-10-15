@@ -14,6 +14,16 @@ const packageNames = [
   'testkit',
 ];
 
+const mailPackageRules = ['mail/core', 'mail/connectors'].map((packageName) => ({
+  name: `no-private-imports-from-${packageName.replaceAll('/', '-')}`,
+  comment: 'Cross-package imports must use package public exports.',
+  severity: 'error',
+  from: { path: `^packages/${packageName}/` },
+  to: {
+    path: `^packages/(?!${packageName.replace('/', '\\/')}/)[^/]+/src/(?!index\\.(?:ts|tsx)$)`,
+  },
+}));
+
 const privatePackageImportRules = packageNames.map((packageName) => ({
   name: `no-private-imports-from-${packageName}`,
   comment: 'Cross-package imports must use package public exports.',
@@ -28,6 +38,7 @@ const privatePackageImportRules = packageNames.map((packageName) => ({
 module.exports = {
   forbidden: [
     ...privatePackageImportRules,
+    ...mailPackageRules,
     {
       name: 'no-packages-import-apps',
       comment: 'Reusable packages must never depend on process entry points.',

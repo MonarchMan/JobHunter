@@ -1,8 +1,8 @@
 # 数据模型与 SQLite 表设计
 
 > 状态：Proposed
-> 版本：2.0.0
-> 日期：2026-08-30
+> 版本：2.1.1
+> 日期：2026-10-14
 > 上位文档：[总体架构](./overall-arch.md)
 
 ## 1. 目的、范围与设计目标
@@ -18,6 +18,14 @@
 新增 platform_connections 仅存非敏感配置、generation 和脱敏连接状态；凭据、私有游标、推荐上下文不入库。jobs、job_revisions 与匹配沿用正式事实模型，不建平台职位缓存表；jobs 增加核验及用户交互时间供保留策略使用。job_observations 归属为 sync_run_id 或 platform_task_id，外键与 CHECK 保证恰有一种；平台不写 sync_seen_jobs 或伪同步运行。首次职位写入在同一短事务内保存修订、相应观察与状态事件，已见标记只适用于官网同步。
 
 平台清理使用更短的可配置保留期限和独立检查频率，不以来源缺失推导下架。收藏、投递、面试准备、笔记及当前任务引用优先保护；删除前事务内重检，观察对任务的引用也须纳入清理排序。正式职位清理不是缓存淘汰，物理压缩仍遵守 ADR-0020。以下表中尚未扩展的非空及同步归属约束描述官网现有基线，平台迁移以本增量和 028 设计为准。
+
+### 招聘邮件目标模型增量（设计已确定，尚未迁移）
+
+[ADR-0055](../adr/0055-recruitment-mail-ingestion-and-privacy-boundary.md) 与 [029 设计](../../specs/029-recruitment-mail/design.md) 新增独立的招聘邮件引用和求职申请数据。邮箱不是 `job_sources` 的一种，邮件事件不参与职位覆盖、缺失或关闭判断；申请可以选择性引用现有 `jobs`，但邮件拒绝、流程结束和 Offer 不修改职位事实。
+
+邮箱账号、provider、文件夹、计划、脱敏地址和 `credentialRef` 保存在本地非敏感配置；默认配置文件为 `<dataRoot>/mail/mailboxes.json`，也可由工作区 `.env` 的 `JOBHUNTER_MAILBOX_CONFIG_PATH` 指定。提供商同步游标、连接代次和最近同步结果保存在数据目录运行状态文件。SQLite 只保存最小消息引用、申请当前投影和申请事件。Token、刷新令牌、应用专用密码、原始 MIME、完整 HTML、普通附件、无关邮件正文和待确认中间分类结果不入库。与招聘无关或待确认的邮件不得保存主题或发件地址，只保留去重与重新读取所需的外部身份、内容哈希、处理结论和版本。
+
+邮箱读取按增量页提交：外部请求和正文解析在事务外完成，短事务原子保存消息引用并发布分类任务，提交成功后再原子替换运行状态文件中的页游标。数据库提交后、游标写入前崩溃允许整页重放；重复游标、任务恢复和分类器重跑由消息与事件唯一约束去重。分类提交短事务更新消息结论、追加申请事件并更新申请当前态。
 
 设计优先级如下：
 
@@ -61,9 +69,9 @@
 
 | 类型       | 例子                                                | 更新规则                       |
 | ---------- | --------------------------------------------------- | ------------------------------ |
-| 当前态     | `jobs`、`candidate_profiles`                        | 原地更新，服务主要查询入口     |
+| 当前态     | `jobs`、`candidate_profiles`、`job_applications`    | 原地更新，服务主要查询入口     |
 | 不可变版本 | `job_revisions`、`profile_versions`                 | 不静默覆盖；按领域保留策略淘汰 |
-| 观察与事件 | `job_observations`、`events`                        | 只追加或按明确保留策略清理     |
+| 观察与事件 | `job_observations`、`application_events`、`events`  | 只追加或按明确保留策略清理     |
 | 推导结果   | `job_enrichments`、`match_results`、`match_advices` | 引用不可变输入，绝不反写事实   |
 
 相同有效输入必须用稳定哈希或唯一约束实现幂等。只有内容实际变化时才产生新版本；重复观察不制造新版本。
@@ -80,6 +88,8 @@ JSON 使用 `TEXT` 保存，只适用于：
 所有 JSON 在应用边界使用 Zod 校验，写入前按稳定键序列化，读取后在使用边界再次校验。需要经常过滤、排序、连接或建立约束的字段必须提升为普通列。
 
 JSON 中不得保存模型密钥、认证 Cookie、完整简历正文的日志副本或未脱敏错误堆栈。
+
+邮箱增量游标可以作为不透明 JSON 保存，但不得包含可直接用于授权的 Token；游标、邮件链接和错误响应不进入日志。申请事件 JSON 只保存经过 Schema 校验的结构化字段和有长度上限的证据，不保存原始 MIME、完整 HTML 或无关邮件正文。
 
 ### 2.4 通用事件模型
 
@@ -401,6 +411,8 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 | `started_at`、`finished_at`        | INTEGER | NOT NULL / NULL | 运行时间                                      |
 
 部分唯一索引：`cache_key WHERE status = 'succeeded'`。相同输入可以保留多次失败，但最多一个成功缓存。
+
+隐私敏感 Agent 可以使用受限输出记录。`recruitment-mail.classify@v1` 禁用持久化输出缓存并使用独立运行身份；其 `output_json` 只允许保存输出哈希和校验状态，不得保存邮件文本、结构化字段或证据。已接受和已忽略结果分别通过 `application_events` 与 `mail_message_refs.processing_status` 实现业务幂等，待确认结果重新读取原邮件，不从 AgentRun 恢复字段结果。
 
 #### 3.4.2 `job_enrichments`
 
@@ -814,30 +826,110 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 | `agent.tool.finished` | toolKey、status、durationMs、脱敏输入/输出摘要                         |
 | `resume.deleted`      | 不可逆影响哈希和计数，不含原文、路径或被删实体 ID                      |
 
+### 3.8 招聘邮件与申请跟踪
+
+本领域保存最小消息引用、求职申请当前态和专用申请事件。邮箱账号及非敏感设置位于本地配置文件，增量游标和健康状态位于 `<dataRoot>/mail/runtime-state.json`；SQLite 不承担邮箱连接配置、游标、待确认分类快照或完整邮件归档。
+
+**文件状态边界：**本地配置保存稳定 `mailboxKey`、provider、脱敏地址、`credentialRef`、文件夹、回溯、计划和模型开关；运行状态按邮箱和文件夹保存连接器版本、代次、不透明游标、最近成功/失败时间及固定错误类别。运行状态先写同目录临时文件再原子替换，不保存授权秘密或邮件内容。
+
+**凭据文件边界：**凭据保存到独立 AES-256-GCM 文件 `<dataRoot>/mail/credentials.enc.json`，密钥位于独立文件 `<dataRoot>/mail/credentials.key` 或来自环境主密钥；每条记录使用随机 IV 和绑定引用的 AAD。普通备份排除密文与密钥，Web 是首版唯一凭据写入者。详见 [ADR-0056](../adr/0056-encrypted-mail-credential-file.md)。
+
+**事务边界：**每个增量页在短事务内保存消息引用并发布分类任务，提交成功后才推进文件游标；若游标写入前崩溃，下次整页重放并由唯一约束消重。单邮件自动接受或用户确认时，在一个短事务内更新消息结论、追加申请事件并更新申请当前态；待确认详情的重新读取、MIME 清洗和分类均在事务外完成。凭据写入、撤销、文件原子替换和提供商网络请求也不进入数据库事务。
+
+#### 3.8.1 `mail_message_refs`
+
+保存幂等、重新获取、来源定位和当前处理状态所需的最小消息身份，不承担邮件正文、中间分类结果或分类历史归档。
+
+| 列                                         | 类型    | 约束        | 说明                                                                       |
+| ------------------------------------------ | ------- | ----------- | -------------------------------------------------------------------------- |
+| `id`                                       | TEXT    | PK          | 内部消息引用 ID                                                            |
+| `mailbox_key`                              | TEXT    | NOT NULL    | 本地配置中的稳定邮箱键；配置删除后仍用于来源追溯                           |
+| `provider_key`                             | TEXT    | NOT NULL    | 连接器 Registry key                                                        |
+| `external_message_key`                     | TEXT    | NOT NULL    | 邮箱内稳定消息键                                                           |
+| `thread_key_hash`                          | TEXT    | NULL        | 可选线程身份哈希                                                           |
+| `source_url`                               | TEXT    | NULL        | 不含凭据或一次性令牌的可选 `https` 原邮件入口，不作为身份键                |
+| `received_at`                              | INTEGER | NOT NULL    | 提供商接收时间                                                             |
+| `content_version`                          | TEXT    | NOT NULL    | 提供商版本、etag 或连接器内容代次                                          |
+| `content_hash`                             | TEXT    | NULL        | 正文清洗后内容哈希，尚未读取时为空                                         |
+| `processing_status`                        | TEXT    | CHECK       | `discovered`、`candidate`、`accepted`、`needs_review`、`ignored`、`failed` |
+| `last_classifier_kind`                     | TEXT    | CHECK, NULL | 最近分类器：`rules`、`agent`                                               |
+| `last_classifier_version`                  | TEXT    | NULL        | 最近自动分类策略版本                                                       |
+| `last_seen_at`、`created_at`、`updated_at` | INTEGER | NOT NULL    | 观察和生命周期时间                                                         |
+
+唯一约束：`(mailbox_key, external_message_key)`；索引：`(processing_status, received_at)`、`(mailbox_key, received_at)`。`source_url` 通过运行时 Schema 限制为不含授权凭据或一次性访问令牌的 `https`，不能由 Worker 自动打开，其查询参数不得进入日志或诊断。`needs_review` 和 `ignored` 记录都不得保存主题、发件地址、正文、结构化提取或证据；待确认详情必须按消息引用重新读取。
+
+#### 3.8.2 `job_applications`
+
+保存公司和岗位维度的申请当前投影。邮件中岗位不必先存在于职位库。
+
+| 列                              | 类型    | 约束               | 说明                                                                                             |
+| ------------------------------- | ------- | ------------------ | ------------------------------------------------------------------------------------------------ |
+| `id`                            | TEXT    | PK                 | 申请 ID                                                                                          |
+| `company_id`                    | TEXT    | FK companies, NULL | 能明确映射时的公司                                                                               |
+| `job_id`                        | TEXT    | FK jobs, NULL      | 用户确认的正式职位关联                                                                           |
+| `external_application_key_hash` | TEXT    | NULL               | 提供商申请编号的不可逆规范身份                                                                   |
+| `company_name`                  | TEXT    | NOT NULL           | 邮件或用户确认的公司显示名                                                                       |
+| `role_title`                    | TEXT    | NOT NULL           | 邮件或用户确认的岗位名称                                                                         |
+| `status`                        | TEXT    | CHECK              | `unknown`、`applied`、`assessment`、`interview`、`offer_intent`、`offered`、`rejected`、`closed` |
+| `status_effective_at`           | INTEGER | NULL               | 当前状态的有效时间                                                                               |
+| `revision`                      | INTEGER | NOT NULL DEFAULT 0 | 状态投影和关联更新的并发版本                                                                     |
+| `created_at`、`updated_at`      | INTEGER | NOT NULL           | 生命周期时间                                                                                     |
+
+索引：`(status, updated_at DESC)`、`(company_id, role_title)`、`job_id`、`external_application_key_hash`。仅凭公司和岗位不建立唯一约束；同一公司可以存在多个同名申请，合并必须有明确申请编号、线程证据或用户确认。
+
+#### 3.8.3 `application_events`
+
+保存按申请有序的招聘流程事件。该表承担外键、排序、状态投影和时间线查询，不使用通用 `events` 替代。
+
+| 列                    | 类型    | 约束                           | 说明                                                     |
+| --------------------- | ------- | ------------------------------ | -------------------------------------------------------- |
+| `id`                  | TEXT    | PK                             | 申请事件 ID                                              |
+| `application_id`      | TEXT    | FK job_applications, NOT NULL  | 所属申请                                                 |
+| `sequence_no`         | INTEGER | NOT NULL CHECK >= 1            | 申请流内序号                                             |
+| `mail_message_ref_id` | TEXT    | FK mail_message_refs, NOT NULL | 稳定邮件来源                                             |
+| `source_content_hash` | TEXT    | NOT NULL                       | 产生事件的清洗内容哈希                                   |
+| `source_event_no`     | INTEGER | NOT NULL CHECK >= 1            | 一封邮件包含多个事件时的稳定序号                         |
+| `acceptance_kind`     | TEXT    | CHECK                          | `automatic`、`user_confirmed`                            |
+| `classifier_kind`     | TEXT    | CHECK                          | `rules`、`agent`                                         |
+| `classifier_version`  | TEXT    | NOT NULL                       | 规则或 Agent/Prompt 版本                                 |
+| `agent_run_id`        | TEXT    | FK agent_runs, NULL            | 使用模型时的运行引用                                     |
+| `event_type`          | TEXT    | NOT NULL                       | 029 规格定义的申请事件类型                               |
+| `effective_at`        | INTEGER | NOT NULL                       | 事件业务有效时间                                         |
+| `received_at`         | INTEGER | NOT NULL                       | 邮件接收时间                                             |
+| `confidence`          | REAL    | NOT NULL CHECK 0..1            | 自动分类置信度；用户确认不修改原始置信度                 |
+| `payload_json`        | TEXT    | NOT NULL DEFAULT `'{}'`        | 公司、岗位、时间原文、时区来源、地点、链接和有界字段证据 |
+| `created_at`          | INTEGER | NOT NULL                       | 入库时间                                                 |
+
+唯一约束：`(application_id, sequence_no)`；邮件来源事件唯一约束 `(mail_message_ref_id, source_content_hash, source_event_no)`。分类器版本变化不能绕过邮件事实唯一约束制造重复事件。只有 `automatic` 或明确 `user_confirmed` 的事件能在同一事务更新 `job_applications.status`；`needs_review` 和 `ignored` 消息不能创建申请事件。
+
 ## 4. 跨领域事务设计
 
-| 用例          | 同一事务内必须完成                                                            | 事务外工作与失败恢复                                                      |
-| ------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 开始同步      | 创建 `sync_runs(running)`                                                     | HTTP 和浏览器抓取在提交后执行                                             |
-| 首次发现职位  | `jobs`、首个 `job_revisions`、`job_observations`、`sync_seen_jobs`、状态事件  | 解析与标准化先完成并校验                                                  |
-| 职位内容变化  | 更新 `jobs`、新增 `job_revisions`、新增观察和已见标记                         | 无原始响应落库；失败整项回滚                                              |
-| 重复观察      | 新增观察和已见标记、更新 `last_seen_at`                                       | 不创建修订                                                                |
-| 职位状态变化  | 更新状态/缺失计数并追加 `job.status.changed`                                  | 完整性计算在事务前完成；可按职位批次提交                                  |
-| 同步完成      | 更新运行状态、覆盖证据、统计和游标                                            | 仅在所有缺失推进批次完成后标记成功                                        |
-| Task 领取     | pending → running、租约、尝试次数 CAS                                         | Handler 在事务外执行                                                      |
-| Task 成功     | running → succeeded、`result_json`、完成时间                                  | 输出先通过 Handler Schema；租约丢失则不提交                               |
-| 发布面试 Task | 创建 pending Task，并关联 turn 或 ResearchRequest                             | payload 在事务前校验；失败整体回滚，不暴露未关联 Task                     |
-| 重试面试 Task | 创建 retry Task，并把业务引用从旧 failed Task 原子切换到新 Task               | 业务状态已变化则拒绝重试，新 Task 不得抢跑                                |
-| Agent 执行    | 分别原子创建 running 和提交终态                                               | 模型调用在两次事务之间；崩溃由缓存和任务重试恢复                          |
-| 导入文档      | 文件、实体、版本及首个业务引用的数据库登记                                    | 临时文件写入、解析在事务外；失败产生的孤立文件延迟清理                    |
-| 保存面经草稿  | 文件 revision CAS，替换经历和问题                                             | 旧 revision 返回冲突，不部分更新                                          |
-| 登记项目资料  | 逻辑文件新版本、解析元数据与 dossier revision                                 | Markdown 校验、规范化和分块在事务外                                       |
-| 开始深档拷打  | 重验 1–8 个当前资料版本并冻结 session bindings、初始化覆盖状态                | 不读取项目目录；问题片段在 Worker 执行期按冻结版本选择                    |
-| 恢复拷打会话  | 暂停同档案当前 active 会话、激活目标会话并递增双方上下文修订号                | 切换前拒绝仍有待处理任务的当前会话；列表按最后修改时间重新排序            |
-| 导入研究包    | claim/finalize 均核验当前 running 且未取消的 Task；提升 mapping、CAS 替换候选 | JSON/Schema/URL 校验和 staging Bundle 文件写入在事务外；失败/过期补偿清理 |
-| 审核网友面经  | 单条候选状态、request revision 与聚合状态 CAS                                 | 外部链接不在事务中访问                                                    |
-| 删除敏感文档  | 重验影响快照、删除业务引用和逻辑文件、追加审计事件                            | 先隔离独占物理实体；事务失败恢复，成功后清除                              |
-| 推进计划      | 更新 `schedules.next_run_at` 并创建幂等 Task                                  | Cron 计算在事务前完成                                                     |
+| 用例           | 同一事务内必须完成                                                            | 事务外工作与失败恢复                                                      |
+| -------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| 开始同步       | 创建 `sync_runs(running)`                                                     | HTTP 和浏览器抓取在提交后执行                                             |
+| 首次发现职位   | `jobs`、首个 `job_revisions`、`job_observations`、`sync_seen_jobs`、状态事件  | 解析与标准化先完成并校验                                                  |
+| 职位内容变化   | 更新 `jobs`、新增 `job_revisions`、新增观察和已见标记                         | 无原始响应落库；失败整项回滚                                              |
+| 重复观察       | 新增观察和已见标记、更新 `last_seen_at`                                       | 不创建修订                                                                |
+| 职位状态变化   | 更新状态/缺失计数并追加 `job.status.changed`                                  | 完整性计算在事务前完成；可按职位批次提交                                  |
+| 同步完成       | 更新运行状态、覆盖证据、统计和游标                                            | 仅在所有缺失推进批次完成后标记成功                                        |
+| Task 领取      | pending → running、租约、尝试次数 CAS                                         | Handler 在事务外执行                                                      |
+| Task 成功      | running → succeeded、`result_json`、完成时间                                  | 输出先通过 Handler Schema；租约丢失则不提交                               |
+| 发布面试 Task  | 创建 pending Task，并关联 turn 或 ResearchRequest                             | payload 在事务前校验；失败整体回滚，不暴露未关联 Task                     |
+| 重试面试 Task  | 创建 retry Task，并把业务引用从旧 failed Task 原子切换到新 Task               | 业务状态已变化则拒绝重试，新 Task 不得抢跑                                |
+| Agent 执行     | 分别原子创建 running 和提交终态                                               | 模型调用在两次事务之间；崩溃由缓存和任务重试恢复                          |
+| 导入文档       | 文件、实体、版本及首个业务引用的数据库登记                                    | 临时文件写入、解析在事务外；失败产生的孤立文件延迟清理                    |
+| 保存面经草稿   | 文件 revision CAS，替换经历和问题                                             | 旧 revision 返回冲突，不部分更新                                          |
+| 登记项目资料   | 逻辑文件新版本、解析元数据与 dossier revision                                 | Markdown 校验、规范化和分块在事务外                                       |
+| 开始深档拷打   | 重验 1–8 个当前资料版本并冻结 session bindings、初始化覆盖状态                | 不读取项目目录；问题片段在 Worker 执行期按冻结版本选择                    |
+| 恢复拷打会话   | 暂停同档案当前 active 会话、激活目标会话并递增双方上下文修订号                | 切换前拒绝仍有待处理任务的当前会话；列表按最后修改时间重新排序            |
+| 导入研究包     | claim/finalize 均核验当前 running 且未取消的 Task；提升 mapping、CAS 替换候选 | JSON/Schema/URL 校验和 staging Bundle 文件写入在事务外；失败/过期补偿清理 |
+| 审核网友面经   | 单条候选状态、request revision 与聚合状态 CAS                                 | 外部链接不在事务中访问                                                    |
+| 提交邮箱增量页 | 新增/更新 `mail_message_refs` 并发布分类 Task                                 | 邮箱请求和头部校验在事务外；提交成功后原子替换文件游标，崩溃时整页重放    |
+| 分类招聘邮件   | 更新消息结论、追加申请事件并更新 `job_applications` 当前投影                  | 正文获取、MIME/HTML 清洗、规则和模型调用在事务外；输出先通过 Schema       |
+| 确认招聘邮件   | 重验瞬时分类结果和目标申请、追加申请事件并更新消息状态与申请当前投影          | 重新读取和分类在事务外；首版只允许确认、忽略或选择申请，不允许修改字段    |
+| 断开邮箱       | 删除或停用本地配置、停止计划并登记稳定删除影响                                | 提供商撤销、凭据库删除和运行状态文件更新在事务外；失败保留可恢复错误状态  |
+| 删除敏感文档   | 重验影响快照、删除业务引用和逻辑文件、追加审计事件                            | 先隔离独占物理实体；事务失败恢复，成功后清除                              |
+| 推进计划       | 更新 `schedules.next_run_at` 并创建幂等 Task                                  | Cron 计算在事务前完成                                                     |
 
 ## 5. 关键跨表不变量
 
@@ -856,6 +948,11 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 13. 网友回答摘录只能写入 `answer_excerpt`，不得写入代表用户事实的 `answer`；未接受候选不得进入网友面经查询。
 14. 一个研究请求同时最多一个有效 Bundle import claim；失败或过期 staging 不得成为正式版本，也不得消耗五版本额度。
 15. 外部研究结果的请求指纹和 Schema 版本必须匹配当前请求；迟到任务不得覆盖较新 revision。
+16. 邮箱授权秘密只存在 AES-256-GCM 加密凭据文件；本地配置只能保存不可直接授权的 `credentialRef`，凭据值不得出现在 SQLite、运行状态、任务、事件、日志或普通备份中。IMAP 授权码仅允许在设置页用户主动触发时通过无缓存接口临时回传，OAuth 令牌不得回传。
+17. 同一稳定邮箱键的 `external_message_key` 唯一；增量页的数据库提交成功后才能推进文件游标，游标未推进只允许造成可安全消重的重复读取。
+18. 邮件来源申请事件必须引用对应 `mail_message_refs`，并以消息引用、内容哈希和邮件内事件序号保持唯一；分类器版本变化不能制造重复事实。
+19. 申请事件与申请当前态在同一事务提交；待确认或忽略消息不能推进状态。首版不允许修改分类字段、既有事件或追加人工事件。
+20. 邮件事件可以选择性关联职位，但不能更新 `jobs`、`job_revisions`、`job_observations`、来源健康或职位匹配结果。
 
 ## 6. 保留、清理与备份
 
@@ -866,6 +963,9 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 - Agent 成功结果按被引用关系保留；无引用失败/取消运行可按期限清理。
 - 简历、个人面经和项目资料只允许通过所属聚合的显式删除流程清理；删除前展示稳定影响快照。
 - 研究 Prompt、Schema 与最多五版有效 Bundle 随研究请求保留；网友面经只长期展示人工接受项，拒绝项可按后续显式保留策略清理。
+- 邮箱原始 MIME、完整 HTML、普通附件和无关邮件正文不保存；`ignored` 邮件引用默认保留 180 天用于回溯去重，超过窗口且不被任务引用时可清理。
+- 招聘邮件引用、申请和申请事件随用户申请历史保留，只有显式删除邮箱派生数据或申请时清理；断开邮箱并保留时间线不能级联删除这些事实。
+- 邮箱密文和密钥不属于普通备份范围；备份可包含非敏感配置和运行状态。跨机器迁移需通过独立安全通道传输密文与对应密钥，或配置相同环境主密钥。恢复后若 `credentialRef` 不可用，对应邮箱进入 `auth_required`，重新授权前不得发布读取任务。
 - 文件实体失去最后引用后先隔离，数据库提交成功后清除；24 小时以上的未登记孤立文件可以清理。
 - 备份先使用 SQLite Online Backup API 创建一致性快照，再从快照读取活动 `entities` 清单并复制、校验 SHA-256。
 - 恢复要求 CLI、Worker 和 Web 停止，在临时目录验证数据库、实体哈希和外键后原子切换。
@@ -874,7 +974,7 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 
 ### 7.1 目标业务表清单
 
-目标模型包含 33 张业务表：
+在现有 33 张目标业务表基础上，招聘邮件能力新增 3 张专用表，目标模型共 36 张业务表：
 
 | 领域           | 表                                                                                                                                                                                                                                            |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -884,6 +984,7 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 | Agent 与匹配   | `agent_runs`、`job_enrichments`、`match_rulesets`、`match_results`、`match_advices`                                                                                                                                                           |
 | 任务与设置     | `tasks`、`schedules`、`application_settings`                                                                                                                                                                                                  |
 | 面试准备       | `resume_project_snapshots`、`project_dossiers`、`drill_sessions`、`drill_turns`、`drill_answer_revisions`、`project_knowledge_items`、`drill_coverage`、`experience_research_requests`、`interview_experiences`、`interview_question_entries` |
+| 招聘进展       | `mail_message_refs`、`job_applications`、`application_events`                                                                                                                                                                                 |
 | 通用基础设施   | `files`、`entities`、`file_entity_mappings`、`events`                                                                                                                                                                                         |
 
 ### 7.2 删除或合并结论
@@ -909,6 +1010,8 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 - `drill_coverage` 是问题选择热路径的小型物化状态，保留比每次重放全部回合和知识项更简单。
 - `experience_research_requests` 保存长期研究意图和人工审核生命周期；一次外部执行仍复用 `tasks`，两者职责不重复。
 - `interview_experiences` 和 `interview_question_entries` 是受约束的领域实体，不应退化为文件 JSON。
+- `application_events` 需要申请外键、流内顺序、稳定邮件来源约束和高频时间线查询，不能退化为通用 `events` 的多态 JSON。
+- `mail_message_refs` 是增量幂等、来源定位和正文按需重取所需的最小记录，不是原始邮件、中间分类结果或分类历史归档；无关和待确认邮件的主题、地址与正文不能借该表保留。
 
 ## 8. 迁移与验证要求
 
@@ -926,5 +1029,8 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 10. 旧浅档会话迁入后绑定数组为空；深档资料登记、五版本上限和冻结版本读取通过集成测试。
 11. 旧个人面经保持 `personal` 来源语义；网友候选的回答摘录与用户回答分列保存，只有 accepted community 记录进入网友面经读取模型。
 12. `0022` 保证同一档案同名项目资料只有一个逻辑文件；`0023` 的 Bundle claim、staging 提升、失败补偿、过期回收和第五/第六版本边界必须通过双连接集成测试。
+13. 招聘邮件迁移创建三张新表和全部 CHECK、唯一、外键及索引；空库与从上一正式 Schema 升级都不得生成默认邮箱配置或伪造申请事件。
+14. 邮箱同步集成测试证明消息引用与分类任务原子提交、运行状态文件原子替换；数据库提交后崩溃造成的重复页和租约恢复不产生重复申请事件。
+15. 加密凭据文件、邮箱配置、运行状态与数据库备份恢复测试证明秘密不进入 SQLite 或普通备份；恢复后凭据引用不可用的邮箱为 `auth_required`，既有申请时间线仍可查询。
 
 本文是目标设计，当前代码与迁移在完成实现和全部验证前不得标记为 Accepted。

@@ -6,3 +6,4 @@ export * from './profile/index.js';
 export * from './shared/index.js';
 export * from './sync/index.js';
 export * from './task/index.js';
+export * from './recruitment-mail/index.js';

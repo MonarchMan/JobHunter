@@ -398,6 +398,133 @@ export const candidateProfiles = sqliteTable('candidate_profiles', {
   updatedAt: epoch('updated_at').notNull(),
 });
 
+/** 邮箱最小消息引用；不保存原始 MIME、正文或待确认分类快照。 */
+export const mailMessageRefs = sqliteTable(
+  'mail_message_refs',
+  {
+    id: text().primaryKey(),
+    mailboxKey: text('mailbox_key').notNull(),
+    providerKey: text('provider_key').notNull(),
+    externalMessageKey: text('external_message_key').notNull(),
+    threadKeyHash: text('thread_key_hash'),
+    sourceUrl: text('source_url'),
+    receivedAt: epoch('received_at').notNull(),
+    contentVersion: text('content_version').notNull(),
+    contentHash: text('content_hash'),
+    processingStatus: text('processing_status').notNull().default('discovered'),
+    lastClassifierKind: text('last_classifier_kind'),
+    lastClassifierVersion: text('last_classifier_version'),
+    lastSeenAt: epoch('last_seen_at').notNull(),
+    createdAt: epoch('created_at').notNull(),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    unique('mail_message_refs_mailbox_external_unique').on(
+      table.mailboxKey,
+      table.externalMessageKey,
+    ),
+    index('mail_message_refs_status_received_idx').on(table.processingStatus, table.receivedAt),
+    index('mail_message_refs_mailbox_received_idx').on(table.mailboxKey, table.receivedAt),
+    check(
+      'mail_message_refs_provider_check',
+      sql`${table.providerKey} in ('gmail', 'microsoft-graph', 'imap')`,
+    ),
+    check(
+      'mail_message_refs_status_check',
+      sql`${table.processingStatus} in ('discovered', 'candidate', 'accepted', 'needs_review', 'ignored', 'failed')`,
+    ),
+    check(
+      'mail_message_refs_classifier_check',
+      sql`${table.lastClassifierKind} is null or ${table.lastClassifierKind} in ('rules', 'agent')`,
+    ),
+  ],
+);
+
+/** 某公司某岗位的申请当前投影；不因公司名相同而强制合并。 */
+export const jobApplications = sqliteTable(
+  'job_applications',
+  {
+    id: text().primaryKey(),
+    companyId: text('company_id').references(() => companies.id, { onDelete: 'restrict' }),
+    jobId: text('job_id').references(() => jobs.id, { onDelete: 'restrict' }),
+    externalApplicationKeyHash: text('external_application_key_hash'),
+    companyName: text('company_name').notNull(),
+    roleTitle: text('role_title').notNull(),
+    status: text().notNull().default('unknown'),
+    statusEffectiveAt: epoch('status_effective_at'),
+    revision: integer().notNull().default(0),
+    createdAt: epoch('created_at').notNull(),
+    updatedAt: epoch('updated_at').notNull(),
+  },
+  (table) => [
+    index('job_applications_status_updated_idx').on(table.status, table.updatedAt),
+    index('job_applications_company_role_idx').on(table.companyId, table.roleTitle),
+    index('job_applications_job_idx').on(table.jobId),
+    index('job_applications_external_key_idx').on(table.externalApplicationKeyHash),
+    check(
+      'job_applications_status_check',
+      sql`${table.status} in ('unknown', 'applied', 'assessment', 'interview', 'offer_intent', 'offered', 'rejected', 'closed')`,
+    ),
+    check('job_applications_revision_check', sql`${table.revision} >= 0`),
+  ],
+);
+
+/** 招聘申请不可变事件；唯一来源约束保证分类重跑不会复制事实。 */
+export const applicationEvents = sqliteTable(
+  'application_events',
+  {
+    id: text().primaryKey(),
+    applicationId: text('application_id')
+      .notNull()
+      .references(() => jobApplications.id, { onDelete: 'cascade' }),
+    sequenceNo: integer('sequence_no').notNull(),
+    mailMessageRefId: text('mail_message_ref_id')
+      .notNull()
+      .references(() => mailMessageRefs.id, { onDelete: 'restrict' }),
+    sourceContentHash: text('source_content_hash').notNull(),
+    sourceEventNo: integer('source_event_no').notNull(),
+    acceptanceKind: text('acceptance_kind').notNull(),
+    classifierKind: text('classifier_kind').notNull(),
+    classifierVersion: text('classifier_version').notNull(),
+    agentRunId: text('agent_run_id').references(() => agentRuns.id, { onDelete: 'restrict' }),
+    eventType: text('event_type').notNull(),
+    effectiveAt: epoch('effective_at').notNull(),
+    receivedAt: epoch('received_at').notNull(),
+    confidence: real().notNull(),
+    payloadJson: jsonText('payload_json').notNull().default('{}'),
+    createdAt: epoch('created_at').notNull(),
+  },
+  (table) => [
+    unique('application_events_application_sequence_unique').on(
+      table.applicationId,
+      table.sequenceNo,
+    ),
+    unique('application_events_source_unique').on(
+      table.mailMessageRefId,
+      table.sourceContentHash,
+      table.sourceEventNo,
+    ),
+    index('application_events_application_effective_idx').on(
+      table.applicationId,
+      table.effectiveAt,
+    ),
+    check('application_events_sequence_check', sql`${table.sequenceNo} >= 1`),
+    check('application_events_source_event_check', sql`${table.sourceEventNo} >= 1`),
+    check(
+      'application_events_acceptance_check',
+      sql`${table.acceptanceKind} in ('automatic', 'user_confirmed')`,
+    ),
+    check(
+      'application_events_classifier_check',
+      sql`${table.classifierKind} in ('rules', 'agent')`,
+    ),
+    check(
+      'application_events_confidence_check',
+      sql`${table.confidence} >= 0 and ${table.confidence} <= 1`,
+    ),
+  ],
+);
+
 /** Agent 执行记录、输入输出摘要和成本状态。 */
 export const agentRuns = sqliteTable(
   'agent_runs',

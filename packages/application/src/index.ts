@@ -10,6 +10,7 @@ export * from './tasks/index.js';
 export * from './contracts/index.js';
 export * from './dashboard/index.js';
 export * from './settings/index.js';
+export * from './mail/index.js';
 export * from './platforms.js';
 export * from './platform-progress.js';
 export * from './platform-observation.js';

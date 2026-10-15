@@ -23,6 +23,7 @@
   ],
   "dependencies": {
     "@jobhunter/platform-core": "workspace:*",
+    "@jobhunter/mail-core": "workspace:*",
     "@jobhunter/agent-core": "workspace:*",
     "@jobhunter/domain": "workspace:*",
     "@jobhunter/matching": "workspace:*",

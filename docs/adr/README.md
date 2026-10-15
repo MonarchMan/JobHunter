@@ -36,3 +36,5 @@ ADR 一经 Accepted 通常不直接改写历史结论；后续决策变更通过
 - [ADR-0049：BOSS 显式 HTTP 的有界重试与会话恢复](./0049-boss-http-recovery-and-retries.md)
 - [ADR-0052：网友面经采用三种研究执行模式](./0052-community-research-execution-modes.md)
 - [ADR-0054：Worker 共享浏览器 CDP 传输](./0054-worker-shared-cdp-transport.md)
+- [ADR-0055：招聘邮件采用独立事件域、本地增量轮询与最小持久化](./0055-recruitment-mail-ingestion-and-privacy-boundary.md)
+- [ADR-0056：邮箱凭据采用跨平台 AES-GCM 加密文件](./0056-encrypted-mail-credential-file.md)
