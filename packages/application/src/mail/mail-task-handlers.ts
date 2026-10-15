@@ -1,4 +1,4 @@
-import { contentHash } from '@jobhunter/domain';
+import { contentHash, type RecruitmentScheduleFact } from '@jobhunter/domain';
 import {
   MailConnectorError,
   type ExternalMailMessage,
@@ -48,6 +48,10 @@ export interface RecruitmentMailProcessingRepository {
     readonly effectiveAt: number;
     readonly receivedAt: number;
     readonly confidence: number;
+    readonly schedule: RecruitmentScheduleFact | null;
+    readonly location: string | null;
+    readonly meetingUrl: string | null;
+    readonly actionUrl: string | null;
     readonly payloadJson: string;
     readonly eventId: string;
     readonly now: number;
@@ -63,7 +67,7 @@ export interface RecruitmentMailClassificationPort {
 }
 
 /** 稳定分类策略标识同时进入任务幂等键和邮件处理状态。 */
-export const recruitmentMailPolicyVersion = 'candidate-rules-v4+agent-v1-prompt-v3';
+export const recruitmentMailPolicyVersion = 'candidate-rules-v4+agent-v2-prompt-v4';
 
 export const mailboxScanTaskPayloadSchema = z.object({}).strict();
 export const mailboxScanTaskOutputSchema = z
@@ -240,10 +244,12 @@ export function createMailClassifyTaskHandler(input: {
             effectiveAt: classification.effectiveAt ?? reference.receivedAt,
             receivedAt: reference.receivedAt,
             confidence: classification.confidence,
+            schedule: classification.schedule,
+            location: classification.location,
+            meetingUrl: classification.meetingUrl,
+            actionUrl: classification.actionUrl,
             payloadJson: JSON.stringify({
-              deadlineAt: classification.deadlineAt,
-              interviewAt: classification.interviewAt,
-              timezoneText: classification.timezoneText,
+              schedule: classification.schedule,
               location: classification.location,
               meetingUrl: classification.meetingUrl,
               actionUrl: classification.actionUrl,

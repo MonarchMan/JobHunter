@@ -78,9 +78,21 @@ function classification(
     roleTitle: '后端工程师',
     applicationKey: 'APP-100',
     effectiveAt: message.receivedAt,
-    deadlineAt: null,
-    interviewAt: null,
-    timezoneText: null,
+    schedule: {
+      activityType: 'interview',
+      scheduledStartAt: 1_760_100_000_000,
+      scheduledEndAt: null,
+      deadlineAt: null,
+      scheduledStartLocalDate: null,
+      scheduledEndLocalDate: null,
+      deadlineLocalDate: null,
+      previousScheduledStartAt: null,
+      previousScheduledStartLocalDate: null,
+      timePrecision: 'exact_time',
+      timezoneSource: 'explicit',
+      timezoneText: '北京时间',
+      stageLabel: '技术一面',
+    },
     location: null,
     meetingUrl: null,
     actionUrl: null,
@@ -186,6 +198,13 @@ describe('mail classification task handler', () => {
     expect(repository.events[0]?.externalApplicationKeyHash).toBe(
       contentHash({ mailboxKey: mailbox.mailboxKey, applicationKey: 'APP-100' }),
     );
+    expect(JSON.parse(repository.events[0]?.payloadJson ?? '{}')).toMatchObject({
+      schedule: {
+        activityType: 'interview',
+        scheduledStartAt: 1_760_100_000_000,
+        timePrecision: 'exact_time',
+      },
+    });
     expect(repository.updates[0]?.status).toBe('accepted');
   });
 

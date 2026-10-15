@@ -5,6 +5,7 @@ import {
   createPlatformTaskHandler,
   createPlatformRetentionTaskHandler,
   CandidateProfileService,
+  CalendarQueryService,
   DashboardQueryService,
   createJobAdviceTaskHandler,
   createJobUnderstandingTaskHandler,
@@ -38,6 +39,7 @@ import {
   TaskService,
   WebJobQueryService,
   WebJobDetailService,
+  WebCalendarQueryService,
   WebProfileService,
   WebResumeDeletionService,
   ResumeDeletionService,
@@ -77,6 +79,7 @@ import {
   SqliteResumeDeletionRepository,
   SqliteResumeDocumentRepository,
   SqliteResumeDraftRepository,
+  SqliteRecruitmentMailRepository,
   SqliteSettingsStore,
   seedSourceCatalog,
   NodeResumeFileReader,
@@ -118,6 +121,7 @@ export interface WebApplicationServices {
   readonly matches: MatchWorkflowService;
   readonly settings: SystemSettingsService;
   readonly mailboxes: MailboxSettingsService;
+  readonly calendar: WebCalendarQueryService;
   readonly sourceSchedules: SourceScheduleReconciliationService;
   readonly interview: InterviewProjectService;
   readonly experiences: InterviewExperienceService;
@@ -405,6 +409,9 @@ export function createLocalWebContainer(
       }),
       settings,
       mailboxes,
+      calendar: new WebCalendarQueryService(
+        new CalendarQueryService(new SqliteRecruitmentMailRepository(database.client)),
+      ),
       sourceSchedules,
       interview: new InterviewProjectService({
         profiles: profileRepository,

@@ -1,9 +1,11 @@
 import type Database from 'better-sqlite3';
-import { projectApplicationStatus } from '@jobhunter/domain';
-import type {
-  MailSyncRepository,
-  RecruitmentMailMessageRef,
-  RecruitmentMailProcessingRepository,
+import { projectApplicationStatus, type RecruitmentScheduleFact } from '@jobhunter/domain';
+import {
+  calendarSourceEventSchema,
+  type MailSyncRepository,
+  type RecruitmentMailMessageRef,
+  type RecruitmentMailProcessingRepository,
+  type CalendarSourceEvent,
 } from '@jobhunter/application';
 import { createHash } from 'node:crypto';
 
@@ -46,6 +48,10 @@ export interface AcceptedApplicationEventInput {
   readonly effectiveAt: number;
   readonly receivedAt: number;
   readonly confidence: number;
+  readonly schedule?: RecruitmentScheduleFact | null;
+  readonly location?: string | null;
+  readonly meetingUrl?: string | null;
+  readonly actionUrl?: string | null;
   readonly payloadJson: string;
   readonly eventId: string;
   readonly now: number;
@@ -199,6 +205,81 @@ export class SqliteRecruitmentMailRepository {
       .all(applicationId) as Record<string, unknown>[];
   }
 
+  /** 读取会影响招聘日历的申请事件，并在数据库边界恢复类型化日程事实。 */
+  public listScheduleEvents(): readonly CalendarSourceEvent[] {
+    const rows = this.#client
+      .prepare(
+        `SELECT
+          event.id,
+          event.application_id,
+          event.sequence_no,
+          application.company_name,
+          application.role_title,
+          event.event_type,
+          event.effective_at,
+          event.received_at,
+          event.activity_type,
+          event.scheduled_start_at,
+          event.scheduled_end_at,
+          event.deadline_at,
+          event.scheduled_start_local_date,
+          event.scheduled_end_local_date,
+          event.deadline_local_date,
+          event.previous_scheduled_start_at,
+          event.previous_scheduled_start_local_date,
+          event.time_precision,
+          event.timezone_source,
+          event.timezone_text,
+          event.stage_label,
+          event.location,
+          event.meeting_url,
+          event.action_url
+        FROM application_events AS event
+        INNER JOIN job_applications AS application ON application.id = event.application_id
+        WHERE event.event_type IN (
+          'assessment_invited',
+          'interview_invited',
+          'interview_rescheduled',
+          'interview_cancelled'
+        )
+          AND event.activity_type IS NOT NULL
+        ORDER BY event.application_id, event.sequence_no`,
+      )
+      .all() as Record<string, unknown>[];
+
+    // 1、数据库只负责筛选候选行；2、运行时 Schema 负责拒绝残缺枚举、非法 URL 和时间结构。
+    return rows.map((row) =>
+      calendarSourceEventSchema.parse({
+        id: row.id,
+        applicationId: row.application_id,
+        sequenceNo: row.sequence_no,
+        companyName: row.company_name,
+        roleTitle: row.role_title,
+        eventType: row.event_type,
+        effectiveAt: row.effective_at,
+        receivedAt: row.received_at,
+        schedule: {
+          activityType: row.activity_type,
+          scheduledStartAt: nullableNumber(row.scheduled_start_at),
+          scheduledEndAt: nullableNumber(row.scheduled_end_at),
+          deadlineAt: nullableNumber(row.deadline_at),
+          scheduledStartLocalDate: nullableString(row.scheduled_start_local_date),
+          scheduledEndLocalDate: nullableString(row.scheduled_end_local_date),
+          deadlineLocalDate: nullableString(row.deadline_local_date),
+          previousScheduledStartAt: nullableNumber(row.previous_scheduled_start_at),
+          previousScheduledStartLocalDate: nullableString(row.previous_scheduled_start_local_date),
+          timePrecision: row.time_precision,
+          timezoneSource: row.timezone_source,
+          timezoneText: nullableString(row.timezone_text),
+          stageLabel: nullableString(row.stage_label),
+        },
+        location: nullableString(row.location),
+        meetingUrl: nullableString(row.meeting_url),
+        actionUrl: nullableString(row.action_url),
+      }),
+    );
+  }
+
   /** 检查邮件来源事实是否已经创建过申请事件。 */
   public hasApplicationEvent(
     mailMessageRefId: string,
@@ -262,8 +343,12 @@ export class SqliteRecruitmentMailRepository {
           `INSERT INTO application_events (
             id, application_id, sequence_no, mail_message_ref_id, source_content_hash, source_event_no,
             acceptance_kind, classifier_kind, classifier_version, agent_run_id, event_type,
-            effective_at, received_at, confidence, payload_json, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            effective_at, received_at, confidence, activity_type, scheduled_start_at,
+            scheduled_end_at, deadline_at, scheduled_start_local_date, scheduled_end_local_date,
+            deadline_local_date, previous_scheduled_start_at, previous_scheduled_start_local_date,
+            time_precision, timezone_source, timezone_text, stage_label, location, meeting_url,
+            action_url, payload_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           input.eventId,
@@ -280,6 +365,22 @@ export class SqliteRecruitmentMailRepository {
           input.effectiveAt,
           input.receivedAt,
           input.confidence,
+          input.schedule?.activityType ?? null,
+          input.schedule?.scheduledStartAt ?? null,
+          input.schedule?.scheduledEndAt ?? null,
+          input.schedule?.deadlineAt ?? null,
+          input.schedule?.scheduledStartLocalDate ?? null,
+          input.schedule?.scheduledEndLocalDate ?? null,
+          input.schedule?.deadlineLocalDate ?? null,
+          input.schedule?.previousScheduledStartAt ?? null,
+          input.schedule?.previousScheduledStartLocalDate ?? null,
+          input.schedule?.timePrecision ?? null,
+          input.schedule?.timezoneSource ?? null,
+          input.schedule?.timezoneText ?? null,
+          input.schedule?.stageLabel ?? null,
+          input.location ?? null,
+          input.meetingUrl ?? null,
+          input.actionUrl ?? null,
           input.payloadJson,
           input.now,
         );
@@ -386,4 +487,14 @@ function toMessageRef(row: Record<string, unknown>): MailMessageRefRecord {
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
   };
+}
+
+/** 将 SQLite 可空整数恢复为应用层时间戳输入。 */
+function nullableNumber(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value);
+}
+
+/** 将 SQLite 可空文本恢复为应用层字符串输入。 */
+function nullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
 }

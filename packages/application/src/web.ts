@@ -3,6 +3,7 @@ export * from './config/index.js';
 export { loadRuntimeAppConfig } from './config/runtime-config.js';
 export * from './contracts/index.js';
 export * from './dashboard/index.js';
+export * from './calendar/index.js';
 export * from './jobs/job-query-service.js';
 export * from './jobs/web-job-query-service.js';
 export * from './jobs/web-job-detail-service.js';
