@@ -16,13 +16,13 @@ export interface MailSyncRepository {
 export interface MailRuntimeStatePort {
   read(mailboxKey: string): Promise<{
     readonly generation: number;
-    readonly cursor: unknown | null;
+    readonly cursor: unknown;
   } | null>;
   write(
     mailboxKey: string,
     value: {
       readonly generation: number;
-      readonly cursor: unknown | null;
+      readonly cursor: unknown;
       readonly connectorVersion: string;
     },
   ): Promise<void>;
@@ -44,7 +44,7 @@ export class MailSyncService {
     connector: MailboxConnector,
     credentialRef: string,
     signal?: AbortSignal,
-  ): Promise<{ pages: number; messages: number; cursor: unknown | null }> {
+  ): Promise<{ pages: number; messages: number; cursor: unknown }> {
     const config = mailboxConfigSchema.parse(configInput);
     const previous = await this.#runtimeState.read(config.mailboxKey);
     const context: MailboxReadContext = {
@@ -54,7 +54,7 @@ export class MailSyncService {
     };
     let pages = 0;
     let messages = 0;
-    let cursor: unknown | null = previous?.cursor ?? null;
+    let cursor: unknown = previous?.cursor ?? null;
     for await (const page of connector.discoverChanges(context, {
       mailboxKey: config.mailboxKey,
       folders: config.folders,

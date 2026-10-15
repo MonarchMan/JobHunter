@@ -30,7 +30,7 @@ interface GraphMessage {
   from?: { emailAddress?: { name?: string; address?: string } };
   body?: { contentType?: string; content?: string };
   bodyPreview?: string;
-  internetMessageHeaders?: Array<{ name?: string; value?: string }>;
+  internetMessageHeaders?: { name?: string; value?: string }[];
 }
 
 /** Microsoft Graph 文件夹级 delta 连接器，使用 ImmutableId 避免文件夹移动改变身份。 */
@@ -76,7 +76,9 @@ export class MicrosoftGraphConnector implements MailboxConnector {
     request: MailChangeRequest,
   ): AsyncIterable<MailChangePage> {
     const token = await this.#token(context);
-    for (const folderId of request.folders) {
+    const folders = request.folders;
+    const nextFolders = graphFolderCursors(request.cursor);
+    for (const [folderIndex, folderId] of folders.entries()) {
       const cursor = graphFolderCursor(request.cursor, folderId);
       let url =
         cursor?.deltaLink ??
@@ -97,15 +99,16 @@ export class MicrosoftGraphConnector implements MailboxConnector {
           throw error;
         }
         const refs = (page.value ?? []).map((item) => this.#ref(context, item));
-        const nextCursor = page['@odata.deltaLink']
-          ? { folderId, deltaLink: page['@odata.deltaLink'] }
+        const folderCursor = page['@odata.deltaLink']
+          ? { deltaLink: page['@odata.deltaLink'] }
           : page['@odata.nextLink']
-            ? { folderId, nextLink: page['@odata.nextLink'] }
-            : null;
+            ? { nextLink: page['@odata.nextLink'] }
+            : {};
+        nextFolders[folderId] = folderCursor;
         yield {
           messages: refs,
-          nextCursor,
-          hasMore: Boolean(page['@odata.nextLink']),
+          nextCursor: { folders: { ...nextFolders } },
+          hasMore: Boolean(page['@odata.nextLink']) || folderIndex < folders.length - 1,
         };
         url = page['@odata.nextLink'] ?? '';
       } while (url);
@@ -122,23 +125,20 @@ export class MicrosoftGraphConnector implements MailboxConnector {
       this.#init(token, context),
     );
     const from = result.from?.emailAddress;
-    const textBody =
-      result.body?.contentType?.toLowerCase() === 'text'
-        ? (result.body.content ?? '')
-        : (result.body?.content ?? '');
+    const isHtml = result.body?.contentType?.toLowerCase() === 'html';
+    const body = result.body?.content ?? '';
     return externalMailMessageSchema.parse(
       safeMessage({
         ...message,
         subject: result.subject ?? '',
         fromName: from?.name ?? '',
         fromAddress: from?.address ?? '',
-        textBody,
-        htmlBody: result.body?.contentType?.toLowerCase() === 'html' ? textBody : null,
-        calendarBody: null,
+        textBody: isHtml ? '' : body,
+        htmlBody: isHtml ? body : null,
         headers: Object.fromEntries(
-          (result.internetMessageHeaders ?? [])
-            .filter((item) => item.name && item.value)
-            .map((item) => [item.name!.toLowerCase(), item.value!]),
+          (result.internetMessageHeaders ?? []).flatMap((item) =>
+            item.name && item.value ? [[item.name.toLowerCase(), item.value]] : [],
+          ),
         ),
       }),
     );
@@ -187,6 +187,25 @@ export class MicrosoftGraphConnector implements MailboxConnector {
       timeoutMs: context.timeoutMs ?? 30_000,
     };
   }
+}
+
+function graphFolderCursors(
+  value: unknown,
+): Record<string, { deltaLink?: string; nextLink?: string }> {
+  if (!value || typeof value !== 'object') return {};
+  const folders = (value as Record<string, unknown>).folders;
+  if (!folders || typeof folders !== 'object') return {};
+  const result: Record<string, { deltaLink?: string; nextLink?: string }> = {};
+  for (const [folderId, raw] of Object.entries(folders as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const deltaLink = (raw as Record<string, unknown>).deltaLink;
+    const nextLink = (raw as Record<string, unknown>).nextLink;
+    result[folderId] = {
+      ...(typeof deltaLink === 'string' ? { deltaLink } : {}),
+      ...(typeof nextLink === 'string' ? { nextLink } : {}),
+    };
+  }
+  return result;
 }
 
 function graphFolderCursor(

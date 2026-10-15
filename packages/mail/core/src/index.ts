@@ -96,7 +96,6 @@ export const externalMailMessageSchema = externalMailMessageRefSchema.extend({
   fromAddress: z.string().max(320),
   textBody: z.string().max(200_000),
   htmlBody: z.string().max(400_000).nullable(),
-  calendarBody: z.string().max(100_000).nullable(),
   headers: z.record(z.string(), z.string().max(2000)).default({}),
 });
 export type ExternalMailMessage = z.infer<typeof externalMailMessageSchema>;

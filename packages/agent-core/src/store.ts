@@ -14,6 +14,7 @@ export interface AgentRunRecord {
   readonly cacheKey: string;
   readonly status: AgentRunStatus;
   readonly output: unknown;
+  readonly outputHash: string | null;
   readonly errorCategory: AgentErrorCategory | null;
   readonly errorSummary: string | null;
   readonly inputTokens: number | null;
@@ -58,6 +59,7 @@ export interface AgentRunStore {
     readonly id: string;
     readonly cacheKey: string;
     readonly output: unknown;
+    readonly outputHash: string;
     readonly usage: AgentRunUsage;
     readonly finishedAt: number;
   }): { readonly kind: 'stored' | 'race'; readonly record: AgentRunRecord };

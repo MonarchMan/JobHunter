@@ -91,7 +91,7 @@ export class AgentRunner {
     }
     const inputHash = sha256(canonicalInput);
     const modelConfigHash = hashCanonical(this.#model.metadata);
-    const cacheKey = sha256(
+    const reusableCacheKey = sha256(
       [
         definition.key,
         definition.version,
@@ -101,7 +101,9 @@ export class AgentRunner {
         inputHash,
       ].join('|'),
     );
-    const cached = this.#store.findSucceeded(cacheKey);
+    const resultPolicy = definition.resultPolicy ?? { cache: 'enabled', persistOutput: true };
+    const cached =
+      resultPolicy.cache === 'enabled' ? this.#store.findSucceeded(reusableCacheKey) : null;
     if (cached?.output !== null && cached?.output !== undefined) {
       try {
         return {
@@ -118,6 +120,11 @@ export class AgentRunner {
     // 2、先登记 running 记录，再在事务外执行模型调用。
     const startedAt = this.#now();
     const runId = this.#createId();
+    // 禁用缓存的敏感任务使用单次运行键，避免成功唯一索引把并发运行误判为缓存竞争。
+    const cacheKey =
+      resultPolicy.cache === 'enabled'
+        ? reusableCacheKey
+        : sha256(`${reusableCacheKey}|uncached|${runId}`);
     this.#store.createRunning({
       id: runId,
       agentKey: definition.key,
@@ -128,6 +135,7 @@ export class AgentRunner {
       cacheKey,
       status: 'running',
       output: null,
+      outputHash: null,
       errorCategory: null,
       errorSummary: null,
       inputTokens: null,
@@ -145,13 +153,18 @@ export class AgentRunner {
     // 3、执行 Agent 并将最终输出原子写入运行记录；并发竞争时使用胜者结果。
     try {
       const output = await this.#execute(definition, parsedInput, runId, signal, totals);
+      const outputHash = sha256(canonicalJson(output));
       const completion = this.#store.completeSucceeded({
         id: runId,
         cacheKey,
-        output,
+        output: resultPolicy.persistOutput ? output : null,
+        outputHash,
         usage: this.#usage(totals),
         finishedAt: this.#now(),
       });
+      if (!resultPolicy.persistOutput) {
+        return { run: completion.record, output, cacheHit: false };
+      }
       let winnerOutput: TOutput;
       try {
         winnerOutput = validateOutput(definition, completion.record.output, parsedInput);

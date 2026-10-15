@@ -74,6 +74,5 @@ export function safeMessage(message: ExternalMailMessage): ExternalMailMessage {
     sourceUrl: parseSafeMailSourceUrl(message.sourceUrl),
     textBody: message.textBody.slice(0, 200_000),
     htmlBody: message.htmlBody?.slice(0, 400_000) ?? null,
-    calendarBody: message.calendarBody?.slice(0, 100_000) ?? null,
   };
 }

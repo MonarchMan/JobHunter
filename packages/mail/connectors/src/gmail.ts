@@ -14,17 +14,17 @@ import {
 import { credentialValue, requestJson, safeMessage, safeRef } from './shared.js';
 
 interface GmailMessageListResponse {
-  messages?: Array<{ id: string; threadId?: string }>;
+  messages?: { id: string; threadId?: string }[];
   nextPageToken?: string;
   resultSizeEstimate?: number;
 }
 interface GmailHistoryResponse {
-  history?: Array<{
+  history?: {
     id: string;
-    messagesAdded?: Array<{ message: GmailApiMessage }>;
+    messagesAdded?: { message: GmailApiMessage }[];
     messages?: GmailApiMessage[];
-    messagesDeleted?: Array<{ message: GmailApiMessage }>;
-  }>;
+    messagesDeleted?: { message: GmailApiMessage }[];
+  }[];
   nextPageToken?: string;
   historyId?: string;
 }
@@ -38,7 +38,8 @@ interface GmailApiMessage {
 }
 interface GmailPayload {
   mimeType?: string;
-  headers?: Array<{ name: string; value: string }>;
+  filename?: string;
+  headers?: { name: string; value: string }[];
   body?: { data?: string };
   parts?: GmailPayload[];
 }
@@ -69,7 +70,7 @@ export class GmailConnector implements MailboxConnector {
   public async listFolders(context: MailboxReadContext): Promise<readonly MailFolder[]> {
     const token = await this.#token(context);
     const result = await requestJson<{
-      labels?: Array<{ id: string; name: string; type?: string }>;
+      labels?: { id: string; name: string; type?: string }[];
     }>(`${this.#baseUrl}/labels`, this.#init(token, context));
     return (result.labels ?? []).map((label) => ({
       id: label.id,
@@ -107,10 +108,13 @@ export class GmailConnector implements MailboxConnector {
     let pageToken: string | undefined;
     const refs: ExternalMailMessageRef[] = [];
     do {
+      const labels = request.folders.map((folder) => `label:${folder.replace(/^label:/, '')}`);
       const query = [
         `after:${String(after)}`,
-        ...request.folders.map((folder) => `label:${folder.replace(/^label:/, '')}`),
-      ].join(' ');
+        labels.length > 1 ? `{${labels.join(' ')}}` : labels[0],
+      ]
+        .filter(Boolean)
+        .join(' ');
       const url = new URL(`${this.#baseUrl}/messages`);
       url.searchParams.set('maxResults', String(pageSize));
       url.searchParams.set('q', query);
@@ -121,7 +125,7 @@ export class GmailConnector implements MailboxConnector {
         const page = refs.splice(0, pageSize);
         yield {
           messages: page,
-          nextCursor: { historyId: initialProfile.historyId },
+          nextCursor: null,
           hasMore: true,
         };
       }
@@ -130,7 +134,7 @@ export class GmailConnector implements MailboxConnector {
     while (refs.length > 0) {
       yield {
         messages: refs.splice(0, pageSize),
-        nextCursor: { historyId: initialProfile.historyId },
+        nextCursor: null,
         hasMore: true,
       };
     }
@@ -154,7 +158,6 @@ export class GmailConnector implements MailboxConnector {
         fromAddress: parseAddress(header(result.payload, 'from')),
         textBody: decodeBody(result.payload, 'text/plain'),
         htmlBody: nullableBody(result.payload, 'text/html'),
-        calendarBody: nullableBody(result.payload, 'text/calendar'),
         headers: Object.fromEntries(
           (result.payload?.headers ?? []).map((item) => [item.name.toLowerCase(), item.value]),
         ),
@@ -281,11 +284,18 @@ function header(payload: GmailPayload | undefined, name: string): string {
   );
 }
 function parseAddress(value: string): string {
-  const match = value.match(/<([^>]+)>/);
+  const match = /<([^>]+)>/u.exec(value);
   return match?.[1] ?? value;
 }
 function decodeBody(payload: GmailPayload | undefined, mimeType: string): string {
   if (!payload) return '';
+  const disposition = header(payload, 'content-disposition').toLocaleLowerCase();
+  if (
+    payload.filename ||
+    disposition.includes('attachment') ||
+    payload.mimeType?.startsWith('message/')
+  )
+    return '';
   if (payload.mimeType === mimeType && payload.body?.data) {
     return Buffer.from(payload.body.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
       'utf8',

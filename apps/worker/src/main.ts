@@ -38,6 +38,15 @@ try {
           },
         }
       : {}),
+    mail: {
+      modelMode: config.mail.classification.modelMode.value,
+      mailboxConfigPath: config.bootstrap.mailboxConfigPath.value,
+      credentialPath: config.bootstrap.mailboxCredentialPath.value,
+      credentialKeyPath: config.bootstrap.mailboxCredentialKeyPath.value,
+      ...(config.mail.credentialMasterKey.value
+        ? { credentialMasterKey: config.mail.credentialMasterKey.value.reveal() }
+        : {}),
+    },
   });
   await runWorkerProcess(worker);
 } finally {

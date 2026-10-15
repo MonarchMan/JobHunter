@@ -70,6 +70,9 @@ export interface AppConfig {
     readonly apiKey: SourcedValue<SecretString | null>;
   };
   readonly mail: {
+    readonly classification: {
+      readonly modelMode: SourcedValue<'off' | 'configured'>;
+    };
     readonly webBaseUrl: SourcedValue<string>;
     readonly credentialMasterKey: SourcedValue<SecretString | null>;
     readonly gmail: {
@@ -100,6 +103,15 @@ export interface ConfigOverrides {
 
 const localConfigSchema = z
   .object({
+    mail: z
+      .object({
+        classification: z
+          .object({ modelMode: z.enum(['off', 'configured']).optional() })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
     platforms: z
       .object({
@@ -414,6 +426,16 @@ export function resolveAppConfig(input: {
       },
     },
     mail: {
+      classification: {
+        modelMode: choose(
+          undefined,
+          nonEmpty(environment.JOBHUNTER_MAIL_MODEL_MODE) === undefined
+            ? undefined
+            : z.enum(['off', 'configured']).parse(environment.JOBHUNTER_MAIL_MODEL_MODE?.trim()),
+          file.mail?.classification?.modelMode,
+          'off',
+        ),
+      },
       webBaseUrl: { ...mailWebBaseUrl, value: normalizeWebBaseUrl(mailWebBaseUrl.value) },
       credentialMasterKey: {
         source: mailboxCredentialMasterKey.source,

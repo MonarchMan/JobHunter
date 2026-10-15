@@ -1,5 +1,6 @@
-import { ImapFlow, type FetchMessageObject } from 'imapflow';
+import { ImapFlow, type FetchMessageObject, type MessageStructureObject } from 'imapflow';
 import { simpleParser } from 'mailparser';
+import { z } from 'zod';
 import {
   MailConnectorError,
   externalMailMessageRefSchema,
@@ -16,8 +17,24 @@ import {
 import { credentialValue, safeMessage, safeRef } from './shared.js';
 
 interface ImapCursor {
-  folders?: Record<string, { uidValidity: string; lastUid: number; highestModSeq?: string }>;
+  /** Zod 对可选字段可能显式返回 undefined，因此边界类型需要接受该形态。 */
+  folders?:
+    | Record<string, { uidValidity: string; lastUid: number; highestModSeq?: string | undefined }>
+    | undefined;
 }
+
+const imapCursorSchema = z.object({
+  folders: z
+    .record(
+      z.string(),
+      z.object({
+        uidValidity: z.string(),
+        lastUid: z.number().int().nonnegative(),
+        highestModSeq: z.string().optional(),
+      }),
+    )
+    .optional(),
+});
 interface ImapCredentials {
   host?: string;
   port?: string;
@@ -56,7 +73,7 @@ export class ImapConnector implements MailboxConnector {
         id: box.path,
         displayName: box.name,
         kind: box.path.toUpperCase() === 'INBOX' ? 'inbox' : 'user',
-        selectable: box.flags ? !box.flags.has('\\Noselect') : true,
+        selectable: !box.flags.has('\\Noselect'),
       }));
     } finally {
       await client.logout().catch(() => undefined);
@@ -71,17 +88,18 @@ export class ImapConnector implements MailboxConnector {
     const client = await this.#connect(context, credentials);
     try {
       const cursor = asImapCursor(request.cursor);
-      for (const folder of request.folders) {
+      const folders = request.folders;
+      const nextFolders = { ...(cursor?.folders ?? {}) };
+      for (const [folderIndex, folder] of folders.entries()) {
         const mailbox = await client.mailboxOpen(folder, { readOnly: true });
-        const uidValidity = String(mailbox.uidValidity ?? '');
+        const uidValidity = String(mailbox.uidValidity);
         const state = cursor?.folders?.[folder];
         if (state && state.uidValidity !== uidValidity)
           throw new MailConnectorError('cursor_invalid', 'IMAP UIDVALIDITY changed.');
         const lastUid = state?.lastUid ?? 0;
         const start = Math.max(lastUid + 1, 1);
-        const end = mailbox.exists;
         const refs: ExternalMailMessageRef[] = [];
-        if (end >= start) {
+        if (mailbox.exists > 0 && start < mailbox.uidNext) {
           for await (const item of client.fetch(
             `${String(start)}:*`,
             { uid: true, envelope: true, internalDate: true, flags: true },
@@ -89,19 +107,16 @@ export class ImapConnector implements MailboxConnector {
           ))
             refs.push(this.#ref(context, folder, uidValidity, item));
         }
+        const discoveredLastUid = refs.at(-1)?.externalMessageKey.split(':').at(-1);
+        nextFolders[folder] = {
+          uidValidity,
+          lastUid: discoveredLastUid ? Number(discoveredLastUid) : lastUid,
+          ...(mailbox.highestModseq ? { highestModSeq: String(mailbox.highestModseq) } : {}),
+        };
         yield {
           messages: refs,
-          nextCursor: {
-            folders: {
-              [folder]: {
-                uidValidity,
-                lastUid: refs.at(-1)?.externalMessageKey.split(':').at(-1)
-                  ? Number(refs.at(-1)!.externalMessageKey.split(':').at(-1))
-                  : lastUid,
-              },
-            },
-          },
-          hasMore: false,
+          nextCursor: { folders: { ...nextFolders } },
+          hasMore: folderIndex < folders.length - 1,
         };
       }
     } finally {
@@ -116,29 +131,52 @@ export class ImapConnector implements MailboxConnector {
     const credentials = await this.#credentials(context.credentialRef, context.signal);
     const client = await this.#connect(context, credentials);
     try {
-      await client.mailboxOpen(message.folderId, { readOnly: true });
-      const uid = Number(message.externalMessageKey.split(':').at(-1));
-      const result = await client.fetchOne(String(uid), { uid: true, source: true }, { uid: true });
-      if (!result || !result.source)
+      const mailbox = await client.mailboxOpen(message.folderId, { readOnly: true });
+      const keySegments = message.externalMessageKey.split(':');
+      const uid = Number(keySegments.at(-1));
+      const expectedUidValidity = keySegments.at(-2);
+      if (
+        !Number.isSafeInteger(uid) ||
+        uid < 1 ||
+        expectedUidValidity !== String(mailbox.uidValidity)
+      ) {
+        throw new MailConnectorError('cursor_invalid', 'IMAP message identity is no longer valid.');
+      }
+      // 1、先读取信封和 BODYSTRUCTURE；2、只选择非附件的 text/plain 或 text/html 部件。
+      const metadata = await client.fetchOne(
+        String(uid),
+        { uid: true, envelope: true, bodyStructure: true },
+        { uid: true },
+      );
+      if (!metadata || !metadata.bodyStructure)
         throw new MailConnectorError('message_not_found', 'IMAP message was not found.');
-      const parsed = await simpleParser(result.source);
+      const parts = selectBodyParts(metadata.bodyStructure);
+      const result =
+        parts.length === 0
+          ? metadata
+          : await client.fetchOne(
+              String(uid),
+              {
+                uid: true,
+                bodyParts: parts.map((part) => ({
+                  key: part.part,
+                  maxLength: part.type === 'text/plain' ? 200_000 : 400_000,
+                })),
+              },
+              { uid: true },
+            );
+      if (!result) throw new MailConnectorError('message_not_found', 'IMAP message was not found.');
+      const parsedBodies = await parseSelectedBodies(parts, result.bodyParts ?? new Map());
+      const from = metadata.envelope?.from?.[0];
       return externalMailMessageSchema.parse(
         safeMessage({
           ...message,
-          subject: parsed.subject ?? '',
-          fromName: parsed.from?.value?.[0]?.name ?? '',
-          fromAddress: parsed.from?.value?.[0]?.address ?? '',
-          textBody: parsed.text ?? '',
-          htmlBody: typeof parsed.html === 'string' ? parsed.html : null,
-          calendarBody:
-            parsed.attachments
-              .find((attachment) => attachment.contentType === 'text/calendar')
-              ?.content.toString('utf8') ?? null,
-          headers: Object.fromEntries(
-            [...parsed.headers.entries()]
-              .filter(([, value]) => typeof value === 'string')
-              .map(([key, value]) => [key, String(value)]),
-          ),
+          subject: metadata.envelope?.subject ?? '',
+          fromName: from?.name ?? '',
+          fromAddress: from?.address ?? '',
+          textBody: parsedBodies.text,
+          htmlBody: parsedBodies.html,
+          headers: {},
         }),
       );
     } finally {
@@ -200,7 +238,69 @@ export class ImapConnector implements MailboxConnector {
   }
 }
 
+interface SelectedBodyPart {
+  readonly part: string;
+  readonly type: 'text/plain' | 'text/html';
+  readonly charset: string | null;
+  readonly encoding: string | null;
+}
+
+/** 遍历 BODYSTRUCTURE，只保留正文文本，明确排除附件、日历和嵌套邮件。 */
+function selectBodyParts(root: MessageStructureObject): readonly SelectedBodyPart[] {
+  const selected: SelectedBodyPart[] = [];
+  const visit = (node: MessageStructureObject, isRoot = false): void => {
+    // 1、先排除整棵附件/嵌套邮件子树，避免误把附件中的 text/plain 当成当前正文。
+    const type = node.type.toLocaleLowerCase();
+    const filename = node.dispositionParameters?.filename ?? node.parameters?.name;
+    if (
+      type === 'message/rfc822' ||
+      node.disposition?.toLocaleLowerCase() === 'attachment' ||
+      filename
+    )
+      return;
+    // 2、只遍历正文容器；容器本身没有部件编号时仍需处理其非附件子部件。
+    for (const child of node.childNodes ?? []) visit(child);
+    const part = node.part ?? (isRoot ? '1' : null);
+    if (!part || (type !== 'text/plain' && type !== 'text/html')) {
+      return;
+    }
+    selected.push({
+      part,
+      type,
+      charset: node.parameters?.charset ?? null,
+      encoding: node.encoding ?? null,
+    });
+  };
+  visit(root, true);
+  return selected;
+}
+
+/** 使用 MIME 解码器处理选中的正文部件，不把完整邮件或附件交给解析器。 */
+async function parseSelectedBodies(
+  parts: readonly SelectedBodyPart[],
+  values: ReadonlyMap<string, Buffer>,
+): Promise<{ readonly text: string; readonly html: string | null }> {
+  let text = '';
+  let html: string | null = null;
+  for (const part of parts) {
+    const value = values.get(part.part);
+    if (!value) continue;
+    const headers = [
+      `Content-Type: ${part.type}${part.charset ? `; charset=${JSON.stringify(part.charset)}` : ''}`,
+      ...(part.encoding ? [`Content-Transfer-Encoding: ${part.encoding}`] : []),
+      '',
+      '',
+    ].join('\r\n');
+    const parsed = await simpleParser(Buffer.concat([Buffer.from(headers, 'ascii'), value]));
+    if (part.type === 'text/plain' && !text) text = parsed.text ?? '';
+    if (part.type === 'text/html' && html === null) {
+      html = typeof parsed.html === 'string' ? parsed.html : null;
+    }
+  }
+  return { text, html };
+}
+
 function asImapCursor(value: unknown): ImapCursor | null {
-  if (!value || typeof value !== 'object') return null;
-  return value as ImapCursor;
+  const parsed = imapCursorSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
 }

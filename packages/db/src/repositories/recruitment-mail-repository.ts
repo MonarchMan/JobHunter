@@ -1,5 +1,11 @@
 import type Database from 'better-sqlite3';
 import { projectApplicationStatus } from '@jobhunter/domain';
+import type {
+  MailSyncRepository,
+  RecruitmentMailMessageRef,
+  RecruitmentMailProcessingRepository,
+} from '@jobhunter/application';
+import { createHash } from 'node:crypto';
 
 /** 数据库中的招聘邮件引用行。 */
 export interface MailMessageRefRecord {
@@ -7,6 +13,7 @@ export interface MailMessageRefRecord {
   readonly mailboxKey: string;
   readonly providerKey: string;
   readonly externalMessageKey: string;
+  readonly folderId: string;
   readonly threadKeyHash: string | null;
   readonly sourceUrl: string | null;
   readonly receivedAt: number;
@@ -58,11 +65,12 @@ export class SqliteRecruitmentMailRepository {
       .prepare(
         `
       INSERT INTO mail_message_refs (
-        id, mailbox_key, provider_key, external_message_key, thread_key_hash, source_url,
+        id, mailbox_key, provider_key, external_message_key, folder_id, thread_key_hash, source_url,
         received_at, content_version, content_hash, processing_status, last_classifier_kind,
         last_classifier_version, last_seen_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(mailbox_key, external_message_key) DO UPDATE SET
+        folder_id = excluded.folder_id,
         thread_key_hash = excluded.thread_key_hash,
         source_url = excluded.source_url,
         received_at = excluded.received_at,
@@ -76,6 +84,7 @@ export class SqliteRecruitmentMailRepository {
         input.mailboxKey,
         input.providerKey,
         input.externalMessageKey,
+        input.folderId,
         input.threadKeyHash,
         input.sourceUrl,
         input.receivedAt,
@@ -97,6 +106,60 @@ export class SqliteRecruitmentMailRepository {
     return row ? toMessageRef(row) : null;
   }
 
+  /** 同步页幂等写入最小引用；线程键只保存不可逆哈希。 */
+  public saveMessageRefs(
+    refs: Parameters<MailSyncRepository['saveMessageRefs']>[0],
+    now = Date.now(),
+  ): void {
+    const transaction = this.#client.transaction(() => {
+      for (const reference of refs) {
+        const existing = this.#findByExternalIdentity(
+          reference.mailboxKey,
+          reference.externalMessageKey,
+        );
+        this.upsertMessageRef({
+          id:
+            existing?.id ?? stableMessageRefId(reference.mailboxKey, reference.externalMessageKey),
+          mailboxKey: reference.mailboxKey,
+          providerKey: reference.providerKey,
+          externalMessageKey: reference.externalMessageKey,
+          folderId: reference.folderId,
+          threadKeyHash: reference.threadKey ? sha256(reference.threadKey) : null,
+          sourceUrl: reference.sourceUrl,
+          receivedAt: reference.receivedAt,
+          contentVersion: reference.contentVersion,
+          contentHash: existing?.contentHash ?? null,
+          processingStatus: existing?.processingStatus ?? 'discovered',
+          lastClassifierKind: existing?.lastClassifierKind ?? null,
+          lastClassifierVersion: existing?.lastClassifierVersion ?? null,
+          lastSeenAt: now,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        });
+      }
+    });
+    transaction();
+  }
+
+  /** 按内部引用恢复连接器所需的最小外部身份。 */
+  public findProcessingMessageRef(id: string): RecruitmentMailMessageRef | null {
+    const row = this.#client.prepare('SELECT * FROM mail_message_refs WHERE id = ?').get(id) as
+      Record<string, unknown> | undefined;
+    if (!row) return null;
+    return {
+      id: String(row.id),
+      mailboxKey: String(row.mailbox_key),
+      providerKey: String(row.provider_key) as RecruitmentMailMessageRef['providerKey'],
+      externalMessageKey: String(row.external_message_key),
+      folderId: String(row.folder_id),
+      threadKey: null,
+      receivedAt: Number(row.received_at),
+      contentVersion: String(row.content_version),
+      sourceUrl: typeof row.source_url === 'string' ? row.source_url : null,
+      changeKind: 'added',
+    };
+  }
+
   /** 原子更新邮件处理结论及分类器版本。 */
   public updateMessageStatus(
     id: string,
@@ -111,6 +174,20 @@ export class SqliteRecruitmentMailRepository {
         `UPDATE mail_message_refs SET processing_status = ?, last_classifier_kind = ?, last_classifier_version = ?, content_hash = ?, updated_at = ? WHERE id = ?`,
       )
       .run(status, classifierKind, classifierVersion, contentHash, updatedAt, id);
+  }
+
+  /** 适配应用端口使用的对象参数，避免处理器接触 SQL 细节。 */
+  public updateProcessingStatus(
+    input: Parameters<RecruitmentMailProcessingRepository['updateMessageStatus']>[0],
+  ): void {
+    this.updateMessageStatus(
+      input.id,
+      input.status,
+      input.classifierKind,
+      input.classifierVersion,
+      input.contentHash,
+      input.updatedAt,
+    );
   }
 
   /** 查询申请时间线，供 Web 或 CLI 展示。 */
@@ -226,6 +303,66 @@ export class SqliteRecruitmentMailRepository {
     });
     return transaction();
   }
+
+  /** 按邮箱和外部稳定键读取已有引用，供同步页重放时沿用内部身份。 */
+  #findByExternalIdentity(
+    mailboxKey: string,
+    externalMessageKey: string,
+  ): MailMessageRefRecord | null {
+    const row = this.#client
+      .prepare('SELECT * FROM mail_message_refs WHERE mailbox_key = ? AND external_message_key = ?')
+      .get(mailboxKey, externalMessageKey) as Record<string, unknown> | undefined;
+    return row ? toMessageRef(row) : null;
+  }
+}
+
+/** 组合数据库引用写入与 Worker 发布器，保持数据库包不依赖具体任务队列。 */
+export function createRecruitmentMailSyncRepository(input: {
+  readonly repository: SqliteRecruitmentMailRepository;
+  readonly enqueueClassification: MailSyncRepository['enqueueClassification'];
+  readonly now?: () => number;
+}): MailSyncRepository {
+  return {
+    saveMessageRefs: (refs) => {
+      input.repository.saveMessageRefs(refs, input.now?.() ?? Date.now());
+      return Promise.resolve();
+    },
+    enqueueClassification: input.enqueueClassification,
+  };
+}
+
+/** 将数据库仓储包装为应用层分类端口，保持已有公开方法兼容。 */
+export function createRecruitmentMailProcessingRepository(
+  repository: SqliteRecruitmentMailRepository,
+): RecruitmentMailProcessingRepository {
+  return {
+    findMessageRef: (id) => repository.findProcessingMessageRef(id),
+    updateMessageStatus: (input) => {
+      repository.updateProcessingStatus(input);
+    },
+    appendAcceptedApplicationEvent: (input) =>
+      repository.appendAcceptedApplicationEvent({
+        ...input,
+        sourceEventNo: 1,
+        acceptanceKind: 'automatic',
+      }),
+  };
+}
+
+function sha256(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function stableMessageRefId(mailboxKey: string, externalMessageKey: string): string {
+  return recruitmentMailMessageRefId(mailboxKey, externalMessageKey);
+}
+
+/** 根据邮箱连接和外部消息身份计算稳定的内部引用 ID。 */
+export function recruitmentMailMessageRefId(
+  mailboxKey: string,
+  externalMessageKey: string,
+): string {
+  return `mail-ref-${sha256(`${mailboxKey}\u0000${externalMessageKey}`).slice(0, 40)}`;
 }
 
 function toMessageRef(row: Record<string, unknown>): MailMessageRefRecord {
@@ -234,6 +371,7 @@ function toMessageRef(row: Record<string, unknown>): MailMessageRefRecord {
     mailboxKey: String(row.mailbox_key),
     providerKey: String(row.provider_key),
     externalMessageKey: String(row.external_message_key),
+    folderId: String(row.folder_id),
     threadKeyHash: typeof row.thread_key_hash === 'string' ? row.thread_key_hash : null,
     sourceUrl: typeof row.source_url === 'string' ? row.source_url : null,
     receivedAt: Number(row.received_at),

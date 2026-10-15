@@ -60,6 +60,7 @@ class MemoryStore implements AgentRunStore {
       ...current,
       status: 'succeeded',
       output: input.output,
+      outputHash: input.outputHash,
       ...input.usage,
       errorCategory: null,
       errorSummary: null,
@@ -246,6 +247,34 @@ describe('agent runtime', () => {
     expect(replay.output.answer).toBe('first');
     expect(model.requests).toHaveLength(1);
     expect(store.runs).toHaveLength(1);
+  });
+
+  it('can disable cache and persist only the validated output hash', async () => {
+    const store = new MemoryStore();
+    const model = new QueueModel([output('first'), output('second')]);
+    const runtime = runner(store, model);
+    const sensitive = definition({
+      resultPolicy: { cache: 'disabled', persistOutput: false },
+    });
+    const request = {
+      definition: sensitive,
+      value: { text: 'private mail body' },
+      signal: new AbortController().signal,
+    };
+
+    const first = await runtime.run(request);
+    const second = await runtime.run(request);
+
+    expect(first.output.answer).toBe('first');
+    expect(second.output.answer).toBe('second');
+    expect(first.cacheHit).toBe(false);
+    expect(second.cacheHit).toBe(false);
+    expect(model.requests).toHaveLength(2);
+    expect([...store.runs.values()]).toHaveLength(2);
+    for (const record of store.runs.values()) {
+      expect(record.output).toBeNull();
+      expect(record.outputHash).toMatch(/^[a-f0-9]{64}$/u);
+    }
   });
 
   it('changes the cache key when prompt version changes', async () => {

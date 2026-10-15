@@ -11,9 +11,9 @@
 - [ ] **MAIL-T007** 实现 Microsoft Graph 连接器，使用 delegated `Mail.Read`、文件夹级 message delta、`Prefer: IdType="ImmutableId"`、`changeKey` 和经校验的 `webLink`，覆盖 delta 失效重建、移动/删除变化、断开和重新授权；通过 Graph 独立 supported 门禁。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-005, MAIL-018, MAIL-Q03, MAIL-Q06, MAIL-Q09）
 - [ ] **MAIL-T008** 实现通用 IMAP over TLS 连接器，覆盖 QQ、163 和企业邮箱应用专用密码配置、严格 TLS、`EXAMINE`、`UID FETCH`/`BODY.PEEK`、`UIDVALIDITY + UID`、CONDSTORE/QRESYNC 与 UID 扫描降级、文件夹重建和凭据撤销；通过 IMAP 独立 supported 门禁。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-005, MAIL-018, MAIL-Q03, MAIL-Q06, MAIL-Q09）
 - [ ] **MAIL-T009** 实现本地邮箱配置、运行状态原子文件、文件夹选择、90 天初次回溯、同步计划和 `mailbox.sync@v1` Handler；分别保存 Gmail history、Graph 文件夹 delta 和 IMAP 文件夹 UID 状态，增量页先原子保存引用并发布分类任务，提交成功后再推进文件游标，崩溃窗口通过安全重放收敛。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-005, MAIL-017, MAIL-Q06, MAIL-Q08, MAIL-Q09）
-- [ ] **MAIL-T010** 实现有界 MIME/HTML/日历解析、远程资源阻断、普通附件忽略、引用历史分离和高召回候选粗筛，确保无关邮件正文不落库。（MAIL-006, MAIL-007, MAIL-008, MAIL-016, MAIL-Q03, MAIL-Q04, MAIL-Q05, MAIL-Q07）
-- [ ] **MAIL-T011** 实现版本化确定性分类与字段提取规则，覆盖中英文申请确认、笔试、面试、改期、取消、拒绝、流程结束、Offer 意向和正式 Offer。（MAIL-008, MAIL-009, MAIL-010, MAIL-011, MAIL-Q03, MAIL-Q07）
-- [ ] **MAIL-T012** 实现无工具 `recruitment-mail.classify@v1` Agent、模型显式开关、业务输出校验、禁用持久化输出缓存、脱敏运行记录和评测；模型关闭或失败时把模糊候选降级到待确认，AgentRun 不保存字段提取结果。（MAIL-009, MAIL-010, MAIL-011, MAIL-Q03, MAIL-Q04, MAIL-Q05, MAIL-Q07）
+- [x] **MAIL-T010** 实现有界 MIME/HTML 正文清洗、远程资源阻断、全部附件忽略、引用历史分离和高召回候选粗筛，确保无关邮件正文不落库且附件不发送给模型。（MAIL-006, MAIL-007, MAIL-008, MAIL-016, MAIL-Q03, MAIL-Q04, MAIL-Q05, MAIL-Q07）
+- [x] **MAIL-T011** 实现版本化确定性招聘候选筛选，覆盖中英文申请确认、笔试、面试、改期、取消、拒绝、流程结束、Offer，以及宣讲营销、岗位推广、问卷、验证码和普通招聘资讯等稳定负例；未知模板保守放行。（MAIL-008, MAIL-010, MAIL-011, MAIL-Q03, MAIL-Q07）
+- [x] **MAIL-T012** 实现无工具 `recruitment-mail.classify@v1` Agent、模型显式开关、业务输出校验、禁用持久化输出缓存、脱敏运行记录和评测；模型关闭或失败时把模糊候选降级到待确认，AgentRun 不保存字段提取结果。（MAIL-009, MAIL-010, MAIL-011, MAIL-Q03, MAIL-Q04, MAIL-Q05, MAIL-Q07）
 - [ ] **MAIL-T013** 实现 `mail.classify@v1` Handler、待确认状态、详情打开时重新读取分类、确认/忽略、申请关联、不可变事件提交和当前状态投影，覆盖同公司多岗位、原邮件不可用、重复任务和乱序邮件。（MAIL-011, MAIL-012, MAIL-013, MAIL-014, MAIL-017, MAIL-Q08）
 - [ ] **MAIL-T014** 实现 Web 邮箱设置、同步状态、待确认列表、确认/忽略、申请选择、申请列表、时间线、截止时间与外链安全交互，覆盖时区推断和首版无字段更正边界。（MAIL-001, MAIL-009, MAIL-011, MAIL-012, MAIL-014, MAIL-015, MAIL-016）
 - [x] **MAIL-T014A** 增加 Web 邮箱配置最小闭环：从设置页管理 IMAP/QQ 连接，非敏感配置按原子 JSON 文件保存，凭据交由独立凭据端口保存；邮箱配置文件路径支持 `JOBHUNTER_MAILBOX_CONFIG_PATH` 覆盖。（MAIL-001, MAIL-002, MAIL-015, MAIL-Q03, MAIL-Q04, MAIL-Q09）
