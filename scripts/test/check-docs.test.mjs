@@ -25,7 +25,7 @@ describe('documentation checker', () => {
     const result = await checkDocs(workspaceRoot);
     expect(result.errors).toEqual([]);
     // 1. 校验当前规格目录的完整基线，避免文档遗漏。
-    expect(result.specCount).toBe(30);
+    expect(result.specCount).toBe(31);
   });
 
   it('finds missing triplet files', async () => {

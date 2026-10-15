@@ -253,7 +253,7 @@ sequenceDiagram
 
 ### 6.2 Agent 最终理解与提取
 
-Agent key 为 `recruitment-mail.classify@v1`，工具集为空。所有通过规则筛选的候选邮件在配置模型可用时均由 Agent 完成最终语义分类与字段提取。输入仅包含：
+Agent key 初始版本为 `recruitment-mail.classify@v1`；030 日程规格将其输出契约升级为 `recruitment-mail.classify@v2`，工具集仍为空。所有通过规则筛选的候选邮件在配置模型可用时均由 Agent 完成最终语义分类与字段提取。输入仅包含：
 
 - 清洗后的主题、发件显示名与域名。
 - 有界当前正文；引用历史只在当前语义不足时保留有界片段。

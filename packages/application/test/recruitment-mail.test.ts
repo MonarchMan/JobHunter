@@ -105,9 +105,21 @@ class RecordingModel implements ModelClient {
         roleTitle: '后端工程师',
         applicationKey: null,
         effectiveAt: '2026-10-15T02:00:00+00:00',
-        deadlineAt: null,
-        interviewAt: '2026-10-16T06:00:00+00:00',
-        timezoneText: '北京时间',
+        schedule: {
+          activityType: 'interview',
+          scheduledStartAt: '2026-10-16T14:00:00+08:00',
+          scheduledEndAt: null,
+          deadlineAt: null,
+          scheduledStartLocalDate: null,
+          scheduledEndLocalDate: null,
+          deadlineLocalDate: null,
+          previousScheduledStartAt: null,
+          previousScheduledStartLocalDate: null,
+          timePrecision: 'exact_time',
+          timezoneSource: 'explicit',
+          timezoneText: '北京时间',
+          stageLabel: '技术一面',
+        },
         location: '线上',
         meetingUrl: 'https://meet.example.test/interview',
         actionUrl: null,
@@ -139,6 +151,28 @@ function mail(overrides: Partial<ExternalMailMessage> = {}): ExternalMailMessage
     textBody: '',
     htmlBody: null,
     headers: {},
+    ...overrides,
+  };
+}
+
+/** 构造模型侧日程输出，允许单项覆盖以验证跨字段业务约束。 */
+function agentSchedule(
+  overrides: Readonly<Record<string, unknown>> = {},
+): Readonly<Record<string, unknown>> {
+  return {
+    activityType: 'interview',
+    scheduledStartAt: '2026-10-16T14:00:00+08:00',
+    scheduledEndAt: null,
+    deadlineAt: null,
+    scheduledStartLocalDate: null,
+    scheduledEndLocalDate: null,
+    deadlineLocalDate: null,
+    previousScheduledStartAt: null,
+    previousScheduledStartLocalDate: null,
+    timePrecision: 'exact_time',
+    timezoneSource: 'explicit',
+    timezoneText: '北京时间',
+    stageLabel: null,
     ...overrides,
   };
 }
@@ -316,6 +350,13 @@ describe('recruitment mail classification', () => {
     expect(recruitmentMailClassificationSchema.safeParse(result.classification).success).toBe(true);
     expect(result).toMatchObject({ modelStatus: 'succeeded', agentRunId: 'mail-run-1' });
     expect(result.classification.eventType).toBe('interview_invited');
+    expect(result.classification.schedule).toMatchObject({
+      activityType: 'interview',
+      scheduledStartAt: Date.parse('2026-10-16T14:00:00+08:00'),
+      timePrecision: 'exact_time',
+      timezoneSource: 'explicit',
+      stageLabel: '技术一面',
+    });
     expect(model.requests).toHaveLength(1);
     expect(model.requests[0]?.tools).toEqual([]);
     expect(JSON.stringify(model.requests[0]?.input)).not.toContain('VCALENDAR');
@@ -324,6 +365,195 @@ describe('recruitment mail classification', () => {
     expect(stored?.outputHash).toMatch(/^[a-f0-9]{64}$/u);
     expect(JSON.stringify(stored)).not.toContain('示例科技');
     expect(store.toolCalls).toEqual([]);
+  });
+
+  it('keeps date-only assessment deadlines without inventing a midnight instant', async () => {
+    const model = new RecordingModel();
+    model.outputOverrides = {
+      eventType: 'assessment_invited',
+      meetingUrl: null,
+      schedule: {
+        activityType: 'assessment',
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        deadlineAt: null,
+        scheduledStartLocalDate: null,
+        scheduledEndLocalDate: null,
+        deadlineLocalDate: '2026-10-22',
+        previousScheduledStartAt: null,
+        previousScheduledStartLocalDate: null,
+        timePrecision: 'date_only',
+        timezoneSource: 'not_applicable',
+        timezoneText: null,
+        stageLabel: '在线测评',
+      },
+      evidence: ['请在 2026 年 10 月 22 日前完成在线测评'],
+    };
+    const classifier = new RecruitmentMailClassifier({
+      runner: new AgentRunner({
+        store: new MemoryAgentRunStore(),
+        model,
+        createId: () => 'date-only-run',
+        now: () => 100,
+      }),
+      defaultTimezone: 'Asia/Shanghai',
+    });
+
+    const result = await classifier.classify(
+      mail({
+        subject: '在线测评邀请',
+        textBody: '请在 2026 年 10 月 22 日前完成在线测评',
+      }),
+      new AbortController().signal,
+    );
+
+    expect(result.classification.schedule).toMatchObject({
+      activityType: 'assessment',
+      deadlineAt: null,
+      deadlineLocalDate: '2026-10-22',
+      timePrecision: 'date_only',
+      timezoneSource: 'not_applicable',
+    });
+  });
+
+  it('extracts the new and previous time for a rescheduled interview', async () => {
+    const model = new RecordingModel();
+    model.outputOverrides = {
+      eventType: 'interview_rescheduled',
+      meetingUrl: null,
+      schedule: {
+        activityType: 'interview',
+        scheduledStartAt: '2026-10-21T15:00:00+08:00',
+        scheduledEndAt: null,
+        deadlineAt: null,
+        scheduledStartLocalDate: null,
+        scheduledEndLocalDate: null,
+        deadlineLocalDate: null,
+        previousScheduledStartAt: '2026-10-20T14:00:00+08:00',
+        previousScheduledStartLocalDate: null,
+        timePrecision: 'exact_time',
+        timezoneSource: 'explicit',
+        timezoneText: '北京时间',
+        stageLabel: '技术一面',
+      },
+      evidence: ['原定 10 月 20 日 14:00，调整至 10 月 21 日 15:00'],
+    };
+    const classifier = new RecruitmentMailClassifier({
+      runner: new AgentRunner({
+        store: new MemoryAgentRunStore(),
+        model,
+        createId: () => 'reschedule-run',
+        now: () => 100,
+      }),
+      defaultTimezone: 'Asia/Shanghai',
+    });
+
+    const result = await classifier.classify(
+      mail({
+        subject: '面试时间调整',
+        textBody: '北京时间，原定 10 月 20 日 14:00，调整至 10 月 21 日 15:00。',
+      }),
+      new AbortController().signal,
+    );
+
+    expect(result.classification.schedule).toMatchObject({
+      scheduledStartAt: Date.parse('2026-10-21T15:00:00+08:00'),
+      previousScheduledStartAt: Date.parse('2026-10-20T14:00:00+08:00'),
+    });
+  });
+
+  it('keeps an assessment date range as local dates', async () => {
+    const model = new RecordingModel();
+    model.outputOverrides = {
+      eventType: 'assessment_invited',
+      meetingUrl: null,
+      schedule: {
+        activityType: 'written_exam',
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        deadlineAt: null,
+        scheduledStartLocalDate: '2026-10-18',
+        scheduledEndLocalDate: '2026-10-20',
+        deadlineLocalDate: null,
+        previousScheduledStartAt: null,
+        previousScheduledStartLocalDate: null,
+        timePrecision: 'date_range',
+        timezoneSource: 'not_applicable',
+        timezoneText: null,
+        stageLabel: '在线笔试',
+      },
+      evidence: ['笔试开放时间为 2026 年 10 月 18 日至 20 日'],
+    };
+    const classifier = new RecruitmentMailClassifier({
+      runner: new AgentRunner({
+        store: new MemoryAgentRunStore(),
+        model,
+        createId: () => 'date-range-run',
+        now: () => 100,
+      }),
+      defaultTimezone: 'Asia/Shanghai',
+    });
+
+    const result = await classifier.classify(
+      mail({
+        subject: '在线笔试邀请',
+        textBody: '笔试开放时间为 2026 年 10 月 18 日至 20 日',
+      }),
+      new AbortController().signal,
+    );
+
+    expect(result.classification.schedule).toMatchObject({
+      activityType: 'written_exam',
+      scheduledStartLocalDate: '2026-10-18',
+      scheduledEndLocalDate: '2026-10-20',
+      timePrecision: 'date_range',
+    });
+  });
+
+  it('records only the target time for a cancelled interview', async () => {
+    const model = new RecordingModel();
+    model.outputOverrides = {
+      eventType: 'interview_cancelled',
+      meetingUrl: null,
+      schedule: {
+        activityType: 'interview',
+        scheduledStartAt: null,
+        scheduledEndAt: null,
+        deadlineAt: null,
+        scheduledStartLocalDate: null,
+        scheduledEndLocalDate: null,
+        deadlineLocalDate: null,
+        previousScheduledStartAt: '2026-10-20T14:00:00+08:00',
+        previousScheduledStartLocalDate: null,
+        timePrecision: 'exact_time',
+        timezoneSource: 'explicit',
+        timezoneText: '北京时间',
+        stageLabel: '技术一面',
+      },
+      evidence: ['原定 2026 年 10 月 20 日 14:00 的技术一面已取消'],
+    };
+    const classifier = new RecruitmentMailClassifier({
+      runner: new AgentRunner({
+        store: new MemoryAgentRunStore(),
+        model,
+        createId: () => 'cancellation-run',
+        now: () => 100,
+      }),
+      defaultTimezone: 'Asia/Shanghai',
+    });
+
+    const result = await classifier.classify(
+      mail({
+        subject: '面试取消通知',
+        textBody: '北京时间，原定 2026 年 10 月 20 日 14:00 的技术一面已取消。',
+      }),
+      new AbortController().signal,
+    );
+
+    expect(result.classification.schedule).toMatchObject({
+      scheduledStartAt: null,
+      previousScheduledStartAt: Date.parse('2026-10-20T14:00:00+08:00'),
+    });
   });
 
   it('keeps a candidate for review when the model is unavailable', async () => {
@@ -373,7 +603,37 @@ describe('recruitment mail classification', () => {
     { evidence: ['邮件中不存在的证据'] },
     { meetingUrl: 'https://invented.example.test/meeting' },
     { meetingUrl: 'http://meet.example.test/interview' },
-    { interviewAt: 'not-a-date' },
+    {
+      schedule: agentSchedule({ scheduledStartAt: 'not-a-date' }),
+    },
+    {
+      schedule: agentSchedule({
+        scheduledStartAt: null,
+        timePrecision: 'exact_time',
+        timezoneSource: 'unknown',
+      }),
+    },
+    {
+      schedule: agentSchedule({
+        scheduledStartLocalDate: '2026-10-16',
+        timePrecision: 'date_only',
+      }),
+    },
+    {
+      schedule: agentSchedule({
+        scheduledEndAt: '2026-10-16T15:00:00+08:00',
+        scheduledStartLocalDate: '2026-10-16',
+        timePrecision: 'time_range',
+      }),
+    },
+    {
+      schedule: agentSchedule({
+        scheduledStartLocalDate: '2026-10-16',
+        scheduledEndLocalDate: '2026-10-17',
+        timePrecision: 'date_range',
+      }),
+    },
+    { eventType: 'offer_issued' },
     { eventType: 'not_recruiting', decision: 'accepted' },
   ])('rejects invalid facts after one repair without persisting them: %j', async (overrides) => {
     const store = new MemoryAgentRunStore();

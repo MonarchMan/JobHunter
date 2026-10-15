@@ -33,6 +33,9 @@ export type {
   WebTaskMutation,
   WebResumeDeletionImpact,
   WebResumeDeletionConfirm,
+  WebCalendarQuery,
+  WebCalendarItem,
+  WebCalendarRange,
 } from './web.js';
 export {
   webDashboardNextActionSchema,
@@ -75,6 +78,9 @@ export {
   webTaskMutationSchema,
   webResumeDeletionImpactSchema,
   webResumeDeletionConfirmSchema,
+  webCalendarQuerySchema,
+  webCalendarItemSchema,
+  webCalendarRangeSchema,
 } from './web.js';
 export * from './interview-web.js';
 export * from './experience-web.js';

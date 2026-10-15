@@ -9,6 +9,7 @@ export * from './sync/index.js';
 export * from './tasks/index.js';
 export * from './contracts/index.js';
 export * from './dashboard/index.js';
+export * from './calendar/index.js';
 export * from './settings/index.js';
 export * from './mail/index.js';
 export * from './platforms.js';

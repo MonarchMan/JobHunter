@@ -36,6 +36,58 @@ export type JobApplicationStatus = z.infer<typeof jobApplicationStatusSchema>;
 export const recruitmentMailDecisionSchema = z.enum(['accepted', 'needs_review', 'ignored']);
 export type RecruitmentMailDecision = z.infer<typeof recruitmentMailDecisionSchema>;
 
+/** 可进入求职日历的招聘活动类型。 */
+export const recruitmentScheduleActivityTypeSchema = z.enum([
+  'interview',
+  'written_exam',
+  'assessment',
+  'coding_test',
+]);
+export type RecruitmentScheduleActivityType = z.infer<typeof recruitmentScheduleActivityTypeSchema>;
+
+/** 日程事实的时间精度；仅日期事实不得伪造为午夜时间。 */
+export const recruitmentScheduleTimePrecisionSchema = z.enum([
+  'exact_time',
+  'date_only',
+  'time_range',
+  'date_range',
+  'unknown',
+]);
+export type RecruitmentScheduleTimePrecision = z.infer<
+  typeof recruitmentScheduleTimePrecisionSchema
+>;
+
+/** 日程时间使用的时区来源。 */
+export const recruitmentScheduleTimezoneSourceSchema = z.enum([
+  'explicit',
+  'mailbox_default',
+  'not_applicable',
+  'unknown',
+]);
+export type RecruitmentScheduleTimezoneSource = z.infer<
+  typeof recruitmentScheduleTimezoneSourceSchema
+>;
+
+/** 招聘邮件中的可执行日程事实；改期旧时间只用于定位待替换安排。 */
+export const recruitmentScheduleFactSchema = z
+  .object({
+    activityType: recruitmentScheduleActivityTypeSchema,
+    scheduledStartAt: utcInstantSchema.nullable(),
+    scheduledEndAt: utcInstantSchema.nullable(),
+    deadlineAt: utcInstantSchema.nullable(),
+    scheduledStartLocalDate: z.iso.date().nullable(),
+    scheduledEndLocalDate: z.iso.date().nullable(),
+    deadlineLocalDate: z.iso.date().nullable(),
+    previousScheduledStartAt: utcInstantSchema.nullable(),
+    previousScheduledStartLocalDate: z.iso.date().nullable(),
+    timePrecision: recruitmentScheduleTimePrecisionSchema,
+    timezoneSource: recruitmentScheduleTimezoneSourceSchema,
+    timezoneText: z.string().min(1).max(128).nullable(),
+    stageLabel: z.string().min(1).max(320).nullable(),
+  })
+  .strict();
+export type RecruitmentScheduleFact = z.infer<typeof recruitmentScheduleFactSchema>;
+
 /** 招聘邮件分类结果；不允许凭空填充不确定字段。 */
 export const recruitmentMailClassificationSchema = z.object({
   eventType: recruitmentMailEventTypeSchema,
@@ -44,12 +96,10 @@ export const recruitmentMailClassificationSchema = z.object({
   roleTitle: z.string().min(1).max(320).nullable(),
   applicationKey: z.string().max(320).nullable(),
   effectiveAt: utcInstantSchema.nullable(),
-  deadlineAt: utcInstantSchema.nullable(),
-  interviewAt: utcInstantSchema.nullable(),
-  timezoneText: z.string().max(128).nullable(),
+  schedule: recruitmentScheduleFactSchema.nullable(),
   location: z.string().max(1000).nullable(),
-  meetingUrl: z.string().url().nullable(),
-  actionUrl: z.string().url().nullable(),
+  meetingUrl: z.url().nullable(),
+  actionUrl: z.url().nullable(),
   recruiterName: z.string().max(320).nullable(),
   confidence: z.number().min(0).max(1),
   evidence: z.array(z.string().max(500)).max(8),

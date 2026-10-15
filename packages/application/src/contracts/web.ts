@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { jobAdviceSchema, ruleOutcomeSchema, scoreComponentSchema } from '@jobhunter/matching';
-import { candidatePreferencesSchema, candidateProfileSchema } from '@jobhunter/domain';
+import {
+  candidatePreferencesSchema,
+  candidateProfileSchema,
+  recruitmentScheduleActivityTypeSchema,
+  recruitmentScheduleTimePrecisionSchema,
+  recruitmentScheduleTimezoneSourceSchema,
+} from '@jobhunter/domain';
 import { resumePolishAgentOutputSchema, resumePolishSectionSchema } from '@jobhunter/resume';
 
 /** Stable error body shared by Web route handlers and React clients. */
@@ -845,3 +851,57 @@ export const webResumeDeletionConfirmSchema = z
 
 /** 应用层使用的类型约束。 */
 export type WebResumeDeletionConfirm = z.infer<typeof webResumeDeletionConfirmSchema>;
+
+/** 招聘日历日期范围查询；起止日期均按用户时区解释且包含结束日。 */
+export const webCalendarQuerySchema = z
+  .object({
+    dateFrom: z.iso.date(),
+    dateTo: z.iso.date(),
+    timezone: z.string().trim().min(1).max(100).default('Asia/Shanghai'),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (input.dateFrom > input.dateTo) {
+      context.addIssue({
+        code: 'custom',
+        path: ['dateTo'],
+        message: 'dateTo must not be earlier than dateFrom.',
+      });
+    }
+  });
+export type WebCalendarQuery = z.infer<typeof webCalendarQuerySchema>;
+
+/** Web 日历中的当前有效安排；改期只更新来源和时间，不暴露旧日程状态。 */
+export const webCalendarItemSchema = z
+  .object({
+    id: z.string().min(1),
+    sourceEventId: z.string().min(1),
+    applicationId: z.string().min(1),
+    companyName: z.string().min(1),
+    roleTitle: z.string().min(1),
+    activityType: recruitmentScheduleActivityTypeSchema,
+    stageLabel: z.string().min(1).max(320).nullable(),
+    scheduledStartAt: z.iso.datetime().nullable(),
+    scheduledEndAt: z.iso.datetime().nullable(),
+    deadlineAt: z.iso.datetime().nullable(),
+    scheduledStartLocalDate: z.iso.date().nullable(),
+    scheduledEndLocalDate: z.iso.date().nullable(),
+    deadlineLocalDate: z.iso.date().nullable(),
+    timePrecision: recruitmentScheduleTimePrecisionSchema,
+    timezoneSource: recruitmentScheduleTimezoneSourceSchema,
+    timezoneText: z.string().min(1).max(128).nullable(),
+    location: z.string().nullable(),
+    meetingUrl: z.url().nullable(),
+    actionUrl: z.url().nullable(),
+    receivedAt: z.iso.datetime(),
+  })
+  .strict();
+export type WebCalendarItem = z.infer<typeof webCalendarItemSchema>;
+
+/** Web 日历日期范围响应。 */
+export const webCalendarRangeSchema = z
+  .object({
+    items: z.array(webCalendarItemSchema),
+  })
+  .strict();
+export type WebCalendarRange = z.infer<typeof webCalendarRangeSchema>;
