@@ -208,8 +208,52 @@ describe('mail classification task handler', () => {
     expect(repository.updates[0]?.status).toBe('accepted');
   });
 
-  it('keeps an incomplete accepted result for review without creating an event', async () => {
+  it('derives a stable application identity for an accepted schedule without an external key', async () => {
     const { output, repository } = await execute(classification({ applicationKey: null }));
+
+    expect(output).toEqual({ status: 'accepted' });
+    expect(repository.events).toHaveLength(1);
+    expect(repository.events[0]).toMatchObject({
+      externalApplicationKeyHash: null,
+      companyName: '示例科技',
+      roleTitle: '后端工程师',
+    });
+    expect(repository.events[0]?.applicationId).toBe(
+      `mail-app-${contentHash({
+        mailboxKey: mailbox.mailboxKey,
+        identityKind: 'schedule_company_role',
+        companyName: '示例科技',
+        roleTitle: '后端工程师',
+      }).slice(0, 40)}`,
+    );
+    expect(repository.updates[0]?.status).toBe('accepted');
+  });
+
+  it('keeps an explicit schedule when its mail template omits the role title', async () => {
+    const { output, repository } = await execute(
+      classification({ applicationKey: null, roleTitle: null }),
+    );
+
+    expect(output).toEqual({ status: 'accepted' });
+    expect(repository.events).toHaveLength(1);
+    expect(repository.events[0]).toMatchObject({
+      companyName: '示例科技',
+      roleTitle: '未知',
+      externalApplicationKeyHash: null,
+    });
+    expect(repository.events[0]?.applicationId).toBe(
+      `mail-app-${contentHash({
+        mailboxKey: mailbox.mailboxKey,
+        identityKind: 'schedule_message',
+        messageRefId: 'message-ref-1',
+      }).slice(0, 40)}`,
+    );
+  });
+
+  it('keeps a non-schedule result without an external application key for review', async () => {
+    const { output, repository } = await execute(
+      classification({ applicationKey: null, schedule: null }),
+    );
 
     expect(output).toEqual({ status: 'needs_review' });
     expect(repository.events).toEqual([]);

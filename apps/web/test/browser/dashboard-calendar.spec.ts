@@ -24,7 +24,26 @@ test('shows the compact calendar above overview and expands into an accessible d
   await calendar.getByRole('button', { name: '展开招聘日程' }).click();
   const dialog = page.getByRole('dialog', { name: '招聘日程' });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('button', { name: '在线编程' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '在线编程' })).toHaveCount(0);
+  await expect(dialog.getByRole('button', { name: '笔试' })).toBeVisible();
+
+  // 详情必须按需读取相邻月份，并允许返回当前月份。
+  const monthHeading = dialog.locator('[class*="monthNavigation"] strong');
+  const currentMonth = await monthHeading.textContent();
+  const nextMonthResponse = page.waitForResponse(
+    (response) => response.url().includes('/api/calendar?') && response.status() === 200,
+  );
+  await dialog.getByRole('button', { name: '下个月' }).click();
+  await nextMonthResponse;
+  await expect(monthHeading).not.toHaveText(currentMonth ?? '');
+  await dialog.getByRole('button', { name: '上个月' }).click();
+  await expect(monthHeading).toHaveText(currentMonth ?? '');
+
+  // 截止日期已经过去的笔试仍保留在日历，并与过去的固定安排统一标记为已完成。
+  const completedExamDay = dialog.getByRole('button').filter({ hasText: '在线笔试' });
+  await expect(completedExamDay).toBeVisible();
+  await completedExamDay.click();
+  await expect(dialog.getByText('已完成')).toBeVisible();
 
   // 日期悬停只改变圆形日期标记，不能再把整个日期单元格变成深色背景。
   const selectedDay = dialog.getByRole('button', { pressed: true });

@@ -41,7 +41,6 @@ export const recruitmentScheduleActivityTypeSchema = z.enum([
   'interview',
   'written_exam',
   'assessment',
-  'coding_test',
 ]);
 export type RecruitmentScheduleActivityType = z.infer<typeof recruitmentScheduleActivityTypeSchema>;
 

@@ -71,17 +71,17 @@ async function migrationsBefore(
 }
 
 describe('SQLite migrations and capabilities', () => {
-  it('backfills typed calendar fields from the unified schedule payload', async () => {
-    const root = await createTemporaryDataRoot('jobhunter-calendar-upgrade-');
+  it('resets legacy application events and rejects the removed activity type', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-calendar-activity-upgrade-');
     dataRoots.push(root);
-    const folder = await migrationsBefore(root.path, 'before-calendar-schedule', 42);
+    const folder = await migrationsBefore(root.path, 'before-calendar-activity-merge', 43);
     const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
     legacy.client
       .prepare(
         `INSERT INTO mail_message_refs (
           id, mailbox_key, provider_key, external_message_key, folder_id, received_at,
           content_version, processing_status, last_seen_at, created_at, updated_at
-        ) VALUES ('mail-calendar', 'personal', 'imap', 'INBOX:1', 'INBOX', 100,
+        ) VALUES ('mail-coding', 'personal', 'imap', 'INBOX:2', 'INBOX', 100,
           '1', 'accepted', 100, 100, 100)`,
       )
       .run();
@@ -89,63 +89,51 @@ describe('SQLite migrations and capabilities', () => {
       .prepare(
         `INSERT INTO job_applications (
           id, company_name, role_title, status, revision, created_at, updated_at
-        ) VALUES ('application-calendar', '示例公司', '后端工程师', 'interview', 1, 100, 100)`,
+        ) VALUES ('application-coding', '示例公司', '开发工程师', 'assessment', 1, 100, 100)`,
       )
       .run();
-    const insertEvent = legacy.client.prepare(
-      `INSERT INTO application_events (
-        id, application_id, sequence_no, mail_message_ref_id, source_content_hash,
-        source_event_no, acceptance_kind, classifier_kind, classifier_version,
-        event_type, effective_at, received_at, confidence, payload_json, created_at
-      ) VALUES (?, 'application-calendar', ?, 'mail-calendar', ?, ?, 'automatic', 'agent',
-        'legacy-agent', ?, 100, 100, 0.9, ?, 100)`,
-    );
-    insertEvent.run(
-      'event-schedule-assessment',
-      1,
-      'a'.repeat(64),
-      1,
-      'assessment_invited',
-      JSON.stringify({
-        schedule: {
-          activityType: 'assessment',
-          scheduledStartAt: null,
-          scheduledEndAt: null,
-          deadlineAt: null,
-          scheduledStartLocalDate: null,
-          scheduledEndLocalDate: null,
-          deadlineLocalDate: '2026-10-31',
-          previousScheduledStartAt: null,
-          previousScheduledStartLocalDate: null,
-          timePrecision: 'date_only',
-          timezoneSource: 'not_applicable',
-          timezoneText: null,
-          stageLabel: '在线测评',
-        },
-        actionUrl: 'https://example.com/assessment',
-      }),
-    );
+    legacy.client
+      .prepare(
+        `INSERT INTO application_events (
+          id, application_id, sequence_no, mail_message_ref_id, source_content_hash,
+          source_event_no, acceptance_kind, classifier_kind, classifier_version,
+          event_type, effective_at, received_at, confidence, activity_type,
+          deadline_local_date, time_precision, timezone_source, payload_json, created_at
+        ) VALUES ('event-coding', 'application-coding', 1, 'mail-coding', ?, 1,
+          'automatic', 'agent', 'legacy-agent', 'assessment_invited', 100, 100, 0.9,
+          'coding_test', '2026-10-31', 'date_only', 'not_applicable', ?, 100)`,
+      )
+      .run(
+        'c'.repeat(64),
+        JSON.stringify({
+          schedule: {
+            activityType: 'coding_test',
+            deadlineLocalDate: '2026-10-31',
+          },
+        }),
+      );
     legacy.close();
 
-    // 1、旧数据库先停机；2、当前版本执行迁移；3、验证统一 schedule 结构完成类型化回填。
+    // 1、执行破坏性迁移；2、验证旧事件已清空；3、确认数据库拒绝旧类型。
     const upgraded = openSqliteDatabase({ dataRoot: root.path });
     handles.push(upgraded);
     expect(
+      upgraded.client.prepare('SELECT count(*) AS count FROM application_events').get(),
+    ).toEqual({ count: 0 });
+    expect(() =>
       upgraded.client
         .prepare(
-          `SELECT activity_type, deadline_local_date, time_precision, timezone_source,
-            stage_label, action_url
-          FROM application_events WHERE id = 'event-schedule-assessment'`,
+          `INSERT INTO application_events (
+            id, application_id, sequence_no, mail_message_ref_id, source_content_hash,
+            source_event_no, acceptance_kind, classifier_kind, classifier_version,
+            event_type, effective_at, received_at, confidence, activity_type,
+            payload_json, created_at
+          ) VALUES ('event-coding-new', 'application-coding', 1, 'mail-coding', ?, 1,
+            'automatic', 'agent', 'current-agent', 'assessment_invited', 100, 100, 0.9,
+            'coding_test', '{}', 100)`,
         )
-        .get(),
-    ).toEqual({
-      activity_type: 'assessment',
-      deadline_local_date: '2026-10-31',
-      time_precision: 'date_only',
-      timezone_source: 'not_applicable',
-      stage_label: '在线测评',
-      action_url: 'https://example.com/assessment',
-    });
+        .run('d'.repeat(64)),
+    ).toThrow();
   });
 
   it('backfills retry roots and maintains projections for newly inserted retries', async () => {
@@ -275,7 +263,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      43,
+      44,
     );
   });
 

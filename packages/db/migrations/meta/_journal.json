@@ -302,6 +302,13 @@
       "when": 1792214400000,
       "tag": "0042_application_event_schedule",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1792300800000,
+      "tag": "0043_reset_application_event_activity_types",
+      "breakpoints": true
     }
   ]
 }
