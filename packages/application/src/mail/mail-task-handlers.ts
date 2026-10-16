@@ -67,7 +67,8 @@ export interface RecruitmentMailClassificationPort {
 }
 
 /** 稳定分类策略标识同时进入任务幂等键和邮件处理状态。 */
-export const recruitmentMailPolicyVersion = 'candidate-rules-v4+agent-v2-prompt-v4';
+export const recruitmentMailPolicyVersion =
+  'candidate-rules-v4+agent-v3-prompt-v5+schedule-identity-v2';
 
 export const mailboxScanTaskPayloadSchema = z.object({}).strict();
 export const mailboxScanTaskOutputSchema = z
@@ -205,9 +206,10 @@ export function createMailClassifyTaskHandler(input: {
         const now = context.clock.now();
         let status = classification.decision;
 
-        // 3.b、自动接受必须具备公司、岗位和稳定申请编号；仅凭名称不能安全合并多次申请。
+        // 3.b、普通流程事件仍要求完整申请身份；明确日程不因模板省略公司或岗位而丢失。
         if (
           status === 'accepted' &&
+          classification.schedule === null &&
           (classification.companyName === null ||
             classification.roleTitle === null ||
             classification.applicationKey === null)
@@ -215,21 +217,29 @@ export function createMailClassifyTaskHandler(input: {
           status = 'needs_review';
         }
         if (status === 'accepted') {
-          const companyName = classification.companyName;
-          const roleTitle = classification.roleTitle;
+          // 3.c、日程模板缺失身份字段时使用显式占位，仅服务展示，不伪造邮件事实。
+          const companyName = classification.companyName ?? '公司未注明';
+          const roleTitle = classification.roleTitle ?? '未知';
           const applicationKey = classification.applicationKey;
-          if (companyName === null || roleTitle === null || applicationKey === null) {
-            throw new TaskExecutionError(
-              'validation_failed',
-              'Accepted mail lacks application identity.',
-            );
-          }
-          // 3.c、申请编号只在当前邮箱连接内稳定，防止不同账号的相同外部编号被合并。
-          const externalApplicationKeyHash = contentHash({
-            mailboxKey: reference.mailboxKey,
-            applicationKey,
-          });
-          const applicationId = `mail-app-${externalApplicationKeyHash.slice(0, 40)}`;
+          // 3.d、外部编号优先；公司和岗位齐全时稳定归组，否则按消息隔离，避免误合并申请。
+          const applicationIdentityHash =
+            applicationKey === null
+              ? classification.companyName !== null && classification.roleTitle !== null
+                ? contentHash({
+                    mailboxKey: reference.mailboxKey,
+                    identityKind: 'schedule_company_role',
+                    companyName: normalizeApplicationIdentity(companyName),
+                    roleTitle: normalizeApplicationIdentity(roleTitle),
+                  })
+                : contentHash({
+                    mailboxKey: reference.mailboxKey,
+                    identityKind: 'schedule_message',
+                    messageRefId: reference.id,
+                  })
+              : contentHash({ mailboxKey: reference.mailboxKey, applicationKey });
+          const externalApplicationKeyHash =
+            applicationKey === null ? null : applicationIdentityHash;
+          const applicationId = `mail-app-${applicationIdentityHash.slice(0, 40)}`;
           input.repository.appendAcceptedApplicationEvent({
             applicationId,
             externalApplicationKeyHash,
@@ -279,6 +289,11 @@ export function createMailClassifyTaskHandler(input: {
       }
     },
   };
+}
+
+/** 归一化派生申请身份，避免邮件模板中的大小写和空白差异拆分同一日程。 */
+function normalizeApplicationIdentity(value: string): string {
+  return value.trim().replace(/\s+/gu, ' ').toLocaleLowerCase('zh-CN');
 }
 
 /** 将连接器稳定错误映射为 Worker 重试类别，摘要不包含供应商响应或邮件数据。 */

@@ -22,7 +22,6 @@ const activityLabels: Readonly<Record<WebCalendarItem['activityType'], string>> 
   interview: '面试',
   written_exam: '笔试',
   assessment: '测评',
-  coding_test: '在线编程',
 };
 
 const activityFilters: readonly ActivityFilter[] = [
@@ -30,8 +29,12 @@ const activityFilters: readonly ActivityFilter[] = [
   'interview',
   'written_exam',
   'assessment',
-  'coding_test',
 ];
+
+const timingStatusLabels: Readonly<Record<WebCalendarItem['timingStatus'], string>> = {
+  upcoming: '待进行',
+  completed: '已完成',
+};
 
 /** 浏览器只校验日历响应本身，避免把应用层服务端聚合入口打入客户端包。 */
 const calendarResponseSchema = z
@@ -44,7 +47,8 @@ const calendarResponseSchema = z
           applicationId: z.string().min(1),
           companyName: z.string().min(1),
           roleTitle: z.string().min(1),
-          activityType: z.enum(['interview', 'written_exam', 'assessment', 'coding_test']),
+          activityType: z.enum(['interview', 'written_exam', 'assessment']),
+          timingStatus: z.enum(['upcoming', 'completed']),
           stageLabel: z.string().min(1).max(320).nullable(),
           scheduledStartAt: z.iso.datetime().nullable(),
           scheduledEndAt: z.iso.datetime().nullable(),
@@ -146,7 +150,7 @@ export function DashboardCalendar({
             </span>
             <h2 id="dashboard-calendar-title">近期日程</h2>
           </div>
-          <p>面试、笔试、测评和在线编程安排</p>
+          <p>面试、笔试和测评安排</p>
         </div>
         <button
           ref={triggerReference}
@@ -182,6 +186,7 @@ export function DashboardCalendar({
                     .join(' ')}
                   aria-label={`${formatDateLabel(date)}，${String(dayItems.length)} 项日程`}
                   onClick={() => {
+                    if (!inMonth) void loadMonth(monthStart(date));
                     openCalendar(date);
                   }}
                 >
@@ -440,13 +445,20 @@ function CalendarDialog({
                   aria-label={`${formatDateLabel(date)}，${String(dayItems.length)} 项日程`}
                   aria-pressed={date === selectedDate}
                   onClick={() => {
+                    if (!inMonth) onMonthChange(monthStart(date));
                     onDateChange(date);
                   }}
                 >
                   <span className={styles.dayNumber}>{String(Number(date.slice(8, 10)))}</span>
                   <span className={styles.dayEvents} aria-hidden="true">
                     {dayItems.slice(0, 2).map((item) => (
-                      <i key={item.id} className={activityClass(item.activityType)}>
+                      <i
+                        key={item.id}
+                        className={[
+                          activityClass(item.activityType),
+                          timingStatusClass(item.timingStatus),
+                        ].join(' ')}
+                      >
                         {item.stageLabel ?? activityLabels[item.activityType]}
                       </i>
                     ))}
@@ -467,9 +479,23 @@ function CalendarDialog({
           {selectedItems.length > 0 ? (
             <ol className={styles.agendaList}>
               {selectedItems.map((item) => (
-                <li key={item.id} className={activityClass(item.activityType)}>
+                <li
+                  key={item.id}
+                  className={[
+                    activityClass(item.activityType),
+                    timingStatusClass(item.timingStatus),
+                  ].join(' ')}
+                >
                   <div className={styles.agendaTitle}>
                     <span>{activityLabels[item.activityType]}</span>
+                    <span
+                      className={[styles.timingStatus, timingStatusClass(item.timingStatus)].join(
+                        ' ',
+                      )}
+                      title="根据日程时间判断，不代表已实际参加或提交"
+                    >
+                      {timingStatusLabels[item.timingStatus]}
+                    </span>
                     <time>{formatCalendarTime(item, timezone)}</time>
                   </div>
                   <h4>
@@ -540,6 +566,11 @@ function mergeCalendarItems(
 
 function activityClass(activityType: WebCalendarItem['activityType']): string {
   return styles[activityType] ?? '';
+}
+
+/** 返回派生时间状态样式，历史安排在月历和详情中保持一致反馈。 */
+function timingStatusClass(status: WebCalendarItem['timingStatus']): string {
+  return styles[`timing_${status}`] ?? '';
 }
 
 function formatMonth(value: string): string {

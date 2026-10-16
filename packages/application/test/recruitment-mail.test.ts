@@ -604,6 +604,10 @@ describe('recruitment mail classification', () => {
     { meetingUrl: 'https://invented.example.test/meeting' },
     { meetingUrl: 'http://meet.example.test/interview' },
     {
+      eventType: 'assessment_invited',
+      schedule: agentSchedule({ activityType: 'coding_test' }),
+    },
+    {
       schedule: agentSchedule({ scheduledStartAt: 'not-a-date' }),
     },
     {

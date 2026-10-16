@@ -541,7 +541,7 @@ export const applicationEvents = sqliteTable(
     ),
     check(
       'application_events_activity_type_check',
-      sql`${table.activityType} is null or ${table.activityType} in ('interview', 'written_exam', 'assessment', 'coding_test')`,
+      sql`${table.activityType} is null or ${table.activityType} in ('interview', 'written_exam', 'assessment')`,
     ),
     check(
       'application_events_time_precision_check',

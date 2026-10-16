@@ -176,12 +176,6 @@
   background: var(--data-4);
 }
 
-.dots i.coding_test,
-.activityMark.coding_test,
-.dayEvents i.coding_test {
-  background: var(--data-3);
-}
-
 .upcomingHeading {
   display: flex;
   align-items: center;
@@ -533,10 +527,6 @@
   border-left-color: var(--data-4);
 }
 
-.agendaList > li.coding_test {
-  border-left-color: var(--data-3);
-}
-
 .agendaTitle {
   display: flex;
   align-items: center;
@@ -545,6 +535,23 @@
   color: var(--muted-ink);
   font-size: 0.67rem;
   font-weight: 700;
+}
+
+.timingStatus {
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.timingStatus.timing_completed {
+  background: var(--surface-muted);
+  color: var(--muted-ink);
+}
+
+.dayEvents i.timing_completed {
+  opacity: 0.58;
 }
 
 .agendaList h4,

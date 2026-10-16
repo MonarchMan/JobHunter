@@ -85,18 +85,28 @@ export function projectCalendar(
   const active = new Map<string, ApplicationCalendarItem>();
   const ordered = [...sourceEvents].sort(
     (left, right) =>
-      left.applicationId.localeCompare(right.applicationId) || left.sequenceNo - right.sequenceNo,
+      left.applicationId.localeCompare(right.applicationId) ||
+      left.receivedAt - right.receivedAt ||
+      left.effectiveAt - right.effectiveAt ||
+      left.sequenceNo - right.sequenceNo,
   );
 
   for (const event of ordered) {
-    // 1、新邀请直接形成当前日程；每封独立测评或面试邀请保留自己的稳定条目。
+    // 1、邀请形成当前日程；同一申请和时间槽的面试提醒复用条目，避免历史回扫产生重复安排。
     if (event.eventType === 'assessment_invited' || event.eventType === 'interview_invited') {
-      active.set(event.id, calendarItem(event, event.id));
+      const duplicate =
+        event.eventType === 'interview_invited'
+          ? findEquivalentInterviewTarget(active, event)
+          : null;
+      const stableId = duplicate?.id ?? event.id;
+      if (duplicate) active.delete(duplicate.id);
+      active.set(stableId, calendarItem(event, stableId));
       continue;
     }
 
     // 2、改期优先用原时间定位，其次使用明确阶段或唯一活动；未匹配时保留新安排避免漏项。
-    const target = findInterviewTarget(active, event);
+    const target =
+      findInterviewTarget(active, event) ?? findEquivalentInterviewTarget(active, event);
     if (event.eventType === 'interview_rescheduled') {
       const stableId = target?.id ?? event.id;
       if (target) active.delete(target.id);
@@ -108,6 +118,34 @@ export function projectCalendar(
     if (target) active.delete(target.id);
   }
   return [...active.values()];
+}
+
+/** 查找同一申请中指向相同时间槽的面试通知，用于合并邀请、提醒和已投影改期。 */
+function findEquivalentInterviewTarget(
+  active: ReadonlyMap<string, ApplicationCalendarItem>,
+  event: CalendarSourceEvent,
+): ApplicationCalendarItem | null {
+  if (event.schedule.activityType !== 'interview') return null;
+  const matches = [...active.values()].filter(
+    (item) =>
+      item.applicationId === event.applicationId &&
+      item.schedule.activityType === 'interview' &&
+      sameScheduleSlot(item.schedule, event.schedule),
+  );
+  return matches.length === 1 ? (matches[0] ?? null) : null;
+}
+
+/** 比较日程的业务时间槽；阶段一侧缺失时仍允许提醒邮件与原安排合并。 */
+function sameScheduleSlot(left: RecruitmentScheduleFact, right: RecruitmentScheduleFact): boolean {
+  const stageCompatible =
+    left.stageLabel === null || right.stageLabel === null || left.stageLabel === right.stageLabel;
+  return (
+    stageCompatible &&
+    left.scheduledStartAt === right.scheduledStartAt &&
+    left.deadlineAt === right.deadlineAt &&
+    left.scheduledStartLocalDate === right.scheduledStartLocalDate &&
+    left.deadlineLocalDate === right.deadlineLocalDate
+  );
 }
 
 /** 创建一个当前日程快照；稳定 ID 与最近来源事件 ID 分离。 */

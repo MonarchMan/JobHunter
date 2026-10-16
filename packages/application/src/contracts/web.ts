@@ -871,6 +871,10 @@ export const webCalendarQuerySchema = z
   });
 export type WebCalendarQuery = z.infer<typeof webCalendarQuerySchema>;
 
+/** 日程相对当前时间的派生状态，不表示用户是否实际参加或提交。 */
+export const webCalendarTimingStatusSchema = z.enum(['upcoming', 'completed']);
+export type WebCalendarTimingStatus = z.infer<typeof webCalendarTimingStatusSchema>;
+
 /** Web 日历中的当前有效安排；改期只更新来源和时间，不暴露旧日程状态。 */
 export const webCalendarItemSchema = z
   .object({
@@ -880,6 +884,7 @@ export const webCalendarItemSchema = z
     companyName: z.string().min(1),
     roleTitle: z.string().min(1),
     activityType: recruitmentScheduleActivityTypeSchema,
+    timingStatus: webCalendarTimingStatusSchema,
     stageLabel: z.string().min(1).max(320).nullable(),
     scheduledStartAt: z.iso.datetime().nullable(),
     scheduledEndAt: z.iso.datetime().nullable(),

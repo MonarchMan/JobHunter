@@ -27,6 +27,7 @@ describe('CalendarQueryService', () => {
     });
     const service = new WebCalendarQueryService(
       new CalendarQueryService(new MemoryCalendarRepository([event])),
+      () => Date.parse('2026-10-19T00:00:00.000Z'),
     );
 
     expect(
@@ -37,11 +38,46 @@ describe('CalendarQueryService', () => {
           id: 'event-invite',
           sourceEventId: 'event-invite',
           activityType: 'interview',
+          timingStatus: 'upcoming',
           stageLabel: '一面',
           scheduledStartAt: '2026-10-20T02:00:00.000Z',
         }),
       ],
     });
+  });
+
+  it('marks past appointments and deadlines completed', () => {
+    const interview = calendarEvent({
+      id: 'event-completed',
+      eventType: 'interview_invited',
+      schedule: exactSchedule('2026-10-15T02:00:00.000Z', '一面'),
+    });
+    const assessment = calendarEvent({
+      id: 'event-past-deadline',
+      sequenceNo: 2,
+      eventType: 'assessment_invited',
+      schedule: {
+        ...emptySchedule('written_exam', '在线笔试'),
+        deadlineLocalDate: '2026-10-15',
+        timePrecision: 'date_only',
+        timezoneSource: 'not_applicable',
+      },
+    });
+    const service = new WebCalendarQueryService(
+      new CalendarQueryService(new MemoryCalendarRepository([interview, assessment])),
+      () => Date.parse('2026-10-16T04:00:00.000Z'),
+    );
+
+    expect(
+      service
+        .list({ dateFrom: '2026-10-15', dateTo: '2026-10-15', timezone: 'Asia/Shanghai' })
+        .items.map((item) => ({ id: item.id, status: item.timingStatus })),
+    ).toEqual(
+      expect.arrayContaining([
+        { id: 'event-completed', status: 'completed' },
+        { id: 'event-past-deadline', status: 'completed' },
+      ]),
+    );
   });
 
   it('replaces the targeted interview after rescheduling without exposing the old schedule', () => {
@@ -78,6 +114,47 @@ describe('CalendarQueryService', () => {
         expect.objectContaining({ id: 'event-second-round', sourceEventId: 'event-second-round' }),
         expect.objectContaining({ id: 'event-first-round', sourceEventId: 'event-rescheduled' }),
       ],
+    );
+  });
+
+  it('replays backfilled mail by received time and merges reminders for the rescheduled slot', () => {
+    const invited = calendarEvent({
+      id: 'event-invited',
+      sequenceNo: 3,
+      receivedAt: '2026-10-10T01:00:00.000Z',
+      eventType: 'interview_invited',
+      schedule: exactSchedule('2026-10-20T02:00:00.000Z', '一面'),
+    });
+    const rescheduled = calendarEvent({
+      id: 'event-rescheduled',
+      sequenceNo: 1,
+      receivedAt: '2026-10-11T01:00:00.000Z',
+      eventType: 'interview_rescheduled',
+      schedule: {
+        ...exactSchedule('2026-10-21T03:00:00.000Z', '一面'),
+        previousScheduledStartAt: utcInstant(Date.parse('2026-10-20T02:00:00.000Z')),
+      },
+    });
+    const reminder = calendarEvent({
+      id: 'event-reminder',
+      sequenceNo: 2,
+      receivedAt: '2026-10-12T01:00:00.000Z',
+      eventType: 'interview_invited',
+      schedule: {
+        ...exactSchedule('2026-10-21T03:00:00.000Z', null),
+        scheduledEndAt: utcInstant(Date.parse('2026-10-21T04:00:00.000Z')),
+        timePrecision: 'time_range',
+      },
+    });
+    const service = new CalendarQueryService(
+      new MemoryCalendarRepository([rescheduled, reminder, invited]),
+    );
+
+    expect(service.list({ dateFrom: '2026-10-20', dateTo: '2026-10-20', timezone: 'UTC' })).toEqual(
+      [],
+    );
+    expect(service.list({ dateFrom: '2026-10-21', dateTo: '2026-10-21', timezone: 'UTC' })).toEqual(
+      [expect.objectContaining({ id: 'event-invited', sourceEventId: 'event-reminder' })],
     );
   });
 
@@ -155,6 +232,7 @@ describe('CalendarQueryService', () => {
 function calendarEvent(input: {
   readonly id: string;
   readonly sequenceNo?: number;
+  readonly receivedAt?: string;
   readonly eventType: CalendarSourceEventType;
   readonly schedule: RecruitmentScheduleFact;
 }): CalendarSourceEvent {
@@ -166,7 +244,7 @@ function calendarEvent(input: {
     roleTitle: '后端工程师',
     eventType: input.eventType,
     effectiveAt: Date.parse('2026-10-15T00:00:00.000Z'),
-    receivedAt: Date.parse('2026-10-15T00:00:00.000Z'),
+    receivedAt: Date.parse(input.receivedAt ?? '2026-10-15T00:00:00.000Z'),
     schedule: input.schedule,
     location: null,
     meetingUrl: null,
