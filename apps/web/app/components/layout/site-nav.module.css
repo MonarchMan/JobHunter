@@ -72,7 +72,7 @@
 
   .link {
     min-height: 2.9rem;
-    padding: 0.8rem 0.9rem;
+    padding: 0.8rem 0.9rem 0.8rem 2rem;
     border-radius: var(--radius-control);
   }
 
@@ -81,6 +81,9 @@
   }
 
   .current {
+    width: calc(100% + 0.75rem);
+    margin-left: -0.75rem;
+    padding-left: 2.75rem;
     background: var(--nav-selected-bg);
     color: var(--nav-selected-ink);
   }
@@ -105,8 +108,10 @@
 
   .link {
     flex: 0 0 auto;
-    min-width: 4.5rem;
+    min-width: 5rem;
+    padding-inline: 1rem;
     text-align: center;
+    border-radius: var(--radius-control);
   }
 }
 
