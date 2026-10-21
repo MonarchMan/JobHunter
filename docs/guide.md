@@ -83,6 +83,8 @@ pnpm --filter @jobhunter/web dev
 
 浏览器访问 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。启动器会同时运行 Web 和一个独立 Worker，因此正常使用时不需要再开第二个 Worker。
 
+开发启动直接读取 workspace 源码，不需要预先执行全仓构建。需要持续检查类型时，在独立终端运行 `pnpm typecheck:watch`，也可使用 `pnpm --filter @jobhunter/web dev:typecheck`；这项检查不会阻塞 Web 启动。正式构建和生产运行仍使用各包的 `dist/`。
+
 如果 3210 端口已被占用，可以临时换一个端口：
 
 macOS / Linux：

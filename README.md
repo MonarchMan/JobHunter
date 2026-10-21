@@ -75,6 +75,8 @@ pnpm --filter @jobhunter/web dev
 
 然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。Web 启动器会同时启动独立 Worker，正常使用时不需要手动运行第二个 Worker。
 
+Web 开发命令直接使用 workspace 源码，不再在启动前构建全仓。需要持续类型反馈时，在另一个终端运行 `pnpm typecheck:watch`（或 `pnpm --filter @jobhunter/web dev:typecheck`）；提交前仍执行一次 `pnpm typecheck`。正式构建与生产运行继续使用 `dist/`。
+
 不同系统的配置命令、模型接入、浏览器选择和首次使用流程见 **[完整上手指南](docs/guide.md)**。
 
 ## 文档导航
