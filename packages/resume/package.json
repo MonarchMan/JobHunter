@@ -4,7 +4,48 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./media": {
+      "development": "./src/import/media.ts",
+      "types": "./dist/import/media.d.ts",
+      "import": "./dist/import/media.js"
+    },
+    "./parsers": {
+      "development": "./src/parsers/index.ts",
+      "types": "./dist/parsers/index.d.ts",
+      "import": "./dist/parsers/index.js"
+    },
+    "./ocr": {
+      "development": "./src/ocr/index.ts",
+      "types": "./dist/ocr/index.d.ts",
+      "import": "./dist/ocr/index.js"
+    },
+    "./ocr-contracts": {
+      "development": "./src/ocr/contracts.ts",
+      "types": "./dist/ocr/contracts.d.ts",
+      "import": "./dist/ocr/contracts.js"
+    },
+    "./profile-agent": {
+      "development": "./src/profile-agent.ts",
+      "types": "./dist/profile-agent.d.ts",
+      "import": "./dist/profile-agent.js"
+    },
+    "./profile-schema": {
+      "development": "./src/profile-schema/index.ts",
+      "types": "./dist/profile-schema/index.d.ts",
+      "import": "./dist/profile-schema/index.js"
+    },
+    "./profile-rules": {
+      "development": "./src/rule-profile-extractor.ts",
+      "types": "./dist/rule-profile-extractor.d.ts",
+      "import": "./dist/rule-profile-extractor.js"
+    },
+    "./polish": {
+      "development": "./src/resume-polish-agent.ts",
+      "types": "./dist/resume-polish-agent.d.ts",
+      "import": "./dist/resume-polish-agent.js"
+    },
     ".": {
+      "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }

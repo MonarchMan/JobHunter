@@ -4,7 +4,18 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./catalog-data": {
+      "development": "./src/catalog/sources.ts",
+      "types": "./dist/catalog/sources.d.ts",
+      "import": "./dist/catalog/sources.js"
+    },
+    "./registry": {
+      "development": "./src/catalog/registry.ts",
+      "types": "./dist/catalog/registry.d.ts",
+      "import": "./dist/catalog/registry.js"
+    },
     ".": {
+      "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
