@@ -40,24 +40,24 @@
 
 @media (min-width: 1025px) {
   .body {
-    padding-left: 14rem;
+    padding-left: 13rem;
   }
 
   .body[data-scroll-locked] {
     /* Radix scroll lock resets body padding; preserve the desktop navigation gutter. */
-    padding-left: 14rem !important;
+    padding-left: 13rem !important;
   }
 
   .header {
     position: fixed;
     inset: 0 auto 0 0;
-    width: 14rem;
+    width: 11rem;
     height: 100dvh;
     align-items: stretch;
     justify-content: start;
     flex-direction: column;
     gap: 1.5rem;
-    padding: 1.5rem 1rem;
+    padding: 1.5rem 0 1.5rem 0.75rem;
     border-right: 1px solid var(--border);
     border-bottom: 0;
     background: var(--surface-glass);
@@ -66,7 +66,8 @@
 
   .brand {
     min-height: 3rem;
-    padding: 0 0.75rem 1.1rem;
+    margin-left: 0.3rem;
+    padding: 0 0.5rem 1.1rem;
     border-bottom: 1px solid var(--border-soft);
   }
 }
@@ -88,6 +89,18 @@
   .header {
     position: sticky;
     flex-direction: row;
+    justify-content: flex-start;
+    gap: clamp(1rem, 4vw, 2rem);
+  }
+
+  .brand {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .header > nav {
+    min-width: 0;
+    flex: 1 1 auto;
   }
 }
 
