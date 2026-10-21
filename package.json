@@ -19,6 +19,7 @@
     "lint": "eslint .",
     "boundaries": "depcruise apps packages --config .dependency-cruiser.cjs",
     "typecheck": "tsc -b --pretty false",
+    "typecheck:watch": "tsc -b --watch --preserveWatchOutput --pretty false",
     "test": "vitest run --project unit",
     "test:integration": "vitest run --project integration --passWithNoTests",
     "test:e2e": "vitest run --project e2e --passWithNoTests",

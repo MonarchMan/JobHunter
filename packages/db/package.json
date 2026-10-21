@@ -4,11 +4,58 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./core": {
+      "development": "./src/web-core/index.ts",
+      "types": "./dist/web-core/index.d.ts",
+      "import": "./dist/web-core/index.js"
+    },
+    "./maintenance": {
+      "development": "./src/web-maintenance/index.ts",
+      "types": "./dist/web-maintenance/index.d.ts",
+      "import": "./dist/web-maintenance/index.js"
+    },
+    "./dashboard": {
+      "development": "./src/web-dashboard/index.ts",
+      "types": "./dist/web-dashboard/index.d.ts",
+      "import": "./dist/web-dashboard/index.js"
+    },
+    "./jobs": {
+      "development": "./src/web-jobs/index.ts",
+      "types": "./dist/web-jobs/index.d.ts",
+      "import": "./dist/web-jobs/index.js"
+    },
+    "./sources": {
+      "development": "./src/web-sources/index.ts",
+      "types": "./dist/web-sources/index.d.ts",
+      "import": "./dist/web-sources/index.js"
+    },
+    "./tasks": {
+      "development": "./src/web-tasks/index.ts",
+      "types": "./dist/web-tasks/index.d.ts",
+      "import": "./dist/web-tasks/index.js"
+    },
+    "./profile": {
+      "development": "./src/web-profile/index.ts",
+      "types": "./dist/web-profile/index.d.ts",
+      "import": "./dist/web-profile/index.js"
+    },
+    "./interview": {
+      "development": "./src/web-interview/index.ts",
+      "types": "./dist/web-interview/index.d.ts",
+      "import": "./dist/web-interview/index.js"
+    },
+    "./platform": {
+      "development": "./src/web-platform/index.ts",
+      "types": "./dist/web-platform/index.d.ts",
+      "import": "./dist/web-platform/index.js"
+    },
     ".": {
+      "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./web": {
+      "development": "./src/web.ts",
       "types": "./dist/web.d.ts",
       "import": "./dist/web.js"
     }

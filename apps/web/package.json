@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "pnpm --workspace-root build",
     "dev": "tsx src/server/main.ts",
+    "dev:typecheck": "pnpm --workspace-root typecheck:watch",
     "build": "next build",
     "test:browser": "playwright test",
     "start": "tsx src/server/main.ts --production",

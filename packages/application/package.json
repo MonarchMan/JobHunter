@@ -4,15 +4,93 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./config": {
+      "development": "./src/config/index.ts",
+      "types": "./dist/config/index.d.ts",
+      "import": "./dist/config/index.js"
+    },
+    "./contracts": {
+      "development": "./src/contracts/index.ts",
+      "types": "./dist/contracts/index.d.ts",
+      "import": "./dist/contracts/index.js"
+    },
+    "./dashboard": {
+      "development": "./src/dashboard/index.ts",
+      "types": "./dist/dashboard/index.d.ts",
+      "import": "./dist/dashboard/index.js"
+    },
+    "./calendar": {
+      "development": "./src/calendar/index.ts",
+      "types": "./dist/calendar/index.d.ts",
+      "import": "./dist/calendar/index.js"
+    },
+    "./applications": {
+      "development": "./src/applications/index.ts",
+      "types": "./dist/applications/index.d.ts",
+      "import": "./dist/applications/index.js"
+    },
+    "./jobs": {
+      "development": "./src/jobs/index.ts",
+      "types": "./dist/jobs/index.d.ts",
+      "import": "./dist/jobs/index.js"
+    },
+    "./interview": {
+      "development": "./src/interview/index.ts",
+      "types": "./dist/interview/index.d.ts",
+      "import": "./dist/interview/index.js"
+    },
+    "./matching": {
+      "development": "./src/matching/index.ts",
+      "types": "./dist/matching/index.d.ts",
+      "import": "./dist/matching/index.js"
+    },
+    "./profile": {
+      "development": "./src/profile/index.ts",
+      "types": "./dist/profile/index.d.ts",
+      "import": "./dist/profile/index.js"
+    },
+    "./sync": {
+      "development": "./src/sync/index.ts",
+      "types": "./dist/sync/index.d.ts",
+      "import": "./dist/sync/index.js"
+    },
+    "./tasks": {
+      "development": "./src/tasks/index.ts",
+      "types": "./dist/tasks/index.d.ts",
+      "import": "./dist/tasks/index.js"
+    },
+    "./settings": {
+      "development": "./src/settings/index.ts",
+      "types": "./dist/settings/index.d.ts",
+      "import": "./dist/settings/index.js"
+    },
+    "./mail-settings": {
+      "development": "./src/mail/mailbox-settings-service.ts",
+      "types": "./dist/mail/mailbox-settings-service.d.ts",
+      "import": "./dist/mail/mailbox-settings-service.js"
+    },
+    "./cleanup-handler": {
+      "development": "./src/operations/cleanup-handler.ts",
+      "types": "./dist/operations/cleanup-handler.d.ts",
+      "import": "./dist/operations/cleanup-handler.js"
+    },
+    "./platform": {
+      "development": "./src/platform.ts",
+      "types": "./dist/platform.d.ts",
+      "import": "./dist/platform.js"
+    },
     "./platform-contracts": {
+      "development": "./src/contracts/platform-retention.ts",
       "types": "./dist/contracts/platform-retention.d.ts",
       "import": "./dist/contracts/platform-retention.js"
     },
     ".": {
+      "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./web": {
+      "development": "./src/web.ts",
       "types": "./dist/web.d.ts",
       "import": "./dist/web.js"
     }

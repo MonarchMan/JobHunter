@@ -4,7 +4,28 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./metadata": {
+      "development": "./src/metadata.ts",
+      "types": "./dist/metadata.d.ts",
+      "import": "./dist/metadata.js"
+    },
+    "./config": {
+      "development": "./src/config.ts",
+      "types": "./dist/config.d.ts",
+      "import": "./dist/config.js"
+    },
+    "./oauth": {
+      "development": "./src/oauth.ts",
+      "types": "./dist/oauth.d.ts",
+      "import": "./dist/oauth.js"
+    },
+    "./runtime": {
+      "development": "./src/factory.ts",
+      "types": "./dist/factory.d.ts",
+      "import": "./dist/factory.js"
+    },
     ".": {
+      "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
