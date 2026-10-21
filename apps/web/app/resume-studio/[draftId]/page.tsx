@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
-import { ResumeTemplateNotFoundError } from '@jobhunter/application/web';
+import { ResumeTemplateNotFoundError } from '@jobhunter/application/profile';
 import { getWebContainer } from '../../../src/server/container.js';
 import { ResumeStudio } from './resume-studio.js';
 

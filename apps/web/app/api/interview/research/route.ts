@@ -1,7 +1,4 @@
-import {
-  webCommunityExperienceFilterSchema,
-  webCreateExperienceResearchSchema,
-} from '@jobhunter/application/web';
+import { webCommunityExperienceFilterSchema, webCreateExperienceResearchSchema } from '@jobhunter/application/contracts';
 import { getWebContainer } from '../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../../src/server/http.js';

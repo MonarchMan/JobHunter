@@ -2,6 +2,9 @@ import type Database from 'better-sqlite3';
 import { projectApplicationStatus, type RecruitmentScheduleFact } from '@jobhunter/domain';
 import {
   calendarSourceEventSchema,
+  applicationProgressEventSchema,
+  applicationProgressRecordSchema,
+  type ApplicationProgressRecord,
   type MailSyncRepository,
   type RecruitmentMailMessageRef,
   type RecruitmentMailProcessingRepository,
@@ -203,6 +206,86 @@ export class SqliteRecruitmentMailRepository {
         'SELECT * FROM application_events WHERE application_id = ? ORDER BY effective_at, sequence_no',
       )
       .all(applicationId) as Record<string, unknown>[];
+  }
+
+  /** 查询应聘进展所需的最小结构化事实，不返回邮件正文或模型输入。 */
+  public listApplicationProgress(): readonly ApplicationProgressRecord[] {
+    const applications = this.#client
+      .prepare(
+        `SELECT id, company_id, job_id, company_name, role_title, status,
+                status_effective_at, updated_at
+           FROM job_applications
+          ORDER BY updated_at DESC, id ASC`,
+      )
+      .all() as Record<string, unknown>[];
+    const events = this.#client
+      .prepare(
+        `SELECT event.id, event.application_id, event.event_type, event.effective_at, event.received_at, event.confidence,
+                event.activity_type, event.scheduled_start_at, event.scheduled_end_at, event.deadline_at,
+                event.scheduled_start_local_date, event.scheduled_end_local_date, event.deadline_local_date,
+                event.previous_scheduled_start_at, event.previous_scheduled_start_local_date,
+                event.time_precision, event.timezone_source, event.timezone_text, event.stage_label,
+                event.location, event.meeting_url, event.action_url, mail.source_url
+           FROM application_events AS event
+           LEFT JOIN mail_message_refs AS mail ON mail.id = event.mail_message_ref_id
+          ORDER BY event.application_id ASC, event.effective_at ASC, event.received_at ASC, event.sequence_no ASC`,
+      )
+      .all() as Record<string, unknown>[];
+    const eventsByApplication = new Map<string, ApplicationProgressRecord['events']>();
+
+    // 1、按申请聚合事件；2、恢复日程事实；3、在数据库边界校验完整响应。
+    for (const row of events) {
+      const applicationId = String(row.application_id);
+      const current = eventsByApplication.get(applicationId) ?? [];
+      current.push(
+        applicationProgressEventSchema.parse({
+          id: String(row.id),
+          eventType: row.event_type,
+          effectiveAt: Number(row.effective_at),
+          receivedAt: Number(row.received_at),
+          confidence: Number(row.confidence),
+          schedule:
+            row.activity_type === null || row.activity_type === undefined
+              ? null
+              : {
+                  activityType: row.activity_type,
+                  scheduledStartAt: nullableNumber(row.scheduled_start_at),
+                  scheduledEndAt: nullableNumber(row.scheduled_end_at),
+                  deadlineAt: nullableNumber(row.deadline_at),
+                  scheduledStartLocalDate: nullableString(row.scheduled_start_local_date),
+                  scheduledEndLocalDate: nullableString(row.scheduled_end_local_date),
+                  deadlineLocalDate: nullableString(row.deadline_local_date),
+                  previousScheduledStartAt: nullableNumber(row.previous_scheduled_start_at),
+                  previousScheduledStartLocalDate: nullableString(
+                    row.previous_scheduled_start_local_date,
+                  ),
+                  timePrecision: row.time_precision,
+                  timezoneSource: row.timezone_source,
+                  timezoneText: nullableString(row.timezone_text),
+                  stageLabel: nullableString(row.stage_label),
+                },
+          stageLabel: nullableString(row.stage_label),
+          location: nullableString(row.location),
+          meetingUrl: nullableString(row.meeting_url),
+          actionUrl: nullableString(row.action_url),
+          sourceUrl: nullableString(row.source_url),
+        }),
+      );
+      eventsByApplication.set(applicationId, current);
+    }
+    return applications.map((row) =>
+      applicationProgressRecordSchema.parse({
+        id: String(row.id),
+        companyId: nullableString(row.company_id),
+        jobId: nullableString(row.job_id),
+        companyName: String(row.company_name),
+        roleTitle: String(row.role_title),
+        status: row.status,
+        statusEffectiveAt: nullableNumber(row.status_effective_at),
+        updatedAt: Number(row.updated_at),
+        events: eventsByApplication.get(String(row.id)) ?? [],
+      }),
+    );
   }
 
   /** 读取会影响招聘日历的申请事件，并在数据库边界恢复类型化日程事实。 */

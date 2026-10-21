@@ -1,4 +1,5 @@
-import { ResumeMediaError, webResumeImportResultSchema } from '@jobhunter/application/web';
+import { ResumeMediaError } from '@jobhunter/application/profile';
+import { webResumeImportResultSchema } from '@jobhunter/application/contracts';
 import { ZodError, z } from 'zod';
 import {
   badRequestResponse,

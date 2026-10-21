@@ -10,7 +10,7 @@ const primaryLinks = [
   { href: '/', label: '工作台', icon: 'dashboard' },
   { href: '/jobs', label: '职位', icon: 'jobs' },
   { href: '/interview', label: '面试准备', shortLabel: '面试', icon: 'interview' },
-  { href: '/profile', label: '个人资料', shortLabel: '资料', icon: 'profile' },
+  { href: '/my', label: '我的', shortLabel: '我的', icon: 'profile' },
 ] as const;
 
 const secondaryLinks = [
@@ -20,6 +20,15 @@ const secondaryLinks = [
 ] as const;
 
 function isCurrentPath(pathname: string, href: string): boolean {
+  if (href === '/my') {
+    return (
+      pathname === '/my' ||
+      pathname === '/profile' ||
+      pathname.startsWith('/profile/') ||
+      pathname === '/applications' ||
+      pathname.startsWith('/applications/')
+    );
+  }
   return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 }
 

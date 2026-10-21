@@ -1,6 +1,6 @@
 'use client';
 
-import type { MailboxSettingsSnapshot, MailboxSettingsView } from '@jobhunter/application/web';
+import type { MailboxSettingsSnapshot, MailboxSettingsView } from '@jobhunter/application/mail-settings';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';

@@ -1,7 +1,4 @@
-import type {
-  CommunityInterviewExperienceRecord,
-  CommunityInterviewQuestionRecord,
-} from '@jobhunter/application/web';
+import type { CommunityInterviewExperienceRecord, CommunityInterviewQuestionRecord } from '@jobhunter/application/contracts';
 import type { ReactElement, ReactNode } from 'react';
 import styles from './research.module.css';
 

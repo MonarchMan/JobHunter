@@ -1,12 +1,18 @@
 'use client';
 
-import type { WebAgentRunDetail, WebAgentRunSummary, WebTask } from '@jobhunter/application/web';
+import type {
+  WebAgentRunDetail,
+  WebAgentRunSummary,
+  WebTask,
+} from '@jobhunter/application/contracts';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
   labelStatus,
+  labelTaskType,
+  labelAgentErrorCategory,
+  labelAgentKey,
   agentRunStatusLabels,
-  taskTypeLabels,
   taskStatusLabels,
 } from '../components/status-labels.js';
 import { TaskActions } from './task-actions.js';
@@ -83,7 +89,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
   const triggerReference = useRef<HTMLButtonElement>(null);
   const displayName = task.jobDetailBatch
     ? `${task.jobDetailBatch.companyName}职位详情同步`
-    : (taskTypeLabels[task.taskType] ?? task.taskType);
+    : labelTaskType(task.taskType);
   return (
     <>
       <button
@@ -108,12 +114,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
             <dl className="facts">
               <div>
                 <dt>任务类型</dt>
-                <dd>
-                  {displayName}
-                  <small>
-                    <code>{task.taskType}</code>
-                  </small>
-                </dd>
+                <dd>{displayName}</dd>
               </div>
               <div>
                 <dt>状态</dt>
@@ -344,7 +345,7 @@ export function AgentRunDetailsDialog({
           setOpen(true);
         }}
       >
-        {run.agentKey}
+        {labelAgentKey(run.agentKey)}
       </button>
       {open ? (
         <DialogShell
@@ -358,7 +359,7 @@ export function AgentRunDetailsDialog({
             <dl className="facts">
               <div>
                 <dt>Agent</dt>
-                <dd>{run.agentKey}</dd>
+                <dd>{labelAgentKey(run.agentKey)}</dd>
               </div>
               <div>
                 <dt>状态</dt>
@@ -391,7 +392,9 @@ export function AgentRunDetailsDialog({
               <section className={styles.failureDetail} aria-labelledby="agent-failure-heading">
                 <h3 id="agent-failure-heading">失败原因</h3>
                 <p>
-                  <strong>{run.errorCategory ?? '未分类'}</strong>
+                  <strong>
+                    {run.errorCategory ? labelAgentErrorCategory(run.errorCategory) : '未分类'}
+                  </strong>
                 </p>
                 <p>{run.errorSummary ?? '系统未记录可展示的失败原因。'}</p>
               </section>

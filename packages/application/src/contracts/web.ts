@@ -7,7 +7,7 @@ import {
   recruitmentScheduleTimePrecisionSchema,
   recruitmentScheduleTimezoneSourceSchema,
 } from '@jobhunter/domain';
-import { resumePolishAgentOutputSchema, resumePolishSectionSchema } from '@jobhunter/resume';
+import { resumePolishAgentOutputSchema, resumePolishSectionSchema } from '@jobhunter/resume/polish';
 
 /** Stable error body shared by Web route handlers and React clients. */
 /** Web API 的统一错误对象。 */

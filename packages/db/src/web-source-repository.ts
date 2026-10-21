@@ -2,8 +2,8 @@ import {
   webSourceSchema,
   type WebSource,
   type WebSourceChannel,
-  type WebSourceRepository,
-} from '@jobhunter/application/web';
+} from '@jobhunter/application/contracts';
+import type { WebSourceRepository } from '@jobhunter/application/sync';
 import type { JobSourceId } from '@jobhunter/domain';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';

@@ -1,4 +1,4 @@
-import type { WebCalendarItem } from '@jobhunter/application/web';
+import type { WebCalendarItem } from '@jobhunter/application/contracts';
 
 /** 月历固定使用周一作为每周第一天。 */
 export const calendarWeekdays = ['一', '二', '三', '四', '五', '六', '日'] as const;

@@ -3,6 +3,8 @@ import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import {
   agentRunStatusLabels,
+  labelAgentErrorCategory,
+  labelAgentKey,
   labelStatus,
   taskStatusLabels,
 } from '../../components/status-labels.js';
@@ -24,7 +26,7 @@ export default async function AgentRunPage({
   if (!run) notFound();
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader title={run.agentKey}>
+      <PageHeader title={labelAgentKey(run.agentKey)}>
         <a href="/tasks">返回任务</a>
       </PageHeader>
       <section className="panel">
@@ -62,9 +64,10 @@ export default async function AgentRunPage({
             <dd>{run.pricingVersion ?? '—'}</dd>
           </div>
         </dl>
-        {run.errorSummary ? (
+        {run.status === 'failed' ? (
           <p className="risk">
-            {run.errorCategory}: {run.errorSummary}
+            {run.errorCategory ? labelAgentErrorCategory(run.errorCategory) : '未分类'}：
+            {run.errorSummary ?? '系统未记录可展示的失败原因。'}
           </p>
         ) : null}
       </section>

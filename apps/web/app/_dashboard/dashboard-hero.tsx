@@ -13,7 +13,7 @@ export function DashboardHero(): ReactElement {
         <div className={styles.actions}>
           <a
             className={['button-primary', styles.primaryAction].filter(Boolean).join(' ')}
-            href="/profile"
+            href="/my"
           >
             建立个人资料 <span aria-hidden="true">→</span>
           </a>

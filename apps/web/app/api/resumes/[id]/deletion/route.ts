@@ -1,7 +1,5 @@
-import {
-  ResumeDeletionNotFoundError,
-  webResumeDeletionConfirmSchema,
-} from '@jobhunter/application/web';
+import { ResumeDeletionNotFoundError } from '@jobhunter/application/profile';
+import { webResumeDeletionConfirmSchema } from '@jobhunter/application/contracts';
 import { ZodError } from 'zod';
 import { getWebContainer } from '../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../src/server/csrf.js';

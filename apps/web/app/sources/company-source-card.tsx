@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebSource, WebSourceChannel } from '@jobhunter/application/web';
+import type { WebSource, WebSourceChannel } from '@jobhunter/application/contracts';
 import { useMemo, useState, type ReactElement } from 'react';
 import { CompanyLogo } from '../components/company-logo.js';
 import {

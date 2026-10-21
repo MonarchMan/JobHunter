@@ -1,6 +1,6 @@
 'use client';
 
-import type { ResumeDraftDetail } from '@jobhunter/application/web';
+import type { ResumeDraftDetail } from '@jobhunter/application/profile';
 import {
   renderResumeHtml,
   addResumeSection,

@@ -1,4 +1,4 @@
-import { MailboxSettingsError } from '@jobhunter/application/web';
+import { MailboxSettingsError } from '@jobhunter/application/mail-settings';
 import { getWebContainer } from '../../../../../src/server/container.js';
 import {
   badRequestResponse,

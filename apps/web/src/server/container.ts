@@ -4,42 +4,15 @@ import {
   PlatformActivityService,
   createPlatformTaskHandler,
   createPlatformRetentionTaskHandler,
+} from '@jobhunter/application/platform';
+import {
   CandidateProfileService,
-  CalendarQueryService,
-  DashboardQueryService,
-  createJobAdviceTaskHandler,
-  createJobUnderstandingTaskHandler,
-  createMatchRevisionTaskHandler,
-  createManualJobScoreTaskHandler,
-  createProjectAnswerDigestTaskHandler,
-  createProjectNotebookTaskHandler,
-  createProjectQuestionTaskHandler,
-  createExperienceResearchTaskHandler,
   createResumeProfileTaskHandler,
   createResumePolishTaskHandler,
   createResumeDeletionTaskHandler,
   createResumePdfExportTaskHandler,
-  createSourceSyncTaskHandler,
-  createSourceHealthTaskHandler,
-  createCleanupTaskHandler,
-  HandlerRegistry,
-  InterviewProjectService,
-  ProjectQuestionGenerator,
-  InterviewExperienceService,
-  ExperienceResearchService,
-  JobQueryService,
-  MatchWorkflowService,
   ProfileInspectionService,
   ProfileManagementService,
-  ProfileJobIntakePolicy,
-  ScheduleService,
-  SourceManagementService,
-  SourceScheduleReconciliationService,
-  SystemSettingsService,
-  TaskService,
-  WebJobQueryService,
-  WebJobDetailService,
-  WebCalendarQueryService,
   WebProfileService,
   WebResumeDeletionService,
   ResumeDeletionService,
@@ -47,52 +20,99 @@ import {
   ResumeProfileWorkflow,
   ResumePolishService,
   ResumeTemplateService,
+} from '@jobhunter/application/profile';
+import { CalendarQueryService, WebCalendarQueryService } from '@jobhunter/application/calendar';
+import {
+  ApplicationProgressQueryService,
+  WebApplicationProgressService,
+} from '@jobhunter/application/applications';
+import { DashboardQueryService } from '@jobhunter/application/dashboard';
+import {
+  JobQueryService,
+  WebJobDetailService,
+  WebJobQueryService,
+} from '@jobhunter/application/jobs';
+import {
+  createJobAdviceTaskHandler,
+  createJobUnderstandingTaskHandler,
+  createMatchRevisionTaskHandler,
+  createManualJobScoreTaskHandler,
+  MatchWorkflowService,
+} from '@jobhunter/application/matching';
+import {
+  createExperienceResearchTaskHandler,
+  createProjectAnswerDigestTaskHandler,
+  createProjectNotebookTaskHandler,
+  createProjectQuestionTaskHandler,
+  ExperienceResearchService,
+  InterviewExperienceService,
+  InterviewProjectService,
+  ProjectQuestionGenerator,
+} from '@jobhunter/application/interview';
+import {
+  createSourceHealthTaskHandler,
+  createSourceSyncTaskHandler,
+  ProfileJobIntakePolicy,
+  SourceManagementService,
+  SourceScheduleReconciliationService,
   WebSourceService,
+} from '@jobhunter/application/sync';
+import {
   WebDiagnosticsService,
-  type AppConfig,
-  MailboxSettingsService,
-  loadRuntimeAppConfig,
-} from '@jobhunter/application/web';
+  HandlerRegistry,
+  ScheduleService,
+  TaskService,
+} from '@jobhunter/application/tasks';
+import { SystemSettingsService } from '@jobhunter/application/settings';
+import { createCleanupTaskHandler } from '@jobhunter/application/cleanup-handler';
+import { MailboxSettingsService } from '@jobhunter/application/mail-settings';
+import { loadRuntimeAppConfig, type AppConfig } from '@jobhunter/application/config';
 import { AgentRunner, type ModelClient } from '@jobhunter/agent-core';
 import {
   openSqliteDatabase,
-  SqlitePlatformRepository,
-  SqlitePlatformActivityRepository,
-  SqliteAgentRunStore,
-  SqliteCandidateProfileRepository,
+  SqliteArtifactStore,
+  SqliteSettingsStore,
+  seedSourceCatalog,
+  NodeResumeFileReader,
+} from '@jobhunter/db/core';
+import { SqliteDashboardReadModel } from '@jobhunter/db/dashboard';
+import {
   SqliteCompanyLookupRepository,
-  SqliteDashboardReadModel,
   SqliteJobQueryRepository,
   SqliteMatchingRepository,
-  SqliteSourceManagementRepository,
-  SqliteTaskRepository,
   SqliteWebJobTraceRepository,
-  SqliteWebSourceRepository,
+} from '@jobhunter/db/jobs';
+import { SqliteSourceManagementRepository, SqliteWebSourceRepository } from '@jobhunter/db/sources';
+import {
+  SqliteAgentRunStore,
+  SqliteTaskRepository,
   SqliteWebDiagnosticsRepository,
-  SqliteArtifactStore,
+} from '@jobhunter/db/tasks';
+import {
+  SqliteCandidateProfileRepository,
+  SqliteResumeDeletionRepository,
+  SqliteResumeDocumentRepository,
+  SqliteResumeDraftRepository,
+} from '@jobhunter/db/profile';
+import {
   SqliteInterviewProjectRepository,
   SqliteInterviewExperienceRepository,
   SqliteInterviewResearchRepository,
   SqliteInterviewTaskRetryCoordinator,
   SqliteInterviewTaskPublisher,
   SqliteProjectNotebookReader,
-  SqliteResumeDeletionRepository,
-  SqliteResumeDocumentRepository,
-  SqliteResumeDraftRepository,
   SqliteRecruitmentMailRepository,
-  SqliteSettingsStore,
-  seedSourceCatalog,
-  NodeResumeFileReader,
-} from '@jobhunter/db/web';
-import { firstPartySourceCatalog } from '@jobhunter/sources';
+} from '@jobhunter/db/interview';
+import { SqlitePlatformActivityRepository, SqlitePlatformRepository } from '@jobhunter/db/platform';
+import { firstPartySourceCatalog } from '@jobhunter/sources/catalog-data';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
 import { createConfiguredModelClient } from '@jobhunter/llm';
 import {
-  createMailConnectorRegistry,
   EncryptedFileCredentialVault,
   FileMailboxConfigStore,
   MailRuntimeStateStore,
-} from '@jobhunter/mail-connectors';
+} from '@jobhunter/mail-connectors/config';
+import { mailConnectorMetadata } from '@jobhunter/mail-connectors/metadata';
 import path from 'node:path';
 import { createRetryableSingleton } from './retryable-singleton.js';
 import { browserFixtureIdentity } from './browser-test-isolation.js';
@@ -122,6 +142,7 @@ export interface WebApplicationServices {
   readonly settings: SystemSettingsService;
   readonly mailboxes: MailboxSettingsService;
   readonly calendar: WebCalendarQueryService;
+  readonly applications: WebApplicationProgressService;
   readonly sourceSchedules: SourceScheduleReconciliationService;
   readonly interview: InterviewProjectService;
   readonly experiences: InterviewExperienceService;
@@ -169,9 +190,6 @@ export function createLocalWebContainer(
       clock,
     });
     settings.applySourceSyncChannelSelection();
-    const mailRegistry = createMailConnectorRegistry(() => {
-      throw new Error('Mailbox credentials are only available inside the Worker.');
-    });
     const mailboxStore = new FileMailboxConfigStore(config.bootstrap.mailboxConfigPath.value);
     const mailboxRuntimeState = new MailRuntimeStateStore(config.bootstrap.dataRoot.value);
     const fixtureIdentity = browserFixtureIdentity(process.env);
@@ -188,7 +206,7 @@ export function createLocalWebContainer(
       configs: mailboxStore,
       credentials: credentialVault,
       runtimeState: mailboxRuntimeState,
-      metadata: mailRegistry.metadata(),
+      metadata: mailConnectorMetadata,
       createMailboxKey: () => ids.generate().replaceAll('-', '').slice(0, 16).toLowerCase(),
     });
     const registry = new HandlerRegistry();
@@ -207,6 +225,7 @@ export function createLocalWebContainer(
       );
     const artifacts = new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value);
     const interviewRepository = new SqliteInterviewProjectRepository(database.client);
+    const recruitmentMailRepository = new SqliteRecruitmentMailRepository(database.client);
     const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
     const resumeDeletion = new ResumeDeletionService({
       repository: new SqliteResumeDeletionRepository(database.client),
@@ -409,8 +428,9 @@ export function createLocalWebContainer(
       }),
       settings,
       mailboxes,
-      calendar: new WebCalendarQueryService(
-        new CalendarQueryService(new SqliteRecruitmentMailRepository(database.client)),
+      calendar: new WebCalendarQueryService(new CalendarQueryService(recruitmentMailRepository)),
+      applications: new WebApplicationProgressService(
+        new ApplicationProgressQueryService(recruitmentMailRepository),
       ),
       sourceSchedules,
       interview: new InterviewProjectService({

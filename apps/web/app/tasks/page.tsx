@@ -146,9 +146,6 @@ export default async function TasksPage({
                       <strong>
                         <TaskDetailsDialog task={task} />
                       </strong>
-                      <small>
-                        <code>{task.id.slice(0, 8)}…</code>
-                      </small>
                     </td>
                     <td>
                       <span className={`status status-${task.status}`}>
@@ -202,7 +199,6 @@ export default async function TasksPage({
                   {labelStatus(taskStatusLabels, task.status)}
                 </span>
               </div>
-              <code>{task.id.slice(0, 8)}…</code>
               <p>
                 {task.errorCategory
                   ? `${task.errorCategory}: ${task.errorSummary ?? '无错误摘要'}`
@@ -269,7 +265,6 @@ export default async function TasksPage({
                       <span className={`status status-${run.status}`}>
                         {labelStatus(agentRunStatusLabels, run.status)}
                       </span>
-                      {run.errorCategory ? <small>{run.errorCategory}</small> : null}
                     </td>
                     <td>
                       Agent {run.agentVersion}
@@ -302,7 +297,6 @@ export default async function TasksPage({
               <p>
                 版本 Agent {run.agentVersion} · {time(run.startedAt)}
               </p>
-              <small>{run.errorCategory ?? '暂无错误'}</small>
             </article>
           ))}
         </div>

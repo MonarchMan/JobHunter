@@ -1,6 +1,7 @@
 import type { ResumeDocumentRecord, ResumeDocumentRepository } from '@jobhunter/application';
 import { parseContentHash } from '@jobhunter/domain';
-import type { ResumeMediaType, ResumeParseStatus } from '@jobhunter/resume';
+import type { ResumeMediaType } from '@jobhunter/resume/media';
+import type { ResumeParseStatus } from '@jobhunter/resume/parsers';
 import type Database from 'better-sqlite3';
 
 /** 数据库查询结果对应的行结构。 */

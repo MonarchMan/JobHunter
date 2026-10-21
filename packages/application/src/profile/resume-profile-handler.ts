@@ -1,15 +1,14 @@
 import { AgentRuntimeError, type AgentRunner } from '@jobhunter/agent-core';
 import { parseId } from '@jobhunter/domain';
+import { isResumeOcrMediaType } from '@jobhunter/resume/media';
+import { ResumeOcrError, type ResumeOcrEngine } from '@jobhunter/resume/ocr-contracts';
+import { resumeProfileAgentDefinition } from '@jobhunter/resume/profile-agent';
 import {
-  isResumeOcrMediaType,
-  extractResumeProfileByRules,
   parseResumeProfileAgentOutput,
-  ResumeOcrError,
-  resumeProfileAgentDefinition,
   toCandidateProfile,
   type CandidatePreferences,
-  type ResumeOcrEngine,
-} from '@jobhunter/resume';
+} from '@jobhunter/resume/profile-schema';
+import { extractResumeProfileByRules } from '@jobhunter/resume/profile-rules';
 import { z } from 'zod';
 import type {
   ResumeArtifactReader,

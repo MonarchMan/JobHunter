@@ -1,4 +1,5 @@
-import type { WebJobDetail, WebJobTrace, WebJobTraceRepository } from '@jobhunter/application/web';
+import type { WebJobDetail } from '@jobhunter/application/contracts';
+import type { WebJobTrace, WebJobTraceRepository } from '@jobhunter/application/jobs';
 import { jobAdviceSchema, ruleOutcomeSchema, scoreComponentSchema } from '@jobhunter/matching';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';

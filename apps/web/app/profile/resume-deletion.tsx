@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebResumeDeletionImpact } from '@jobhunter/application/web';
+import type { WebResumeDeletionImpact } from '@jobhunter/application/contracts';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';

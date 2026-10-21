@@ -4,7 +4,7 @@ import {
   parseResumePolishAgentOutput,
   resumePolishAgentDefinition,
   resumePolishSectionSchema,
-} from '@jobhunter/resume';
+} from '@jobhunter/resume/polish';
 import { z } from 'zod';
 import { mapAgentRuntimeError } from '../agents/error-mapping.js';
 import type { CandidateProfileRepository } from '../ports/profiles.js';

@@ -85,3 +85,4 @@ export {
 export * from './interview-web.js';
 export * from './experience-web.js';
 export * from './research-web.js';
+export * from './application-progress-web.js';

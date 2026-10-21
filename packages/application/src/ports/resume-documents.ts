@@ -1,5 +1,6 @@
 import type { ContentHash, UtcInstant } from '@jobhunter/domain';
-import type { ResumeMediaType, ResumeParseStatus } from '@jobhunter/resume';
+import type { ResumeMediaType } from '@jobhunter/resume/media';
+import type { ResumeParseStatus } from '@jobhunter/resume/parsers';
 
 /** 应用层数据结构或端口契约。 */
 export interface ResumeDocumentRecord {

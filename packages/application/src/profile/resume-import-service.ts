@@ -1,5 +1,5 @@
 import type { Clock, IdGenerator } from '@jobhunter/domain';
-import { detectResumeMediaType, parseResumeText } from '@jobhunter/resume';
+import { detectResumeMediaType } from '@jobhunter/resume/media';
 import type { ArtifactStore } from '../ports/artifact-store.js';
 import type { ResumeDocumentRecord, ResumeDocumentRepository } from '../ports/resume-documents.js';
 
@@ -60,6 +60,8 @@ export class ResumeImportService {
     if (existing) return { document: existing, deduplicated: true };
 
     // 2、在数据库事务外解析和清洗文本，避免阻塞 SQLite 事务。
+    // 2.a、解析器按实际上传请求加载，避免 Web 首页装配时编译 PDF/DOCX 运行时。
+    const { parseResumeText } = await import('@jobhunter/resume/parsers');
     const parsed = await parseResumeText(bytes, detected.mediaType, {
       minimumNonWhitespaceCharacters: this.#options.minimumNonWhitespaceCharacters,
       maximumExtractedCharacters: this.#options.maximumExtractedCharacters,

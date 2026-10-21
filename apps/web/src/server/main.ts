@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { resolveWebServerConfig } from './host.js';
+import { resolveWebChildEnvironment, resolveWebServerConfig } from './host.js';
 
 // 1、解析 Web 配置；2、启动 Worker；3、启动 Next 服务；4、统一转发退出和子进程错误。
 const config = resolveWebServerConfig({
@@ -15,13 +15,15 @@ const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
 const workerSource = path.join(workspaceRoot, 'apps', 'worker', 'src', 'main.ts');
 const workerDist = path.join(workspaceRoot, 'apps', 'worker', 'dist', 'main.js');
 const workerArguments = config.development ? [tsxBin, workerSource] : [workerDist];
+// 2.a、开发子进程通过标准导出条件加载 workspace 源码，保留已有 Node 参数；生产继续使用 dist。
+const childEnvironment = {
+  ...resolveWebChildEnvironment(process.env, config.development),
+  JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
+};
 const worker = spawn(process.execPath, workerArguments, {
   cwd: workspaceRoot,
   stdio: 'inherit',
-  env: {
-    ...process.env,
-    JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
-  },
+  env: childEnvironment,
 });
 const next = spawn(
   process.execPath,
@@ -35,10 +37,7 @@ const next = spawn(
   ],
   {
     stdio: 'inherit',
-    env: {
-      ...process.env,
-      JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
-    },
+    env: childEnvironment,
   },
 );
 

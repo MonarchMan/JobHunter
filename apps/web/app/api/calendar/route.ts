@@ -1,4 +1,4 @@
-import { webCalendarQuerySchema } from '@jobhunter/application/web';
+import { webCalendarQuerySchema } from '@jobhunter/application/contracts';
 import { ZodError } from 'zod';
 import { badRequestResponse, dataResponse, errorResponse } from '../../../src/server/http.js';
 import { getWebContainer } from '../../../src/server/container.js';

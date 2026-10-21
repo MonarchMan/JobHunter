@@ -1,11 +1,6 @@
 'use client';
 
-import type {
-  CommunityExperienceFilter,
-  CommunityExperienceSummary,
-  ExperienceResearchDetail,
-  ExperienceResearchRequestSummary,
-} from '@jobhunter/application/web';
+import type { CommunityExperienceFilter, CommunityExperienceSummary, ExperienceResearchDetail, ExperienceResearchRequestSummary } from '@jobhunter/application/contracts';
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useRef, useState } from 'react';

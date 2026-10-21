@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebProfileDetail, WebProfileMutation } from '@jobhunter/application/web';
+import type { WebProfileDetail, WebProfileMutation } from '@jobhunter/application/contracts';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';

@@ -1,5 +1,5 @@
 import { parseId, type CandidateProfileData, type CandidateProfileId } from '@jobhunter/domain';
-import { isResumeOcrMediaType } from '@jobhunter/resume';
+import { isResumeOcrMediaType } from '@jobhunter/resume/media';
 import type { ResumeFileReader } from '../ports/resume-documents.js';
 import type { EnqueueTaskResult } from '../tasks/model.js';
 import type { TaskService } from '../tasks/task-service.js';
