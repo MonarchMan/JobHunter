@@ -1,7 +1,5 @@
-import {
-  SourceSyncTargetRequiredError,
-  webSourceChannelMutationSchema,
-} from '@jobhunter/application/web';
+import { SourceSyncTargetRequiredError } from '@jobhunter/application/sync';
+import { webSourceChannelMutationSchema } from '@jobhunter/application/contracts';
 import { ZodError } from 'zod';
 import {
   badRequestResponse,

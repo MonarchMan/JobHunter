@@ -1,7 +1,5 @@
-import {
-  ResumePolishValidationError,
-  webResumePolishRequestSchema,
-} from '@jobhunter/application/web';
+import { ResumePolishValidationError } from '@jobhunter/application/profile';
+import { webResumePolishRequestSchema } from '@jobhunter/application/contracts';
 import { ZodError } from 'zod';
 import {
   badRequestResponse,

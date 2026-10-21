@@ -1,6 +1,9 @@
 'use client';
 
-import type { AvailableResumeProject, ProjectDossierSummary } from '@jobhunter/application/web';
+import type {
+  AvailableResumeProject,
+  ProjectDossierSummary,
+} from '@jobhunter/application/interview';
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
@@ -68,7 +71,7 @@ export function InterviewProjectIndex({
           <div className="empty-state">
             <h3>简历里还没有可用项目</h3>
             <p>先导入或编辑个人资料中的项目经历，再回来开始拷打。</p>
-            <a className="button-primary" href="/profile#resume-projects">
+            <a className="button-primary" href="/my?tab=profile#resume-projects">
               补充项目经历
             </a>
           </div>

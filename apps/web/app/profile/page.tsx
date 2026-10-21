@@ -8,7 +8,7 @@ import { ResumeDeletion } from './resume-deletion.js';
 import { ResumeImport } from './resume-import.js';
 import { Pagination } from '../components/lists/pagination.js';
 import { SelectField } from '../components/forms/select-field.js';
-import { webPagination } from '@jobhunter/application/web';
+import { webPagination } from '@jobhunter/application/contracts';
 import { ResumeEditor } from './resume-editor.js';
 import styles from './page.module.css';
 
@@ -17,11 +17,14 @@ export const metadata: Metadata = { title: '个人资料' };
 
 interface ProfilePageProperties {
   readonly searchParams: Promise<SearchParameterSource>;
+  readonly embedded?: boolean;
 }
 
 export default async function ProfilePage({
   searchParams,
+  embedded = false,
 }: ProfilePageProperties): Promise<ReactElement> {
+  const Container = embedded ? 'div' : 'main';
   const query = await searchParams;
   const container = await getWebContainer();
   const profiles = container.services.webProfiles.list();
@@ -33,7 +36,7 @@ export default async function ProfilePage({
   const selectedId = firstSearchParameter(query, 'profile') ?? profiles[0]?.id;
   if (!selectedId) {
     return (
-      <main id="main-content" tabIndex={-1}>
+      <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
         <PageHeader title="个人资料" />
         <ResumeImport />
         <section className="empty-state page-empty-state" aria-labelledby="profile-empty-title">
@@ -51,13 +54,13 @@ export default async function ProfilePage({
             </a>
           </div>
         </section>
-      </main>
+      </Container>
     );
   }
   const selectedProfile = profiles.find((profile) => profile.id === selectedId);
   if (!selectedProfile?.currentVersionId) {
     return (
-      <main id="main-content" tabIndex={-1}>
+      <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
         <PageHeader title="个人资料" />
         {selectedProfile ? <ResumeImport profileId={selectedProfile.id} /> : <ResumeImport />}
         <section className="empty-state page-empty-state" aria-labelledby="profile-pending-title">
@@ -67,7 +70,7 @@ export default async function ProfilePage({
           <h2 id="profile-pending-title">个人资料正在生成</h2>
           <p>简历已保存，等待 Worker 完成后台提取任务后刷新此页面。</p>
         </section>
-      </main>
+      </Container>
     );
   }
   const detail = container.services.webProfiles.get(selectedId);
@@ -77,9 +80,10 @@ export default async function ProfilePage({
     versionPagination.current * versionPagination.pageSize,
   );
   return (
-    <main id="main-content" tabIndex={-1}>
+    <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
       <PageHeader title="个人资料">
-        <form action="/profile" method="get" noValidate>
+        <form action={embedded ? '/my' : '/profile'} method="get" noValidate>
+          {embedded ? <input type="hidden" name="tab" value="profile" /> : null}
           <label>
             选择画像
             <SelectField
@@ -152,7 +156,7 @@ export default async function ProfilePage({
             label="画像版本分页"
             createHref={(page) => {
               const parameters = new URLSearchParams({ profile: selectedId, page: String(page) });
-              return `/profile?${parameters.toString()}`;
+              return `${embedded ? '/my?tab=profile&' : '/profile?'}${parameters.toString()}`;
             }}
           />
         </article>
@@ -178,6 +182,6 @@ export default async function ProfilePage({
       {detail.current.resumeDocumentId ? (
         <ResumeDeletion resumeDocumentId={detail.current.resumeDocumentId} />
       ) : null}
-    </main>
+    </Container>
   );
 }

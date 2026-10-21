@@ -1,4 +1,4 @@
-import { webAcceptExperienceSchema } from '@jobhunter/application/web';
+import { webAcceptExperienceSchema } from '@jobhunter/application/contracts';
 import { getWebContainer } from '../../../../../../src/server/container.js';
 import { dataResponse, forbiddenResponse } from '../../../../../../src/server/http.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';

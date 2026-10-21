@@ -12,9 +12,13 @@ export async function requestJson<T>(
   init: RequestInit & { readonly timeoutMs?: number },
 ): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? 30_000);
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, init.timeoutMs ?? 30_000);
   const signal = init.signal;
-  const onAbort = (): void => controller.abort(signal?.reason);
+  const onAbort = (): void => {
+    controller.abort(signal?.reason);
+  };
   signal?.addEventListener('abort', onAbort, { once: true });
   try {
     const response = await fetch(input, { ...init, signal: controller.signal });

@@ -12,6 +12,7 @@ import {
   type MailHealthResult,
 } from '@jobhunter/mail-core';
 import { credentialValue, requestJson, safeMessage, safeRef } from './shared.js';
+import { gmailConnectorMetadata } from './metadata.js';
 
 interface GmailMessageListResponse {
   messages?: { id: string; threadId?: string }[];
@@ -46,15 +47,7 @@ interface GmailPayload {
 
 /** Gmail API 的只读连接器；游标是 Gmail historyId，网络请求始终在事务外执行。 */
 export class GmailConnector implements MailboxConnector {
-  public readonly metadata = {
-    providerKey: 'gmail' as const,
-    version: 'gmail-api-v1',
-    authKind: 'oauth' as const,
-    incrementalMode: 'history' as const,
-    folderMode: 'labels' as const,
-    supportsStableMessageId: true,
-    supportStatus: 'experimental' as const,
-  };
+  public readonly metadata = gmailConnectorMetadata;
   readonly #credentials: (
     ref: string,
     signal?: AbortSignal,

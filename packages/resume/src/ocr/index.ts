@@ -5,40 +5,14 @@ import engData from '@tesseract.js-data/eng';
 import { createWorker, OEM } from 'tesseract.js';
 import type { ResumeMediaType } from '../import/media.js';
 import { normalizeResumeText } from '../parsers/index.js';
+import {
+  ResumeOcrError,
+  type ResumeOcrEngine,
+  type ResumeOcrOptions,
+  type ResumeOcrResult,
+} from './contracts.js';
 
-/** 模块数据结构或契约。 */
-export interface ResumeOcrResult {
-  readonly text: string;
-  readonly characterCount: number;
-  readonly engineVersion: string;
-}
-
-/** 模块数据结构或契约。 */
-export interface ResumeOcrOptions {
-  readonly minimumNonWhitespaceCharacters?: number;
-  readonly maximumExtractedCharacters?: number;
-  readonly signal?: AbortSignal;
-}
-
-/** 模块数据结构或契约。 */
-export interface ResumeOcrEngine {
-  recognize(
-    bytes: Uint8Array,
-    mediaType: Extract<ResumeMediaType, 'image/jpeg' | 'image/png'>,
-    options?: ResumeOcrOptions,
-  ): Promise<ResumeOcrResult>;
-}
-
-/** OCR 质量不足、文本超限或引擎异常时抛出的稳定错误。 */
-export class ResumeOcrError extends Error {
-  public readonly code: 'low_quality' | 'text_too_large' | 'engine_failed';
-
-  public constructor(code: ResumeOcrError['code'], message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'ResumeOcrError';
-    this.code = code;
-  }
-}
+export * from './contracts.js';
 
 const languages = [chiSimData, engData];
 

@@ -1,7 +1,7 @@
 import {
   buildGmailAuthorizationUrl,
   buildMicrosoftGraphAuthorizationUrl,
-} from '@jobhunter/mail-connectors';
+} from '@jobhunter/mail-connectors/oauth';
 import { getWebContainer } from '../../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
 import {

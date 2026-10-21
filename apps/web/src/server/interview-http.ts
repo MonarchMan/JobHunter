@@ -9,9 +9,9 @@ import {
   InterviewProjectConflictError,
   ProjectMaterialError,
   ProjectDossierNotFoundError,
-  TaskExecutionError,
   type InterviewTaskAccepted,
-} from '@jobhunter/application/web';
+} from '@jobhunter/application/interview';
+import { TaskExecutionError } from '@jobhunter/application/tasks';
 import { DomainError } from '@jobhunter/domain';
 import { ZodError } from 'zod';
 import {

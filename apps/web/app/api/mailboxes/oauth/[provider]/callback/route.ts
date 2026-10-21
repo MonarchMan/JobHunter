@@ -1,4 +1,4 @@
-import { exchangeOAuthCode, fetchOAuthMailboxAddress } from '@jobhunter/mail-connectors';
+import { exchangeOAuthCode, fetchOAuthMailboxAddress } from '@jobhunter/mail-connectors/oauth';
 import { getWebContainer } from '../../../../../../src/server/container.js';
 import {
   clearMailOAuthCookie,

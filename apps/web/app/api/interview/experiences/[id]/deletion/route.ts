@@ -1,4 +1,4 @@
-import { webDeleteExperienceSchema } from '@jobhunter/application/web';
+import { webDeleteExperienceSchema } from '@jobhunter/application/contracts';
 import { getWebContainer } from '../../../../../../src/server/container.js';
 import { dataResponse, forbiddenResponse } from '../../../../../../src/server/http.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';

@@ -7,3 +7,4 @@ export * from './oauth.js';
 export * from './mailbox-config-store.js';
 export * from './encrypted-file-credential-vault.js';
 export * from './windows-credential-vault.js';
+export * from './metadata.js';

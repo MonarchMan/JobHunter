@@ -51,7 +51,7 @@ export function DashboardSteps({
           title="建立简历画像"
           detail="告诉 Agent 你的经历、偏好与目标。"
           complete={false}
-          href="/profile"
+          href="/my"
         />
         <Step
           number="02"

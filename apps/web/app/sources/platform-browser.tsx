@@ -3,7 +3,7 @@ import { PlatformRetentionStatus } from './platform-retention-status.js';
 
 import { useEffect, useRef, useState, type ReactElement, type SyntheticEvent } from 'react';
 import { useRouter } from 'next/navigation.js';
-import type { BossCommand, WebBossSnapshot } from '@jobhunter/application/web';
+import type { BossCommand, WebBossSnapshot } from '@jobhunter/application/platform';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './boss-browser.module.css';
 
@@ -219,7 +219,7 @@ export function PlatformBrowser({
         {state.profileSearch?.keywords.length
           ? state.profileSearch.keywords.join('、')
           : '尚未填写具体岗位'}
-        。<a href="/profile#resume-intention">编辑意向岗位</a>；修改后请重新连接。
+        。<a href="/my?tab=profile#resume-intention">编辑意向岗位</a>；修改后请重新连接。
       </p>
       {state.profileSearch?.error && <p role="alert">{state.profileSearch.error}</p>}
       {

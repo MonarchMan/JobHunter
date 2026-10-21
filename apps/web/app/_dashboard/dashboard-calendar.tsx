@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebCalendarItem } from '@jobhunter/application/web';
+import type { WebCalendarItem } from '@jobhunter/application/contracts';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';

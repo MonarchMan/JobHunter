@@ -4,7 +4,7 @@ import {
   resumePolishAgentOutputSchema,
   resumePolishSectionSchema,
   type ResumePolishSection,
-} from '@jobhunter/resume';
+} from '@jobhunter/resume/polish';
 import type { CandidateProfileRepository } from '../ports/profiles.js';
 import {
   webResumePolishAcceptedSchema,

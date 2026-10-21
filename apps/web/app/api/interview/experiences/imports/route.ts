@@ -1,4 +1,4 @@
-import { ResumeMediaError } from '@jobhunter/application/web';
+import { ResumeMediaError } from '@jobhunter/application/interview';
 import {
   badRequestResponse,
   dataResponse,

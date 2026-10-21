@@ -6,10 +6,9 @@ import {
   webSourceSyncTaskDetailSchema,
   type WebAgentRunDetail,
   type WebAgentRunSummary,
-  type WebDiagnosticsRepository,
   type WebSourceSyncTaskDetail,
-  type WebTaskListEntry,
-} from '@jobhunter/application/web';
+} from '@jobhunter/application/contracts';
+import type { WebDiagnosticsRepository, WebTaskListEntry } from '@jobhunter/application/tasks';
 import type Database from 'better-sqlite3';
 
 /** 数据库查询结果对应的行结构。 */

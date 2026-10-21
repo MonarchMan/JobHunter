@@ -8,5 +8,7 @@ export * from './resume-profile-workflow.js';
 export * from './resume-polish-handler.js';
 export * from './resume-polish-service.js';
 export * from './web-profile-service.js';
+export * from './web-resume-deletion-service.js';
 export * from './resume-template-service.js';
 export * from './resume-export-handler.js';
+export { ResumeMediaError } from '@jobhunter/resume/media';

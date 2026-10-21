@@ -1,4 +1,4 @@
-import { ExperienceDocumentNotFoundError } from '@jobhunter/application/web';
+import { ExperienceDocumentNotFoundError } from '@jobhunter/application/interview';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';

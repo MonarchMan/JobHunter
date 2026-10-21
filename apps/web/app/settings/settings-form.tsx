@@ -1,6 +1,6 @@
 'use client';
 
-import type { SystemSettings } from '@jobhunter/application/web';
+import type { SystemSettings } from '@jobhunter/application/settings';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';

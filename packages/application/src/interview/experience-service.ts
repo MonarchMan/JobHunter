@@ -13,7 +13,7 @@ import {
   type IdGenerator,
   type InterviewExperienceDraft,
 } from '@jobhunter/domain';
-import { detectResumeMediaType, parseResumeText, type ResumeMediaType } from '@jobhunter/resume';
+import { detectResumeMediaType, type ResumeMediaType } from '@jobhunter/resume/media';
 import type { ArtifactStore, QuarantinedArtifact } from '../ports/artifact-store.js';
 import type {
   ExperienceDeletionSnapshot,
@@ -196,6 +196,8 @@ export class InterviewExperienceService {
         '个人面经首版暂不支持图片，请使用 Markdown、TXT、PDF 或 DOCX。',
       );
     }
+    // 2.a、解析器只在导入面经文件时加载，避免普通面试页面编译 PDF/DOCX 运行时。
+    const { parseResumeText } = await import('@jobhunter/resume/parsers');
     const parsedText = await parseResumeText(input.bytes, detected.mediaType, {
       minimumNonWhitespaceCharacters: 1,
       maximumExtractedCharacters: 250_000,

@@ -15,6 +15,7 @@ import {
   type MailboxReadContext,
 } from '@jobhunter/mail-core';
 import { credentialValue, safeMessage, safeRef } from './shared.js';
+import { imapConnectorMetadata } from './metadata.js';
 
 interface ImapCursor {
   /** Zod 对可选字段可能显式返回 undefined，因此边界类型需要接受该形态。 */
@@ -45,15 +46,7 @@ interface ImapCredentials {
 
 /** 通用 IMAP over TLS 连接器；所有邮箱操作使用 EXAMINE 和 BODY.PEEK，避免修改已读状态。 */
 export class ImapConnector implements MailboxConnector {
-  public readonly metadata = {
-    providerKey: 'imap' as const,
-    version: 'imap-tls-v1',
-    authKind: 'app_password' as const,
-    incrementalMode: 'imap_uid' as const,
-    folderMode: 'folders' as const,
-    supportsStableMessageId: true,
-    supportStatus: 'experimental' as const,
-  };
+  public readonly metadata = imapConnectorMetadata;
   readonly #credentials: (
     ref: string,
     signal?: AbortSignal,

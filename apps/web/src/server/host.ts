@@ -14,6 +14,23 @@ export interface WebServerConfig {
   readonly development: boolean;
 }
 
+const developmentCondition = '--conditions=development';
+
+/** 为 Web 与 Worker 子进程保留既有环境，并在开发模式启用 workspace 源码导出。 */
+export function resolveWebChildEnvironment(
+  environment: NodeJS.ProcessEnv,
+  development: boolean,
+): NodeJS.ProcessEnv {
+  // 1、生产模式原样复制环境；2、开发模式仅在尚未声明时追加 development 条件。
+  if (!development) return { ...environment };
+  const nodeOptions = environment.NODE_OPTIONS?.trim() ?? '';
+  if (nodeOptions.split(/\s+/u).includes(developmentCondition)) return { ...environment };
+  return {
+    ...environment,
+    NODE_OPTIONS: [nodeOptions, developmentCondition].filter(Boolean).join(' '),
+  };
+}
+
 /** Refuse every wildcard, LAN and public address; v1 is intentionally local-only. */
 /** 将任意本机主机名规范化为受支持的监听地址。 */
 export function normalizeLoopbackHost(value: string | undefined): WebServerConfig['host'] {

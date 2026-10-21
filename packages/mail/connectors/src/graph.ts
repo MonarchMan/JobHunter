@@ -12,6 +12,7 @@ import {
   type MailboxReadContext,
 } from '@jobhunter/mail-core';
 import { credentialValue, requestJson, safeMessage, safeRef } from './shared.js';
+import { graphConnectorMetadata } from './metadata.js';
 
 interface GraphPage<T> {
   value?: T[];
@@ -35,15 +36,7 @@ interface GraphMessage {
 
 /** Microsoft Graph 文件夹级 delta 连接器，使用 ImmutableId 避免文件夹移动改变身份。 */
 export class MicrosoftGraphConnector implements MailboxConnector {
-  public readonly metadata = {
-    providerKey: 'microsoft-graph' as const,
-    version: 'graph-v1.0',
-    authKind: 'oauth' as const,
-    incrementalMode: 'delta' as const,
-    folderMode: 'folders' as const,
-    supportsStableMessageId: true,
-    supportStatus: 'experimental' as const,
-  };
+  public readonly metadata = graphConnectorMetadata;
   readonly #credentials: (
     ref: string,
     signal?: AbortSignal,

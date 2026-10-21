@@ -5,7 +5,7 @@ import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { PlatformTabs, SourceTabs, type SourceChannel } from './source-tabs.js';
 import { Pagination } from '../components/lists/pagination.js';
-import { webPagination, type WebSourceChannel } from '@jobhunter/application/web';
+import { webPagination, type WebSourceChannel } from '@jobhunter/application/contracts';
 import { CompanySourceCard } from './company-source-card.js';
 import { SourceChannelSyncAction } from './source-actions.js';
 import styles from './page.module.css';
@@ -78,7 +78,7 @@ export default async function SourcesPage({
             <h2 id="source-sync-prerequisite-title">确认目标岗位后再同步</h2>
             <p>请先在个人资料中填写并保存目标岗位，系统确认职位大类后才会开始同步。</p>
           </div>
-          <a className="button-primary" href="/profile#resume-intention">
+          <a className="button-primary" href="/my?tab=profile#resume-intention">
             去确认目标岗位
           </a>
         </section>

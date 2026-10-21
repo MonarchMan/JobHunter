@@ -1,6 +1,6 @@
 'use client';
 
-import type { ExperienceDocumentDetail } from '@jobhunter/application/web';
+import type { ExperienceDocumentDetail } from '@jobhunter/application/interview';
 import type { InterviewExperienceDraft } from '@jobhunter/domain';
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement, SyntheticEvent } from 'react';

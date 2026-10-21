@@ -1,9 +1,6 @@
 'use client';
 
-import type {
-  ProjectDossierDetail,
-  ProjectQuestionGenerationStage,
-} from '@jobhunter/application/web';
+import type { ProjectDossierDetail, ProjectQuestionGenerationStage } from '@jobhunter/application/interview';
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';

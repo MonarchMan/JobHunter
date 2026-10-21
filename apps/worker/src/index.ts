@@ -98,7 +98,7 @@ import {
   Job51CdpSessionProvider,
   LiepinCdpSessionProvider,
 } from '@jobhunter/platform-connectors';
-import { TesseractResumeOcrEngine } from '@jobhunter/resume';
+import { TesseractResumeOcrEngine } from '@jobhunter/resume/ocr';
 import {
   AdapterRegistry,
   FetchSourceHttpClient,
