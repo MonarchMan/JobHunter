@@ -732,6 +732,12 @@ async function seedFixture(dataRoot: string): Promise<void> {
           120, 80, 1000, 'USD', 'fake-price-v1', 2, 3)`,
       )
       .run(ids.agentRun);
+    database.client.exec(`INSERT INTO agent_runs
+      (id,agent_key,agent_version,prompt_version,model_config_hash,input_hash,cache_key,
+       status,error_category,error_summary,started_at,finished_at)
+      VALUES('018f0000-0000-7000-8000-000000000708','recruitment-mail.classify',
+       'fake-v1','mail-prompt-v1','fake-config','fake-input-2','fake-cache-2',
+       'failed','unknown',NULL,4,5)`);
     database.client
       .prepare(
         `INSERT INTO events

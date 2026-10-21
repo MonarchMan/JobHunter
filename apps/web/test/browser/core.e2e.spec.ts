@@ -1041,7 +1041,14 @@ test.describe('校招实习管理台核心流程', () => {
     await page.goto('/tasks');
     const taskTitle = page.getByRole('button', { name: '来源同步' }).first();
     await expect(taskTitle).toBeVisible();
-    await expect(page.getByRole('button', { name: 'job-understanding' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '职位理解' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '招聘邮件分析' })).toBeVisible();
+    const failedAgent = page.locator('[data-agent-section]').getByRole('row').filter({
+      hasText: '招聘邮件分析',
+    });
+    await expect(failedAgent).toContainText('失败');
+    await expect(failedAgent).not.toContainText('未知错误');
+    await expect(failedAgent).not.toContainText('unknown');
     const titleColor = await taskTitle.evaluate((element) => getComputedStyle(element).color);
     await taskTitle.hover();
     await expect(taskTitle).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -1053,7 +1060,7 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(taskTable.getByRole('cell').first()).toHaveCSS('text-align', 'center');
     await expect(taskTable.getByRole('cell').first()).toHaveCSS('vertical-align', 'middle');
 
-    await page.getByRole('button', { name: 'job-understanding' }).click();
+    await page.getByRole('button', { name: '职位理解' }).click();
     await expect(page.getByRole('heading', { name: 'Agent 运行详情' })).toBeVisible();
     const toolTable = page.getByRole('table', { name: '工具调用' });
     await expect(toolTable.getByText('fixture.lookup', { exact: true }).first()).toBeVisible();
