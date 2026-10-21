@@ -3,9 +3,20 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { openSqliteDatabase } from '@jobhunter/db';
-import { createSqliteMaintenanceTick } from '../src/sqlite-maintenance.js';
+import {
+  createSqliteMaintenanceTick,
+  resolveSqliteMaintenanceCommand,
+} from '../src/sqlite-maintenance.js';
 
 describe('SQLite maintenance worker composition', () => {
+  it('runs the maintenance child from TypeScript while the Worker uses source exports', () => {
+    const command = resolveSqliteMaintenanceCommand();
+    expect(command.arguments[0]).toMatch(/[\\/]tsx[\\/]dist[\\/]cli\.mjs$/u);
+    expect(command.arguments[1]).toMatch(
+      /[\\/]apps[\\/]worker[\\/]src[\\/]sqlite-maintenance-main\.ts$/u,
+    );
+  });
+
   it('passes shutdown to the actual child process and waits for it to close', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'jobhunter-maintenance-abort-'));
     const database = openSqliteDatabase({ dataRoot: root });
@@ -21,7 +32,7 @@ describe('SQLite maintenance worker composition', () => {
     }
   });
 
-  it('runs the built child entry and persists one summary without creating a no-op task', async () => {
+  it('runs the matching child entry and persists one summary without creating a no-op task', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'jobhunter-maintenance-child-'));
     const database = openSqliteDatabase({ dataRoot: root });
     try {

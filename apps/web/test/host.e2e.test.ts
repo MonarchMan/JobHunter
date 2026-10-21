@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { createLocalWebContainer } from '../src/server/container.js';
-import { normalizeLoopbackHost, resolveWebServerConfig } from '../src/server/host.js';
+import {
+  normalizeLoopbackHost,
+  resolveWebChildEnvironment,
+  resolveWebServerConfig,
+} from '../src/server/host.js';
 
 describe('Web loopback startup policy', () => {
   it.each(['127.0.0.1', 'localhost', '::1', '[::1]'])('accepts loopback host %s', (host) => {
@@ -25,6 +29,30 @@ describe('Web loopback startup policy', () => {
       development: false,
     });
     expect(() => resolveWebServerConfig({ PORT: '0' })).toThrow(/PORT/);
+  });
+
+  it('enables source exports only for development child processes', () => {
+    expect(
+      resolveWebChildEnvironment(
+        { NODE_ENV: 'development', NODE_OPTIONS: '--trace-warnings' },
+        true,
+      ),
+    ).toEqual({
+      NODE_ENV: 'development',
+      NODE_OPTIONS: '--trace-warnings --conditions=development',
+    });
+    expect(
+      resolveWebChildEnvironment(
+        { NODE_ENV: 'development', NODE_OPTIONS: '--conditions=development' },
+        true,
+      ),
+    ).toEqual({ NODE_ENV: 'development', NODE_OPTIONS: '--conditions=development' });
+    expect(
+      resolveWebChildEnvironment(
+        { NODE_ENV: 'production', NODE_OPTIONS: '--trace-warnings' },
+        false,
+      ),
+    ).toEqual({ NODE_ENV: 'production', NODE_OPTIONS: '--trace-warnings' });
   });
 
   it('composes read and task services over the configured local database', async () => {

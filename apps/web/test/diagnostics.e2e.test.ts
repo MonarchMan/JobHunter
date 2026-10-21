@@ -3,6 +3,17 @@ import { openSqliteDatabase } from '@jobhunter/db';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
+import { labelAgentErrorCategory, labelAgentKey } from '../app/components/status-labels.js';
+
+describe('Agent 诊断展示标签', () => {
+  it('将已知及未知 Agent 名称和错误分类转换为中文', () => {
+    expect(labelAgentKey('recruitment-mail.classify')).toBe('招聘邮件分析');
+    expect(labelAgentKey('interview.community-research-configured-model')).toBe('面经研究');
+    expect(labelAgentKey('future.agent')).toBe('未登记的 Agent 类型');
+    expect(labelAgentErrorCategory('unknown')).toBe('未知错误');
+    expect(labelAgentErrorCategory('future_error')).toBe('其他错误');
+  });
+});
 
 const failedTaskId = '018f0000-0000-7000-8000-000000000701';
 const pendingTaskId = '018f0000-0000-7000-8000-000000000702';

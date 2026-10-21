@@ -9,7 +9,7 @@ import {
 import { utcInstant, type Clock, type IdGenerator, type UtcInstant } from '@jobhunter/domain';
 import { FakeModelClient } from '@jobhunter/llm';
 import type { ResumeArtifactReader } from '@jobhunter/application';
-import type { ResumeOcrEngine } from '@jobhunter/resume';
+import type { ResumeOcrEngine } from '@jobhunter/resume/ocr-contracts';
 import { createTemporaryDataRoot } from '@jobhunter/testkit';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
