@@ -18,12 +18,16 @@
 - **ENG-007**：仓库必须提供 `.env.example` 和本地配置示例，但不得包含秘密；`var/`、备份、简历、数据库和评测输出默认忽略。
 - **ENG-008**：构建产物必须写入各包 `dist/`，可从干净 checkout 通过单一命令重建。
 - **ENG-009**：文档检查必须验证规格三件套、状态、相对链接、重复需求 ID 和 `git diff --check` 等价规则。
+- **ENG-010**：开发入口必须直接加载 workspace 源码，不得在启动 Web 或 Worker 前同步执行全仓 `tsc -b`；正式构建仍必须从干净 checkout 生成并使用各包 `dist/`，开发类型检查必须提供独立的增量 watch 命令。
+- **ENG-011**：内部包必须按消费者职责提供细粒度公开子路径；Web 页面、路由和装配代码不得仅为少量类型、静态目录或元信息而导入聚合全部运行时实现的粗粒度 barrel。
 
 ## 质量需求
 
 - **ENG-Q01**：基础命令必须可在 Windows PowerShell 和常见 POSIX shell 运行，不依赖 shell 专属串联语法。
 - **ENG-Q02**：工具配置集中维护，包级覆盖必须有注释说明原因。
 - **ENG-Q03**：普通测试使用固定时钟、随机种子和临时目录，不产生顺序依赖。
+- **ENG-Q04**：源码开发模式必须复用标准 package exports 条件并保留调用方已有的 Node 启动参数，不得依赖 POSIX 专属环境变量语法或已存在的 `dist/`。
+- **ENG-Q05**：细粒度公开子路径必须同时支持 development 源码条件和 production 构建产物，并由回归测试证明轻量入口不会加载来源适配器、邮箱协议运行时或简历 OCR/PDF 解析实现。
 
 ## 验收场景
 
@@ -32,6 +36,8 @@
 3. 普通 test 在无网络、无模型 Key 时通过且不创建工作区 `var/`。（ENG-005,006）
 4. `.env.example` 经秘密扫描无真实值，数据库/简历文件无法被默认 git add。（ENG-007）
 5. 删除任一规格 tasks.md 或制造坏相对链接，docs:check 失败。（ENG-009）
+6. 不预构建 workspace 包时启动 Web 开发入口，Web 与其独立 Worker 均从 `src/` 解析内部包；开发启动不触发根 `build`，独立 `typecheck:watch` 可持续报告类型错误，生产导入仍解析到 `dist/`。（ENG-010, ENG-Q04）
+7. 分别导入来源目录数据、邮箱连接器元信息和简历媒体类型子路径，解析结果只包含对应轻量模块；Web 生产代码不再引用 application/db/sources/mail-connectors 的粗粒度 Web 或根 barrel。（ENG-011, ENG-Q05）
 
 ## 未解决问题
 
