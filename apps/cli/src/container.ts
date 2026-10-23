@@ -311,15 +311,6 @@ export function createLocalCliContainer(
       run: async () => {
         const initialized = await initialization.initialize({
           dataRoot: config.bootstrap.dataRoot.value,
-          configPath: config.bootstrap.configPath.value,
-          defaultConfig: {
-            logLevel: 'info',
-            worker: {
-              pollIntervalMs: 1_000,
-              maxConcurrentNetworkTasks: 4,
-              taskTypeConcurrency: {},
-            },
-          },
         });
         const runtime = operational();
         const defaultResumePath = [

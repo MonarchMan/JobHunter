@@ -12,9 +12,11 @@ database_maintenance 单例保存检查摘要与 owner_pid。所有标准连接�
 
 ## 配置
 
-`packages/application/config` 定义 BootstrapConfig、AppConfig 和唯一的运行时配置加载器。CLI、Web 与 Worker 都显式传入工作区根目录；加载器先读取 `<workspaceRoot>/.env`，再以进程环境覆盖同名值，随后执行两阶段解析：第一阶段只从 CLI、合并环境和内置默认值解析 dataRoot/configPath；第二阶段从该路径加载非敏感文件，再合并普通配置。这样配置结果不受进程当前工作目录影响，也不依赖 Next、tsx 或 Shell 各自的环境文件行为。
+`packages/application/config` 定义 BootstrapConfig、AppConfig 和唯一的运行时配置加载器。CLI、Web 与 Worker 显式传入工作区根目录；加载器仅读取 `<workspaceRoot>/.env`，以进程环境覆盖同名值，再应用 CLI 临时参数和内置默认值。先解析 dataRoot 与邮箱数据路径，再校验普通参数，不再读取 JSON 运行配置。配置结果不受进程当前工作目录影响。
 
-配置文件不得改变自己的路径或 dataRoot，避免循环解析。项目运行参数继续使用 `JOBHUNTER_` 前缀，模型连接参数例外，统一使用 `BASE_URL`、`MODEL`、`API_KEY`，不再提供显式 Provider 或供应商专用别名。`BASE_URL` 缺省为 `https://api.openai.com/v1`，配置加载器根据主机名标签或路径段中的独立 `anthropic` 标识推断协议。秘密字段使用 `SecretString` 包装，禁止默认 `toString/toJSON`。本地配置文件默认 `<dataRoot>/config.json`，只允许 Settings Registry 中的非敏感字段。显式进程环境继续高于 `.env`，CLI 临时参数继续拥有最高优先级。
+`.env.example` 是唯一运行配置模板；`init` 仅初始化运行数据。项目参数使用 `JOBHUNTER_` 前缀，模型连接统一使用 `BASE_URL`、`MODEL`、`API_KEY`。`BASE_URL` 默认 `https://api.openai.com/v1`，根据主机标签或路径段中的独立 `anthropic` 标识推断协议。秘密字段使用 `SecretString` 包装，禁止隐式回显。
+
+Worker 参数使用 `JOBHUNTER_WORKER_POLL_INTERVAL_MS`、`JOBHUNTER_MAX_CONCURRENT_NETWORK_TASKS`、`JOBHUNTER_TASK_TYPE_CONCURRENCY`（JSON 对象字符串）。平台统一间隔使用 `JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS`，追加 `_BOSS`、`_ZHILIAN`、`_51JOB`、`_LIEPIN` 分别覆盖对应平台。邮箱账号、同步游标和加密凭据属于运行数据，继续独立存储。
 
 ## 日志
 

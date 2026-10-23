@@ -63,9 +63,7 @@ describe('Web loopback startup policy', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         expect(container.services.jobs.list({ limit: 10 }).items).toEqual([]);
         expect(container.services.sources.list()).toEqual(

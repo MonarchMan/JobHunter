@@ -9,139 +9,82 @@ import {
   SecretString,
 } from '../src/index.js';
 
-describe('two-stage configuration', () => {
-  it('requires explicit mail model consent and lets environment override the local file', () => {
+describe('workspace dotenv configuration', () => {
+  it('requires explicit mail model consent', () => {
     const bootstrap = resolveBootstrapConfig({ environment: {} });
     expect(resolveAppConfig({ bootstrap, environment: {} }).mail.classification.modelMode).toEqual({
       value: 'off',
       source: 'default',
     });
-    const file = { mail: { classification: { modelMode: 'configured' } } };
     expect(
-      resolveAppConfig({ bootstrap, environment: {}, file }).mail.classification.modelMode,
-    ).toEqual({ value: 'configured', source: 'file' });
-    expect(
-      resolveAppConfig({ bootstrap, environment: { JOBHUNTER_MAIL_MODEL_MODE: 'off' }, file }).mail
+      resolveAppConfig({ bootstrap, environment: { JOBHUNTER_MAIL_MODEL_MODE: 'configured' } }).mail
         .classification.modelMode,
-    ).toEqual({ value: 'off', source: 'environment' });
+    ).toEqual({ value: 'configured', source: 'environment' });
     expect(() =>
       resolveAppConfig({ bootstrap, environment: { JOBHUNTER_MAIL_MODEL_MODE: 'invalid' } }),
     ).toThrow();
   });
-  it('平台统一间隔默认零，保留显式零覆盖及配置优先级', () => {
-    const bootstrap = resolveBootstrapConfig({ environment: {} });
-    expect(resolveAppConfig({ bootstrap, environment: {} }).platforms.requestIntervalMs).toEqual({
-      value: 0,
-      source: 'default',
+
+  it('applies CLI, environment, then default precedence', () => {
+    const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
+    const config = resolveAppConfig({
+      bootstrap,
+      cli: { logLevel: 'debug' },
+      environment: {
+        JOBHUNTER_LOG_LEVEL: 'warn',
+        JOBHUNTER_WORKER_POLL_INTERVAL_MS: '2500',
+        JOBHUNTER_MAX_CONCURRENT_NETWORK_TASKS: '7',
+        JOBHUNTER_TASK_TYPE_CONCURRENCY: '{"source.sync":2}',
+        BASE_URL: 'https://models.example.test/v1',
+        MODEL: 'test-model',
+        API_KEY: 'secret-value',
+      },
     });
-    const file = { platforms: { requestIntervalMs: 5000 } };
-    expect(
-      resolveAppConfig({ bootstrap, environment: {}, file }).platforms.requestIntervalMs,
-    ).toEqual({ value: 5000, source: 'file' });
-    const environment = { JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS: '0' };
-    expect(resolveAppConfig({ bootstrap, environment, file }).platforms.requestIntervalMs).toEqual({
-      value: 0,
+    expect(config.logLevel).toEqual({ value: 'debug', source: 'cli' });
+    expect(config.worker.pollIntervalMs).toEqual({ value: 2500, source: 'environment' });
+    expect(config.worker.maxConcurrentNetworkTasks).toEqual({ value: 7, source: 'environment' });
+    expect(config.worker.taskTypeConcurrency).toEqual({
+      value: { 'source.sync': 2 },
       source: 'environment',
     });
-    expect(
-      resolveAppConfig({ bootstrap, environment, file, cli: { platformRequestIntervalMs: 100 } })
-        .platforms.requestIntervalMs,
-    ).toEqual({ value: 100, source: 'cli' });
+    expect(config.model.provider).toEqual({ value: 'openai-compatible', source: 'environment' });
+    expect(config.model.apiKey.value?.reveal()).toBe('secret-value');
+  });
+
+  it('maps provider-specific platform intervals from environment variables', () => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
     expect(
       resolveAppConfig({ bootstrap, environment: {} }).platforms.requestIntervalMsByProvider,
     ).toEqual({ value: {}, source: 'default' });
     expect(
       resolveAppConfig({
         bootstrap,
-        environment,
-        file: { platforms: { requestIntervalMsByProvider: { boss: 0, liepin: 1000 } } },
+        environment: {
+          JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_BOSS: '0',
+          JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_LIEPIN: '1000',
+        },
       }).platforms.requestIntervalMsByProvider,
-    ).toEqual({ value: { boss: 0, liepin: 1000 }, source: 'file' });
+    ).toEqual({ value: { boss: 0, liepin: 1000 }, source: 'environment' });
   });
 
-  it.each([-1, 1.5, 60_001])('拒绝错误的平台专用间隔 %s', (value) => {
+  it.each(['-1', '1.5', '60001', 'invalid'])('rejects invalid platform interval %s', (value) => {
     const bootstrap = resolveBootstrapConfig({ environment: {} });
     expect(() =>
       resolveAppConfig({
         bootstrap,
-        environment: {},
-        file: { platforms: { requestIntervalMsByProvider: { liepin: value } } },
+        environment: { JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_LIEPIN: value },
       }),
     ).toThrow();
   });
 
-  it('拒绝未知平台间隔键', () => {
-    const bootstrap = resolveBootstrapConfig({ environment: {} });
-    expect(() =>
-      resolveAppConfig({
-        bootstrap,
-        environment: {},
-        file: { platforms: { requestIntervalMsByProvider: { unknown: 1000 } } },
-      }),
-    ).toThrow();
-  });
-
-  it.each(['-1', '1.5', '60001', 'invalid'])('拒绝错误平台间隔 %s', (value) => {
-    const bootstrap = resolveBootstrapConfig({ environment: {} });
-    expect(() =>
-      resolveAppConfig({
-        bootstrap,
-        environment: { JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS: value },
-      }),
-    ).toThrow();
-  });
-  it('loads workspace environment consistently and lets process values override it', async () => {
-    const workspaceRoot = await mkdtemp(join(tmpdir(), 'jobhunter-runtime-config-'));
-    try {
-      // 1、准备工作区级 `.env` 与非敏感配置，模拟从任意应用子目录启动。
-      await writeFile(
-        join(workspaceRoot, '.env'),
-        [
-          'JOBHUNTER_DATA_ROOT=./runtime-data',
-          'BASE_URL=https://workspace-model.example.test/v1',
-          'MODEL=workspace-model',
-          'API_KEY=workspace-secret',
-        ].join('\n'),
-        'utf8',
-      );
-      await mkdir(join(workspaceRoot, 'runtime-data'));
-      await writeFile(
-        join(workspaceRoot, 'runtime-data', 'config.json'),
-        JSON.stringify({ logLevel: 'error' }),
-        'utf8',
-      );
-
-      // 2、显式进程环境覆盖 `.env` 同名模型名，其他模型字段继续来自工作区文件。
-      const config = await loadRuntimeAppConfig({
-        workspaceRoot,
-        environment: { MODEL: 'process-model' },
-      });
-
-      // 3、配置路径只相对工作区解析，密钥仍保持脱敏包装。
-      expect(config.bootstrap.dataRoot.value).toBe(join(workspaceRoot, 'runtime-data'));
-      expect(config.model.provider.value).toBe('openai-compatible');
-      expect(config.model.baseUrl.value).toBe('https://workspace-model.example.test/v1');
-      expect(config.model.modelName).toEqual({ value: 'process-model', source: 'environment' });
-      expect(config.model.apiKey.value?.reveal()).toBe('workspace-secret');
-      expect(JSON.stringify(config.model.apiKey)).not.toContain('workspace-secret');
-      expect(config.logLevel).toEqual({ value: 'error', source: 'file' });
-    } finally {
-      await rm(workspaceRoot, { recursive: true, force: true });
-    }
-  });
-
-  it('resolves bootstrap only from CLI, environment, and defaults', () => {
+  it('resolves bootstrap paths without a JSON runtime config', () => {
     const bootstrap = resolveBootstrapConfig({
       cwd: 'C:/workspace',
       cli: { dataRoot: './cli-data' },
-      environment: {
-        JOBHUNTER_DATA_ROOT: './env-data',
-        JOBHUNTER_CONFIG_PATH: './env-config.json',
-      },
+      environment: { JOBHUNTER_CONFIG_PATH: './ignored-config.json' },
     });
     expect(bootstrap).toEqual({
       dataRoot: { value: resolve('C:/workspace', 'cli-data'), source: 'cli' },
-      configPath: { value: resolve('C:/workspace', 'env-config.json'), source: 'environment' },
       mailboxConfigPath: {
         value: resolve('C:/workspace', 'cli-data', 'mail', 'mailboxes.json'),
         source: 'default',
@@ -157,7 +100,7 @@ describe('two-stage configuration', () => {
     });
   });
 
-  it('allows the mailbox configuration file to be placed through the workspace environment', () => {
+  it('keeps mailbox storage paths configurable through environment', () => {
     const bootstrap = resolveBootstrapConfig({
       cwd: 'C:/workspace',
       environment: { JOBHUNTER_MAILBOX_CONFIG_PATH: './private/mailboxes.json' },
@@ -168,7 +111,46 @@ describe('two-stage configuration', () => {
     });
   });
 
-  it('configures the encrypted mailbox credential files and redacts an optional master key', () => {
+  it('loads only workspace dotenv and lets process values override it', async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), 'jobhunter-runtime-config-'));
+    try {
+      // 1、写入工作区 `.env`，并创建旧 JSON 文件验证它不会被读取。
+      await writeFile(
+        join(workspaceRoot, '.env'),
+        [
+          'JOBHUNTER_DATA_ROOT=./runtime-data',
+          'JOBHUNTER_LOG_LEVEL=error',
+          'JOBHUNTER_WORKER_POLL_INTERVAL_MS=2000',
+          'BASE_URL=https://workspace-model.example.test/v1',
+          'MODEL=workspace-model',
+          'API_KEY=workspace-secret',
+        ].join('\n'),
+        'utf8',
+      );
+      await mkdir(join(workspaceRoot, 'runtime-data'));
+      await writeFile(
+        join(workspaceRoot, 'runtime-data', 'config.json'),
+        '{"logLevel":"debug"}',
+        'utf8',
+      );
+      // 2、进程环境覆盖 `.env` 的模型名，普通参数继续来自 `.env`。
+      const config = await loadRuntimeAppConfig({
+        workspaceRoot,
+        environment: { MODEL: 'process-model' },
+      });
+      // 3、旧 JSON 不参与解析，密钥仍保持脱敏包装。
+      expect(config.bootstrap.dataRoot.value).toBe(join(workspaceRoot, 'runtime-data'));
+      expect(config.logLevel).toEqual({ value: 'error', source: 'environment' });
+      expect(config.worker.pollIntervalMs).toEqual({ value: 2000, source: 'environment' });
+      expect(config.model.modelName).toEqual({ value: 'process-model', source: 'environment' });
+      expect(config.model.apiKey.value?.reveal()).toBe('workspace-secret');
+      expect(JSON.stringify(config.model.apiKey)).not.toContain('workspace-secret');
+    } finally {
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('configures encrypted mailbox credential files and redacts the optional master key', () => {
     const bootstrap = resolveBootstrapConfig({
       cwd: 'C:/workspace',
       environment: {
@@ -180,49 +162,8 @@ describe('two-stage configuration', () => {
       bootstrap,
       environment: { JOBHUNTER_MAILBOX_CREDENTIAL_KEY: 'credential-master-key' },
     });
-
-    expect(bootstrap.mailboxCredentialPath.value).toBe(
-      resolve('C:/workspace', 'private/credentials.enc.json'),
-    );
-    expect(bootstrap.mailboxCredentialKeyPath.value).toBe(
-      resolve('C:/workspace', 'private/credentials.key'),
-    );
     expect(config.mail.credentialMasterKey.value?.reveal()).toBe('credential-master-key');
     expect(JSON.stringify(config.mail.credentialMasterKey)).not.toContain('credential-master-key');
-  });
-
-  it('applies CLI then environment then file then default precedence', () => {
-    const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
-    const config = resolveAppConfig({
-      bootstrap,
-      cli: { logLevel: 'debug' },
-      environment: {
-        JOBHUNTER_LOG_LEVEL: 'warn',
-        JOBHUNTER_WORKER_POLL_INTERVAL_MS: '2500',
-        BASE_URL: 'https://models.example.test/v1',
-        MODEL: 'test-model',
-        API_KEY: 'secret-value',
-      },
-      file: {
-        logLevel: 'error',
-        worker: {
-          pollIntervalMs: 3000,
-          maxConcurrentNetworkTasks: 7,
-          taskTypeConcurrency: { 'source.sync': 2 },
-        },
-      },
-    });
-    expect(config.logLevel).toEqual({ value: 'debug', source: 'cli' });
-    expect(config.worker.pollIntervalMs).toEqual({ value: 2500, source: 'environment' });
-    expect(config.worker.maxConcurrentNetworkTasks).toEqual({ value: 7, source: 'file' });
-    expect(config.worker.taskTypeConcurrency).toEqual({
-      value: { 'source.sync': 2 },
-      source: 'file',
-    });
-    expect(config.model.provider).toEqual({ value: 'openai-compatible', source: 'environment' });
-    expect(config.model.baseUrl.value).toBe('https://models.example.test/v1');
-    expect(config.model.modelName.value).toBe('test-model');
-    expect(config.model.apiKey.value?.reveal()).toBe('secret-value');
   });
 
   it('accepts per-task-type concurrency from the environment', () => {
@@ -324,16 +265,6 @@ describe('two-stage configuration', () => {
     });
     expect(config.model.modelName.value).toBeNull();
     expect(config.model.apiKey.value).toBeNull();
-  });
-
-  it('rejects bootstrap fields and secrets in the local non-sensitive file', () => {
-    const bootstrap = resolveBootstrapConfig({ cwd: 'C:/workspace', environment: {} });
-    expect(() =>
-      resolveAppConfig({ bootstrap, environment: {}, file: { dataRoot: './escape' } }),
-    ).toThrow();
-    expect(() =>
-      resolveAppConfig({ bootstrap, environment: {}, file: { model: { apiKey: 'secret' } } }),
-    ).toThrow();
   });
 
   it('redacts secrets during implicit string and JSON conversion', () => {

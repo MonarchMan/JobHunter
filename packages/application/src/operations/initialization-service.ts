@@ -2,8 +2,6 @@
 export interface InitializationResult {
   readonly dataRoot: string;
   readonly databasePath: string;
-  readonly configPath: string;
-  readonly configCreated: boolean;
   readonly companies: number;
   readonly sources: number;
   readonly bootstrap?: {
@@ -15,11 +13,7 @@ export interface InitializationResult {
 
 /** 应用层数据结构或端口契约。 */
 export interface SystemInitializer {
-  initialize(input: {
-    readonly dataRoot: string;
-    readonly configPath: string;
-    readonly defaultConfig: Readonly<Record<string, unknown>>;
-  }): Promise<InitializationResult>;
+  initialize(input: { readonly dataRoot: string }): Promise<InitializationResult>;
 }
 
 /** 编排首次运行所需的目录、配置和数据库初始化。 */

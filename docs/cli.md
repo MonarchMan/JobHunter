@@ -12,8 +12,9 @@ jh --data-root "D:\JobHunter 数据" doctor
 全局参数必须放在子命令之前：
 
 - `--data-root <path>`：本地数据目录，默认 `./var`。
-- `--config <path>`：非敏感配置文件，默认 `<data-root>/config.json`。
 - `--json`：输出机器 JSON。
+
+运行参数只从项目根目录 `.env` 和进程环境读取；进程环境覆盖 `.env`，命令行选项仅覆盖当前命令。`.env.example` 包含可选参数及其默认值。
 
 路径参数既接受绝对路径，也接受相对当前工作目录的路径。在 PowerShell 中，包含空格的路径需要加双引号；POSIX shell 同样可使用双引号。
 

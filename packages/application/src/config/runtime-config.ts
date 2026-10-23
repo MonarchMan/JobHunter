@@ -25,7 +25,7 @@ async function readOptionalText(filePath: string): Promise<string | null> {
   }
 }
 
-/** 为 CLI、Web 和 Worker 加载同一份工作区运行时配置。 */
+/** 为 CLI、Web 和 Worker 从唯一 `.env` 与进程环境加载运行配置。 */
 export async function loadRuntimeAppConfig(input: RuntimeAppConfigInput): Promise<AppConfig> {
   const workspaceRoot = resolve(input.workspaceRoot);
 
@@ -36,20 +36,16 @@ export async function loadRuntimeAppConfig(input: RuntimeAppConfigInput): Promis
     ...(input.environment ?? process.env),
   };
 
-  // 2、先解析数据、普通配置和邮箱配置文件路径，再读取仅包含非敏感项的本地 JSON 配置。
+  // 2、Bootstrap 只解析数据目录和邮箱专属存储路径，普通运行参数全部来自环境变量。
   const bootstrap = resolveBootstrapConfig({
     cwd: workspaceRoot,
     environment,
     ...(input.cli ? { cli: input.cli } : {}),
   });
-  const configText = await readOptionalText(bootstrap.configPath.value);
-  const file = configText === null ? {} : (JSON.parse(configText) as unknown);
-
   // 3、复用唯一优先级规则完成校验，密钥仍由 SecretString 封装后返回。
   return resolveAppConfig({
     bootstrap,
     environment,
-    file,
     ...(input.cli ? { cli: input.cli } : {}),
   });
 }

@@ -65,9 +65,7 @@ describe('Web resume deletion', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const impact = container.services.resumeDeletion.preview(resumeId);
         expect(impact).toMatchObject({

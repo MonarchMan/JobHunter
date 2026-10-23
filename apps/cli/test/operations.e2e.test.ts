@@ -21,13 +21,13 @@ describe('operations composition', () => {
       cli: { logLevel: 'debug' },
       environment: {
         JOBHUNTER_LOG_LEVEL: 'warn',
+        JOBHUNTER_WORKER_POLL_INTERVAL_MS: '2000',
         API_KEY: 'e2e-api-secret',
       },
-      file: { logLevel: 'error', worker: { pollIntervalMs: 2_000 } },
     });
     expect(config.bootstrap.dataRoot).toEqual({ value: dataRoot, source: 'cli' });
     expect(config.logLevel).toEqual({ value: 'debug', source: 'cli' });
-    expect(config.worker.pollIntervalMs).toEqual({ value: 2_000, source: 'file' });
+    expect(config.worker.pollIntervalMs).toEqual({ value: 2_000, source: 'environment' });
     expect(JSON.stringify(config)).not.toContain('e2e-api-secret');
 
     const lines: string[] = [];
