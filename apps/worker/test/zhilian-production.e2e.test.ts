@@ -3,7 +3,6 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import {
   ZhilianCdpSessionProvider,
@@ -31,12 +30,74 @@ import { createProductionWorkerApplication } from '../src/index.js';
 
 const execute = promisify(execFile);
 
+const searchFixture: {
+  readonly templates: ZhilianSearchTemplates;
+  readonly row: unknown;
+  readonly detail: unknown;
+} = {
+  templates: {
+    list: {
+      url: 'https://fe-api.zhaopin.com/c/i/search/positions?at=test-at&rt=test-rt&platform=13&version=0.0.0',
+      headers: { 'x-zp-platform': '13', 'x-zp-business-system': '1' },
+      body: JSON.stringify({
+        S_SOU_FULL_INDEX: '示例岗位',
+        S_SOU_WORK_CITY: '101',
+        S_SOU_WORK_EXPERIENCE: '0305',
+        order: 0,
+        actionid: 'test-action',
+        pageSize: 20,
+        pageIndex: 1,
+        cvNumber: 'test-resume',
+        at: 'test-at',
+        rt: 'test-rt',
+        eventScenario: 'pcSearchedSouSearch',
+        anonymous: 0,
+        resumeNumber: 'test-resume',
+        clickFilterBlackCompany: false,
+        platform: 13,
+        version: '0.0.0',
+        sortType: 'DEFAULT',
+      }),
+    },
+    detail: {
+      url: 'https://fe-api.zhaopin.com/c/i/jobs/position-detailv3?number=TEST_JOB&at=test-at&rt=test-rt&cvNumber=test-resume&resumeNumber=test-resume&identity=1&platform=13&version=0.0.0',
+      headers: { 'x-zp-platform': '13', 'x-zp-business-system': '1' },
+    },
+  },
+  row: {
+    number: 'TEST_JOB',
+    name: '示例工程师',
+    companyNumber: 'TEST_COMPANY',
+    companyName: '示例公司',
+    workCity: '上海',
+    salary60: '面议',
+    education: '本科',
+    workingExp: '3-5年',
+  },
+  detail: {
+    code: 200,
+    apiCode: 200,
+    data: {
+      detailedPosition: {
+        positionNumber: 'TEST_JOB',
+        positionName: '示例工程师',
+        positionWorkCity: '上海',
+        positionWorkingExp: '3-5年',
+        salary: '面议',
+        education: '本科',
+        jobDesc: '<div>负责示例研发。<br><div>编写单元测试。</div></div>',
+      },
+      detailedCompany: { companyNumber: 'TEST_COMPANY', companyName: '示例公司' },
+    },
+  },
+};
+
 /** CLI 真子进程、生产装配和隔离 SQLite；只有浏览器借用及上游响应为合成数据。 */
 it.each(['campus', 'search', '51job'] as const)(
   'runs Zhilian %s CLI through production Worker, unified jobs and provider-bound Web projection',
   async (mode) => {
     const provider = mode === '51job' ? '51job' : 'zhilian';
-    const externalId = mode === '51job' ? '100' : 'CC_TEST';
+    const externalId = mode === '51job' ? '100' : mode === 'search' ? 'TEST_JOB' : 'CC_TEST';
     const root = { path: await mkdtemp(path.join(tmpdir(), 'zhilian-production-')) };
     const auth = { at: 'fixture-secret-at', rt: 'fixture-secret-rt', d: 'fixture-secret-d' };
     let now = 0;
@@ -79,12 +140,7 @@ it.each(['campus', 'search', '51job'] as const)(
           },
         }),
       );
-    const search = JSON.parse(
-      readFileSync(
-        new URL('../../../fixtures/platforms/zhilian-search.json', import.meta.url),
-        'utf8',
-      ),
-    ) as { templates: ZhilianSearchTemplates; row: unknown; detail: unknown };
+    const search = searchFixture;
     if (mode === 'search')
       fetcher
         .mockReset()

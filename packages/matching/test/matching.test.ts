@@ -1,6 +1,5 @@
 import { parseCandidateProfile, parseId, parseNormalizedJob, utcInstant } from '@jobhunter/domain';
 import { assertPromptMatchesDefinition } from '@jobhunter/agent-core';
-import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
   calculateDeterministicMatch,
@@ -290,16 +289,48 @@ describe('job advice Agent', () => {
   });
 });
 
-describe('matching golden-set evaluation', () => {
-  it('measures ranking, false exclusions, and advice factual consistency from a file', async () => {
-    const path = new URL(
-      '../../../evals/job-matching/cases/redacted-agent-jobs.json',
-      import.meta.url,
-    );
-    const goldenCase = JSON.parse(await readFile(path, 'utf8')) as unknown;
-    expect(evaluateMatchingGoldenCase(goldenCase, { topK: 2 })).toEqual({
-      topK: 2,
-      topKRelevant: 2,
+/** 按匹配评测契约即时构造最小样本，避免测试依赖私有或过期评测文件。 */
+function matchingGoldenCase(adviceReference: string): unknown {
+  return {
+    id: 'unit-case',
+    profile,
+    jobs: [
+      {
+        job,
+        company: { sizeCategory: 'large', industry: '大模型应用' },
+        understanding,
+        relevant: true,
+        mustNotExclude: true,
+      },
+    ],
+    adviceSamples: [
+      {
+        externalJobId: job.externalJobId,
+        output: {
+          highlights: [
+            {
+              text: '证据支持的建议。',
+              references: [{ kind: 'evidence', value: adviceReference }],
+            },
+          ],
+          gaps: [],
+          uncertainties: [],
+          resumeEmphasis: [],
+          preparation: [],
+        },
+      },
+    ],
+  };
+}
+
+describe('matching golden-case evaluation', () => {
+  it('measures ranking, false exclusions, and advice factual consistency', () => {
+    const match = calculateDeterministicMatch(input());
+    const evidence = match.components.flatMap((component) => component.matchedEvidence)[0];
+    if (!evidence) throw new Error('Expected deterministic evidence.');
+    expect(evaluateMatchingGoldenCase(matchingGoldenCase(evidence.summary), { topK: 1 })).toEqual({
+      topK: 1,
+      topKRelevant: 1,
       topKRelevantRate: 1,
       falseExclusions: 0,
       adviceSamples: 1,
@@ -308,17 +339,9 @@ describe('matching golden-set evaluation', () => {
     });
   });
 
-  it('counts fabricated advice references as factual failures', async () => {
-    const path = new URL(
-      '../../../evals/job-matching/cases/redacted-agent-jobs.json',
-      import.meta.url,
-    );
-    const goldenCase = JSON.parse(await readFile(path, 'utf8')) as {
-      adviceSamples: { output: { highlights: { references: { value: string }[] }[] } }[];
-    };
-    const reference = goldenCase.adviceSamples[0]?.output.highlights[0]?.references[0];
-    if (!reference) throw new Error('Expected a golden advice reference.');
-    reference.value = '虚构经历';
-    expect(evaluateMatchingGoldenCase(goldenCase).adviceFactConsistencyRate).toBe(0);
+  it('counts fabricated advice references as factual failures', () => {
+    expect(
+      evaluateMatchingGoldenCase(matchingGoldenCase('不存在的经历')).adviceFactConsistencyRate,
+    ).toBe(0);
   });
 });
