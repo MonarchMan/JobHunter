@@ -203,6 +203,5 @@ pnpm docs:check
 
 - [CLI 指南](./cli.md)：命令参数、JSON 输出、备份和恢复。
 - [总体架构](./arch/overall-arch.md)：进程职责、模块边界和数据流。
-- [SDD 开发流程](./sdd/README.md)：规格、设计、任务与验收规则。
 - [功能规格索引](../specs/README.md)：当前能力及实现状态。
 - [招聘来源支持矩阵](../packages/sources/SUPPORT_MATRIX.md)：各企业来源的覆盖范围与限制。

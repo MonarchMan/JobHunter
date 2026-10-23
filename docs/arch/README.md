@@ -6,5 +6,7 @@
 - [Worker、任务队列与并发设计](./worker-and-concurrency.md)：任务状态、领取、租约、调度、重试和恢复。
 - [Agent、画像与匹配设计](./agent-and-matching.md)：Agent 协议、版本、缓存、画像合并、评分和评测。
 - [面试准备、简历项目拷打与面经知识库设计](./interview-preparation.md)：渐进式项目拷打、个人/网友面经、外部 Agent 委派和安全边界。
+- [UI 设计规范](./ui/DESIGN.md)：共享视觉令牌、排版、密度、形状和动效。
+- [UI 交互契约](./ui/UX-CONTRACT.md)：跨页面导航、状态、错误恢复和焦点行为。
 
 改变总体依赖方向、数据所有权、进程职责或核心技术选择时，先新增/更新 `docs/adr/` 中的决策记录，再同步相关架构和规格。

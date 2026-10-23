@@ -288,16 +288,19 @@ JobHunter/
 │  └─ testkit/                # 固定样本、伪时钟、假模型和测试工厂
 ├─ docs/
 │  ├─ arch/                   # 总体架构与专题架构
+│  │  └─ ui/                  # UI 视觉规范与交互契约
 │  └─ adr/                    # 架构决策记录
 ├─ specs/                     # SDD 功能规格
-├─ fixtures/                  # 脱敏后的采集与简历测试样本
 └─ var/                       # 默认本地运行数据，不提交版本库
    ├─ jobhunter.sqlite
    ├─ raw/
    ├─ resumes/
    ├─ interview-prep/
-   └─ exports/
+   ├─ exports/
+   └─ archive/                # 不再使用的历史评测与样本数据
 ```
+
+测试专属的合成样本与对应测试放在各模块的 `test/fixtures/`，不在仓库根目录维护共享样本集。
 
 使用 `pnpm workspace` 管理包，所有跨模块调用只能通过包的公开入口，不允许从其他包的内部路径导入。邮箱包使用 `packages/mail/*` 嵌套 workspace 模式，分别发布内部包 `@jobhunter/mail-core` 和 `@jobhunter/mail-connectors`，目录聚合不改变依赖方向。
 
@@ -998,7 +1001,7 @@ CLI、Web 与 Worker 必须复用应用层唯一的运行时配置加载器，�
 | `specs/*/design.md`         | 当前能力如何在总体架构内实现           |
 | `specs/*/tasks.md`          | 以什么可验证顺序完成实现               |
 
-SDD 状态、追踪、Definition of Ready/Done 与变更流程见 [SDD 开发流程](../sdd/README.md)；功能清单、规格依赖与验收要求见 [功能规格索引](../../specs/README.md)。
+功能规格、依赖关系与验收要求见 [功能规格索引](../../specs/README.md)；工程变更约束见仓库根目录 `AGENTS.md`。
 
 若功能设计需要违反本文档中的依赖方向、数据所有权、进程职责或安全边界，必须先创建 ADR，说明背景、备选方案、影响和迁移策略，再修改总体架构。
 
