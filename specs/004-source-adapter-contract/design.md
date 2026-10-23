@@ -24,8 +24,9 @@ packages/sources/<source-key>/
 ├─ adapter.ts
 ├─ schemas.ts
 ├─ normalize.ts
-├─ fixtures/
-└─ adapter.test.ts
+└─ test/
+   ├─ fixtures/
+   └─ adapter.test.ts
 ```
 
 ## 契约

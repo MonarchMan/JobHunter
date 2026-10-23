@@ -6,8 +6,7 @@ import {
   LiepinCdpSessionProvider,
 } from '../src/cdp.js';
 import type { PlatformSession } from '@jobhunter/platform-core';
-import { readFileSync } from 'node:fs';
-import type { ZhilianSearchTemplates } from '../src/index.js';
+import { zhilianSearchFixture as fixture } from './fixtures/zhilian-search-fixture.js';
 
 vi.mock('node:fs/promises', () => ({
   readFile: () => Promise.resolve('9222\n/devtools/browser/test'),
@@ -1285,12 +1284,6 @@ it('智联自动连接只打开首页，以同一次认证请求初始化 HTTP�
 it.each(['list-first', 'detail-first'] as const)(
   'initializes explicit main-site %s templates on one authorized socket',
   async (order) => {
-    const fixture = JSON.parse(
-      readFileSync(
-        new URL('../../../fixtures/platforms/zhilian-search.json', import.meta.url),
-        'utf8',
-      ),
-    ) as { templates: ZhilianSearchTemplates };
     FakeSocket.targetUrl = 'https://www.zhaopin.com/jobs?kw=Java';
     const fetcher = vi.fn().mockResolvedValue(
       Response.json({
@@ -1337,12 +1330,6 @@ it.each(['list-first', 'detail-first'] as const)(
 );
 
 it('rejects mismatched main-site authentication without upstream requests', async () => {
-  const fixture = JSON.parse(
-    readFileSync(
-      new URL('../../../fixtures/platforms/zhilian-search.json', import.meta.url),
-      'utf8',
-    ),
-  ) as { templates: ZhilianSearchTemplates };
   FakeSocket.targetUrl = 'https://www.zhaopin.com/jobs';
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
@@ -1356,7 +1343,7 @@ it('rejects mismatched main-site authentication without upstream requests', asyn
   emitCampus({
     method: 'GET',
     ...fixture.templates.detail,
-    url: fixture.templates.detail.url.replace('at=fixture-at', 'at=other'),
+    url: fixture.templates.detail.url.replace('at=test-at', 'at=other'),
     postData: '',
   });
   await assertion;

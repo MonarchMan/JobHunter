@@ -1,30 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ZhilianSearchHttpSession, type ZhilianSearchTemplates } from '../src/index.js';
+import { ZhilianSearchHttpSession } from '../src/index.js';
+import { zhilianSearchFixture as fixture } from './fixtures/zhilian-search-fixture.js';
 
-const fixture = JSON.parse(
-  readFileSync(new URL('../../../fixtures/platforms/zhilian-search.json', import.meta.url), 'utf8'),
-) as {
-  templates: ZhilianSearchTemplates;
-  row: {
-    number: string;
-    name: string;
-    companyNumber: string;
-    companyName: string;
-    workCity: string;
-    salary60: string;
-    education: string;
-    workingExp: string;
-  };
-  detail: {
-    code: number;
-    apiCode: number;
-    data: {
-      detailedPosition: { positionNumber: string; positionName: string; jobDesc: string };
-      detailedCompany: { companyNumber: string; companyName: string };
-    };
-  };
-};
 const signal = new AbortController().signal;
 /** 合成结果使用相同协议，不包含真实个人令牌。 */
 function batch(
@@ -101,16 +78,16 @@ it('preserves search filters across pages and requests independent verified deta
   const { session, fetcher } = setup([batch([fixture.row], 0), batch([second]), fixture.detail]);
   expect((await session.readNext(signal)).hasMore).toBe(true);
   expect((await session.readNext(signal)).candidates[0]?.externalJobId).toBe('CC_NEXT');
-  expect(await session.readDetail('CC_TEST', signal)).toMatchObject({
-    description: '负责研发。\n完成测试。',
-    sourceUrl: 'https://www.zhaopin.com/jobdetail/CC_TEST.htm',
+  expect(await session.readDetail('TEST_JOB', signal)).toMatchObject({
+    description: '负责示例研发。\n编写单元测试。',
+    sourceUrl: 'https://www.zhaopin.com/jobdetail/TEST_JOB.htm',
   });
   for (let i = 0; i < 2; i++) {
     const sentBody = fetcher.mock.calls[i]?.[1]?.body;
     if (typeof sentBody !== 'string') throw new Error('Missing JSON body');
     expect(JSON.parse(sentBody)).toMatchObject({
-      S_SOU_FULL_INDEX: 'Java',
-      S_SOU_WORK_CITY: '801',
+      S_SOU_FULL_INDEX: '示例岗位',
+      S_SOU_WORK_CITY: '101',
       S_SOU_WORK_EXPERIENCE: '0305',
       pageIndex: i + 1,
     });
@@ -120,7 +97,7 @@ it('preserves search filters across pages and requests independent verified deta
   expect(fetcher.mock.calls[2]?.[1]?.method).toBe('GET');
   const sentUrl = fetcher.mock.calls[2]?.[0];
   if (typeof sentUrl !== 'string') throw new Error('Missing URL');
-  expect(new URL(sentUrl).searchParams.get('number')).toBe('CC_TEST');
+  expect(new URL(sentUrl).searchParams.get('number')).toBe('TEST_JOB');
   expect(await session.readNext(signal)).toEqual({ candidates: [], hasMore: false });
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
@@ -131,7 +108,7 @@ it('preserves the observed unordered-list description in a main-site detail', as
   detail.data.detailedPosition.jobDesc = '<div>职责<ul><li>开发。</li><li>测试。</li></ul></div>';
   const { session } = setup([batch(), detail]);
   await session.readNext(signal);
-  expect((await session.readDetail('CC_TEST', signal)).description).toBe(
+  expect((await session.readDetail('TEST_JOB', signal)).description).toBe(
     '职责\n- 开发。\n- 测试。',
   );
 });
@@ -141,7 +118,7 @@ it('rejects malformed unordered-list structure in a main-site detail', async () 
   detail.data.detailedPosition.jobDesc = '<ul><li>正文</ul>';
   const { session } = setup([batch(), detail]);
   await session.readNext(signal);
-  await expect(session.readDetail('CC_TEST', signal)).rejects.toMatchObject({
+  await expect(session.readDetail('TEST_JOB', signal)).rejects.toMatchObject({
     category: 'parse_changed',
     reason: 'detail_description_format',
   });
@@ -162,7 +139,7 @@ it.each([
     list = { ...list, url: list.url.replace('fe-api.zhaopin.com', 'evil.example') };
   if (kind === 'unknown-query') list = { ...list, url: list.url + '&unknown=value' };
   if (kind === 'auth-mismatch')
-    detail = { ...detail, url: detail.url.replace('at=fixture-at', 'at=other') };
+    detail = { ...detail, url: detail.url.replace('at=test-at', 'at=other') };
   if (kind === 'unknown-body')
     list = { ...list, body: JSON.stringify({ ...JSON.parse(list.body), unreviewed: 'x' }) };
   if (kind === 'wrong-platform')
@@ -204,7 +181,7 @@ it('counts missing company IDs, deduplicates overlap and rejects fully repeated 
   ]);
   expect(await session.readNext(signal)).toMatchObject({
     skippedMissingCompanyId: 1,
-    candidates: [{ externalJobId: 'CC_TEST' }],
+    candidates: [{ externalJobId: 'TEST_JOB' }],
   });
   expect((await session.readNext(signal)).candidates).toEqual([
     expect.objectContaining({ externalJobId: 'B' }),
@@ -224,7 +201,7 @@ it.each(['job', 'title', 'company', 'name', 'html', 'empty', 'malformed-html'] a
     if (kind === 'malformed-html') raw.data.detailedPosition.jobDesc = '<div>text';
     const { session } = setup([batch(), raw]);
     await session.readNext(signal);
-    await expect(session.readDetail('CC_TEST', signal)).rejects.toThrow('parse_changed');
+    await expect(session.readDetail('TEST_JOB', signal)).rejects.toThrow('parse_changed');
   },
 );
 it('rejects undiscovered detail without upstream IO', async () => {
@@ -260,7 +237,7 @@ it('honors configured five seconds and cancels queued work without extra request
   });
   await session.readNext(signal);
   const controller = new AbortController();
-  const pending = session.readDetail('CC_TEST', controller.signal);
+  const pending = session.readDetail('TEST_JOB', controller.signal);
   const rejected = expect(pending).rejects.toThrow('session_unavailable');
   await vi.advanceTimersByTimeAsync(4999);
   expect(fetcher).toHaveBeenCalledTimes(1);

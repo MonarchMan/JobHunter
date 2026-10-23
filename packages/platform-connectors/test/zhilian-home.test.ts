@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
 import { afterEach, expect, it, vi } from 'vitest';
 import { zhilianSessionFromHome } from '../src/zhilian-home.js';
+import { zhilianSearchFixture as fixture } from './fixtures/zhilian-search-fixture.js';
 
 const auth = {
   at: 'fixture-at',
@@ -22,12 +22,6 @@ afterEach(() => {
 
 it('首页认证足以构造独立 HTTP 搜索与详情，不复制 Cookie 或普通追踪字段', async () => {
   vi.useFakeTimers();
-  const fixture = JSON.parse(
-    readFileSync(
-      new URL('../../../fixtures/platforms/zhilian-search.json', import.meta.url),
-      'utf8',
-    ),
-  ) as { row: unknown; detail: unknown };
   const fetcher = vi
     .fn<typeof fetch>()
     .mockResolvedValueOnce(
@@ -45,8 +39,8 @@ it('首页认证足以构造独立 HTTP 搜索与详情，不复制 Cookie 或�
   expect((await session.readNext(signal)).candidates).toHaveLength(1);
   // 1、只推进离线时钟，不让 node:timers/promises 产生真实等待。
   vi.setSystemTime(Date.now() + 5001);
-  const detail = session.readDetail('CC_TEST', signal);
-  expect((await detail).description).toContain('负责研发');
+  const detail = session.readDetail('TEST_JOB', signal);
+  expect((await detail).description).toContain('负责示例研发');
   expect(fetcher).toHaveBeenCalledTimes(2);
   const body = fetcher.mock.calls[0]?.[1]?.body;
   expect(typeof body).toBe('string');
