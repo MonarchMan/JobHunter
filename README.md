@@ -81,14 +81,13 @@ Web 开发命令直接使用 workspace 源码，不再在启动前构建全仓�
 
 ## 文档导航
 
-视觉规范见 [设计规范](docs/design/DESIGN.md)，跨页面交互规则见 [UX 契约](docs/design/UX-CONTRACT.md)，设计验收记录统一存放在 `docs/reports/`。临时审计输出放入 `var/audits/`，不提交版本库。
+视觉规范见 [设计规范](docs/arch/ui/DESIGN.md)，跨页面交互规则见 [UX 契约](docs/arch/ui/UX-CONTRACT.md)，设计验收记录统一存放在 `docs/reports/`。临时审计输出放入 `var/audits/`，不提交版本库。
 
 | 文档                                                   | 内容                             |
 | ------------------------------------------------------ | -------------------------------- |
 | [完整上手指南](docs/guide.md)                          | 安装、初始化、首次使用和常见问题 |
 | [CLI 指南](docs/cli.md)                                | 命令参数、JSON 输出、备份和恢复  |
 | [总体架构](docs/arch/overall-arch.md)                  | 进程职责、模块边界和数据流       |
-| [SDD 开发流程](docs/sdd/README.md)                     | 规格、设计、任务与验收规则       |
 | [功能规格索引](specs/README.md)                        | 当前能力、依赖关系和实现状态     |
 | [招聘来源支持矩阵](packages/sources/SUPPORT_MATRIX.md) | 各企业来源的覆盖范围与限制       |
 

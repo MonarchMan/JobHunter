@@ -2,7 +2,7 @@
   "profile": "product-admin",
   "sourceRoots": ["apps/web/app"],
   "locale": "zh-CN",
-  "canonicalMap": "docs/design/UX-CONTRACT.md",
+  "canonicalMap": "docs/arch/ui/UX-CONTRACT.md",
   "requiredCapabilities": [
     "Table Selection",
     "Select/Listbox",
