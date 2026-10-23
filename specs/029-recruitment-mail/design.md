@@ -273,7 +273,7 @@ Agent key 初始版本为 `recruitment-mail.classify@v1`；030 日程规格当�
 
 邮件分类使用独立模型客户端，单次请求上限 120 秒、Agent 总时限 180 秒，最多一次结构修复；共享 8,000 输出 Token 预算，适配包含推理 Token 的模型用量。单邮件任务租约为 4 分钟，覆盖正文读取与分类时限；到达时限时保留待确认引用，不丢弃候选。模型未配置时不发起请求。
 
-运行配置 `mail.classification.modelMode` 首版只允许 `off` 或 `configured`，默认 `off`。使用环境变量 `JOBHUNTER_MAIL_MODEL_MODE` 或非敏感 `config.json` 中的 `mail.classification.modelMode` 显式开启，环境变量优先；`configured` 表示用户同意将清洗后的招聘候选正文发送给所配置模型提供商。关闭时不影响同步和规则识别，候选进入待确认。
+运行配置 `mail.classification.modelMode` 首版只允许 `off` 或 `configured`，默认 `off`。使用环境变量 `JOBHUNTER_MAIL_MODEL_MODE` 显式开启；`configured` 表示用户同意将清洗后的招聘候选正文发送给所配置模型提供商。关闭时不影响同步和规则识别，候选进入待确认。
 
 ### 6.3 决策与人工确认
 

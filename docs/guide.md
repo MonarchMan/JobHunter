@@ -17,7 +17,7 @@ JobHunter 是一个运行在本机的个人求职工作台。它把简历、企�
 
 ### 招聘平台职位
 
-四个平台正常采集的固定间隔都可在数据目录的 `config.json` 中分别设置，例如 `"platforms": { "requestIntervalMs": 0, "requestIntervalMsByProvider": { "boss": 0, "zhilian": 0, "51job": 0, "liepin": 1000 } }`。各平台优先使用自身值，未指定时使用统一 `requestIntervalMs`（默认 **0 毫秒**；环境变量 `JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS` 可设置统一回退值，支持 0～60000 毫秒）。本机生产配置目前猎聘为 **1000 毫秒**，其他三平台为 0；改动需重启 Worker。各连接独立计时；这不启用并发，也不取消网络退避、服务端 Retry-After、安全恢复检查或前程无忧等待新模板。BOSS 浏览器模式仅约束 Worker 主动点击／加载动作，不能限制官网自主产生的网络请求。
+四个平台正常采集的固定间隔统一在项目根目录 `.env` 配置。`JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS` 是未单独配置平台的回退值（默认 **0 毫秒**）；`JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_BOSS`、`_ZHILIAN`、`_51JOB`、`_LIEPIN` 分别覆盖对应平台，范围均为 0～60000 毫秒。修改后重启 Worker。各连接独立计时；这不启用并发，也不取消网络退避、服务端 Retry-After、安全恢复检查或前程无忧等待新模板。BOSS 浏览器模式仅约束 Worker 主动点击／加载动作，不能限制官网自主产生的网络请求。
 
 在“职位”页把来源类型切换为“招聘平台”，再选择 BOSS、智联、前程无忧或猎聘。在日常使用的 Chrome 登录平台并启用远程调试；确认借用最小登录上下文后点击“获取职位”。Worker 使用默认第一份个人资料中填写的具体意向岗位，逐词各取一批、合并去重后补齐详情入库；不额外搜索职位大类或细分岗位。每个词使用同一默认 Chrome 配置下的独立后台页，共享登录态，不接管用户页面；后续获取复用各词连接。修改资料后使用“按当前资料重新连接”。不需要选择标签页或填写其 ID；首次逐词初始化可能各需 Chrome 授权，尚未合并为跨词一次授权。断开只关闭 Worker 创建的页；意外断线遗留的专用页可手动关闭。
 

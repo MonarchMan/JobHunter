@@ -43,7 +43,7 @@ describe('init and doctor commands', () => {
       ).toBe(0);
       expect(JSON.parse(output.stdout.join(''))).toMatchObject({
         ok: true,
-        data: { dataRoot: expectedDataRoot, configCreated: true },
+        data: { dataRoot: expectedDataRoot },
       });
       expect((await stat(expectedDataRoot)).isDirectory()).toBe(true);
       expect(output.stderr).toEqual([]);
@@ -56,6 +56,8 @@ describe('init and doctor commands', () => {
     const root = await createTemporaryDataRoot('jobhunter-cli-init-');
     const dataRoot = path.join(root.path, '中文 数据');
     try {
+      const envPath = path.join(root.path, '.env');
+      await writeFile(envPath, 'JOBHUNTER_LOG_LEVEL=error\n');
       const firstOutput = memoryIo();
       const firstExit = await runLocalCli({
         argv: ['--json', '--data-root', dataRoot, 'init'],
@@ -67,7 +69,6 @@ describe('init and doctor commands', () => {
       const initialized = JSON.parse(firstOutput.stdout.join('')) as {
         readonly data: {
           readonly dataRoot: string;
-          readonly configCreated: boolean;
           readonly companies: number;
           readonly sources: number;
           readonly bootstrap: {
@@ -81,7 +82,6 @@ describe('init and doctor commands', () => {
         ok: true,
         data: {
           dataRoot,
-          configCreated: true,
           companies: 20,
           sources: 62,
           bootstrap: {
@@ -96,7 +96,7 @@ describe('init and doctor commands', () => {
       ).toBe(true);
 
       const configPath = path.join(dataRoot, 'config.json');
-      await writeFile(configPath, '{"logLevel":"error"}\n');
+      await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
       const secondOutput = memoryIo();
       expect(
         await runLocalCli({
@@ -107,9 +107,10 @@ describe('init and doctor commands', () => {
         }),
       ).toBe(0);
       expect(JSON.parse(secondOutput.stdout.join(''))).toMatchObject({
-        data: { configCreated: false, companies: 20, sources: 62 },
+        data: { companies: 20, sources: 62 },
       });
-      await expect(readFile(configPath, 'utf8')).resolves.toBe('{"logLevel":"error"}\n');
+      await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(readFile(envPath, 'utf8')).resolves.toBe('JOBHUNTER_LOG_LEVEL=error\n');
 
       const doctorOutput = memoryIo();
       expect(

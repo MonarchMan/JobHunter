@@ -25,7 +25,7 @@ export async function runLocalCli(input: {
       io: input.io,
     });
   } catch {
-    const error = { code: 'CONFIGURATION_ERROR', message: '配置文件或启动参数无效。', details: {} };
+    const error = { code: 'CONFIGURATION_ERROR', message: '环境配置或启动参数无效。', details: {} };
     const renderer = input.argv.includes('--json')
       ? new JsonRenderer(input.io)
       : new HumanRenderer(input.io);

@@ -96,9 +96,7 @@ describe('Web diagnostics', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const diagnostics = container.services.diagnostics.list();
         expect(diagnostics.tasks).toHaveLength(2);
@@ -158,7 +156,7 @@ describe('Web diagnostics', () => {
         environment: {},
         cwd: root.path,
       });
-      const config = resolveAppConfig({ bootstrap, environment: {}, file: {} });
+      const config = resolveAppConfig({ bootstrap, environment: {} });
       createLocalWebContainer(config).close();
       const taskId = '018f0000-0000-7000-8000-000000000711';
       const sourceId = '018f0000-0000-7000-8000-000000000205';
@@ -254,7 +252,7 @@ describe('Web diagnostics', () => {
         environment: {},
         cwd: root.path,
       });
-      const config = resolveAppConfig({ bootstrap, environment: {}, file: {} });
+      const config = resolveAppConfig({ bootstrap, environment: {} });
       createLocalWebContainer(config).close();
       const database = openSqliteDatabase({ dataRoot: root.path });
       try {

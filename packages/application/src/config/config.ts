@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { PlatformProviderKey } from '@jobhunter/platform-core';
 
 /** 应用层使用的类型约束。 */
-export type ConfigSource = 'cli' | 'environment' | 'file' | 'default';
+export type ConfigSource = 'cli' | 'environment' | 'default';
 
 /** 应用层数据结构或端口契约。 */
 export interface SourcedValue<T> {
@@ -42,7 +42,6 @@ export class SecretString {
 /** 应用层数据结构或端口契约。 */
 export interface BootstrapConfig {
   readonly dataRoot: SourcedValue<string>;
-  readonly configPath: SourcedValue<string>;
   readonly mailboxConfigPath: SourcedValue<string>;
   readonly mailboxCredentialPath: SourcedValue<string>;
   readonly mailboxCredentialKeyPath: SourcedValue<string>;
@@ -90,7 +89,6 @@ export interface AppConfig {
 /** 应用层数据结构或端口契约。 */
 export interface ConfigOverrides {
   readonly dataRoot?: string;
-  readonly configPath?: string;
   readonly logLevel?: string;
   readonly platformRequestIntervalMs?: number;
   readonly workerPollIntervalMs?: number;
@@ -100,46 +98,6 @@ export interface ConfigOverrides {
   readonly modelName?: string;
   readonly modelApiKey?: string;
 }
-
-const localConfigSchema = z
-  .object({
-    mail: z
-      .object({
-        classification: z
-          .object({ modelMode: z.enum(['off', 'configured']).optional() })
-          .strict()
-          .optional(),
-      })
-      .strict()
-      .optional(),
-    logLevel: z.enum(['debug', 'info', 'warn', 'error']).optional(),
-    platforms: z
-      .object({
-        requestIntervalMs: z.number().int().min(0).max(60_000).optional(),
-        requestIntervalMsByProvider: z
-          .object({
-            boss: z.number().int().min(0).max(60_000).optional(),
-            zhilian: z.number().int().min(0).max(60_000).optional(),
-            '51job': z.number().int().min(0).max(60_000).optional(),
-            liepin: z.number().int().min(0).max(60_000).optional(),
-          })
-          .strict()
-          .optional(),
-      })
-      .strict()
-      .optional(),
-    worker: z
-      .object({
-        pollIntervalMs: z.number().int().min(100).max(60_000).optional(),
-        maxConcurrentNetworkTasks: z.number().int().min(1).max(32).optional(),
-        taskTypeConcurrency: z
-          .record(z.string().trim().min(1), z.number().int().min(1).max(32))
-          .optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
 
 const defaultOpenAiBaseUrl = 'https://api.openai.com/v1';
 
@@ -156,16 +114,10 @@ function nonEmpty(value: string | undefined): string | undefined {
   return normalized;
 }
 
-/** 按显式覆盖、环境、文件、默认值顺序选择配置。 */
-function choose<T>(
-  cli: T | undefined,
-  environment: T | undefined,
-  file: T | undefined,
-  fallback: T,
-): SourcedValue<T> {
+/** 按命令行、环境和内置默认值顺序选择配置。 */
+function choose<T>(cli: T | undefined, environment: T | undefined, fallback: T): SourcedValue<T> {
   if (cli !== undefined) return { value: cli, source: 'cli' };
   if (environment !== undefined) return { value: environment, source: 'environment' };
-  if (file !== undefined) return { value: file, source: 'file' };
   return { value: fallback, source: 'default' };
 }
 
@@ -230,9 +182,9 @@ function normalizeWebBaseUrl(value: string): string {
   return url.toString().replace(/\/$/, '');
 }
 
-/** 解析启动阶段数据目录、配置文件和迁移目录。 */
+/** 解析启动阶段数据目录和邮箱运行数据路径。 */
 export function resolveBootstrapConfig(input: {
-  readonly cli?: Pick<ConfigOverrides, 'dataRoot' | 'configPath'>;
+  readonly cli?: Pick<ConfigOverrides, 'dataRoot'>;
   readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly cwd?: string;
 }): BootstrapConfig {
@@ -241,37 +193,26 @@ export function resolveBootstrapConfig(input: {
   const dataRootChoice = choose(
     nonEmpty(input.cli?.dataRoot),
     nonEmpty(environment.JOBHUNTER_DATA_ROOT),
-    undefined,
     './var',
   );
   const dataRoot = { ...dataRootChoice, value: resolve(cwd, dataRootChoice.value) };
-  const configPathChoice = choose(
-    nonEmpty(input.cli?.configPath),
-    nonEmpty(environment.JOBHUNTER_CONFIG_PATH),
-    undefined,
-    resolve(dataRoot.value, 'config.json'),
-  );
   const mailboxConfigPathChoice = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_MAILBOX_CONFIG_PATH),
-    undefined,
     resolve(dataRoot.value, 'mail', 'mailboxes.json'),
   );
   const mailboxCredentialPathChoice = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_PATH),
-    undefined,
     resolve(dataRoot.value, 'mail', 'credentials.enc.json'),
   );
   const mailboxCredentialKeyPathChoice = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_KEY_PATH),
-    undefined,
     resolve(dataRoot.value, 'mail', 'credentials.key'),
   );
   return {
     dataRoot,
-    configPath: { ...configPathChoice, value: resolve(cwd, configPathChoice.value) },
     mailboxConfigPath: {
       ...mailboxConfigPathChoice,
       value: resolve(cwd, mailboxConfigPathChoice.value),
@@ -287,58 +228,41 @@ export function resolveBootstrapConfig(input: {
   };
 }
 
-/** 合并 CLI、环境、文件和默认值，生成最终应用配置。 */
+/** 合并 CLI、环境和默认值，生成最终应用配置。 */
 export function resolveAppConfig(input: {
-  // 1、读取文件配置；2、应用命令行/环境覆盖；3、解析并校验并发和模型参数；4、返回来源标记。
+  // 1、应用命令行和环境配置；2、解析并校验并发和模型参数；3、返回来源标记。
   readonly bootstrap: BootstrapConfig;
   readonly cli?: ConfigOverrides;
   readonly environment?: Readonly<Record<string, string | undefined>>;
-  readonly file?: unknown;
 }): AppConfig {
   const environment = input.environment ?? process.env;
-  const file = localConfigSchema.parse(input.file ?? {});
   const logLevel = choose(
     nonEmpty(input.cli?.logLevel),
     nonEmpty(environment.JOBHUNTER_LOG_LEVEL),
-    file.logLevel,
     'info',
   );
   const parsedLogLevel = z.enum(['debug', 'info', 'warn', 'error']).parse(logLevel.value);
-  const modelApiKey = choose(
-    nonEmpty(input.cli?.modelApiKey),
-    nonEmpty(environment.API_KEY),
-    undefined,
-    null,
-  );
+  const modelApiKey = choose(nonEmpty(input.cli?.modelApiKey), nonEmpty(environment.API_KEY), null);
   const modelBaseUrl = choose(
     nonEmpty(input.cli?.modelBaseUrl),
     nonEmpty(environment.BASE_URL),
-    undefined,
     defaultOpenAiBaseUrl,
   );
-  const modelName = choose(
-    nonEmpty(input.cli?.modelName),
-    nonEmpty(environment.MODEL),
-    undefined,
-    null,
-  );
+  const modelName = choose(nonEmpty(input.cli?.modelName), nonEmpty(environment.MODEL), null);
   const inferredProvider = inferModelProvider(modelBaseUrl.value);
   const pollIntervalMs = choose(
     input.cli?.workerPollIntervalMs,
     environmentInteger(environment.JOBHUNTER_WORKER_POLL_INTERVAL_MS, 'poll interval'),
-    file.worker?.pollIntervalMs,
     1_000,
   );
   const maxConcurrentNetworkTasks = choose(
     input.cli?.maxConcurrentNetworkTasks,
     environmentInteger(environment.JOBHUNTER_MAX_CONCURRENT_NETWORK_TASKS, 'network concurrency'),
-    file.worker?.maxConcurrentNetworkTasks,
     4,
   );
   const taskTypeConcurrency = choose(
     input.cli?.taskTypeConcurrency,
     environmentConcurrency(environment.JOBHUNTER_TASK_TYPE_CONCURRENCY),
-    file.worker?.taskTypeConcurrency,
     defaultTaskTypeConcurrency,
   );
   const requestIntervalMs = choose(
@@ -347,52 +271,63 @@ export function resolveAppConfig(input: {
       environment.JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS,
       'platform request interval',
     ),
-    file.platforms?.requestIntervalMs,
     0,
   );
-  const requestIntervalMsByProvider = choose<
+  const requestIntervalMsByProviderRecord = Object.fromEntries(
+    (
+      [
+        ['boss', 'BOSS'],
+        ['zhilian', 'ZHILIAN'],
+        ['51job', '51JOB'],
+        ['liepin', 'LIEPIN'],
+      ] as const satisfies readonly (readonly [PlatformProviderKey, string])[]
+    )
+      .map(([provider, suffix]) => {
+        const interval = environmentInteger(
+          environment[`JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_${suffix}`],
+          `${provider} platform request interval`,
+        );
+        return interval === undefined
+          ? null
+          : [provider, z.number().int().min(0).max(60_000).parse(interval)];
+      })
+      .filter((entry) => entry !== null),
+  ) as Partial<Record<PlatformProviderKey, number>>;
+  const requestIntervalMsByProvider: SourcedValue<
     Readonly<Partial<Record<PlatformProviderKey, number | undefined>>>
-  >(undefined, undefined, file.platforms?.requestIntervalMsByProvider, {});
+  > = {
+    value: requestIntervalMsByProviderRecord,
+    source: Object.keys(requestIntervalMsByProviderRecord).length > 0 ? 'environment' : 'default',
+  };
   const mailWebBaseUrl = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_WEB_BASE_URL),
-    undefined,
     'http://127.0.0.1:3210',
   );
   const mailboxCredentialMasterKey = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_KEY),
-    undefined,
     null,
   );
-  const gmailClientId = choose(
-    undefined,
-    nonEmpty(environment.JOBHUNTER_GMAIL_CLIENT_ID),
-    undefined,
-    null,
-  );
+  const gmailClientId = choose(undefined, nonEmpty(environment.JOBHUNTER_GMAIL_CLIENT_ID), null);
   const gmailClientSecret = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_GMAIL_CLIENT_SECRET),
-    undefined,
     null,
   );
   const microsoftClientId = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_MICROSOFT_CLIENT_ID),
-    undefined,
     null,
   );
   const microsoftClientSecret = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_MICROSOFT_CLIENT_SECRET),
-    undefined,
     null,
   );
   const microsoftTenant = choose(
     undefined,
     nonEmpty(environment.JOBHUNTER_MICROSOFT_TENANT),
-    undefined,
     'common',
   );
   return {
@@ -432,7 +367,6 @@ export function resolveAppConfig(input: {
           nonEmpty(environment.JOBHUNTER_MAIL_MODEL_MODE) === undefined
             ? undefined
             : z.enum(['off', 'configured']).parse(environment.JOBHUNTER_MAIL_MODEL_MODE?.trim()),
-          file.mail?.classification?.modelMode,
           'off',
         ),
       },

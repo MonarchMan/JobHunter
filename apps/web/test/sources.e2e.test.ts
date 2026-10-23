@@ -118,9 +118,7 @@ describe('Web source management', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         expect(container.services.sources.isSyncReady()).toBe(false);
         expect(() =>
@@ -165,9 +163,7 @@ describe('Web source management', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const result = container.services.webSources.mutateChannel({
           kind: 'sync',
@@ -201,9 +197,7 @@ describe('Web source management', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         expect(container.services.settings.get()).toEqual({
           jobUnderstanding: { enabled: false },
@@ -298,7 +292,7 @@ describe('Web source management', () => {
         environment: {},
         cwd: root.path,
       });
-      const config = resolveAppConfig({ bootstrap, environment: {}, file: {} });
+      const config = resolveAppConfig({ bootstrap, environment: {} });
       createLocalWebContainer(config).close();
 
       const initial = openSqliteDatabase({ dataRoot: root.path });
@@ -396,9 +390,7 @@ describe('Web source management', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const schedules = openSqliteDatabase({ dataRoot: root.path });
         try {

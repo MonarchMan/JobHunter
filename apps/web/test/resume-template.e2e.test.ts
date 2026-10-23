@@ -55,9 +55,7 @@ describe('Web resume template composition', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const service = container.services.resumeTemplates;
         const technical = await service.createOrResume(profileId, 'technical-blueprint');

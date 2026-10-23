@@ -166,9 +166,7 @@ describe('Web job listing', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         // 1、来源日期决定 published_desc 顺序，不能受本地写入时间影响。
         database.client
@@ -248,9 +246,7 @@ describe('Web job listing', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const query = parseWebJobQuery({ company: '腾讯', limit: '1' });
         const first = container.services.webJobs.list(query);

@@ -300,8 +300,7 @@ export function createProgram(input: {
       },
     })
     .addOption(new Option('--json', '输出稳定的机器可读 JSON'))
-    .addOption(new Option('--data-root <path>', '数据目录绝对或相对路径'))
-    .addOption(new Option('--config <path>', '本地非敏感配置文件路径'));
+    .addOption(new Option('--data-root <path>', '数据目录绝对或相对路径'));
   program
     .command('source')
     .description('查看来源并手动入队同步')
@@ -1069,7 +1068,7 @@ export function createProgram(input: {
 
   program
     .command('init')
-    .description('创建数据目录、配置、数据库迁移和幂等来源 seed')
+    .description('创建数据目录、数据库迁移和幂等来源 seed')
     .action(async () => {
       if (!input.container.initialize) {
         throw new CliError({
@@ -1084,7 +1083,6 @@ export function createProgram(input: {
         human: [
           `初始化完成：${initialized.dataRoot}`,
           `数据库：${initialized.databasePath}`,
-          `配置：${initialized.configPath}${initialized.configCreated ? '（已创建）' : '（已保留）'}`,
           `来源：${String(initialized.sources)}，公司：${String(initialized.companies)}`,
           ...(initialized.bootstrap
             ? [
@@ -1174,7 +1172,7 @@ export async function runCli(input: {
       let helpCommand = program;
       for (let index = 0; index < helpIndex; index += 1) {
         const argument = input.argv[index];
-        if (argument === '--data-root' || argument === '--config') {
+        if (argument === '--data-root') {
           index += 1;
           continue;
         }

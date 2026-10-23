@@ -84,9 +84,7 @@ describe('Web profile management', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const profileId = '018f0000-0000-7000-8000-000000000601';
         const sourceVersionId = '018f0000-0000-7000-8000-000000000602';
@@ -157,9 +155,7 @@ describe('Web profile management', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const profileId = '018f0000-0000-7000-8000-000000000601';
         const original = container.services.webProfiles.get(profileId);

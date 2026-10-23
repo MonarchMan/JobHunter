@@ -2,12 +2,14 @@
 
 > 状态：Implemented
 
+- [x] **OPS-T013** 将运行参数统一为工作区 `.env`，移除 JSON 配置入口并迁移本机参数，验证初始化与环境优先级。（OPS-001,011）
+
 - [x] **OPS-T011** 实现 SQLite 阈值检查、跨进程写保护、子进程维护、备份保留及诊断摘要，并覆盖跳过、故障恢复和数据完整性。（OPS-012..015）
 - [x] **OPS-T012** 在业务任务活动期间延期全部日常维护检查，并统一 Worker 对锁忙和维护写保护的恢复语义。（OPS-016）
 
 > 显式覆盖：OPS-001, OPS-002, OPS-003, OPS-004, OPS-005, OPS-006, OPS-007, OPS-008, OPS-009, OPS-010, OPS-011, OPS-012, OPS-013, OPS-014, OPS-015, OPS-016, OPS-Q01, OPS-Q02, OPS-Q03, OPS-Q04
 
-- [x] **OPS-T001** 定义 BootstrapConfig/AppConfig 两阶段解析、`JOBHUNTER_` 环境映射、优先级和 SecretString。（OPS-001, OPS-Q02）
+- [x] **OPS-T001** 定义 BootstrapConfig/AppConfig 环境解析、`JOBHUNTER_` 映射、优先级和 SecretString。（OPS-001, OPS-Q02）
 - [x] **OPS-T002** 实现 SafeLogger、Pino sink、字段级 redactor 和日志泄漏测试。（OPS-003,004, OPS-Q01）
 - [x] **OPS-T003** 实现离线 doctor、required/degraded 结果和版本诊断。（OPS-002,005,006,010）
 - [x] **OPS-T004** 实现显式 online 来源 health check，证明不做完整同步或模型调用。（OPS-Q04）

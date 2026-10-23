@@ -23,9 +23,7 @@ describe('SQLite maintenance HTTP responses', () => {
         environment: {},
         cwd: root.path,
       });
-      const container = createLocalWebContainer(
-        resolveAppConfig({ bootstrap, environment: {}, file: {} }),
-      );
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         expect(container.services.diagnostics.getTask(id)?.taskType).toBe('maintenance.sqlite');
         expect(() => container.services.diagnostics.mutate({ kind: 'cancel', taskId: id })).toThrow(
