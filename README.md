@@ -4,6 +4,15 @@
 
 <h1 align="center">JobHunter</h1>
 
+## 清理本地生成文件
+
+先停止 Web、Worker 和浏览器测试进程，再执行：
+
+- `pnpm clean:cache`：删除 Next.js 缓存、浏览器测试构建目录、测试及覆盖率报告；保留 `.next` 中的非缓存编译产物、各包 `dist` 和 TypeScript 增量信息。
+- `pnpm clean`：额外删除 Web 的 `.next`、各包 `dist` 和 `tsconfig.tsbuildinfo`，用于完全重新构建。
+
+两者均保留 `node_modules` 和 `var`。清理缓存后首次编译可能变慢；完整清理后生产启动前需执行 `pnpm build` 和 `pnpm --filter @jobhunter/web build`。开发模式通过源码入口运行，无需预先重建 workspace。这两个命令不会自动停止服务，不应在构建或测试运行中执行。
+
 <p align="center">
   本地管理简历、企业官网职位、匹配判断与后台任务的个人求职工作台。
 </p>

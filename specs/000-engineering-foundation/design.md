@@ -51,6 +51,10 @@ workspace 只匹配 `apps/*` 和 `packages/*`。`packages/sources/<company>` 是
 
 根 scripts 使用 pnpm recursive/filter，而不使用依赖 shell 的 `&&`。`check` 聚合 format:check、lint、typecheck、test 和 docs:check；integration/e2e/online smoke 分开，避免默认命令产生外部副作用。`typecheck:watch` 直接复用 TypeScript project references 的增量 watch，不与开发服务生命周期耦合。
 
+## 产物清理
+
+`scripts/clean.mjs` 使用显式目录白名单：根及 workspace 的测试报告、coverage，Web 的 `.next/cache`、`.next/dev/cache` 和 `.next-browser-fixture`／带运行 ID 的测试目录。缓存模式保留正式编译结果；完整模式额外移除 `.next`、各包 `dist` 和 `tsconfig.tsbuildinfo`。删除前验证绝对路径在仓库内，并拒绝路径上的符号链接或 junction，避免影响外部目录。不存在的目标可重复清理。不会自动停止服务，也不会在开发或测试运行中自动清理。
+
 ## 文档检查
 
 `scripts/check-docs.mjs` 只读扫描 Markdown：

@@ -8,6 +8,7 @@
   - 2026-10-14：`.node-version` 改为本地工具配置，不再提交版本库；项目支持范围继续以 `package.json#engines` 为准。
 - [x] **ENG-T002** 创建严格 TypeScript 基础配置、包模板和 project references。（ENG-002,008）
 - [x] **ENG-T003** 配置 ESLint、Prettier、Vitest 和统一根命令。（ENG-003, ENG-Q02）
+  - 2026-10-25：扩展完整清理范围，并新增保留编译产物的缓存清理命令；通过临时目录验证保留数据、重复清理和目录链接防护。
 - [x] **ENG-T004** 配置 dependency-cruiser 的公开入口和分层规则，并添加故意违规 fixture 测试。（ENG-004）
 - [x] **ENG-T005** 建立单元/集成/E2E/online smoke 分层与 testkit 临时目录。（ENG-005,006, ENG-Q03）
 - [x] **ENG-T006** 创建 `.gitignore`、唯一运行配置模板 `.env.example`，并运行秘密扫描。（ENG-007）
