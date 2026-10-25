@@ -14,6 +14,7 @@
     "preinstall": "node scripts/check-node-version.mjs",
     "build": "tsc -b",
     "clean": "node scripts/clean.mjs",
+    "clean:cache": "node scripts/clean.mjs --cache-only",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
