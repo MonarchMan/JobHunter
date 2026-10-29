@@ -23,9 +23,14 @@ export async function GET(request: Request): Promise<Response> {
     const container = await getWebContainer();
     const profiles = container.services.webProfiles.list();
     const selected = new URL(request.url).searchParams.get('profile') ?? profiles[0]?.id;
+    const selectedProfile = profiles.find((profile) => profile.id === selected);
+    if (selected && !selectedProfile) return notFoundResponse('个人资料不存在。');
     return dataResponse({
       profiles,
-      detail: selected ? container.services.webProfiles.get(selected) : null,
+      // 待提取的档案尚无版本详情，仍须作为有效档案返回，不能误报 404。
+      detail: selectedProfile?.currentVersionId
+        ? container.services.webProfiles.get(selectedProfile.id)
+        : null,
     });
   } catch (error) {
     if (error instanceof CandidateProfileNotFoundError) return notFoundResponse('个人资料不存在。');

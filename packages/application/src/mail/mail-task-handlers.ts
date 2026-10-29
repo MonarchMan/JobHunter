@@ -70,15 +70,13 @@ export interface RecruitmentMailClassificationPort {
 export const recruitmentMailPolicyVersion =
   'candidate-rules-v4+agent-v3-prompt-v5+schedule-identity-v2';
 
-export const mailboxScanTaskPayloadSchema = z.object({}).strict();
-export const mailboxScanTaskOutputSchema = z
-  .object({ enabledMailboxes: z.number().int().nonnegative() })
-  .strict();
-export const mailboxSyncTaskPayloadSchema = z
-  .object({ mailboxKey: z.string().min(1).max(128) })
-  .strict();
+export const mailboxSyncTaskPayloadSchema = z.object({}).strict();
 export const mailboxSyncTaskOutputSchema = z
-  .object({ pages: z.number().int().nonnegative(), messages: z.number().int().nonnegative() })
+  .object({
+    mailboxes: z.number().int().nonnegative(),
+    pages: z.number().int().nonnegative(),
+    messages: z.number().int().nonnegative(),
+  })
   .strict();
 export const mailClassifyTaskPayloadSchema = z
   .object({ messageRefId: z.string().min(1).max(128) })
@@ -87,31 +85,7 @@ export const mailClassifyTaskOutputSchema = z
   .object({ status: z.enum(['accepted', 'needs_review', 'ignored']) })
   .strict();
 
-/** 创建邮箱扫描任务；扫描只发布单邮箱任务，不接触凭据或正文。 */
-export function createMailboxScanTaskHandler(input: {
-  readonly configs: MailboxConfigReader;
-  readonly enqueue: (mailbox: MailboxConfig) => void;
-}): TaskHandler<
-  z.infer<typeof mailboxScanTaskPayloadSchema>,
-  z.infer<typeof mailboxScanTaskOutputSchema>
-> {
-  return {
-    taskType: 'mailbox.scan@v1',
-    payloadSchema: mailboxScanTaskPayloadSchema,
-    outputSchema: mailboxScanTaskOutputSchema,
-    defaultMaxAttempts: 3,
-    leaseDurationMs: 60_000,
-    concurrencyKey: () => 'mailbox-scan',
-    async execute() {
-      // 1、读取非敏感配置；2、只为启用连接发布邮箱级任务。
-      const mailboxes = (await input.configs.list()).filter((mailbox) => mailbox.enabled);
-      for (const mailbox of mailboxes) input.enqueue(mailbox);
-      return { enabledMailboxes: mailboxes.length };
-    },
-  };
-}
-
-/** 创建单邮箱同步任务，连接器选择只依赖提供商无关端口。 */
+/** 创建每日邮箱同步任务；扫描候选和增量同步属于同一任务的连续阶段。 */
 export function createMailboxSyncTaskHandler(input: {
   readonly configs: MailboxConfigReader;
   readonly connectorFor: (config: MailboxConfig) => MailboxConnector | undefined;
@@ -125,29 +99,42 @@ export function createMailboxSyncTaskHandler(input: {
     payloadSchema: mailboxSyncTaskPayloadSchema,
     outputSchema: mailboxSyncTaskOutputSchema,
     defaultMaxAttempts: 4,
-    leaseDurationMs: 10 * 60_000,
-    concurrencyKey: (payload) => `mailbox-sync:${payload.mailboxKey}`,
-    async execute(context, payload) {
-      const config = (await input.configs.list()).find(
-        (mailbox) => mailbox.mailboxKey === payload.mailboxKey,
-      );
-      if (!config?.enabled) return { pages: 0, messages: 0 };
-      const connector = input.connectorFor(config);
-      if (!connector) {
-        throw new TaskExecutionError('invalid_config', 'Mailbox connector is unavailable.');
+    leaseDurationMs: 30 * 60_000,
+    concurrencyKey: () => 'mailbox-sync',
+    async execute(context) {
+      // 1、读取启用邮箱；2、逐个执行发现、粗筛引用和游标提交；3、汇总批次结果。
+      const mailboxes = (await input.configs.list()).filter((mailbox) => mailbox.enabled);
+      let pages = 0;
+      let messages = 0;
+      let firstFailure: TaskExecutionError | null = null;
+      for (const config of mailboxes) {
+        const connector = input.connectorFor(config);
+        if (!connector) {
+          firstFailure ??= new TaskExecutionError(
+            'invalid_config',
+            'Mailbox connector is unavailable.',
+          );
+          continue;
+        }
+        try {
+          // 2.a、同步服务内部先发现邮件引用，再保存引用、发布分类任务并推进游标。
+          const result = await input.service.sync(
+            config,
+            connector,
+            config.credentialRef,
+            context.signal,
+          );
+          pages += result.pages;
+          messages += result.messages;
+        } catch (error) {
+          const failure = mapMailConnectorError(error);
+          if (context.signal.aborted || failure.category === 'cancelled') throw failure;
+          // 2.b、单个邮箱的临时故障不能阻止本批次尝试其他邮箱；游标使重试安全重放。
+          firstFailure ??= failure;
+        }
       }
-      try {
-        // 1、连接器在事务外增量发现；2、服务保存引用并发布分类任务后推进游标。
-        const result = await input.service.sync(
-          config,
-          connector,
-          config.credentialRef,
-          context.signal,
-        );
-        return { pages: result.pages, messages: result.messages };
-      } catch (error) {
-        throw mapMailConnectorError(error);
-      }
+      if (firstFailure) throw firstFailure;
+      return { mailboxes: mailboxes.length, pages, messages };
     },
   };
 }

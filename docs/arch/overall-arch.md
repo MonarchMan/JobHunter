@@ -618,7 +618,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    AUTH["用户显式授权邮箱"] --> SYNC["mailbox.sync 增量发现"]
+    AUTH["用户显式授权邮箱"] --> SYNC["mailbox.sync 每日增量发现与同步"]
     SYNC --> REF["最小 MailMessageRef"]
     REF --> PREFILTER{"确定性候选粗筛"}
     PREFILTER -->|稳定无关| IGNORE["仅保留去重结论"]

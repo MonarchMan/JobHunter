@@ -26,7 +26,6 @@ import {
   createSourceJobDetailTaskHandler,
   createSourceSyncTaskHandler,
   createSourceHealthTaskHandler,
-  createMailboxScanTaskHandler,
   createMailboxSyncTaskHandler,
   createMailClassifyTaskHandler,
   MailSyncService,
@@ -682,19 +681,6 @@ export function createProductionWorkerApplication(input: {
       defaultTimezone: input.mail.defaultTimezone ?? 'Asia/Shanghai',
     });
     registry.register(
-      createMailboxScanTaskHandler({
-        configs: mailboxConfigs,
-        enqueue: (mailbox) => {
-          interviewTasks.enqueue({
-            taskType: 'mailbox.sync@v1',
-            payload: { mailboxKey: mailbox.mailboxKey },
-            // 每个扫描时间窗允许再次同步；邮箱级并发键仍阻止重叠执行。
-            idempotencyKey: `mailbox.sync:${mailbox.mailboxKey}:${String(Math.floor(clock.now() / 300_000))}`,
-          });
-        },
-      }),
-    );
-    registry.register(
       createMailboxSyncTaskHandler({
         configs: mailboxConfigs,
         connectorFor: (config) => connectorRegistry.get(config.providerKey),
@@ -731,10 +717,11 @@ export function createProductionWorkerApplication(input: {
   if (input.mail) {
     scheduleService.upsert({
       id: ids.generate(),
+      // 保留稳定键以原位更新旧的五分钟调度，避免旧计划仍持续入队。
       scheduleKey: 'mailbox-scan-every-five-minutes',
-      taskType: 'mailbox.scan@v1',
+      taskType: 'mailbox.sync@v1',
       payload: {},
-      cronExpression: '*/5 * * * *',
+      cronExpression: '0 3 * * *',
       timezone: 'Asia/Shanghai',
     });
   }

@@ -43,7 +43,6 @@ export const taskTypeLabels: Readonly<Record<string, string>> = {
   'interview.project-answer-digest': '项目回答分析',
   'interview.project-notebook.render': '项目面试档案生成',
   'interview.experience-research.execute': '面经研究',
-  'mailbox.scan@v1': '邮箱扫描',
   'mailbox.sync@v1': '邮箱同步',
   'mail.classify@v1': '招聘邮件识别',
   'maintenance.cleanup': '系统数据清理',
