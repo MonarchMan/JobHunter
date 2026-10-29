@@ -75,6 +75,33 @@ function seedProfile(dataRoot: string): void {
 }
 
 describe('Web profile management', () => {
+  it('keeps a profile without an extracted version visible in profile summaries', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-web-profile-pending-');
+    try {
+      const bootstrap = resolveBootstrapConfig({
+        cli: { dataRoot: root.path },
+        environment: {},
+        cwd: root.path,
+      });
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
+      try {
+        await container.services.resumes.importBytes({
+          bytes: new TextEncoder().encode(
+            '候选人\n目标岗位：大模型算法工程师\n教育背景：计算机科学硕士。\n项目经历：负责大模型训练、评测和部署，完成多项性能优化。',
+          ),
+          signal: new AbortController().signal,
+        });
+        expect(container.services.webProfiles.list()).toMatchObject([
+          { name: '默认候选人画像', currentVersionId: null },
+        ]);
+      } finally {
+        container.close();
+      }
+    } finally {
+      await root.cleanup();
+    }
+  });
+
   it('queues selected resume sections without changing the current profile version', async () => {
     const root = await createTemporaryDataRoot('jobhunter-web-profile-polish-');
     try {

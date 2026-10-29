@@ -2,6 +2,8 @@
 
 > 状态：Ready
 
+- [x] **MAIL-T017** 将自动邮箱增量扫描改为每日 03:00（`Asia/Shanghai`）运行，并合并发现与同步阶段为单个 `mailbox.sync@v1` 批次任务，更新既有计划键以停用旧五分钟调度。（MAIL-017）
+
 - [x] **MAIL-T001** 建立 029 规格、设计和任务文档，更新总体架构与数据模型，并新增 ADR-0055 固定独立招聘进展领域、本地增量轮询、凭据边界及 `packages/mail/core`、`packages/mail/connectors` 目录决策。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-007, MAIL-010, MAIL-012, MAIL-017, MAIL-018, MAIL-Q01, MAIL-Q02, MAIL-Q04, MAIL-Q05）
 - [x] **MAIL-T002** 建立两个嵌套 workspace 包及公开入口，更新 pnpm、TypeScript、dependency-cruiser 和构建配置，验证 `application → mail/core ← mail/connectors` 的单向依赖。（MAIL-Q01, MAIL-Q02）
 - [x] **MAIL-T003** 在领域层实现招聘邮件分类结果、申请事件、申请状态、时间值对象和状态投影，并以纯单元测试覆盖规则分类、Offer 意向以及首版无人工更正边界。（MAIL-008, MAIL-009, MAIL-013, MAIL-014, MAIL-Q02, MAIL-Q08）
@@ -10,7 +12,7 @@
 - [ ] **MAIL-T006** 实现 Gmail 连接器和本机 OAuth/加密文件凭据适配，使用 `gmail.readonly`、有界 `messages.list` 和 `users.history.list`，覆盖同步期间追平、过期 `historyId` 重建、稳定 message ID、可选安全来源 URL、断开和重新授权；通过 Gmail 独立 supported 门禁。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-005, MAIL-018, MAIL-Q03, MAIL-Q06, MAIL-Q09）
 - [ ] **MAIL-T007** 实现 Microsoft Graph 连接器，使用 delegated `Mail.Read`、文件夹级 message delta、`Prefer: IdType="ImmutableId"`、`changeKey` 和经校验的 `webLink`，覆盖 delta 失效重建、移动/删除变化、断开和重新授权；通过 Graph 独立 supported 门禁。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-005, MAIL-018, MAIL-Q03, MAIL-Q06, MAIL-Q09）
 - [ ] **MAIL-T008** 实现通用 IMAP over TLS 连接器，覆盖 QQ、163 和企业邮箱应用专用密码配置、严格 TLS、`EXAMINE`、`UID FETCH`/`BODY.PEEK`、`UIDVALIDITY + UID`、CONDSTORE/QRESYNC 与 UID 扫描降级、文件夹重建和凭据撤销；通过 IMAP 独立 supported 门禁。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-005, MAIL-018, MAIL-Q03, MAIL-Q06, MAIL-Q09）
-- [ ] **MAIL-T009** 实现本地邮箱配置、运行状态原子文件、文件夹选择、默认 30 天有界回溯、过期游标重建、同步计划和 `mailbox.sync@v1` Handler；分别保存 Gmail history、Graph 文件夹 delta 和 IMAP 文件夹 UID 状态，增量页先原子保存引用并发布分类任务，提交成功后再推进文件游标，崩溃窗口通过安全重放收敛。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-005, MAIL-017, MAIL-Q06, MAIL-Q08, MAIL-Q09）
+- [ ] **MAIL-T009** 实现本地邮箱配置、运行状态原子文件、文件夹选择、默认 30 天有界回溯、过期游标重建、每日 `mailbox.sync@v1` 计划和 Handler；任务内部完成邮箱发现与增量同步，不拆分 `mailbox.scan@v1` 子任务；分别保存 Gmail history、Graph 文件夹 delta 和 IMAP 文件夹 UID 状态，增量页先原子保存引用并发布分类任务，提交成功后再推进文件游标，崩溃窗口通过安全重放收敛。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-005, MAIL-017, MAIL-Q06, MAIL-Q08, MAIL-Q09）
 - [x] **MAIL-T010** 实现有界 MIME/HTML 正文清洗、远程资源阻断、全部附件忽略、引用历史分离和高召回候选粗筛，确保无关邮件正文不落库且附件不发送给模型。（MAIL-006, MAIL-007, MAIL-008, MAIL-016, MAIL-Q03, MAIL-Q04, MAIL-Q05, MAIL-Q07）
 - [x] **MAIL-T011** 实现版本化确定性招聘候选筛选，覆盖中英文申请确认、笔试、面试、改期、取消、拒绝、流程结束、Offer，以及宣讲营销、岗位推广、问卷、验证码和普通招聘资讯等稳定负例；未知模板保守放行。（MAIL-008, MAIL-010, MAIL-011, MAIL-Q03, MAIL-Q07）
 - [x] **MAIL-T012** 实现无工具 `recruitment-mail.classify@v1` Agent、模型显式开关、业务输出校验、禁用持久化输出缓存、脱敏运行记录和评测；模型关闭或失败时把模糊候选降级到待确认，AgentRun 不保存字段提取结果。（MAIL-009, MAIL-010, MAIL-011, MAIL-Q03, MAIL-Q04, MAIL-Q05, MAIL-Q07）

@@ -185,7 +185,7 @@ sequenceDiagram
     participant D as SQLite
     participant M as Configured Model
 
-    S->>D: 发布 mailbox.sync@v1
+    S->>D: 每日发布 mailbox.sync@v1
     W->>A: 领取同步任务
     A->>F: 读取邮箱配置和增量状态
     W->>C: discoverChanges(cursor)
@@ -205,10 +205,10 @@ sequenceDiagram
 
 ### 4.1 `mailbox.sync@v1`
 
-- payload：`mailboxKey`、触发方式和可选手动操作令牌，不包含文件夹游标或任何邮件内容。
-- 并发键：`mailbox-sync:{mailboxKey}`。
-- 计划默认按本地时区每 10 分钟执行，可由设置关闭或调整；停机期间只补最近一次 occurrence。
-- 每个增量页先在事务外获取并校验，再在一个短事务内保存新引用并发布对应分类任务；数据库提交后，才以临时文件加原子替换更新 `<dataRoot>/mail/runtime-state.json` 中的页游标。若数据库提交后、游标写入前崩溃，下次允许整页重放，并由消息唯一键和任务幂等键消重。
+- payload：空对象，不包含文件夹游标或任何邮件内容；任务内部遍历所有启用邮箱。
+- 并发键：`mailbox-sync`，同一批次只允许一个每日同步任务运行。
+- 计划默认每天 03:00（`Asia/Shanghai`）执行；停机期间只补最近一次 occurrence。
+- 每个邮箱的增量页先在事务外获取并校验，再在一个短事务内保存新引用并发布对应分类任务；数据库提交后，才以临时文件加原子替换更新 `<dataRoot>/mail/runtime-state.json` 中的页游标。若数据库提交后、游标写入前崩溃，下次允许整页重放，并由消息唯一键和任务幂等键消重。
 - 初次同步默认使用 30 天回溯；游标缺失、失效或最近成功定位时间早于配置窗口时，丢弃旧游标并重新执行有界扫描，总范围仍受 365 天上限约束。
 
 ### 4.2 `mail.classify@v1`

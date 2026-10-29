@@ -1,4 +1,5 @@
-import { parseId } from '@jobhunter/domain';
+import { parseId, utcInstant } from '@jobhunter/domain';
+import { SourceError } from '@jobhunter/source-core';
 import { z } from 'zod';
 import type { TaskErrorCategory, TaskHandler } from '../tasks/model.js';
 import { TaskExecutionError } from '../tasks/retry-policy.js';
@@ -60,10 +61,23 @@ export function createSourceSyncTaskHandler(
     concurrencyKey: (payload) => `source-sync:${payload.sourceId}`,
     /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
-      const result = await service.run(
-        { sourceId: parseId(payload.sourceId, 'JobSource'), trigger: payload.trigger },
-        context.signal,
-      );
+      let result: Awaited<ReturnType<JobSyncService['run']>>;
+      try {
+        result = await service.run(
+          { sourceId: parseId(payload.sourceId, 'JobSource'), trigger: payload.trigger },
+          context.signal,
+        );
+      } catch (error) {
+        if (error instanceof SourceError) {
+          throw new TaskExecutionError(taskErrorCategory(error.category), error.safeDiagnostic, {
+            cause: error,
+            ...(error.retryAfterAt === null
+              ? {}
+              : { retryAfterAt: utcInstant(error.retryAfterAt) }),
+          });
+        }
+        throw error;
+      }
       if (result.kind === 'conflict') {
         return { runId: result.runId, status: 'conflict', coverage: null };
       }

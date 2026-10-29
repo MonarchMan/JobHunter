@@ -5,14 +5,16 @@ import {
   type RecruitmentMailClassification,
 } from '@jobhunter/domain';
 import type { ExternalMailMessage, MailboxConfig, MailboxConnector } from '@jobhunter/mail-core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   createMailClassifyTaskHandler,
+  createMailboxSyncTaskHandler,
   type RecruitmentMailClassificationPort,
   type RecruitmentMailMessageRef,
   type RecruitmentMailProcessingRepository,
 } from '../src/mail/mail-task-handlers.js';
 import type { RecruitmentMailClassificationResult } from '../src/mail/mail-classifier.js';
+import type { MailSyncService } from '../src/mail/mail-sync-service.js';
 import type { TaskHandlerContext } from '../src/tasks/model.js';
 
 const mailbox: MailboxConfig = {
@@ -163,6 +165,40 @@ function connector(): MailboxConnector {
     healthCheck: () => Promise.resolve({ status: 'healthy', checkedAt: 0 }),
   };
 }
+
+describe('mailbox sync task handler', () => {
+  it('performs discovery and synchronization for all enabled mailboxes in one task', async () => {
+    const secondMailbox: MailboxConfig = { ...mailbox, mailboxKey: 'mailbox-2' };
+    const disabledMailbox: MailboxConfig = {
+      ...mailbox,
+      mailboxKey: 'mailbox-disabled',
+      enabled: false,
+    };
+    const sync = vi
+      .fn<MailSyncService['sync']>()
+      .mockResolvedValueOnce({ pages: 2, messages: 3, cursor: null })
+      .mockResolvedValueOnce({ pages: 1, messages: 4, cursor: null });
+    const taskContext = context();
+    const handler = createMailboxSyncTaskHandler({
+      configs: { list: () => Promise.resolve([mailbox, disabledMailbox, secondMailbox]) },
+      connectorFor: () => connector(),
+      service: { sync } as unknown as MailSyncService,
+    });
+
+    const output = await handler.execute(taskContext, {});
+
+    expect(handler.taskType).toBe('mailbox.sync@v1');
+    expect(handler.concurrencyKey?.({})).toBe('mailbox-sync');
+    expect(sync).toHaveBeenCalledTimes(2);
+    expect(sync.mock.calls.map(([config]) => config.mailboxKey)).toEqual([
+      mailbox.mailboxKey,
+      secondMailbox.mailboxKey,
+    ]);
+    expect(sync.mock.calls.every(([, , , signal]) => signal === taskContext.signal)).toBe(true);
+    expect(output).toEqual({ mailboxes: 2, pages: 3, messages: 7 });
+    expect(() => handler.payloadSchema.parse({ mailboxKey: mailbox.mailboxKey })).toThrow();
+  });
+});
 
 /** 使用固定分类端口运行单邮件处理器，便于验证事件提交门槛。 */
 async function execute(result: RecruitmentMailClassificationResult): Promise<{

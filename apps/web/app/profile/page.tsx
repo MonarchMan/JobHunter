@@ -67,8 +67,14 @@ export default async function ProfilePage({
           <span className="empty-state-icon" aria-hidden="true">
             ◌
           </span>
-          <h2 id="profile-pending-title">个人资料正在生成</h2>
-          <p>简历已保存，等待 Worker 完成后台提取任务后刷新此页面。</p>
+          <h2 id="profile-pending-title">个人资料待提取</h2>
+          {selectedProfile ? <p>当前档案：{selectedProfile.name}</p> : null}
+          <p>简历已保存，个人资料尚未提取成功。可在任务页查看提取状态或重试失败任务。</p>
+          <div className="inline-actions">
+            <a className="button-secondary" href="/tasks?type=resume.profile.extract">
+              查看提取任务
+            </a>
+          </div>
         </section>
       </Container>
     );

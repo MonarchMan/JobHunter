@@ -429,3 +429,30 @@ describe('source.job-detail retry diagnostics', () => {
     });
   });
 });
+
+describe('source.sync task errors', () => {
+  it('preserves safe preflight diagnostics instead of replacing them with a generic failure', async () => {
+    const { createSourceSyncTaskHandler } = await import('../src/sync/job-sync-handler.js');
+    const handler = createSourceSyncTaskHandler({
+      run: () =>
+        Promise.reject(
+          new SourceError('invalid_config', '请先在个人资料中确认目标岗位，再同步职位。'),
+        ),
+    });
+
+    await expect(
+      handler.execute(
+        {
+          signal: new AbortController().signal,
+          clock: { now: () => utcInstant(1) },
+          logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+          services: {},
+        },
+        { sourceId: '018f0000-0000-7000-8000-000000000211', trigger: 'manual' },
+      ),
+    ).rejects.toMatchObject({
+      category: 'invalid_config',
+      safeSummary: '请先在个人资料中确认目标岗位，再同步职位。',
+    });
+  });
+});
