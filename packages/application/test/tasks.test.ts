@@ -391,6 +391,38 @@ describe('RetryPolicy', () => {
 });
 
 describe('source.job-detail retry diagnostics', () => {
+  it('leaves temporary network failures to the shared retry policy', async () => {
+    const handler = createSourceJobDetailTaskHandler({
+      run: () => Promise.reject(new SourceError('temporary', 'Tencent detail request timed out.')),
+    });
+
+    await expect(
+      handler.execute(
+        {
+          signal: new AbortController().signal,
+          clock: { now: () => utcInstant(1) },
+          logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+          services: {},
+        },
+        {
+          sourceId: '018f0000-0000-7000-8000-000000000211',
+          runId: '01a06074-96ee-7c4e-a89a-7027d4fc9c13',
+          listContentHash: 'a'.repeat(64),
+          adapterVersion: '1.0.0',
+          discovered: {
+            externalJobId: '1231829074692139076',
+            sourceUrl: 'https://join.qq.com/post_detail.html?postid=1231829074692139076',
+            raw: {},
+          },
+        },
+      ),
+    ).rejects.toMatchObject({
+      category: 'network_temporary',
+      retryable: null,
+      safeSummary: 'Tencent detail request timed out.',
+    });
+  });
+
   it('keeps the parse category and diagnostic while marking it retryable', async () => {
     const handler = createSourceJobDetailTaskHandler({
       run: () =>

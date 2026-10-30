@@ -385,6 +385,44 @@ describe('persistent task queue', () => {
     });
   });
 
+  it('recovers an expired lease while its original handler is still awaiting', async () => {
+    const input = await setup();
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let attempts = 0;
+    const registry = registryWith({
+      execute: async ({ signal }) => {
+        attempts += 1;
+        if (attempts > 1) return;
+        started();
+        await new Promise<void>((resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('lease lost')), { once: true });
+        });
+      },
+    });
+    const { tasks } = services(input, registry);
+    const task = enqueueSync(tasks, 'recover-running-handler').task;
+    const worker = engine(input, registry);
+    const abort = new AbortController();
+    const running = worker.run(abort.signal);
+    try {
+      await startedPromise;
+      input.clock.advance(1_001);
+      await vi.waitFor(
+        () => {
+          expect(tasks.get(task.id)).toMatchObject({ status: 'succeeded', attemptCount: 2 });
+        },
+        { timeout: 3_000 },
+      );
+      expect(attempts).toBe(2);
+    } finally {
+      abort.abort();
+      await running;
+    }
+  });
+
   it('reports cancellation across processes on heartbeat and rejects cancelling success', async () => {
     const input = await setup();
     const registry = registryWith({ execute: () => undefined });

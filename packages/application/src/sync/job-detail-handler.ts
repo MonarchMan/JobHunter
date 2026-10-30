@@ -69,8 +69,9 @@ export function createSourceJobDetailTaskHandler(
         );
       } catch (error) {
         if (isSourceError(error)) {
+          // 1、普通来源错误交由通用重试策略按类别判断；解析变化仍保留原有重试行为。
           throw new TaskExecutionError(taskCategory(error.category), error.safeDiagnostic, {
-            retryable: error.category === 'parse_changed',
+            ...(error.category === 'parse_changed' ? { retryable: true } : {}),
             cause: error,
           });
         }
