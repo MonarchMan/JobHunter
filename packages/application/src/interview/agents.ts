@@ -91,7 +91,7 @@ const limits = {
 /** 仅基于简历、回答与允许证据提出下一道项目追问。 */
 export const projectQuestionAgentDefinition = defineAgent({
   key: 'interview.project-question',
-  version: 'v1',
+  version: '1.0.0',
   promptVersion: 'v1',
   outputSchemaVersion: 'v1',
   outputSchemaName: 'project_interview_question',
@@ -109,7 +109,7 @@ evidenceRefs 必须逐字选自 allowedEvidenceRefs。guidanceSlots 只写回答
 /** 基于已冻结项目 Markdown 资料提出必须引用资料证据的深层追问。 */
 export const docsGroundedProjectQuestionAgentDefinition = defineAgent({
   key: 'interview.project-question-docs',
-  version: 'v1',
+  version: '1.0.0',
   promptVersion: 'v1',
   outputSchemaVersion: 'v1',
   outputSchemaName: 'docs_grounded_project_interview_question',
@@ -129,7 +129,7 @@ guidanceSlots 只写回答应覆盖的槽位名称。`,
 /** 从用户回答中抽取知识项与覆盖变化，不生成示范答案。 */
 export const projectAnswerDigestAgentDefinition = defineAgent({
   key: 'interview.project-answer-digest',
-  version: 'v1',
+  version: '1.0.0',
   promptVersion: 'v1',
   outputSchemaVersion: 'v1',
   outputSchemaName: 'project_answer_digest',

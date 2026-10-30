@@ -6,7 +6,8 @@ export interface AgentLimits {
   readonly timeoutMs: number;
   readonly maxSteps: number;
   readonly maxInputTokens: number;
-  readonly maxOutputTokens: number;
+  /** 模型单次输出上限；未设置时由供应商自身决定。 */
+  readonly maxOutputTokens?: number;
   readonly maxEstimatedCostMicros: number;
 }
 
@@ -31,13 +32,19 @@ export interface AgentDefinition<TInput, TOutput> {
   };
 }
 
+/** Agent 行为版本必须使用三段式 SemVer，便于缓存隔离、审计和跨页面比较。 */
+const agentVersionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
 /** 校验并冻结 Agent 定义，确保运行时元数据和工具键唯一。 */
 export function defineAgent<TInput, TOutput>(
   definition: AgentDefinition<TInput, TOutput>,
 ): AgentDefinition<TInput, TOutput> {
   if (!definition.key.trim()) throw new TypeError('Agent key is required.');
-  if (!definition.version.trim() || !definition.promptVersion.trim()) {
-    throw new TypeError('Agent and prompt versions are required.');
+  if (!agentVersionPattern.test(definition.version)) {
+    throw new TypeError('Agent version must use MAJOR.MINOR.PATCH format.');
+  }
+  if (!definition.promptVersion.trim()) {
+    throw new TypeError('Prompt version is required.');
   }
   if (!definition.outputSchemaVersion.trim() || !definition.outputSchemaName.trim()) {
     throw new TypeError('Agent output schema name and version are required.');
@@ -46,6 +53,7 @@ export function defineAgent<TInput, TOutput>(
   // 1、校验版本、提示词和运行上限，防止无界模型调用。
   const limits = definition.limits;
   for (const [key, value] of Object.entries(limits)) {
+    if (value === undefined) continue;
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new TypeError(`Agent limit ${key} must be a positive integer.`);
     }

@@ -30,7 +30,7 @@ export interface AgentRunRecord {
 export interface AgentRunUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
-  readonly estimatedCostMicros: number;
+  readonly estimatedCostMicros: number | null;
   readonly costCurrency: string;
   readonly pricingVersion: string;
 }

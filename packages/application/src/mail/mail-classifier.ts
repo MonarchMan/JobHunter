@@ -73,7 +73,7 @@ type RecruitmentMailAgentOutput = z.infer<typeof recruitmentMailAgentOutputSchem
 /** 无工具招聘邮件 Agent；正文是不可信数据，成功运行只持久化输入/输出哈希和用量。 */
 export const recruitmentMailAgentDefinition = defineAgent({
   key: 'recruitment-mail.classify',
-  version: 'v3',
+  version: '3.0.0',
   promptVersion: 'v5-written-exam',
   outputSchemaVersion: 'v3',
   outputSchemaName: 'recruitment_mail_classification',

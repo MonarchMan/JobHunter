@@ -22,12 +22,15 @@ const configSchema = z
       }, 'Base URL must be an HTTP(S) URL.'),
     apiKey: z.string().trim().min(1),
     model: z.string().trim().min(1),
+    costCurrency: z.enum(['USD', 'CNY']).default('USD'),
     timeoutMs: z
       .number()
       .int()
       .min(1_000)
       .max(10 * 60_000)
-      .default(60_000),
+      .default(180_000),
+    inputCostPerMillionUsd: z.number().finite().nonnegative().nullable().optional(),
+    outputCostPerMillionUsd: z.number().finite().nonnegative().nullable().optional(),
   })
   .strict();
 
@@ -57,7 +60,10 @@ export interface AnthropicClientConfig {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly costCurrency?: 'USD' | 'CNY';
   readonly timeoutMs?: number;
+  readonly inputCostPerMillionUsd?: number | null | undefined;
+  readonly outputCostPerMillionUsd?: number | null | undefined;
   readonly fetchImplementation?: typeof fetch;
 }
 
@@ -80,8 +86,23 @@ function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
       (value?.cache_creation_input_tokens ?? 0) +
       (value?.cache_read_input_tokens ?? 0),
     outputTokens: value?.output_tokens ?? 0,
-    estimatedCostMicros: 0,
+    estimatedCostMicros: null,
   };
+}
+
+/** 将 Anthropic Token 数按每百万 Token 美元报价换算为微美元。 */
+function estimateCostMicros(
+  value: z.infer<typeof responseSchema>['usage'],
+  inputPrice: number | null | undefined,
+  outputPrice: number | null | undefined,
+): number | null {
+  if (inputPrice === null || inputPrice === undefined || outputPrice === null || outputPrice === undefined)
+    return null;
+  const inputTokens =
+    (value?.input_tokens ?? 0) +
+    (value?.cache_creation_input_tokens ?? 0) +
+    (value?.cache_read_input_tokens ?? 0);
+  return Math.round(inputTokens * inputPrice + (value?.output_tokens ?? 0) * outputPrice);
 }
 
 /** 执行模块的解析、转换、评分或调用辅助逻辑。 */
@@ -125,15 +146,21 @@ export class AnthropicModelClient implements ModelClient {
       baseUrl: input.baseUrl,
       apiKey: input.apiKey,
       model: input.model,
+      costCurrency: input.costCurrency ?? 'USD',
       ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+      inputCostPerMillionUsd: input.inputCostPerMillionUsd ?? null,
+      outputCostPerMillionUsd: input.outputCostPerMillionUsd ?? null,
     });
     this.#fetch = input.fetchImplementation ?? fetch;
     this.metadata = {
       provider: 'anthropic',
       model: this.#config.model,
       config: { baseUrl: this.#config.baseUrl, timeoutMs: this.#config.timeoutMs },
-      costCurrency: 'USD',
-      pricingVersion: 'unpriced-v1',
+      costCurrency: this.#config.costCurrency,
+      pricingVersion:
+        this.#config.inputCostPerMillionUsd === null || this.#config.outputCostPerMillionUsd === null
+          ? 'unpriced'
+          : 'configured',
     };
   }
 
@@ -143,7 +170,8 @@ export class AnthropicModelClient implements ModelClient {
     const combined = AbortSignal.any([signal, timeout]);
     const baseBody = {
       model: this.#config.model,
-      max_tokens: request.maxOutputTokens,
+      // Anthropic 协议要求 max_tokens；未设置应用层上限时使用协议可接受的宽松值。
+      max_tokens: request.maxOutputTokens ?? 128_000,
       system: request.systemPrompt,
       messages: [
         {
@@ -205,7 +233,11 @@ export class AnthropicModelClient implements ModelClient {
           ? [{ id: call.data.id, toolKey: call.data.name, input: call.data.input }]
           : [];
       });
-      if (calls.length > 0) return { kind: 'tool_calls', calls, usage: usage(parsed.usage) };
+      const responseUsage = {
+        ...usage(parsed.usage),
+        estimatedCostMicros: estimateCostMicros(parsed.usage, this.#config.inputCostPerMillionUsd, this.#config.outputCostPerMillionUsd),
+      };
+      if (calls.length > 0) return { kind: 'tool_calls', calls, usage: responseUsage };
 
       const content = parsed.content.flatMap((block) => {
         const text = textBlockSchema.safeParse(block);
@@ -219,7 +251,7 @@ export class AnthropicModelClient implements ModelClient {
       } catch {
         throw new ModelClientError('invalid_output', 'Model response content was not JSON.');
       }
-      return { kind: 'output', output, usage: usage(parsed.usage) };
+      return { kind: 'output', output, usage: responseUsage };
     } catch (error) {
       if (error instanceof ModelClientError) throw error;
       if (combined.aborted) {

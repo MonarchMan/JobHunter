@@ -8,7 +8,7 @@ import {
   parseResumePolishAgentOutput,
   parseResumeText,
   resumeProfileAgentDefinition,
-  resumeProfilePromptV2,
+  resumeProfilePromptV3,
   resumePolishAgentDefinition,
   resumePolishPromptV1,
   toCandidateProfile,
@@ -136,7 +136,7 @@ describe('rule-first resume profile extraction', () => {
 describe('resume profile Agent boundary schema', () => {
   it('keeps prompt, Agent and output schema versions consistent', () => {
     expect(() => {
-      assertPromptMatchesDefinition(resumeProfilePromptV2, resumeProfileAgentDefinition);
+      assertPromptMatchesDefinition(resumeProfilePromptV3, resumeProfileAgentDefinition);
     }).not.toThrow();
   });
 
@@ -163,20 +163,13 @@ describe('resume profile Agent boundary schema', () => {
             evidenceRefs: [{ start: 0, end: extracted.length, summary: '完整技能描述' }],
           },
         ],
-        skills: [
-          {
-            value: { name: 'TypeScript', level: 'proficient' },
-            confidence: 0.95,
-            evidenceRefs: [{ start, end, summary: '明确技能' }],
-          },
-        ],
         domains: [],
         yearsOfExperience: null,
         managementExperience: null,
       },
       extracted,
     );
-    expect(output.skills[0]?.value.name).toBe('TypeScript');
+    expect(toCandidateProfile(output, emptyPreferences).skills).toEqual([]);
     expect(toCandidateProfile(output, emptyPreferences).professionalSkills).toBe(extracted);
     expect(output).not.toHaveProperty('preferences');
   });
@@ -196,7 +189,6 @@ describe('resume profile Agent boundary schema', () => {
           workExperience: [],
           projects: [],
           professionalSkills: [],
-          skills: [],
           domains: [],
           yearsOfExperience: null,
           managementExperience: null,
@@ -204,6 +196,34 @@ describe('resume profile Agent boundary schema', () => {
         '短文本',
       ),
     ).toThrow(/range exceeds/);
+  });
+
+  it('requires the model to output completed education dates', () => {
+    const extracted = '某大学 计算机科学 2020年9月';
+    const output = parseResumeProfileAgentOutput(
+        {
+          targetRoles: [],
+          education: [
+            {
+              institution: '某大学',
+              degree: '本科',
+              field: '计算机科学',
+              startDate: '2020-09-01',
+              endDate: null,
+              highlights: [],
+              evidenceRefs: [{ start: 0, end: extracted.length, summary: '教育经历' }],
+            },
+          ],
+          workExperience: [],
+          projects: [],
+          professionalSkills: [],
+          domains: [],
+          yearsOfExperience: null,
+          managementExperience: null,
+        },
+        extracted,
+      );
+    expect(output.education[0]?.startDate).toBe('2020-09-01');
   });
 });
 

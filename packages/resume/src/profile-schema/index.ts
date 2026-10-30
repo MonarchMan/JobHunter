@@ -2,6 +2,7 @@ import { parseCandidateProfile, type CandidateProfileData } from '@jobhunter/dom
 import { z } from 'zod';
 
 const text = z.string().trim().min(1);
+const dateValue = z.iso.date().nullable();
 // 每条证据都保存原文字符区间，后续会在应用边界再次校验范围和非空性。
 const evidenceReferenceSchema = z
   .object({
@@ -30,8 +31,8 @@ function evidenceFactSchema<T extends z.ZodType>(
 }
 
 const dated = {
-  startDate: text.nullable(),
-  endDate: text.nullable(),
+  startDate: dateValue,
+  endDate: dateValue,
   highlights: z.array(evidenceFactSchema(text)),
 };
 
@@ -71,13 +72,6 @@ export const resumeProfileAgentOutputSchema = z
         .strict(),
     ),
     professionalSkills: z.array(evidenceFactSchema(text)),
-    skills: z.array(
-      evidenceFactSchema(
-        z
-          .object({ name: text, level: z.enum(['familiar', 'proficient', 'expert', 'uncertain']) })
-          .strict(),
-      ),
-    ),
     domains: z.array(evidenceFactSchema(text)),
     yearsOfExperience: evidenceFactSchema(z.number().nonnegative()).nullable(),
     managementExperience: evidenceFactSchema(z.boolean()).nullable(),
@@ -174,11 +168,6 @@ export function toCandidateProfile(
         .map((fact) => fact.value)
         .join('\n')
         .trim() || null,
-    skills: output.skills.map((fact) => ({
-      name: fact.value.name,
-      level: fact.value.level,
-      evidence: domainEvidence(fact.evidenceRefs),
-    })),
     domains: output.domains.map((fact) => fact.value),
     yearsOfExperience: output.yearsOfExperience?.value ?? null,
     managementExperience: output.managementExperience?.value ?? null,

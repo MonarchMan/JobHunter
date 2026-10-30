@@ -9,6 +9,9 @@ export interface ConfiguredModelClientInput {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly costCurrency?: 'USD' | 'CNY';
+  readonly inputCostPerMillionUsd?: number | null;
+  readonly outputCostPerMillionUsd?: number | null;
   readonly timeoutMs?: number;
 }
 
@@ -21,6 +24,9 @@ export function createConfiguredModelClient(input: ConfiguredModelClientInput): 
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
     model: input.model,
+    costCurrency: input.costCurrency,
+    inputCostPerMillionUsd: input.inputCostPerMillionUsd,
+    outputCostPerMillionUsd: input.outputCostPerMillionUsd,
     ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
   });
 }

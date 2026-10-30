@@ -2,7 +2,8 @@
 export interface ModelUsage {
   readonly inputTokens: number;
   readonly outputTokens: number;
-  readonly estimatedCostMicros: number;
+  /** 未配置供应商报价时为 null，不能把未知成本误记为 0。 */
+  readonly estimatedCostMicros: number | null;
 }
 
 /** 模块数据结构或契约。 */
@@ -24,7 +25,7 @@ export interface ModelRequest {
   readonly input: unknown;
   readonly outputSchemaName: string;
   readonly outputJsonSchema: unknown;
-  readonly maxOutputTokens: number;
+  readonly maxOutputTokens?: number;
   readonly tools: readonly ModelToolSpec[];
   readonly toolResults: readonly ModelToolResult[];
   readonly repair?: {
