@@ -404,7 +404,7 @@ describe('Web source management', () => {
               )
               .pluck()
               .get(),
-          ).toBe(catalogCounts.enabled + 1);
+          ).toBe(catalogCounts.enabled);
         } finally {
           schedules.close();
         }

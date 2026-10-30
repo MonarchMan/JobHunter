@@ -192,6 +192,22 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
             {task.sourceSync ? (
               <section aria-labelledby={`source-sync-detail-${task.id}`}>
                 <h3 id={`source-sync-detail-${task.id}`}>官网同步信息</h3>
+                {task.sourceSync.sources && task.sourceSync.sources.length > 1
+                  ? task.sourceSync.sources.map((source) => (
+                      <section key={source.adapterKey} aria-label={`${source.adapterKey} 同步结果`}>
+                        <h4>
+                          {source.companyName} / {source.sourceSlug}
+                        </h4>
+                        <p>
+                          <code>{source.adapterKey}</code>：
+                          {source.run
+                            ? `${syncRunStatusLabels[source.run.status]} / ${syncCoverageLabels[source.run.coverage]}`
+                            : '尚未开始同步运行'}
+                        </p>
+                        {source.run?.errorSummary ? <p>{source.run.errorSummary}</p> : null}
+                      </section>
+                    ))
+                  : null}
                 <dl className="facts">
                   <div>
                     <dt>公司 / 招聘渠道</dt>

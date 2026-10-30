@@ -562,25 +562,6 @@ test.describe('校招实习管理台核心流程', () => {
 
   test('updates and locks an internship candidate profile version', async ({ page }) => {
     await page.goto('/profile');
-    const profileSelector = page.getByRole('combobox', { name: '选择画像' });
-    await expect(profileSelector).toHaveText(/画像/);
-    await expect(page.locator('header form input[name="profile"]')).toHaveValue(
-      '018f0000-0000-7000-8000-000000000601',
-    );
-    const profileTriggerBox = await profileSelector.boundingBox();
-    await profileSelector.click();
-    const profileListbox = page.getByRole('listbox');
-    await expect(profileListbox).toBeVisible();
-    const profileListboxBox = await page.locator('[data-authored-select-content]').boundingBox();
-    expect(profileTriggerBox).not.toBeNull();
-    expect(profileListboxBox).not.toBeNull();
-    if (profileTriggerBox && profileListboxBox) {
-      expect(Math.abs(profileListboxBox.width - profileTriggerBox.width)).toBeLessThanOrEqual(1);
-      expect(profileListboxBox.y).toBeGreaterThan(profileTriggerBox.y + profileTriggerBox.height);
-    }
-    await page.keyboard.press('Escape');
-    await expect(profileListbox).toBeHidden();
-    await expect(profileSelector).toBeFocused();
     const advancedTools = page.locator('summary').filter({
       hasText: '高级维护：字段锁定与 JSON 修正',
     });

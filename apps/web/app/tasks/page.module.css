@@ -41,6 +41,23 @@
   background: var(--surface);
 }
 
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.currencyPicker {
+  width: 7.25rem;
+}
+
+.currencyPicker :global([data-authored-select-trigger]) {
+  min-height: 2.35rem;
+  padding-inline: 0.55rem;
+  font-size: 0.85rem;
+}
+
 .cardHeading {
   display: flex;
   justify-content: space-between;
@@ -72,4 +89,5 @@
   .filters :global(.button-secondary) {
     width: 100%;
   }
+
 }

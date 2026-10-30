@@ -365,6 +365,7 @@
   z-index: 5;
   bottom: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
@@ -384,7 +385,18 @@
 
 .resume-editor-actions > div {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.65rem;
+  margin-left: auto;
+}
+
+.resume-editor-actions button {
+  height: 2.75rem;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .resume-preview-backdrop {
@@ -605,9 +617,17 @@
     flex-direction: column;
   }
 
-  .resume-editor-actions > div,
+  /* 窄屏按相同列宽分两行，避免模板入口与保存按钮互相挤压。 */
+  .resume-editor-actions > div {
+    display: grid;
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-left: 0;
+  }
+
   .resume-editor-actions button {
-    flex: 1;
+    width: 100%;
+    min-width: 0;
   }
 
   .resume-preview-backdrop {
