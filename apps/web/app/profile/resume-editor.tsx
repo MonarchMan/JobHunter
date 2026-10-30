@@ -1260,7 +1260,7 @@ export function ResumeEditor({
             预览
           </button>
           <button type="submit" disabled={busy}>
-            {busy ? '正在保存…' : '保存简历'}
+            {busy ? '正在保存…' : '保存'}
           </button>
         </div>
       </footer>

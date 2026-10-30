@@ -1,13 +1,11 @@
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../src/server/container.js';
-import { PageHeader } from '../components/layout/page-header.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { ProfileEditor } from './profile-editor.js';
 import { ResumeDeletion } from './resume-deletion.js';
 import { ResumeImport } from './resume-import.js';
 import { Pagination } from '../components/lists/pagination.js';
-import { SelectField } from '../components/forms/select-field.js';
 import { webPagination } from '@jobhunter/application/contracts';
 import { ResumeEditor } from './resume-editor.js';
 import styles from './page.module.css';
@@ -37,7 +35,6 @@ export default async function ProfilePage({
   if (!selectedId) {
     return (
       <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
-        <PageHeader title="个人资料" />
         <ResumeImport />
         <section className="empty-state page-empty-state" aria-labelledby="profile-empty-title">
           <span className="empty-state-icon" aria-hidden="true">
@@ -61,7 +58,6 @@ export default async function ProfilePage({
   if (!selectedProfile?.currentVersionId) {
     return (
       <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
-        <PageHeader title="个人资料" />
         {selectedProfile ? <ResumeImport profileId={selectedProfile.id} /> : <ResumeImport />}
         <section className="empty-state page-empty-state" aria-labelledby="profile-pending-title">
           <span className="empty-state-icon" aria-hidden="true">
@@ -87,24 +83,6 @@ export default async function ProfilePage({
   );
   return (
     <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
-      <PageHeader title="个人资料">
-        <form action={embedded ? '/my' : '/profile'} method="get" noValidate>
-          {embedded ? <input type="hidden" name="tab" value="profile" /> : null}
-          <label>
-            选择画像
-            <SelectField
-              name="profile"
-              label="选择画像"
-              defaultValue={selectedId}
-              options={profiles.map((profile) => ({
-                value: profile.id,
-                label: profile.name,
-              }))}
-            />
-          </label>
-          <button type="submit">查看</button>
-        </form>
-      </PageHeader>
       <ResumeImport profileId={detail.profile.id} />
       <ResumeEditor
         profileId={detail.profile.id}

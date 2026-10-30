@@ -102,7 +102,7 @@ export default async function JobsPage({
               label="招聘类别"
               defaultValue={query.recruitmentCategory}
               options={[
-                { value: 'all', label: '全部招聘类别' },
+                { value: 'all', label: '全部' },
                 { value: 'internship', label: '实习' },
                 { value: 'campus', label: '校招' },
                 { value: 'social', label: '社招' },
@@ -143,7 +143,7 @@ export default async function JobsPage({
               label="职位类别"
               defaultValue={fieldValue(parameters, 'subfamily')}
               options={[
-                { value: '', label: '全部类别' },
+                { value: '', label: '全部' },
                 ...canonicalJobSubfamilies.map((subfamily) => ({
                   value: subfamily,
                   label: subfamily,
@@ -222,7 +222,7 @@ export default async function JobsPage({
         <p className={styles.resultSummary} aria-live="polite">
           当前类别：
           {query.recruitmentCategory === 'all'
-            ? '全部招聘类别'
+            ? '全部'
             : query.recruitmentCategory === 'campus'
               ? '校招'
               : query.recruitmentCategory === 'social'

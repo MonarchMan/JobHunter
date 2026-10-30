@@ -39,6 +39,7 @@ export interface WebDiagnosticsRepository {
   getAgentRun(id: string): WebAgentRunDetail | null;
   getSourceSyncTaskDetail(input: {
     readonly sourceId: string;
+    readonly sourceIds?: readonly string[];
     readonly trigger: 'manual' | 'schedule' | 'retry';
     readonly windowStartedAt: number;
     readonly windowFinishedAt: number | null;
@@ -76,9 +77,13 @@ function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): We
     task.taskType === 'source.sync'
       ? z
           .object({
-            sourceId: z.string().trim().min(1),
+            sourceId: z.string().trim().min(1).optional(),
+            sourceIds: z.array(z.string().trim().min(1)).min(2).optional(),
             trigger: z.enum(['manual', 'schedule', 'retry']),
           })
+          .refine(
+            (payload) => (payload.sourceId === undefined) !== (payload.sourceIds === undefined),
+          )
           .strict()
           .safeParse(task.payload)
       : null;
@@ -99,7 +104,11 @@ function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): We
     sourceSync:
       sourceSyncPayload?.success === true
         ? repository.getSourceSyncTaskDetail({
-            sourceId: sourceSyncPayload.data.sourceId,
+            sourceId:
+              sourceSyncPayload.data.sourceId ?? sourceSyncPayload.data.sourceIds?.[0] ?? '',
+            ...(sourceSyncPayload.data.sourceIds
+              ? { sourceIds: sourceSyncPayload.data.sourceIds }
+              : {}),
             trigger: sourceSyncPayload.data.trigger,
             windowStartedAt: task.startedAt ?? task.createdAt,
             windowFinishedAt: task.finishedAt,

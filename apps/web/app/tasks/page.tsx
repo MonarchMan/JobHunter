@@ -18,6 +18,7 @@ import {
 import { TaskActions } from './task-actions.js';
 import { TaskAutoRefresh } from './task-auto-refresh.js';
 import { AgentRunDetailsDialog, TaskDetailsDialog } from './diagnostic-details.js';
+import { CurrencySelect } from './currency-select.js';
 import { SelectField } from '../components/forms/select-field.js';
 import dataTableStyles from '../components/lists/data-table.module.css';
 import styles from './page.module.css';
@@ -38,6 +39,24 @@ function positivePage(source: SearchParameterSource, name: string): number {
   return Number.isSafeInteger(value) && value > 0 ? value : 1;
 }
 
+/** 将不同运行记录统一换算成当前页面选择的展示货币。汇率来自显式配置，避免页面隐式猜价。 */
+function formatCost(
+  micros: number | null,
+  sourceCurrency: string | null,
+  displayCurrency: 'USD' | 'CNY',
+): string {
+  if (micros === null) return '—';
+  const rate = Number(process.env.MODEL_USD_TO_CNY_RATE ?? '7.2');
+  const source = sourceCurrency === 'CNY' ? 'CNY' : 'USD';
+  const amount = micros / 1_000_000;
+  const converted = source === displayCurrency
+    ? amount
+    : displayCurrency === 'CNY'
+      ? amount * rate
+      : amount / rate;
+  return `${converted.toFixed(6)} ${displayCurrency}`;
+}
+
 interface TasksPageProperties {
   readonly searchParams: Promise<SearchParameterSource>;
 }
@@ -50,6 +69,21 @@ export default async function TasksPage({
   const taskType = firstSearchParameter(parameters, 'type');
   const taskPage = positivePage(parameters, 'taskPage');
   const agentPage = positivePage(parameters, 'agentPage');
+  const requestedCurrency = firstSearchParameter(parameters, 'currency');
+  const displayCurrency: 'USD' | 'CNY' = requestedCurrency === 'CNY' ? 'CNY' : 'USD';
+  const currencyHrefs = (['USD', 'CNY'] as const).reduce(
+    (result, currency) => {
+      const query = new URLSearchParams();
+      for (const [key, raw] of Object.entries(parameters)) {
+        const value = typeof raw === 'string' || raw === undefined ? raw : raw[0];
+        if (value && key !== 'currency') query.set(key, value);
+      }
+      query.set('currency', currency);
+      result[currency] = `/tasks?${query.toString()}`;
+      return result;
+    },
+    {} as Record<'USD' | 'CNY', string>,
+  );
   const container = await getWebContainer();
   const diagnostics = container.services.diagnostics.list({
     ...(status && ['pending', 'running', 'failed', 'succeeded', 'cancelled'].includes(status)
@@ -63,7 +97,6 @@ export default async function TasksPage({
     <main id="main-content" tabIndex={-1}>
       <PageHeader title="任务与 Agent 运行">
         <div>
-          <p>诊断视图不会显示任务载荷或模型原始内容。</p>
           <TaskAutoRefresh />
         </div>
       </PageHeader>
@@ -125,7 +158,7 @@ export default async function TasksPage({
               <tr>
                 <th scope="col">类型</th>
                 <th scope="col">状态</th>
-                <th scope="col">尝试</th>
+                <th scope="col">重试</th>
                 <th scope="col">错误</th>
                 <th scope="col">开始 / 完成</th>
                 <th scope="col">操作</th>
@@ -230,7 +263,10 @@ export default async function TasksPage({
         aria-labelledby="agent-heading"
         data-agent-section
       >
-        <h2 id="agent-heading">Agent 运行</h2>
+        <div className={styles.sectionHeading}>
+          <h2 id="agent-heading">Agent 运行</h2>
+          <CurrencySelect value={displayCurrency} hrefs={currencyHrefs} />
+        </div>
         <div
           className={[dataTableStyles.scroll, styles.desktopTable].filter(Boolean).join(' ')}
           data-agent-table
@@ -274,9 +310,11 @@ export default async function TasksPage({
                       {run.inputTokens ?? '—'} / {run.outputTokens ?? '—'}
                     </td>
                     <td>
-                      {run.estimatedCostMicros === null
-                        ? '—'
-                        : `${(run.estimatedCostMicros / 1_000_000).toFixed(6)} ${run.costCurrency ?? ''}`}
+                      {run.pricingVersion === 'unpriced'
+                        ? '未定价'
+                        : run.estimatedCostMicros === null
+                          ? '—'
+                        : formatCost(run.estimatedCostMicros, run.costCurrency, displayCurrency)}
                     </td>
                     <td>{time(run.startedAt)}</td>
                   </tr>

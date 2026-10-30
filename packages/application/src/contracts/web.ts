@@ -657,40 +657,47 @@ export type WebSettingsMutation = z.infer<typeof webSettingsMutationSchema>;
 /** Web 任务状态枚举 Schema。 */
 const webTaskStatusSchema = z.enum(['pending', 'running', 'succeeded', 'failed', 'cancelled']);
 
-/** 来源同步任务详情 Schema。 */
-export const webSourceSyncTaskDetailSchema = z
+const webSourceSyncRunDetailSchema = z
+  .object({
+    id: z.string().trim().min(1),
+    status: z.enum(['running', 'succeeded', 'partial', 'failed', 'cancelled']),
+    coverage: z.enum(['complete', 'partial', 'unknown']),
+    stats: z
+      .object({
+        discovered: z.number().int().nonnegative(),
+        created: z.number().int().nonnegative(),
+        revised: z.number().int().nonnegative(),
+        unchanged: z.number().int().nonnegative(),
+        skippedNonDomestic: z.number().int().nonnegative(),
+        skippedOutOfScope: z.number().int().nonnegative(),
+        skippedUnknownRegion: z.number().int().nonnegative(),
+        isolated: z.number().int().nonnegative(),
+        restored: z.number().int().nonnegative(),
+        staled: z.number().int().nonnegative(),
+        closed: z.number().int().nonnegative(),
+        followupEnqueued: z.number().int().nonnegative(),
+      })
+      .strict(),
+    errorCategory: z.string().nullable(),
+    errorSummary: z.string().nullable(),
+  })
+  .strict();
+
+const webSourceSyncSourceDetailSchema = z
   .object({
     companyName: z.string().trim().min(1),
     channel: z.enum(['intern', 'campus', 'social']),
     sourceSlug: z.string().trim().min(1),
     adapterKey: z.string().trim().min(1),
     trigger: z.enum(['manual', 'schedule', 'retry']),
-    run: z
-      .object({
-        id: z.string().trim().min(1),
-        status: z.enum(['running', 'succeeded', 'partial', 'failed', 'cancelled']),
-        coverage: z.enum(['complete', 'partial', 'unknown']),
-        stats: z
-          .object({
-            discovered: z.number().int().nonnegative(),
-            created: z.number().int().nonnegative(),
-            revised: z.number().int().nonnegative(),
-            unchanged: z.number().int().nonnegative(),
-            skippedNonDomestic: z.number().int().nonnegative(),
-            skippedOutOfScope: z.number().int().nonnegative(),
-            skippedUnknownRegion: z.number().int().nonnegative(),
-            isolated: z.number().int().nonnegative(),
-            restored: z.number().int().nonnegative(),
-            staled: z.number().int().nonnegative(),
-            closed: z.number().int().nonnegative(),
-            followupEnqueued: z.number().int().nonnegative(),
-          })
-          .strict(),
-        errorCategory: z.string().nullable(),
-        errorSummary: z.string().nullable(),
-      })
-      .strict()
-      .nullable(),
+    run: webSourceSyncRunDetailSchema.nullable(),
+  })
+  .strict();
+
+/** 来源同步任务详情 Schema，聚合任务按物理来源分别列出执行结果。 */
+export const webSourceSyncTaskDetailSchema = webSourceSyncSourceDetailSchema
+  .extend({
+    sources: z.array(webSourceSyncSourceDetailSchema).optional(),
   })
   .strict();
 
