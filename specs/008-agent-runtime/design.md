@@ -6,6 +6,16 @@ AgentDefinition.validateOutput 在 Schema 校验后执行，业务拒绝使用 i
 
 实现遵循 [Agent 与匹配设计](../../docs/arch/agent-and-matching.md)。
 
+模型价格由统一配置提供，支持 USD 和 CNY 两种货币，价格单位为每百万 Token。适配器在收到供应商 usage 后换算为对应货币的微单位；没有完整价格配置时保留 token 用量，但将成本记为 `null`，避免把未知价格误判为免费。
+
+默认价格策略参考 CC-Switch：先将模型 ID 去掉路由前缀、冒号后缀、日期后缀并转小写，再查随版本发布的内置官方美元种子价格表，覆盖 OpenAI、Anthropic、DeepSeek、Kimi、MiniMax、GLM 和 Qwen 等常用模型；`MODEL_COST_CURRENCY` 选择 `USD` 或 `CNY`，价格覆盖变量按所选货币解释。内置表未命中时不猜测价格，记录 `unpriced`。
+
+GLM-5.3、GLM-5.3-Flash 和 GLM-5.3-FlashX 的内置值采用 Z.ai 海外 API 的美元目录。通过 `MODEL_COST_CURRENCY=CNY` 可将覆盖价格解释为人民币；Web 诊断页面用一个全局 USD/CNY 切换统一展示所有记录，并按 `MODEL_USD_TO_CNY_RATE` 换算，不在同一列表中混排不同币种。
+
+简历画像提取使用 `resume-profile` Prompt v3，按通用规则、教育经历、工作经历、项目经历、技能与领域、证据与输出检查分块组织要求。日期由模型直接补全为 `YYYY-MM-DD`：只有年月时起始补为月初、终止补为月末；只有年份时起始补为 `09-01`、终止补为 `06-30`；季节按固定季节边界补全。应用层不通过脚本改写模型日期。
+
+Agent 行为版本统一使用三段式 SemVer（例如 `1.0.0`、`2.1.0`）。`defineAgent` 在组合根装配前拒绝 `v1`、`1` 或其他非三段式值。版本号是缓存键和运行审计的一部分，任何变更都必须先取得产品负责人明确同意；实现变更不得自行递增版本。历史数据采用破坏性迁移直接归一化为对应三段式值。
+
 ## 包
 
 ```text
