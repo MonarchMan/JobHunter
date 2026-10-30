@@ -35,6 +35,9 @@ try {
             baseUrl: config.model.baseUrl.value,
             model: config.model.modelName.value,
             apiKey: config.model.apiKey.value.reveal(),
+            inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value,
+            outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value,
+            costCurrency: config.model.costCurrency.value,
           },
         }
       : {}),

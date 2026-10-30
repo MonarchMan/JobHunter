@@ -309,6 +309,13 @@
       "when": 1792300800000,
       "tag": "0043_reset_application_event_activity_types",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792387200000,
+      "tag": "0044_source_sync_aggregate_projection",
+      "breakpoints": true
     }
   ]
 }
