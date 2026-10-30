@@ -420,6 +420,13 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(sourceCard).toHaveCount(1);
     // 1、公司卡片是唯一完整容器；总览和指标条不得再次形成带外框的小卡片。
     const overview = sourceCard.getByRole('region', { name: '腾讯全部渠道总览' });
+    await expect(overview.getByRole('heading')).toHaveCount(0);
+    await expect(sourceCard.getByText('选择具体渠道可查看同步运行、统计和计划设置。')).toHaveCount(
+      0,
+    );
+    await expect(
+      sourceCard.getByRole('combobox', { name: '腾讯招聘渠道', exact: true }),
+    ).toHaveJSProperty('tagName', 'BUTTON');
     await expect(overview).toHaveCSS('border-top-width', '0px');
     await expect(overview).toHaveCSS('border-left-width', '0px');
     await expect(overview).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -491,8 +498,25 @@ test.describe('校招实习管理台核心流程', () => {
       page.getByRole('region', { name: '通知', exact: true }).getByRole('status'),
     ).toHaveText(firstFeedback ?? '');
 
-    await sourceCard.getByLabel('腾讯招聘渠道', { exact: true }).selectOption('intern');
+    await sourceCard.getByRole('combobox', { name: '腾讯招聘渠道', exact: true }).click();
+    await page.getByRole('option', { name: '实习', exact: true }).click();
     const sourcePanel = sourceCard.locator('[data-company-source-panel]').first();
+    await expect(sourcePanel.getByRole('heading', { name: '实习渠道', exact: true })).toHaveCount(
+      0,
+    );
+    await expect(sourcePanel.locator('header a')).toBeVisible();
+    await expect(sourcePanel.locator('header a')).toHaveAttribute('target', '_blank');
+    await expect(sourcePanel.locator('header a')).toHaveCSS('text-overflow', 'ellipsis');
+    await expect(sourcePanel.locator('header a')).toHaveCSS('white-space', 'nowrap');
+    await expect(sourcePanel.locator('header a')).toHaveCSS('text-align', 'center');
+    await expect(sourcePanel.locator('header a')).toHaveCSS('font-size', '16px');
+    await expect(sourcePanel.locator('header a')).toHaveAttribute(
+      'title',
+      (await sourcePanel.locator('header a').getAttribute('href')) ?? '',
+    );
+    await expect(sourcePanel.locator('header a')).toHaveText(
+      (await sourcePanel.locator('header a').getAttribute('href')) ?? '',
+    );
     await expect(sourcePanel).toHaveCSS('border-top-width', '0px');
     await expect(sourcePanel).toHaveCSS('border-left-width', '0px');
     await expect(sourcePanel).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');

@@ -15,7 +15,7 @@ function facetValues(values: readonly (string | null)[]): readonly string[] {
     (left, right) => left.localeCompare(right, 'zh-CN'),
   );
 }
-
+/** 公开调研结果须逐条核对来源，只有接受的候选才进入网友面经。 */
 export default async function ResearchPage({
   searchParams,
 }: Readonly<{ searchParams: Promise<SearchParameterSource> }>): Promise<ReactElement> {
@@ -36,10 +36,7 @@ export default async function ResearchPage({
   const allAccepted = service.listAccepted();
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader
-        title="网友面经"
-        description="定义目标岗位，把公开网络调研交给本地 Codex，再逐条核对来源与内容。只有你接受的候选才会进入网友面经。"
-      />
+      <PageHeader title="网友面经" />
       <InterviewSectionNav />
       <ResearchIndex
         requests={service.listRequests()}

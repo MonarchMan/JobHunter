@@ -128,25 +128,10 @@
   line-height: 1;
 }
 
-.company-channel-selector select {
-  box-sizing: border-box;
+/* 下拉框视觉由公共组件负责，卡片只约束布局宽度。 */
+.company-channel-selector > button {
   width: auto;
-  min-width: 6.5rem;
-  height: 2.5rem;
-  min-height: 2.5rem;
-  padding: 0 2rem 0 0.7rem;
-  border-color: var(--border-hover);
-  background-color: var(--surface);
-  color: var(--primary-hover);
-  font-size: 0.86rem;
-  font-weight: 760;
-}
-
-.company-source-meta {
-  margin: 0.25rem 0 0 2.7rem;
-  color: var(--muted-ink);
-  font-size: 0.8rem;
-  line-height: 1.45;
+  min-width: 7.5rem;
 }
 
 .company-sync-channel {
@@ -202,19 +187,6 @@
   background: transparent;
 }
 
-.company-overview-intro h3 {
-  margin: 0.1rem 0 0;
-  color: var(--ink);
-  font-size: 1rem;
-}
-
-.company-overview-intro > p:last-child {
-  margin: 0.22rem 0 0;
-  color: var(--muted-ink);
-  font-size: 0.78rem;
-  line-height: 1.5;
-}
-
 .company-overview-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -255,9 +227,16 @@
 
 .company-source-panel-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+/* 链接区必须可收缩，长网址才会在徽标之前截断而非撑宽卡片。 */
+.company-source-panel-header > div:first-child {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .company-source-panel h3 {
@@ -274,15 +253,21 @@
   letter-spacing: 0.04em;
 }
 
-.source-technical-name {
-  margin: 0.22rem 0 0;
+.source-official-link {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+  margin: 0;
   color: var(--muted-ink);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5;
 }
 
 .source-badges {
   display: flex;
+  flex-shrink: 0;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.5rem;
@@ -371,6 +356,10 @@
     flex-direction: column;
   }
 
+  .company-source-panel-header > div:first-child {
+    width: 100%;
+  }
+
   .company-source-header,
   .company-source-panels {
     padding-right: 0.8rem;
@@ -409,21 +398,12 @@
     justify-content: space-between;
   }
 
-  .company-channel-selector select {
-    min-width: 7.5rem;
-  }
-
   .company-source-header-actions {
     width: 100%;
   }
 
   .company-source-header-actions > :last-child {
     margin-left: auto;
-  }
-
-  .company-source-meta {
-    margin-left: 2.45rem;
-    font-size: 0.76rem;
   }
 
   .company-source-panel .source-facts {

@@ -8,15 +8,12 @@ import styles from './settings.module.css';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '设置' };
-
+/** 设置保存成功后对后续同步生效，页面只编辑非敏感运行开关。 */
 export default async function SettingsPage(): Promise<ReactElement> {
   const container = await getWebContainer();
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader
-        title="设置"
-        description="管理影响整个系统的非敏感运行开关。修改后请点击“保存设置”，保存成功后对后续同步生效。"
-      />
+      <PageHeader title="设置" />
       <section
         className={[styles.settingsPanel, 'panel'].join(' ')}
         aria-labelledby="settings-title"

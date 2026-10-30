@@ -3,6 +3,7 @@
 import type { WebSource, WebSourceChannel } from '@jobhunter/application/contracts';
 import { useMemo, useState, type ReactElement } from 'react';
 import { CompanyLogo } from '../components/company-logo.js';
+import { SelectField } from '../components/forms/select-field.js';
 import {
   coverageLabels,
   labelStatus,
@@ -68,15 +69,15 @@ function SourcePanel({
     >
       <header className={styles['company-source-panel-header']}>
         <div>
-          <p className={styles['source-channel-kicker']}>{label}渠道</p>
-          <h3>
-            {source.effectiveEnabled
-              ? '当前同步已启用'
-              : source.enabled
-                ? '当前同步渠道未选中'
-                : '当前来源已停用'}
-          </h3>
-          <p className={styles['source-technical-name']}>{source.slug}</p>
+          <a
+            className={styles['source-official-link']}
+            href={source.officialUrl}
+            title={source.officialUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {source.officialUrl}
+          </a>
         </div>
         <div className={styles['source-badges']}>
           <span className={classNames('status', styles[`health-${source.healthStatus}`])}>
@@ -172,11 +173,6 @@ function CompanyOverview({
       className={classNames(styles['company-source-view'], styles['company-source-overview'])}
       aria-label={`${companyName}全部渠道总览`}
     >
-      <div className={styles['company-overview-intro']}>
-        <p className={styles['source-channel-kicker']}>全部渠道</p>
-        <h3>{channels.map((channel) => channelLabels[channel.channel]).join('、')}渠道</h3>
-        <p>选择具体渠道可查看同步运行、统计和计划设置。</p>
-      </div>
       <dl className={styles['company-overview-metrics']}>
         <div>
           <dt>接入渠道</dt>
@@ -263,9 +259,6 @@ export function CompanySourceCard({
               <h2>{companyName}</h2>
             )}
           </div>
-          <p className={styles['company-source-meta']}>
-            {channels.length} 个逻辑渠道 · {sources.length} 个物理来源
-          </p>
         </div>
         <div
           className={classNames(
@@ -281,20 +274,24 @@ export function CompanySourceCard({
         <div className={styles['company-source-controls']} data-company-source-controls>
           <label className={styles['company-channel-selector']} data-company-channel-selector>
             <span>招聘渠道</span>
-            <select
-              aria-label={`${companyName}招聘渠道`}
+            <SelectField
+              name={`source-channel-${channels[0]?.id ?? companyName}`}
+              label={`${companyName}招聘渠道`}
               value={selected}
-              onChange={(event) => {
-                setSelected(event.target.value as SelectedChannel);
+              onValueChange={(value) => {
+                // 1、只接受当前卡片提供的渠道，切换时继续复用统计与同步操作。
+                if (value === 'all' || channels.some((channel) => channel.channel === value)) {
+                  setSelected(value as SelectedChannel);
+                }
               }}
-            >
-              <option value="all">全部</option>
-              {channels.map((channel) => (
-                <option value={channel.channel} key={channel.id}>
-                  {channelLabels[channel.channel]}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: 'all', label: '全部' },
+                ...channels.map((channel) => ({
+                  value: channel.channel,
+                  label: channelLabels[channel.channel],
+                })),
+              ]}
+            />
           </label>
           <div
             className={styles['company-source-header-actions']}

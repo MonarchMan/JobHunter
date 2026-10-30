@@ -9,7 +9,7 @@ import { ResearchWorkbench, type ResearchTaskView } from './research-workbench.j
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '网友面经研究' };
-
+/** 交接材料不包含简历或项目目录，外部 Agent 返回符合 Schema 的公开来源研究包。 */
 export default async function ResearchDetailPage({
   params,
 }: Readonly<{ params: Promise<{ readonly id: string }> }>): Promise<ReactElement> {
@@ -29,10 +29,7 @@ export default async function ResearchDetailPage({
       : null;
     return (
       <main id="main-content" tabIndex={-1}>
-        <PageHeader
-          title={detail.request.brief.targetRoles.join(' / ')}
-          description="交接材料不包含你的简历或项目目录；外部 Agent 只需返回符合 Schema 的公开来源研究包。"
-        >
+        <PageHeader title={detail.request.brief.targetRoles.join(' / ')}>
           <a className="button-secondary" href="/interview/research">
             返回研究列表
           </a>

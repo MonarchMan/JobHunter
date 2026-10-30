@@ -13,12 +13,17 @@
 }
 
 .tableScroll {
+  /* 表格自然撑高，避免嵌套纵向滚动与空滚动条槽干扰页面浏览。 */
+  height: auto;
+  max-height: none;
   overflow-x: auto;
+  overflow-y: hidden;
+  /* 横向滚动条不应遮挡最后一行内容或制造纵向溢出。 */
+  padding-bottom: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  scrollbar-gutter: stable;
 }
 
 .tableScroll table {

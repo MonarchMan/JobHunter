@@ -4,12 +4,17 @@
 }
 
 .scroll {
+  /* 分页控制内容长度；纵向随页面滚动，容器只承担横向溢出。 */
+  height: auto;
+  max-height: none;
   overflow-x: auto;
+  overflow-y: hidden;
+  /* 为底行控件与横向滚动条留出空间，避免产生几像素的纵向溢出。 */
+  padding-bottom: 1.25rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  scrollbar-gutter: stable;
 }
 
 .scroll table {

@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: '招聘来源' };
 interface SourcesPageProperties {
   readonly searchParams: Promise<SearchParameterSource>;
 }
-
+/** 来源操作只创建后台任务，页面请求不执行采集或健康检查。 */
 export default async function SourcesPage({
   searchParams,
 }: SourcesPageProperties): Promise<ReactElement> {
@@ -53,10 +53,7 @@ export default async function SourcesPage({
       : [];
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader
-        title="招聘来源"
-        description="按来源类型管理职位同步。操作仅创建后台任务，页面请求不会执行采集或健康检查。"
-      />
+      <PageHeader title="招聘来源" />
       <div className={styles.toolbar} data-source-toolbar>
         <SourceTabs active={channel} officialCount={companies.length} />
         {channel === 'official' && sourceChannels.length > 0 ? (
