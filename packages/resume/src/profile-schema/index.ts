@@ -39,6 +39,17 @@ const dated = {
 /** 简历画像 Agent 的严格输出 Schema，防止模型返回无法落库的自由文本。 */
 export const resumeProfileAgentOutputSchema = z
   .object({
+    // 基础信息沿用事实证据结构；缺省为空，既有输出无需改写历史画像。
+    basicInfo: z
+      .object({
+        name: evidenceFactSchema(text).nullable(),
+        phone: evidenceFactSchema(text).nullable(),
+        email: evidenceFactSchema(text).nullable(),
+        location: evidenceFactSchema(text).nullable(),
+        website: evidenceFactSchema(text).nullable(),
+      })
+      .strict()
+      .default({ name: null, phone: null, email: null, location: null, website: null }),
     targetRoles: z.array(evidenceFactSchema(text)),
     education: z.array(
       z
@@ -137,6 +148,13 @@ export function toCandidateProfile(
 ): CandidateProfileData {
   // 1、丢弃模型元数据，只将已验证的事实映射为领域画像，并保留用户偏好。
   return parseCandidateProfile({
+    basicInfo: {
+      name: output.basicInfo.name?.value ?? null,
+      phone: output.basicInfo.phone?.value ?? null,
+      email: output.basicInfo.email?.value ?? null,
+      location: output.basicInfo.location?.value ?? null,
+      website: output.basicInfo.website?.value ?? null,
+    },
     targetRoles: output.targetRoles.map((fact) => fact.value),
     preferences,
     education: output.education.map((item) => ({

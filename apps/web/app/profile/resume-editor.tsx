@@ -606,8 +606,14 @@ function PreviewDialog({
           <div>
             <h2 id="resume-preview-title">简历预览</h2>
           </div>
-          <button type="button" className="button-muted" onClick={onClose}>
-            关闭预览
+          <button
+            type="button"
+            className="button-close"
+            onClick={onClose}
+            aria-label="关闭预览"
+            title="关闭预览"
+          >
+            <Icon name="close" />
           </button>
         </header>
         <div className={styles['resume-preview-scroll']} data-resume-preview-scroll>

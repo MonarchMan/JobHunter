@@ -201,14 +201,16 @@ function environmentNonNegativeNumber(value: string | undefined, name: string): 
   const text = nonEmpty(value);
   if (text === undefined) return undefined;
   const parsed = Number(text);
-  if (!Number.isFinite(parsed) || parsed < 0) throw new TypeError(`${name} must be a non-negative number.`);
+  if (!Number.isFinite(parsed) || parsed < 0)
+    throw new TypeError(`${name} must be a non-negative number.`);
   return parsed;
 }
 
 /** 解析支持的成本货币；价格单位必须与该货币一致，避免混算。 */
 function environmentCostCurrency(value: string | undefined): 'USD' | 'CNY' {
   const currency = nonEmpty(value)?.toUpperCase() ?? 'USD';
-  if (currency !== 'USD' && currency !== 'CNY') throw new TypeError('MODEL_COST_CURRENCY must be USD or CNY.');
+  if (currency !== 'USD' && currency !== 'CNY')
+    throw new TypeError('MODEL_COST_CURRENCY must be USD or CNY.');
   return currency;
 }
 
@@ -274,23 +276,23 @@ export function resolveBootstrapConfig(input: {
   const environment = input.environment ?? process.env;
   const dataRootChoice = choose(
     nonEmpty(input.cli?.dataRoot),
-    nonEmpty(environment.JOBHUNTER_DATA_ROOT),
+    nonEmpty(environment.DATA_ROOT),
     './var',
   );
   const dataRoot = { ...dataRootChoice, value: resolve(cwd, dataRootChoice.value) };
   const mailboxConfigPathChoice = choose(
     undefined,
-    nonEmpty(environment.JOBHUNTER_MAILBOX_CONFIG_PATH),
+    nonEmpty(environment.MAILBOX_CONFIG_PATH),
     resolve(dataRoot.value, 'mail', 'mailboxes.json'),
   );
   const mailboxCredentialPathChoice = choose(
     undefined,
-    nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_PATH),
+    nonEmpty(environment.MAILBOX_CREDENTIAL_PATH),
     resolve(dataRoot.value, 'mail', 'credentials.enc.json'),
   );
   const mailboxCredentialKeyPathChoice = choose(
     undefined,
-    nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_KEY_PATH),
+    nonEmpty(environment.MAILBOX_CREDENTIAL_KEY_PATH),
     resolve(dataRoot.value, 'mail', 'credentials.key'),
   );
   return {
@@ -318,11 +320,7 @@ export function resolveAppConfig(input: {
   readonly environment?: Readonly<Record<string, string | undefined>>;
 }): AppConfig {
   const environment = input.environment ?? process.env;
-  const logLevel = choose(
-    nonEmpty(input.cli?.logLevel),
-    nonEmpty(environment.JOBHUNTER_LOG_LEVEL),
-    'info',
-  );
+  const logLevel = choose(nonEmpty(input.cli?.logLevel), nonEmpty(environment.LOG_LEVEL), 'info');
   const parsedLogLevel = z.enum(['debug', 'info', 'warn', 'error']).parse(logLevel.value);
   const modelApiKey = choose(nonEmpty(input.cli?.modelApiKey), nonEmpty(environment.API_KEY), null);
   const modelBaseUrl = choose(
@@ -343,31 +341,31 @@ export function resolveAppConfig(input: {
   );
   const outputCostPerMillionUsd = choose(
     undefined,
-    environmentNonNegativeNumber(environment.MODEL_OUTPUT_COST_PER_MILLION_USD, 'output model price'),
+    environmentNonNegativeNumber(
+      environment.MODEL_OUTPUT_COST_PER_MILLION_USD,
+      'output model price',
+    ),
     resolveDefaultModelPricing(modelName.value)?.[1] ?? null,
   );
   const inferredProvider = inferModelProvider(modelBaseUrl.value);
   const pollIntervalMs = choose(
     input.cli?.workerPollIntervalMs,
-    environmentInteger(environment.JOBHUNTER_WORKER_POLL_INTERVAL_MS, 'poll interval'),
+    environmentInteger(environment.WORKER_POLL_INTERVAL_MS, 'poll interval'),
     1_000,
   );
   const maxConcurrentNetworkTasks = choose(
     input.cli?.maxConcurrentNetworkTasks,
-    environmentInteger(environment.JOBHUNTER_MAX_CONCURRENT_NETWORK_TASKS, 'network concurrency'),
+    environmentInteger(environment.MAX_CONCURRENT_NETWORK_TASKS, 'network concurrency'),
     4,
   );
   const taskTypeConcurrency = choose(
     input.cli?.taskTypeConcurrency,
-    environmentConcurrency(environment.JOBHUNTER_TASK_TYPE_CONCURRENCY),
+    environmentConcurrency(environment.TASK_TYPE_CONCURRENCY),
     defaultTaskTypeConcurrency,
   );
   const requestIntervalMs = choose(
     input.cli?.platformRequestIntervalMs,
-    environmentInteger(
-      environment.JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS,
-      'platform request interval',
-    ),
+    environmentInteger(environment.PLATFORM_REQUEST_INTERVAL_MS, 'platform request interval'),
     0,
   );
   const requestIntervalMsByProviderRecord = Object.fromEntries(
@@ -381,7 +379,7 @@ export function resolveAppConfig(input: {
     )
       .map(([provider, suffix]) => {
         const interval = environmentInteger(
-          environment[`JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_${suffix}`],
+          environment[`PLATFORM_REQUEST_INTERVAL_MS_${suffix}`],
           `${provider} platform request interval`,
         );
         return interval === undefined
@@ -398,35 +396,23 @@ export function resolveAppConfig(input: {
   };
   const mailWebBaseUrl = choose(
     undefined,
-    nonEmpty(environment.JOBHUNTER_WEB_BASE_URL),
+    nonEmpty(environment.WEB_BASE_URL),
     'http://127.0.0.1:3210',
   );
   const mailboxCredentialMasterKey = choose(
     undefined,
-    nonEmpty(environment.JOBHUNTER_MAILBOX_CREDENTIAL_KEY),
+    nonEmpty(environment.MAILBOX_CREDENTIAL_KEY),
     null,
   );
-  const gmailClientId = choose(undefined, nonEmpty(environment.JOBHUNTER_GMAIL_CLIENT_ID), null);
-  const gmailClientSecret = choose(
-    undefined,
-    nonEmpty(environment.JOBHUNTER_GMAIL_CLIENT_SECRET),
-    null,
-  );
-  const microsoftClientId = choose(
-    undefined,
-    nonEmpty(environment.JOBHUNTER_MICROSOFT_CLIENT_ID),
-    null,
-  );
+  const gmailClientId = choose(undefined, nonEmpty(environment.GMAIL_CLIENT_ID), null);
+  const gmailClientSecret = choose(undefined, nonEmpty(environment.GMAIL_CLIENT_SECRET), null);
+  const microsoftClientId = choose(undefined, nonEmpty(environment.MICROSOFT_CLIENT_ID), null);
   const microsoftClientSecret = choose(
     undefined,
-    nonEmpty(environment.JOBHUNTER_MICROSOFT_CLIENT_SECRET),
+    nonEmpty(environment.MICROSOFT_CLIENT_SECRET),
     null,
   );
-  const microsoftTenant = choose(
-    undefined,
-    nonEmpty(environment.JOBHUNTER_MICROSOFT_TENANT),
-    'common',
-  );
+  const microsoftTenant = choose(undefined, nonEmpty(environment.MICROSOFT_TENANT), 'common');
   return {
     bootstrap: input.bootstrap,
     logLevel: { ...logLevel, value: parsedLogLevel },
@@ -464,9 +450,9 @@ export function resolveAppConfig(input: {
       classification: {
         modelMode: choose(
           undefined,
-          nonEmpty(environment.JOBHUNTER_MAIL_MODEL_MODE) === undefined
+          nonEmpty(environment.MAIL_MODEL_MODE) === undefined
             ? undefined
-            : z.enum(['off', 'configured']).parse(environment.JOBHUNTER_MAIL_MODEL_MODE?.trim()),
+            : z.enum(['off', 'configured']).parse(environment.MAIL_MODEL_MODE?.trim()),
           'off',
         ),
       },

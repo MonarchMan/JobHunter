@@ -13,7 +13,7 @@
 3. 先用版本化确定性规则筛选招聘流程候选，稳定负例不调用模型；候选邮件由用户配置的无工具 Agent 理解正文并提取字段。
 4. 不归档完整邮箱。无关邮件和待确认邮件只保存最小消息引用与处理状态；已接受邮件保存申请事件，不保存独立分类版本或中间分类结果。
 5. `JobApplication` 与 `ApplicationEvent` 拥有独立生命周期，可选择性引用正式 `Job`，但不修改职位事实或职位状态。
-6. 邮箱设置保存在本地非敏感配置，增量游标和健康状态保存在数据目录运行状态文件；SQLite 不保存邮箱连接或游标。配置文件默认位于 `<dataRoot>/mail/mailboxes.json`，可由工作区 `.env` 中的 `JOBHUNTER_MAILBOX_CONFIG_PATH` 指定绝对或相对工作区路径。
+6. 邮箱设置保存在本地非敏感配置，增量游标和健康状态保存在数据目录运行状态文件；SQLite 不保存邮箱连接或游标。配置文件默认位于 `<dataRoot>/mail/mailboxes.json`，可由工作区 `.env` 中的 `MAILBOX_CONFIG_PATH` 指定绝对或相对工作区路径。
 7. 首版采用本地增量轮询，不建设需要公网回调的推送基础设施，也不提供分类字段或既有事件的人工更正。
 8. 首版同时交付 `gmail`、`microsoft-graph` 和 `imap` 三个连接器；每个连接器独立经过授权、首次回溯、增量、游标恢复、断开和重新授权门禁，三者全部 supported 后才算 M1 完整交付。
 
@@ -89,9 +89,9 @@ interface MailboxAuthorizationResult {
 }
 ```
 
-Token、刷新令牌和应用专用密码由连接器侧的 `CredentialVault` 使用 AES-256-GCM 写入独立加密文件，不能作为普通应用服务返回值、Task payload 或 Repository 参数。每条记录使用独立随机 IV，并将版本和 `credentialRef` 作为 AAD；密钥来自独立密钥文件或 `JOBHUNTER_MAILBOX_CREDENTIAL_KEY`。设置页允许用户主动点击按钮，通过无缓存的受控接口临时读取 IMAP `password` 并以密码模式展示；OAuth access/refresh token 永不回传。OAuth 回调代码只允许在本机授权流程中瞬时存在，交换完成后立即丢弃且不得记录。
+Token、刷新令牌和应用专用密码由连接器侧的 `CredentialVault` 使用 AES-256-GCM 写入独立加密文件，不能作为普通应用服务返回值、Task payload 或 Repository 参数。每条记录使用独立随机 IV，并将版本和 `credentialRef` 作为 AAD；密钥来自独立密钥文件或 `MAILBOX_CREDENTIAL_KEY`。设置页允许用户主动点击按钮，通过无缓存的受控接口临时读取 IMAP `password` 并以密码模式展示；OAuth access/refresh token 永不回传。OAuth 回调代码只允许在本机授权流程中瞬时存在，交换完成后立即丢弃且不得记录。
 
-默认路径为 `<dataRoot>/mail/credentials.enc.json` 和 `<dataRoot>/mail/credentials.key`，可分别由 `JOBHUNTER_MAILBOX_CREDENTIAL_PATH`、`JOBHUNTER_MAILBOX_CREDENTIAL_KEY_PATH` 覆盖。Windows Credential Manager 仅作为旧版本一次性迁移来源：按已有配置引用读取，写入新文件并解密校验后撤销旧副本；运行时不再依赖平台专有凭据库。首版由 Web 独占凭据写操作，Worker 接入时只读；未来若 Worker 需要刷新令牌回写，必须先增加跨进程写协调。
+默认路径为 `<dataRoot>/mail/credentials.enc.json` 和 `<dataRoot>/mail/credentials.key`，可分别由 `MAILBOX_CREDENTIAL_PATH`、`MAILBOX_CREDENTIAL_KEY_PATH` 覆盖。Windows Credential Manager 仅作为旧版本一次性迁移来源：按已有配置引用读取，写入新文件并解密校验后撤销旧副本；运行时不再依赖平台专有凭据库。首版由 Web 独占凭据写操作，Worker 接入时只读；未来若 Worker 需要刷新令牌回写，必须先增加跨进程写协调。
 
 ### 3.3 读取端口
 
@@ -273,7 +273,7 @@ Agent key 初始版本为 `recruitment-mail.classify@v1`；030 日程规格当�
 
 邮件分类使用独立模型客户端，单次请求上限 120 秒、Agent 总时限 180 秒，最多一次结构修复；共享 8,000 输出 Token 预算，适配包含推理 Token 的模型用量。单邮件任务租约为 4 分钟，覆盖正文读取与分类时限；到达时限时保留待确认引用，不丢弃候选。模型未配置时不发起请求。
 
-运行配置 `mail.classification.modelMode` 首版只允许 `off` 或 `configured`，默认 `off`。使用环境变量 `JOBHUNTER_MAIL_MODEL_MODE` 显式开启；`configured` 表示用户同意将清洗后的招聘候选正文发送给所配置模型提供商。关闭时不影响同步和规则识别，候选进入待确认。
+运行配置 `mail.classification.modelMode` 首版只允许 `off` 或 `configured`，默认 `off`。使用环境变量 `MAIL_MODEL_MODE` 显式开启；`configured` 表示用户同意将清洗后的招聘候选正文发送给所配置模型提供商。关闭时不影响同步和规则识别，候选进入待确认。
 
 ### 6.3 决策与人工确认
 

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 export function browserFixtureIdentity(environment: NodeJS.ProcessEnv): string | null {
   // 1、随机身份、运行模式和临时目录三者同时满足才返回非敏感标识。
   const id = environment.JOBHUNTER_BROWSER_TEST_RUN_ID;
-  const root = environment.JOBHUNTER_DATA_ROOT;
+  const root = environment.DATA_ROOT;
   if (
     !id ||
     !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id) ||

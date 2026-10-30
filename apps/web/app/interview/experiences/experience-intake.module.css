@@ -352,10 +352,6 @@
     align-items: stretch;
   }
 
-  .templateDialog > header > button {
-    width: 100%;
-  }
-
   .archiveList a {
     grid-template-columns: 2.2rem minmax(0, 1fr);
   }

@@ -3,7 +3,8 @@
 > 状态：Implemented
 > 显式覆盖：ENG-001, ENG-002, ENG-003, ENG-004, ENG-005, ENG-006, ENG-007, ENG-008, ENG-009, ENG-010, ENG-011, ENG-Q01, ENG-Q02, ENG-Q03, ENG-Q04, ENG-Q05
 
-- [x] **ENG-T001** 创建根 package、pnpm workspace、Node 版本检查和锁文件。（ENG-001）
+- [x] **ENG-T001** 创建根 package、pnpm workspace、Node 版本声明和锁文件。（ENG-001）
+  - 2026-10-29：Node 支持范围放宽为 >=24，移除安装版本阻断，doctor 与文档同步最低版本并覆盖 Node 26 回归。
   - 2026-10-13：将 pnpm 约束由固定补丁版本调整为 `>=11.0.0`，允许兼容的新版本直接执行 workspace 命令。
   - 2026-10-14：`.node-version` 改为本地工具配置，不再提交版本库；项目支持范围继续以 `package.json#engines` 为准。
 - [x] **ENG-T002** 创建严格 TypeScript 基础配置、包模板和 project references。（ENG-002,008）

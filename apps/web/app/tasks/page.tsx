@@ -49,11 +49,8 @@ function formatCost(
   const rate = Number(process.env.MODEL_USD_TO_CNY_RATE ?? '7.2');
   const source = sourceCurrency === 'CNY' ? 'CNY' : 'USD';
   const amount = micros / 1_000_000;
-  const converted = source === displayCurrency
-    ? amount
-    : displayCurrency === 'CNY'
-      ? amount * rate
-      : amount / rate;
+  const converted =
+    source === displayCurrency ? amount : displayCurrency === 'CNY' ? amount * rate : amount / rate;
   return `${converted.toFixed(6)} ${displayCurrency}`;
 }
 
@@ -136,7 +133,7 @@ export default async function TasksPage({
             ]}
           />
         </label>
-        <button type="submit">应用筛选</button>
+        <button type="submit">搜索</button>
         <a className="button-secondary" href="/tasks">
           清除
         </a>
@@ -314,7 +311,7 @@ export default async function TasksPage({
                         ? '未定价'
                         : run.estimatedCostMicros === null
                           ? '—'
-                        : formatCost(run.estimatedCostMicros, run.costCurrency, displayCurrency)}
+                          : formatCost(run.estimatedCostMicros, run.costCurrency, displayCurrency)}
                     </td>
                     <td>{time(run.startedAt)}</td>
                   </tr>

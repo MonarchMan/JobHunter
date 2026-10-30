@@ -328,7 +328,7 @@ JobHunter/
 
 | 能力         | 技术选择                                                        |
 | ------------ | --------------------------------------------------------------- |
-| 运行时与语言 | Node.js 24 LTS、TypeScript strict                               |
+| 运行时与语言 | Node.js >=24、TypeScript strict                               |
 | Workspace    | pnpm workspace                                                  |
 | Schema       | Zod                                                             |
 | SQLite       | better-sqlite3、Drizzle ORM                                     |
@@ -889,7 +889,7 @@ CLI、Web 与 Worker 必须复用应用层唯一的运行时配置加载器，�
 
 模型等进程级敏感配置通过环境变量或不纳入版本控制的本地 `.env` 提供，不得写入 SQLite 普通配置表、日志、错误消息或版本库。邮箱凭据默认不使用 `.env`，必须进入跨平台 AES-GCM 加密文件；本地配置和普通备份只保存邮箱设置及 `credentialRef`，恢复后引用不可用时重新授权。
 
-密文默认位于 `<dataRoot>/mail/credentials.enc.json`，生成的密钥位于 `<dataRoot>/mail/credentials.key`，两者路径可通过 `JOBHUNTER_MAILBOX_CREDENTIAL_PATH`、`JOBHUNTER_MAILBOX_CREDENTIAL_KEY_PATH` 覆盖；也可由 `JOBHUNTER_MAILBOX_CREDENTIAL_KEY` 提供主密钥而不生成密钥文件。默认密钥与密文同目录，不能防护整个数据目录泄露。普通应用备份不包含密文与密钥，跨机器迁移需分别安全传输。首版只有 Web 写入凭据；Worker 接入后只读，多进程写入需另加协调。
+密文默认位于 `<dataRoot>/mail/credentials.enc.json`，生成的密钥位于 `<dataRoot>/mail/credentials.key`，两者路径可通过 `MAILBOX_CREDENTIAL_PATH`、`MAILBOX_CREDENTIAL_KEY_PATH` 覆盖；也可由 `MAILBOX_CREDENTIAL_KEY` 提供主密钥而不生成密钥文件。默认密钥与密文同目录，不能防护整个数据目录泄露。普通应用备份不包含密文与密钥，跨机器迁移需分别安全传输。首版只有 Web 写入凭据；Worker 接入后只读，多进程写入需另加协调。
 
 ## 9. 运维与质量保障
 

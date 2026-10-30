@@ -74,7 +74,11 @@ describe('workspace dotenv configuration', () => {
     const bootstrap = resolveBootstrapConfig({ environment: {} });
     const config = resolveAppConfig({
       bootstrap,
-      environment: { MODEL: model, BASE_URL: 'https://models.example.test/v1', API_KEY: 'secret-value' },
+      environment: {
+        MODEL: model,
+        BASE_URL: 'https://models.example.test/v1',
+        API_KEY: 'secret-value',
+      },
     });
     expect(config.model.inputCostPerMillionUsd.value).toBe(inputPrice);
     expect(config.model.outputCostPerMillionUsd.value).toBe(outputPrice);
@@ -87,11 +91,11 @@ describe('workspace dotenv configuration', () => {
       source: 'default',
     });
     expect(
-      resolveAppConfig({ bootstrap, environment: { JOBHUNTER_MAIL_MODEL_MODE: 'configured' } }).mail
+      resolveAppConfig({ bootstrap, environment: { MAIL_MODEL_MODE: 'configured' } }).mail
         .classification.modelMode,
     ).toEqual({ value: 'configured', source: 'environment' });
     expect(() =>
-      resolveAppConfig({ bootstrap, environment: { JOBHUNTER_MAIL_MODEL_MODE: 'invalid' } }),
+      resolveAppConfig({ bootstrap, environment: { MAIL_MODEL_MODE: 'invalid' } }),
     ).toThrow();
   });
 
@@ -101,10 +105,10 @@ describe('workspace dotenv configuration', () => {
       bootstrap,
       cli: { logLevel: 'debug' },
       environment: {
-        JOBHUNTER_LOG_LEVEL: 'warn',
-        JOBHUNTER_WORKER_POLL_INTERVAL_MS: '2500',
-        JOBHUNTER_MAX_CONCURRENT_NETWORK_TASKS: '7',
-        JOBHUNTER_TASK_TYPE_CONCURRENCY: '{"source.sync":2}',
+        LOG_LEVEL: 'warn',
+        WORKER_POLL_INTERVAL_MS: '2500',
+        MAX_CONCURRENT_NETWORK_TASKS: '7',
+        TASK_TYPE_CONCURRENCY: '{"source.sync":2}',
         BASE_URL: 'https://models.example.test/v1',
         MODEL: 'test-model',
         API_KEY: 'secret-value',
@@ -130,8 +134,8 @@ describe('workspace dotenv configuration', () => {
       resolveAppConfig({
         bootstrap,
         environment: {
-          JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_BOSS: '0',
-          JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_LIEPIN: '1000',
+          PLATFORM_REQUEST_INTERVAL_MS_BOSS: '0',
+          PLATFORM_REQUEST_INTERVAL_MS_LIEPIN: '1000',
         },
       }).platforms.requestIntervalMsByProvider,
     ).toEqual({ value: { boss: 0, liepin: 1000 }, source: 'environment' });
@@ -142,7 +146,7 @@ describe('workspace dotenv configuration', () => {
     expect(() =>
       resolveAppConfig({
         bootstrap,
-        environment: { JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS_LIEPIN: value },
+        environment: { PLATFORM_REQUEST_INTERVAL_MS_LIEPIN: value },
       }),
     ).toThrow();
   });
@@ -173,7 +177,7 @@ describe('workspace dotenv configuration', () => {
   it('keeps mailbox storage paths configurable through environment', () => {
     const bootstrap = resolveBootstrapConfig({
       cwd: 'C:/workspace',
-      environment: { JOBHUNTER_MAILBOX_CONFIG_PATH: './private/mailboxes.json' },
+      environment: { MAILBOX_CONFIG_PATH: './private/mailboxes.json' },
     });
     expect(bootstrap.mailboxConfigPath).toEqual({
       value: resolve('C:/workspace', 'private/mailboxes.json'),
@@ -188,9 +192,9 @@ describe('workspace dotenv configuration', () => {
       await writeFile(
         join(workspaceRoot, '.env'),
         [
-          'JOBHUNTER_DATA_ROOT=./runtime-data',
-          'JOBHUNTER_LOG_LEVEL=error',
-          'JOBHUNTER_WORKER_POLL_INTERVAL_MS=2000',
+          'DATA_ROOT=./runtime-data',
+          'LOG_LEVEL=error',
+          'WORKER_POLL_INTERVAL_MS=2000',
           'BASE_URL=https://workspace-model.example.test/v1',
           'MODEL=workspace-model',
           'API_KEY=workspace-secret',
@@ -224,13 +228,13 @@ describe('workspace dotenv configuration', () => {
     const bootstrap = resolveBootstrapConfig({
       cwd: 'C:/workspace',
       environment: {
-        JOBHUNTER_MAILBOX_CREDENTIAL_PATH: './private/credentials.enc.json',
-        JOBHUNTER_MAILBOX_CREDENTIAL_KEY_PATH: './private/credentials.key',
+        MAILBOX_CREDENTIAL_PATH: './private/credentials.enc.json',
+        MAILBOX_CREDENTIAL_KEY_PATH: './private/credentials.key',
       },
     });
     const config = resolveAppConfig({
       bootstrap,
-      environment: { JOBHUNTER_MAILBOX_CREDENTIAL_KEY: 'credential-master-key' },
+      environment: { MAILBOX_CREDENTIAL_KEY: 'credential-master-key' },
     });
     expect(config.mail.credentialMasterKey.value?.reveal()).toBe('credential-master-key');
     expect(JSON.stringify(config.mail.credentialMasterKey)).not.toContain('credential-master-key');
@@ -241,7 +245,7 @@ describe('workspace dotenv configuration', () => {
     const config = resolveAppConfig({
       bootstrap,
       environment: {
-        JOBHUNTER_TASK_TYPE_CONCURRENCY: JSON.stringify({
+        TASK_TYPE_CONCURRENCY: JSON.stringify({
           'source.sync': 2,
           'match.advise': 4,
         }),
@@ -287,12 +291,12 @@ describe('workspace dotenv configuration', () => {
     const config = resolveAppConfig({
       bootstrap,
       environment: {
-        JOBHUNTER_WEB_BASE_URL: 'http://127.0.0.1:4321/',
-        JOBHUNTER_GMAIL_CLIENT_ID: 'gmail-client',
-        JOBHUNTER_GMAIL_CLIENT_SECRET: 'gmail-secret',
-        JOBHUNTER_MICROSOFT_CLIENT_ID: 'microsoft-client',
-        JOBHUNTER_MICROSOFT_CLIENT_SECRET: 'microsoft-secret',
-        JOBHUNTER_MICROSOFT_TENANT: 'organizations',
+        WEB_BASE_URL: 'http://127.0.0.1:4321/',
+        GMAIL_CLIENT_ID: 'gmail-client',
+        GMAIL_CLIENT_SECRET: 'gmail-secret',
+        MICROSOFT_CLIENT_ID: 'microsoft-client',
+        MICROSOFT_CLIENT_SECRET: 'microsoft-secret',
+        MICROSOFT_TENANT: 'organizations',
       },
     });
 

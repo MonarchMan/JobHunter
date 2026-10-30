@@ -205,8 +205,15 @@ function TemplatePreviewDialog({
           <h2 id="template-preview-title">{templateName} · 导出效果预览</h2>
           <p id="template-preview-description">与 HTML、PDF 使用相同模板，编辑标记已隐藏。</p>
         </div>
-        <button type="button" className="button-muted" onClick={onClose} autoFocus>
-          关闭预览
+        <button
+          type="button"
+          className="button-close"
+          onClick={onClose}
+          autoFocus
+          aria-label="关闭预览"
+          title="关闭预览"
+        >
+          <Icon name="close" />
         </button>
       </header>
       <div className={styles.previewViewport}>

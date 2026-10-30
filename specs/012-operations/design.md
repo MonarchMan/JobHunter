@@ -14,9 +14,9 @@ database_maintenance 单例保存检查摘要与 owner_pid。所有标准连接�
 
 `packages/application/config` 定义 BootstrapConfig、AppConfig 和唯一的运行时配置加载器。CLI、Web 与 Worker 显式传入工作区根目录；加载器仅读取 `<workspaceRoot>/.env`，以进程环境覆盖同名值，再应用 CLI 临时参数和内置默认值。先解析 dataRoot 与邮箱数据路径，再校验普通参数，不再读取 JSON 运行配置。配置结果不受进程当前工作目录影响。
 
-`.env.example` 是唯一运行配置模板；`init` 仅初始化运行数据。项目参数使用 `JOBHUNTER_` 前缀，模型连接统一使用 `BASE_URL`、`MODEL`、`API_KEY`。`BASE_URL` 默认 `https://api.openai.com/v1`，根据主机标签或路径段中的独立 `anthropic` 标识推断协议。秘密字段使用 `SecretString` 包装，禁止隐式回显。
+`.env.example` 是唯一运行配置模板；`init` 仅初始化运行数据。模板中的用户配置参数不使用项目前缀，模型连接统一使用 `BASE_URL`、`MODEL`、`API_KEY`。`BASE_URL` 默认 `https://api.openai.com/v1`，根据主机标签或路径段中的独立 `anthropic` 标识推断协议。秘密字段使用 `SecretString` 包装，禁止隐式回显。
 
-Worker 参数使用 `JOBHUNTER_WORKER_POLL_INTERVAL_MS`、`JOBHUNTER_MAX_CONCURRENT_NETWORK_TASKS`、`JOBHUNTER_TASK_TYPE_CONCURRENCY`（JSON 对象字符串）。平台统一间隔使用 `JOBHUNTER_PLATFORM_REQUEST_INTERVAL_MS`，追加 `_BOSS`、`_ZHILIAN`、`_51JOB`、`_LIEPIN` 分别覆盖对应平台。邮箱账号、同步游标和加密凭据属于运行数据，继续独立存储。
+Worker 参数使用 `WORKER_POLL_INTERVAL_MS`、`MAX_CONCURRENT_NETWORK_TASKS`、`TASK_TYPE_CONCURRENCY`（JSON 对象字符串）。平台统一间隔使用 `PLATFORM_REQUEST_INTERVAL_MS`，追加 `_BOSS`、`_ZHILIAN`、`_51JOB`、`_LIEPIN` 分别覆盖对应平台。邮箱账号、同步游标和加密凭据属于运行数据，继续独立存储。
 
 ## 日志
 

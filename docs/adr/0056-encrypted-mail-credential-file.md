@@ -11,7 +11,7 @@
 ## 决策
 
 1. `mail/connectors` 实现 `WritableCredentialVault`，默认保存到 `<dataRoot>/mail/credentials.enc.json`。每条记录使用 AES-256-GCM、独立随机 12 字节 IV、认证标签以及包含版本和 `credentialRef` 的 AAD，防止密文篡改和记录调换；写入采用临时文件和原子替换。
-2. 默认生成独立 32 字节密钥到 `<dataRoot>/mail/credentials.key`。可用 `JOBHUNTER_MAILBOX_CREDENTIAL_KEY` 提供 32 字节 Base64 或 64 字符十六进制主密钥，此时不创建密钥文件。密文和密钥文件路径分别由 `JOBHUNTER_MAILBOX_CREDENTIAL_PATH`、`JOBHUNTER_MAILBOX_CREDENTIAL_KEY_PATH` 覆盖。
+2. 默认生成独立 32 字节密钥到 `<dataRoot>/mail/credentials.key`。可用 `MAILBOX_CREDENTIAL_KEY` 提供 32 字节 Base64 或 64 字符十六进制主密钥，此时不创建密钥文件。密文和密钥文件路径分别由 `MAILBOX_CREDENTIAL_PATH`、`MAILBOX_CREDENTIAL_KEY_PATH` 覆盖。
 3. 文件在 POSIX 系统以 `0600` 创建；Windows 依赖用户数据目录的 ACL。默认密钥与密文同处数据目录，因此该方案保护单独泄露的密文，不能抵御整个数据目录和密钥同时被读取。需要分离存储时使用外部主密钥或独立密钥文件路径。
 4. Web 是首版唯一凭据写入者；Worker 接入时使用同一配置只读。当前串行队列只保证单实例写入，多进程凭据写入及 Worker 令牌回写必须先引入跨进程协调。
 5. Windows 旧后端只用于一次性维护迁移，不在 Web 启动或读取时装配。按现有邮箱配置中的引用主动迁移，先写密文并重新读取校验，再撤销旧副本；失败保留旧凭据，不输出秘密，不扫描其他应用凭据，不改写邮箱配置及稳定引用。已有 `os:` 引用作为不透明兼容标识保留。

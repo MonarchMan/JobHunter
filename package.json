@@ -5,13 +5,12 @@
   "type": "module",
   "description": "Personal job discovery and matching agent",
   "engines": {
-    "node": ">=24 <25",
+    "node": ">=24",
     "pnpm": ">=11.0.0"
   },
   "scripts": {
     "boss": "tsx apps/cli/src/platform-main.ts",
     "platform": "tsx apps/cli/src/platform-main.ts",
-    "preinstall": "node scripts/check-node-version.mjs",
     "build": "tsc -b",
     "clean": "node scripts/clean.mjs",
     "clean:cache": "node scripts/clean.mjs --cache-only",

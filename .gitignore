@@ -31,3 +31,6 @@ test-results/
 
 # 脚本示例
 script.js
+
+# macOS 目录元数据
+.DS_Store

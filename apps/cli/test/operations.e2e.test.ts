@@ -14,14 +14,14 @@ describe('operations composition', () => {
     const bootstrap = resolveBootstrapConfig({
       cwd: container.path,
       cli: { dataRoot },
-      environment: { JOBHUNTER_DATA_ROOT: path.join(container.path, '环境目录') },
+      environment: { DATA_ROOT: path.join(container.path, '环境目录') },
     });
     const config = resolveAppConfig({
       bootstrap,
       cli: { logLevel: 'debug' },
       environment: {
-        JOBHUNTER_LOG_LEVEL: 'warn',
-        JOBHUNTER_WORKER_POLL_INTERVAL_MS: '2000',
+        LOG_LEVEL: 'warn',
+        WORKER_POLL_INTERVAL_MS: '2000',
         API_KEY: 'e2e-api-secret',
       },
     });

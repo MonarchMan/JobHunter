@@ -23,11 +23,11 @@ it('测试只接受夹具专属端口的 loopback 地址', () => {
 it('真实数据目录或生产服务即使继承标识也不能冒充隔离夹具', () => {
   const env = {
     JOBHUNTER_BROWSER_TEST_RUN_ID: id,
-    JOBHUNTER_DATA_ROOT: path.join(tmpdir(), 'jobhunter-web-browser-test'),
+    DATA_ROOT: path.join(tmpdir(), 'jobhunter-web-browser-test'),
   };
   expect(browserFixtureIdentity(env)).toBe(id);
   expect(browserFixtureIdentity({ ...env, NODE_ENV: 'production' })).toBeNull();
-  expect(browserFixtureIdentity({ ...env, JOBHUNTER_DATA_ROOT: path.resolve('var') })).toBeNull();
+  expect(browserFixtureIdentity({ ...env, DATA_ROOT: path.resolve('var') })).toBeNull();
   expect(browserFixtureIdentity({ ...env, JOBHUNTER_BROWSER_TEST_RUN_ID: 'invalid' })).toBeNull();
 });
 it('普通服务与旧夹具的只读探测均拒绝，正确身份才放行', () => {

@@ -30,9 +30,7 @@ export async function POST(
   if (provider === 'gmail') {
     const config = container.mailOAuth.gmail;
     if (!config) {
-      return badRequestResponse(
-        '尚未配置 Gmail OAuth 客户端，请先设置 JOBHUNTER_GMAIL_CLIENT_ID。',
-      );
+      return badRequestResponse('尚未配置 Gmail OAuth 客户端，请先设置 GMAIL_CLIENT_ID。');
     }
     authorizationUrl = buildGmailAuthorizationUrl(config, attempt.state, {
       codeChallenge: attempt.codeChallenge,
@@ -40,9 +38,7 @@ export async function POST(
   } else {
     const config = container.mailOAuth.microsoftGraph;
     if (!config) {
-      return badRequestResponse(
-        '尚未配置 Microsoft OAuth 客户端，请先设置 JOBHUNTER_MICROSOFT_CLIENT_ID。',
-      );
+      return badRequestResponse('尚未配置 Microsoft OAuth 客户端，请先设置 MICROSOFT_CLIENT_ID。');
     }
     authorizationUrl = buildMicrosoftGraphAuthorizationUrl(config, attempt.state, config.tenant, {
       codeChallenge: attempt.codeChallenge,

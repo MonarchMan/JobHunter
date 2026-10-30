@@ -80,8 +80,15 @@ function TemplatePreviewDialog({
           <h2 id="experience-template-dialog-title">个人面经 Markdown 模板</h2>
           <p id="experience-template-dialog-description">{version} · 预览内容与下载文件一致</p>
         </div>
-        <button type="button" className="button-secondary" autoFocus onClick={onClose}>
-          关闭
+        <button
+          type="button"
+          className="button-close"
+          autoFocus
+          onClick={onClose}
+          aria-label="关闭"
+          title="关闭"
+        >
+          <Icon name="close" />
         </button>
       </header>
       <pre aria-label="个人面经模板内容" tabIndex={0}>

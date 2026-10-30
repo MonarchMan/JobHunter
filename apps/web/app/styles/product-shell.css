@@ -234,3 +234,26 @@ details,
     padding-top: 1.5rem;
   }
 }
+
+/* 关闭控件固定为紧凑正方形，避免文字按钮内边距与窄屏拉伸改变尺寸。 */
+button.button-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 2.25rem;
+  width: 2.25rem;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--danger);
+}
+
+button.button-close:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}

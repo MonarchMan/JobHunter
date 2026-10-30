@@ -18,7 +18,7 @@
 - [x] **MAIL-T012** 实现无工具 `recruitment-mail.classify@v1` Agent、模型显式开关、业务输出校验、禁用持久化输出缓存、脱敏运行记录和评测；模型关闭或失败时把模糊候选降级到待确认，AgentRun 不保存字段提取结果。（MAIL-009, MAIL-010, MAIL-011, MAIL-Q03, MAIL-Q04, MAIL-Q05, MAIL-Q07）
 - [ ] **MAIL-T013** 实现 `mail.classify@v1` Handler、待确认状态、详情打开时重新读取分类、确认/忽略、申请关联、不可变事件提交和当前状态投影，覆盖同公司多岗位、原邮件不可用、重复任务和乱序邮件。（MAIL-011, MAIL-012, MAIL-013, MAIL-014, MAIL-017, MAIL-Q08）
 - [ ] **MAIL-T014** 实现 Web 邮箱设置、同步状态、待确认列表、确认/忽略、申请选择、申请列表、时间线、截止时间与外链安全交互，覆盖时区推断和首版无字段更正边界。（MAIL-001, MAIL-009, MAIL-011, MAIL-012, MAIL-014, MAIL-015, MAIL-016）
-- [x] **MAIL-T014A** 增加 Web 邮箱配置最小闭环：从设置页管理 IMAP/QQ 连接，非敏感配置按原子 JSON 文件保存，凭据交由独立凭据端口保存；邮箱配置文件路径支持 `JOBHUNTER_MAILBOX_CONFIG_PATH` 覆盖。（MAIL-001, MAIL-002, MAIL-015, MAIL-Q03, MAIL-Q04, MAIL-Q09）
+- [x] **MAIL-T014A** 增加 Web 邮箱配置最小闭环：从设置页管理 IMAP/QQ 连接，非敏感配置按原子 JSON 文件保存，凭据交由独立凭据端口保存；邮箱配置文件路径支持 `MAILBOX_CONFIG_PATH` 覆盖。（MAIL-001, MAIL-002, MAIL-015, MAIL-Q03, MAIL-Q04, MAIL-Q09）
 - [x] **MAIL-T014B** 将 Gmail、Microsoft 365 / Outlook 和 IMAP 统一接入设置页的渐进式添加入口：右上角“+”先选择 provider，再显示对应添加卡片；OAuth 使用 state、PKCE、HttpOnly Cookie 和凭据端口，未配置客户端时明确禁用。（MAIL-001, MAIL-002, MAIL-015, MAIL-015A, MAIL-Q03, MAIL-Q04）
 - [x] **MAIL-T014C** 调整设置页凭据回显边界：普通快照继续脱敏，用户主动点击时经无缓存接口读取 IMAP 授权码，默认密码模式并在隐藏时清理前端明文；OAuth 令牌禁止回传，同时修复窄屏编辑表单布局，并通过只预热 Win32 API 的空闲超时辅助进程消除重复 PowerShell 启动延迟。（MAIL-002, MAIL-015, MAIL-Q04）
 - [x] **MAIL-T014D** 按 ADR-0056 将邮箱凭据迁移为跨平台 AES-256-GCM 加密文件，支持独立密钥文件或环境主密钥、原子写入、删除、重启解密和 Windows 旧凭据一次性迁移；普通应用备份排除密文与密钥。（MAIL-002, MAIL-018, MAIL-Q04, MAIL-Q09）

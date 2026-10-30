@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img alt="Node.js 24" src="https://img.shields.io/badge/Node.js-24.x-4E5FBB?logo=nodedotjs&logoColor=white">
+  <img alt="Node.js 24+" src="https://img.shields.io/badge/Node.js-%3E%3D24-4E5FBB?logo=nodedotjs&logoColor=white">
   <img alt="pnpm 11+" src="https://img.shields.io/badge/pnpm-%3E%3D11.0.0-E06C5D?logo=pnpm&logoColor=white">
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-4E5FBB?logo=typescript&logoColor=white">
   <img alt="Local first" src="https://img.shields.io/badge/data-local--first-596275">
@@ -69,7 +69,7 @@ JobHunter 帮助个人求职者减少重复搜索和信息整理：先从简历�
 
 | 环境                     | 版本或建议                     | 是否必需 |
 | ------------------------ | ------------------------------ | -------- |
-| Node.js                  | `24.x`                         | 必需     |
+| Node.js                  | `>=24`                         | 必需     |
 | pnpm                     | `>=11.0.0`                     | 必需     |
 | Edge、Chrome 或 Chromium | 动态来源采集或浏览器测试时使用 | 可选     |
 | 模型服务                 | OpenAI 兼容接口或 Anthropic    | 可选     |
@@ -81,6 +81,8 @@ node apps/cli/dist/main.js init
 node apps/cli/dist/main.js doctor
 pnpm --filter @jobhunter/web dev
 ```
+
+未配置可选模型时，`doctor` 会显示 `degraded` 并返回退出码 4；基础初始化仍已完成，可以继续启动 Web。
 
 然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。Web 启动器会同时启动独立 Worker，正常使用时不需要手动运行第二个 Worker。
 
