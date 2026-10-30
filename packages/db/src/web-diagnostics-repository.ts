@@ -167,7 +167,8 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     const rows = this.#client
       .prepare(
         `
-      SELECT json_object(
+      SELECT task.payload_json, task.started_at AS window_started_at,
+        task.finished_at AS window_finished_at, json_object(
         'kind', 'task', 'id', task.id, 'taskType', task.task_type, 'status', task.status,
         'attemptCount', task.attempt_count, 'maxAttempts', task.max_attempts,
         'retryOfTaskId', task.retry_of_task_id,
@@ -204,9 +205,30 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       WHERE task.id IN (SELECT value FROM json_each(?))
     `,
       )
-      .all(JSON.stringify(ids)) as { readonly detail_json: string }[];
+      .all(JSON.stringify(ids)) as {
+      readonly detail_json: string;
+      readonly payload_json: string;
+      readonly window_started_at: number | null;
+      readonly window_finished_at: number | null;
+    }[];
     // 2、与单任务详情共用运行时校验，阻止原始执行数据进入页面。
-    return rows.map((row) => webTaskSchema.parse(JSON.parse(row.detail_json) as unknown));
+    return rows.map((row) => {
+      const task = webTaskSchema.parse(JSON.parse(row.detail_json) as unknown);
+      const payload = JSON.parse(row.payload_json) as { readonly sourceIds?: unknown };
+      if (!task.sourceSync || !Array.isArray(payload.sourceIds)) return task;
+      const sourceIds = payload.sourceIds.filter((id): id is string => typeof id === 'string');
+      if (sourceIds.length < 2) return task;
+      const sources = sourceIds.flatMap((sourceId) => {
+        const detail = this.getSourceSyncTaskDetail({
+          sourceId,
+          trigger: task.sourceSync!.trigger,
+          windowStartedAt: row.window_started_at ?? Date.parse(task.createdAt),
+          windowFinishedAt: row.window_finished_at,
+        });
+        return detail ? [detail] : [];
+      });
+      return webTaskSchema.parse({ ...task, sourceSync: { ...task.sourceSync, sources } });
+    });
   }
 
   /** 执行数据库组件对外暴露的操作。 */
@@ -354,6 +376,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
   /** 执行数据库组件对外暴露的操作。 */
   public getSourceSyncTaskDetail(input: {
     readonly sourceId: string;
+    readonly sourceIds?: readonly string[];
     readonly trigger: 'manual' | 'schedule' | 'retry';
     readonly windowStartedAt: number;
     readonly windowFinishedAt: number | null;
@@ -395,7 +418,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
         }
       | undefined;
     if (!row) return null;
-    return webSourceSyncTaskDetailSchema.parse({
+    const detail = webSourceSyncTaskDetailSchema.parse({
       companyName: row.company_name,
       channel: row.channel,
       sourceSlug: row.source_slug,
@@ -413,5 +436,16 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
             }
           : null,
     });
+    if (!input.sourceIds || input.sourceIds.length < 2) return detail;
+    const sources = input.sourceIds.flatMap((sourceId) => {
+      const source = this.getSourceSyncTaskDetail({
+        sourceId,
+        trigger: input.trigger,
+        windowStartedAt: input.windowStartedAt,
+        windowFinishedAt: input.windowFinishedAt,
+      });
+      return source ? [source] : [];
+    });
+    return webSourceSyncTaskDetailSchema.parse({ ...detail, sources });
   }
 }

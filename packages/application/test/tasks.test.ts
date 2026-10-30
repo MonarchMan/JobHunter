@@ -128,6 +128,100 @@ describe('source.sync handler', () => {
     ).toThrow();
   });
 
+  it('runs aggregated source payloads in order under the same handler', async () => {
+    const sourceIds = [
+      '018f0000-0000-7000-8000-000000000002',
+      '018f0000-0000-7000-8000-000000000004',
+    ];
+    const runIds = [
+      parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun'),
+      parseId('018f0000-0000-7000-8000-000000000005', 'SyncRun'),
+    ];
+    const run = vi.fn(({ sourceId }: { readonly sourceId: string }) => {
+      const index = sourceIds.indexOf(sourceId);
+      return Promise.resolve({
+        kind: 'completed' as const,
+        runId: runIds[index]!,
+        status: 'succeeded' as const,
+        coverage: 'complete' as const,
+        stats: {
+          discovered: 0,
+          created: 0,
+          unchanged: 0,
+          revised: 0,
+          restored: 0,
+          staled: 0,
+          closed: 0,
+          isolated: 0,
+          followupEnqueued: 0,
+        },
+      });
+    });
+    const handler = createSourceSyncTaskHandler({ run });
+    const payload = handler.payloadSchema.parse({ sourceIds, trigger: 'schedule' });
+    expect(handler.taskType).toBe('source.sync');
+    await expect(
+      handler.execute(
+        {
+          signal: new AbortController().signal,
+          clock: { now: () => utcInstant(1) },
+          logger: silentLogger,
+          services: {},
+        },
+        payload,
+      ),
+    ).resolves.toEqual({
+      runs: sourceIds.map((sourceId, index) => ({
+        sourceId,
+        runId: runIds[index],
+        status: 'succeeded',
+        coverage: 'complete',
+      })),
+    });
+    expect(run.mock.calls.map(([input]) => input.sourceId)).toEqual(sourceIds);
+  });
+
+  it('attempts every aggregate source before retrying the shared task', async () => {
+    const sourceIds = [
+      '018f0000-0000-7000-8000-000000000012',
+      '018f0000-0000-7000-8000-000000000014',
+    ];
+    const run = vi.fn(({ sourceId }: { readonly sourceId: string }) =>
+      sourceId === sourceIds[0]
+        ? Promise.reject(new Error('first source temporarily unavailable'))
+        : Promise.resolve({
+            kind: 'completed' as const,
+            runId: parseId('018f0000-0000-7000-8000-000000000015', 'SyncRun'),
+            status: 'succeeded' as const,
+            coverage: 'complete' as const,
+            stats: {
+              discovered: 0,
+              created: 0,
+              unchanged: 0,
+              revised: 0,
+              restored: 0,
+              staled: 0,
+              closed: 0,
+              isolated: 0,
+              followupEnqueued: 0,
+            },
+          }),
+    );
+    const handler = createSourceSyncTaskHandler({ run });
+    await expect(
+      handler.execute(
+        {
+          signal: new AbortController().signal,
+          clock: { now: () => utcInstant(1) },
+          logger: silentLogger,
+          services: {},
+        },
+        handler.payloadSchema.parse({ sourceIds, trigger: 'manual' }),
+      ),
+    ).rejects.toThrow('first source temporarily unavailable');
+    expect(run).toHaveBeenCalledTimes(2);
+  });
+
   it('classifies a failed synchronization as a permanent task error', async () => {
     const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
     const handler = createSourceSyncTaskHandler({

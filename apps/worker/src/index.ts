@@ -311,6 +311,9 @@ export function createProductionWorkerApplication(input: {
     readonly baseUrl: string;
     readonly apiKey: string;
     readonly model: string;
+    readonly costCurrency?: 'USD' | 'CNY';
+    readonly inputCostPerMillionUsd?: number | null;
+    readonly outputCostPerMillionUsd?: number | null;
   };
   /** 邮箱运行时配置；缺省时仍注册空闲邮件任务，便于测试和无邮箱部署。 */
   readonly mail?: {
@@ -700,18 +703,20 @@ export function createProductionWorkerApplication(input: {
   const scheduleService = new ScheduleService({ queue, clock, ids }, registry);
   scheduleService.upsert({
     id: ids.generate(),
+    // 保留旧键以原位替换小时计划，避免重启后出现重复清理任务。
     scheduleKey: 'platform-retention-hourly',
     taskType: 'platform.retention',
     payload: { action: 'run' },
-    cronExpression: '35 * * * *',
+    cronExpression: '35 4 * * *',
     timezone: 'Asia/Shanghai',
   });
   scheduleService.upsert({
     id: ids.generate(),
+    // 每天错峰清理过期导出，旧计划身份和历史任务关联继续保留。
     scheduleKey: 'resume-export-cleanup-hourly',
     taskType: 'resume.export.cleanup@v1',
     payload: {},
-    cronExpression: '15 * * * *',
+    cronExpression: '15 4 * * *',
     timezone: 'Asia/Shanghai',
   });
   if (input.mail) {

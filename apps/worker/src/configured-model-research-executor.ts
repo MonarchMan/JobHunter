@@ -29,7 +29,7 @@ const configuredResearchInputSchema = z
 /** 只基于 Worker 预采集证据生成网友面经候选的模型定义。 */
 const configuredResearchAgentDefinition = defineAgent({
   key: 'interview.community-research-configured-model',
-  version: 'v1',
+  version: '1.0.0',
   promptVersion: communityResearchPromptVersion,
   outputSchemaVersion: 'community-research-bundle@v2',
   outputSchemaName: 'community_research_bundle',

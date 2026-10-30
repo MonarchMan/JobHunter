@@ -69,15 +69,13 @@ export async function collectKuaishouPages(
   try {
     if (signal.aborted) throw new SourceError('temporary', 'Kuaishou collection was aborted.');
     await page.goto(site.bootstrap, { waitUntil: 'domcontentloaded', timeout: request.timeoutMs });
+    // 2、页面运行时尚未就绪不等于协议已变化；它可能是脚本加载抖动，交由任务退避重试。
     await page
       .waitForFunction(kuaishouRuntimeReady, undefined, { timeout: request.timeoutMs })
       .catch(() => {
-        throw new SourceError(
-          signal.aborted || page.isClosed() ? 'temporary' : 'parse_changed',
-          'Kuaishou official runtime did not become ready.',
-        );
+        throw new SourceError('temporary', 'Kuaishou official runtime did not become ready.');
       });
-    // 2、主站解码字典；校园站动态选择最新对应性质项目，互不借用社会招聘证据。
+    // 3、主站解码字典；校园站动态选择最新对应性质项目，互不借用社会招聘证据。
     const project = site.campus
       ? selectKuaishouProject(await invoke({ campus: true, operation: 'projects' }), site.nature)
       : undefined;
@@ -114,7 +112,7 @@ export async function collectKuaishouPages(
       Math.min(request.maximumPages, options.maximumPages ?? request.maximumPages),
     );
     const sampled = options.pageSampling === 'first-last' && count > limit && limit >= 2;
-    // 3、生产顺序翻页；smoke 只读首页和末页（可加中间页），且显式标记 partial。
+    // 4、生产顺序翻页；smoke 只读首页和末页（可加中间页），且显式标记 partial。
     const numbers = sampled
       ? [...new Set([1, ...(limit >= 3 ? [Math.ceil(count / 2)] : []), count])]
       : Array.from({ length: Math.min(count, limit) }, (_, index) => index + 1);

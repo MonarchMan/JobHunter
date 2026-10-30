@@ -199,7 +199,10 @@ export class SqliteSettingsStore {
              AND EXISTS (
                SELECT 1 FROM job_sources source
                JOIN source_channels previous ON previous.id = source.channel_id
-               WHERE source.id = json_extract(tasks.payload_json, '$.sourceId')
+               WHERE (
+                 source.id = json_extract(tasks.payload_json, '$.sourceId')
+                 OR source.id IN (SELECT value FROM json_each(tasks.payload_json, '$.sourceIds'))
+               )
                  AND previous.channel != ?
              )`,
         )

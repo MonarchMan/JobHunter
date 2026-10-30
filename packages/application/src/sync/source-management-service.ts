@@ -104,7 +104,7 @@ export class SourceManagementService {
         ),
       ),
     );
-    return this.#enqueue(sourceIds, input.idempotencyToken);
+    return this.#enqueue(sourceIds, input.idempotencyToken, true);
   }
 
   /** 投递单个来源同步任务。 */
@@ -128,6 +128,7 @@ export class SourceManagementService {
     return this.#enqueue(
       selected.map((source) => source.id),
       input.idempotencyToken,
+      true,
     );
   }
 
@@ -135,14 +136,53 @@ export class SourceManagementService {
   #enqueue(
     sourceIds: readonly JobSourceId[],
     idempotencyToken: string | undefined,
+    aggregateKuaishouIntern = true,
   ): readonly EnqueueTaskResult[] {
     const suppliedToken = idempotencyToken?.trim();
     const token = suppliedToken && suppliedToken.length > 0 ? suppliedToken : this.#ids.generate();
-    return sourceIds.map((sourceId) =>
-      this.#tasks.enqueue({
-        taskType: 'source.sync',
+    const selected = new Set(sourceIds);
+    const kuaishouIntern = this.#sources
+      .list()
+      .filter(
+        (source) =>
+          source.effectiveEnabled &&
+          ['kuaishou.intern', 'kuaishou.intern.campus'].includes(source.adapterKey),
+      );
+    const aggregate =
+      aggregateKuaishouIntern &&
+      kuaishouIntern.length === 2 &&
+      kuaishouIntern.some((source) => selected.has(source.id));
+    if (aggregate) for (const source of kuaishouIntern) selected.delete(source.id);
+    const commands = [
+      ...Array.from(selected, (sourceId) => ({
+        type: 'source.sync',
+        key: String(sourceId),
         payload: { sourceId, trigger: 'manual' },
-        idempotencyKey: `source.sync:${sourceId}:manual:${token}`,
+      })),
+      ...(aggregate
+        ? (() => {
+            const ordered = [
+              ...kuaishouIntern.filter((source) => source.adapterKey === 'kuaishou.intern'),
+              ...kuaishouIntern.filter((source) => source.adapterKey === 'kuaishou.intern.campus'),
+            ];
+            return [
+              {
+                type: 'source.sync',
+                key: 'kuaishou-intern',
+                payload: {
+                  sourceIds: ordered.map((source) => source.id),
+                  trigger: 'manual',
+                },
+              },
+            ];
+          })()
+        : []),
+    ];
+    return commands.map(({ type, key, payload }) =>
+      this.#tasks.enqueue({
+        taskType: type,
+        payload,
+        idempotencyKey: `${type}:${key}:manual:${token}`,
       }),
     );
   }

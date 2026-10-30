@@ -190,10 +190,13 @@ describe('Kuaishou native browser lifecycle (ADR-0023)', () => {
     },
   );
 
-  it('reports missing runtime as protocol drift and releases the page', async () => {
+  it('retries when the official runtime is not ready and releases the page', async () => {
     const h = harness();
     h.page.waitForFunction.mockRejectedValue(new Error('timeout'));
-    await expect(h.run()).rejects.toMatchObject({ category: 'parse_changed' });
+    await expect(h.run()).rejects.toMatchObject({
+      category: 'temporary',
+      message: 'Kuaishou official runtime did not become ready.',
+    });
     expect(h.page.close).toHaveBeenCalledOnce();
   });
 

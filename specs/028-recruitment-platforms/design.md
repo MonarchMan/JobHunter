@@ -173,7 +173,7 @@ ADR-0049 增加可选 PlatformSession.resume；只有 BOSS HTTP 提供有效恢�
 
 ## 5. 保留策略与空间
 
-首版清理通过 CLI 发布 `platform.retention` Worker 任务，支持 preview/enable/disable/status；每小时维护计划仅检查已启用策略是否到期。策略存于 application_settings，默认 30 天、6 小时、关闭；preview 保存短期随机确认令牌而不删除职位，enable 必须消费同一策略的未过期令牌，首次删除至少等待一个执行间隔。每次事务最多删除 100 条，重新计算活跃时间与引用。
+首版清理通过 CLI 发布 `platform.retention` Worker 任务，支持 preview/enable/disable/status；维护计划每天 04:35（Asia/Shanghai）检查已启用策略是否到期，保留旧计划键 `platform-retention-hourly` 原位更新，避免残留小时计划。策略存于 application_settings，默认 30 天、6 小时、关闭；preview 保存短期随机确认令牌而不删除职位，enable 必须消费同一策略的未过期令牌，首次删除至少等待一个执行间隔。每次事务最多删除 100 条，重新计算活跃时间与引用。
 
 未启用或尚未到期的维护任务直接返回 skipped，不扫描职位和引用，也不写设置。预览输出必须包含不可撤销删除提示；eligible/protected 是该次事务执行前的候选计数，不代表删除后剩余数量。确认令牌在五分钟后过期，新预览会替换旧令牌。
 
