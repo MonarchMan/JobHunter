@@ -242,9 +242,19 @@ export class WorkerEngine implements TaskCancellationNotifier {
         if (!result.ownsLease) controller.abort('lease_lost' satisfies AbortReason);
         else if (result.cancelRequested) controller.abort('cancelled' satisfies AbortReason);
       } catch (error) {
-        if (!this.#isQueueBusy(error)) throw error;
-        // 1、锁忙不代表已续租，下轮仍通过仓储检查实际租约所有权。
-        this.#logger.warn('worker.queue_busy', { phase: 'heartbeat', taskId: task.id });
+        if (this.#isQueueBusy(error)) {
+          // 1、锁忙不代表已续租，下轮仍通过仓储检查实际租约所有权。
+          this.#logger.warn('worker.queue_busy', { phase: 'heartbeat', taskId: task.id });
+        } else {
+          // 2、无法确认租约仍有效时必须停止处理，防止失去所有权后继续提交结果。
+          controller.abort('lease_lost' satisfies AbortReason);
+          this.#logger.error('worker.heartbeat_failed', {
+            taskId: task.id,
+            taskType: task.taskType,
+            error,
+          });
+          return;
+        }
       }
     }
   }
@@ -408,10 +418,16 @@ export class WorkerEngine implements TaskCancellationNotifier {
   async #runSchedulerLoop(): Promise<void> {
     while (!this.#stopping) {
       try {
+        // 1、独立扫描过期租约，避免某个任务类型的领取循环被长任务占住后无法恢复任务。
+        const recovery = this.#queue.recoverExpired(this.#clock.now());
+        if (recovery.recovered > 0 || recovery.exhausted > 0) {
+          this.#logger.warn('worker.expired_leases_recovered', recovery);
+        }
+        // 2、同一调度循环推进到期计划，减少重复轮询数据库。
         this.#scheduleService.enqueueDue();
       } catch (error) {
         if (!this.#isQueueBusy(error)) throw error;
-        this.#logger.warn('worker.queue_busy', { phase: 'schedule' });
+        this.#logger.warn('worker.queue_busy', { phase: 'recovery_or_schedule' });
       }
       try {
         await this.#delay.wait(this.#options.schedulerPollMs, this.#lifecycle.signal);
