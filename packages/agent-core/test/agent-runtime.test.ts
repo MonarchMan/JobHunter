@@ -179,6 +179,16 @@ function runner(store: MemoryStore, model: ModelClient): AgentRunner {
 }
 
 describe('agent runtime', () => {
+  it('requires three-part semantic agent versions', () => {
+    expect(() => definition({ version: 'v1' })).toThrow(
+      'Agent version must use MAJOR.MINOR.PATCH format.',
+    );
+    expect(() => definition({ version: '1.0' })).toThrow(
+      'Agent version must use MAJOR.MINOR.PATCH format.',
+    );
+    expect(() => definition({ version: '1.0.0' })).not.toThrow();
+  });
+
   it('repairs business validation before caching and rejects bad cached output', async () => {
     const store = new MemoryStore();
     const model = new QueueModel([output('bad'), output('valid'), output('valid')]);

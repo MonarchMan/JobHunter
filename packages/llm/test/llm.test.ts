@@ -91,7 +91,7 @@ describe('Anthropic model client', () => {
     await expect(client.complete(request, new AbortController().signal)).resolves.toEqual({
       kind: 'output',
       output: { ok: true },
-      usage: { inputTokens: 3, outputTokens: 2, estimatedCostMicros: 0 },
+      usage: { inputTokens: 3, outputTokens: 2, estimatedCostMicros: null },
     });
     expect(body).toMatchObject({
       model: 'claude-test',
@@ -242,7 +242,7 @@ describe('OpenAI-compatible model client', () => {
     await expect(client.complete(request, new AbortController().signal)).resolves.toEqual({
       kind: 'output',
       output: { ok: true },
-      usage: { inputTokens: 3, outputTokens: 2, estimatedCostMicros: 0 },
+      usage: { inputTokens: 3, outputTokens: 2, estimatedCostMicros: null },
     });
     expect(JSON.stringify(client.metadata)).not.toContain('test-secret');
   });
@@ -314,7 +314,7 @@ describe('OpenAI-compatible model client', () => {
       await expect(client.complete(request, new AbortController().signal)).resolves.toEqual({
         kind: 'unparsed_output',
         text: content,
-        usage: { inputTokens: 0, outputTokens: 0, estimatedCostMicros: 0 },
+        usage: { inputTokens: 0, outputTokens: 0, estimatedCostMicros: null },
       });
     },
   );

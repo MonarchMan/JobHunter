@@ -256,6 +256,9 @@ export function createLocalCliContainer(
             baseUrl: config.model.baseUrl.value,
             model: config.model.modelName.value,
             apiKey: config.model.apiKey.value.reveal(),
+            inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value,
+            outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value,
+            costCurrency: config.model.costCurrency.value,
           }).metadata
         : null;
     services = {
@@ -334,14 +337,46 @@ export function createLocalCliContainer(
           : [];
         let schedules = 0;
         if (sourceSyncReady) {
-          for (const source of runtime.sources
-            .list()
-            .filter((candidate) => candidate.effectiveEnabled)) {
+          const sources = runtime.sources.list().filter((candidate) => candidate.effectiveEnabled);
+          const kuaishouIntern = [
+            ...sources.filter((source) => source.adapterKey === 'kuaishou.intern'),
+            ...sources.filter((source) => source.adapterKey === 'kuaishou.intern.campus'),
+          ];
+          const grouped = kuaishouIntern.length === 2;
+          for (const source of sources.filter(
+            (candidate) => !grouped || !candidate.adapterKey.startsWith('kuaishou.intern'),
+          )) {
             runtime.schedules.upsert({
               id: source.id,
               scheduleKey: `source.sync:${source.id}`,
               taskType: 'source.sync',
               payload: { sourceId: source.id, trigger: 'schedule' },
+              cronExpression: '0 3 * * *',
+              timezone: 'Asia/Shanghai',
+              enabled: true,
+            });
+            schedules += 1;
+          }
+          if (grouped) {
+            const [primary, campus] = kuaishouIntern;
+            if (!primary || !campus) throw new Error('Kuaishou intern sources are incomplete.');
+            runtime.schedules.upsert({
+              id: campus.id,
+              scheduleKey: `source.sync:${campus.id}`,
+              taskType: 'source.sync',
+              payload: { sourceId: campus.id, trigger: 'schedule' },
+              cronExpression: '0 3 * * *',
+              timezone: 'Asia/Shanghai',
+              enabled: false,
+            });
+            runtime.schedules.upsert({
+              id: primary.id,
+              scheduleKey: `source.sync:${primary.id}`,
+              taskType: 'source.sync',
+              payload: {
+                sourceIds: [primary.id, campus.id],
+                trigger: 'schedule',
+              },
               cronExpression: '0 3 * * *',
               timezone: 'Asia/Shanghai',
               enabled: true,
@@ -436,6 +471,9 @@ export function createLocalCliContainer(
                       baseUrl: config.model.baseUrl.value,
                       model: config.model.modelName.value,
                       apiKey: config.model.apiKey.value.reveal(),
+                      inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value,
+                      outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value,
+                      costCurrency: config.model.costCurrency.value,
                     },
                   }
                 : {}),

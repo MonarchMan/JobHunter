@@ -22,12 +22,15 @@ const configSchema = z
       }, 'Base URL must be an HTTP(S) URL.'),
     apiKey: z.string().trim().min(1),
     model: z.string().trim().min(1),
+    costCurrency: z.enum(['USD', 'CNY']).default('USD'),
     timeoutMs: z
       .number()
       .int()
       .min(1_000)
       .max(10 * 60_000)
-      .default(60_000),
+      .default(180_000),
+    inputCostPerMillionUsd: z.number().finite().nonnegative().nullable().optional(),
+    outputCostPerMillionUsd: z.number().finite().nonnegative().nullable().optional(),
   })
   .strict();
 
@@ -63,7 +66,10 @@ export interface OpenAiCompatibleClientConfig {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly costCurrency?: 'USD' | 'CNY';
   readonly timeoutMs?: number;
+  readonly inputCostPerMillionUsd?: number | null | undefined;
+  readonly outputCostPerMillionUsd?: number | null | undefined;
   readonly fetchImplementation?: typeof fetch;
 }
 
@@ -81,8 +87,19 @@ function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
   return {
     inputTokens: value?.prompt_tokens ?? 0,
     outputTokens: value?.completion_tokens ?? 0,
-    estimatedCostMicros: 0,
+    estimatedCostMicros: null,
   };
+}
+
+/** 将 Token 数和每百万 Token 美元报价换算为微美元；未同时提供报价时返回 null。 */
+function estimateCostMicros(
+  value: z.infer<typeof responseSchema>['usage'],
+  inputPrice: number | null | undefined,
+  outputPrice: number | null | undefined,
+): number | null {
+  if (inputPrice === null || inputPrice === undefined || outputPrice === null || outputPrice === undefined)
+    return null;
+  return Math.round((value?.prompt_tokens ?? 0) * inputPrice + (value?.completion_tokens ?? 0) * outputPrice);
 }
 
 /** 判断是否连接 DeepSeek 官方 OpenAI 兼容入口。 */
@@ -169,15 +186,21 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       baseUrl: input.baseUrl,
       apiKey: input.apiKey,
       model: input.model,
+      costCurrency: input.costCurrency ?? 'USD',
       ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+      inputCostPerMillionUsd: input.inputCostPerMillionUsd ?? null,
+      outputCostPerMillionUsd: input.outputCostPerMillionUsd ?? null,
     });
     this.#fetch = input.fetchImplementation ?? fetch;
     this.metadata = {
       provider: 'openai-compatible',
       model: this.#config.model,
       config: { baseUrl: this.#config.baseUrl, timeoutMs: this.#config.timeoutMs },
-      costCurrency: 'USD',
-      pricingVersion: 'unpriced-v1',
+      costCurrency: this.#config.costCurrency,
+      pricingVersion:
+        this.#config.inputCostPerMillionUsd === null || this.#config.outputCostPerMillionUsd === null
+          ? 'unpriced'
+          : 'configured',
     };
   }
 
@@ -204,7 +227,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       const baseBody = {
         model: this.#config.model,
         messages,
-        max_tokens: request.maxOutputTokens,
+        ...(request.maxOutputTokens === undefined ? {} : { max_tokens: request.maxOutputTokens }),
         ...(shouldDisableDeepSeekThinking(this.#config.baseUrl, this.#config.model)
           ? { thinking: { type: 'disabled' as const } }
           : {}),
@@ -272,15 +295,36 @@ export class OpenAiCompatibleModelClient implements ModelClient {
               throw new ModelClientError('invalid_output', 'Model tool arguments were not JSON.');
             }
           }),
-          usage: usage(parsed.usage),
+          usage: {
+            ...usage(parsed.usage),
+            estimatedCostMicros: estimateCostMicros(
+              parsed.usage,
+              this.#config.inputCostPerMillionUsd,
+              this.#config.outputCostPerMillionUsd,
+            ),
+          },
         };
       }
       // 2、代码围栏在本地安全剥离；其他非 JSON（含 DeepSeek 偶发空正文）交给 Runner 修复一次。
       const content = choice.message.content ?? '';
       const structured = parseStructuredContent(content);
       return structured.parsed
-        ? { kind: 'output', output: structured.value, usage: usage(parsed.usage) }
-        : { kind: 'unparsed_output', text: content, usage: usage(parsed.usage) };
+        ? {
+            kind: 'output',
+            output: structured.value,
+            usage: {
+              ...usage(parsed.usage),
+              estimatedCostMicros: estimateCostMicros(parsed.usage, this.#config.inputCostPerMillionUsd, this.#config.outputCostPerMillionUsd),
+            },
+          }
+        : {
+            kind: 'unparsed_output',
+            text: content,
+            usage: {
+              ...usage(parsed.usage),
+              estimatedCostMicros: estimateCostMicros(parsed.usage, this.#config.inputCostPerMillionUsd, this.#config.outputCostPerMillionUsd),
+            },
+          };
     } catch (error) {
       if (error instanceof ModelClientError) throw error;
       if (combined.aborted) {

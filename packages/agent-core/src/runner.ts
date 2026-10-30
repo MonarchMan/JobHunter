@@ -17,14 +17,15 @@ export interface AgentRunnerResult<TOutput> {
 interface Totals {
   inputTokens: number;
   outputTokens: number;
-  estimatedCostMicros: number;
+  estimatedCostMicros: number | null;
 }
 
 /** 将单次模型响应的用量累加到运行总量。 */
 function addUsage(totals: Totals, usage: ModelUsage): void {
   totals.inputTokens += usage.inputTokens;
   totals.outputTokens += usage.outputTokens;
-  totals.estimatedCostMicros += usage.estimatedCostMicros;
+  if (usage.estimatedCostMicros === null) totals.estimatedCostMicros = null;
+  else if (totals.estimatedCostMicros !== null) totals.estimatedCostMicros += usage.estimatedCostMicros;
 }
 
 /** 将 Schema 错误压缩成可供模型修复提示使用的摘要。 */
@@ -220,7 +221,9 @@ export class AgentRunner {
           input: parsedInput,
           outputSchemaName: definition.outputSchemaName,
           outputJsonSchema,
-          maxOutputTokens: definition.limits.maxOutputTokens,
+          ...(definition.limits.maxOutputTokens === undefined
+            ? {}
+            : { maxOutputTokens: definition.limits.maxOutputTokens }),
           tools: definition.tools.map((tool) => ({ key: tool.key, description: tool.description })),
           toolResults,
         },
@@ -297,7 +300,9 @@ export class AgentRunner {
         input: parsedInput,
         outputSchemaName: definition.outputSchemaName,
         outputJsonSchema,
-        maxOutputTokens: definition.limits.maxOutputTokens,
+        ...(definition.limits.maxOutputTokens === undefined
+          ? {}
+          : { maxOutputTokens: definition.limits.maxOutputTokens }),
         tools: [],
         toolResults: [],
         repair: {
@@ -327,8 +332,10 @@ export class AgentRunner {
   #checkUsage<TInput, TOutput>(definition: AgentDefinition<TInput, TOutput>, totals: Totals): void {
     if (
       totals.inputTokens > definition.limits.maxInputTokens ||
-      totals.outputTokens > definition.limits.maxOutputTokens ||
-      totals.estimatedCostMicros > definition.limits.maxEstimatedCostMicros
+      (definition.limits.maxOutputTokens !== undefined &&
+        totals.outputTokens > definition.limits.maxOutputTokens) ||
+      (totals.estimatedCostMicros !== null &&
+        totals.estimatedCostMicros > definition.limits.maxEstimatedCostMicros)
     ) {
       throw new AgentRuntimeError('budget_exceeded', 'Agent model usage exceeded budget.');
     }

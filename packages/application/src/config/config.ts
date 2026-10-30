@@ -67,6 +67,9 @@ export interface AppConfig {
     readonly baseUrl: SourcedValue<string>;
     readonly modelName: SourcedValue<string | null>;
     readonly apiKey: SourcedValue<SecretString | null>;
+    readonly costCurrency: SourcedValue<'USD' | 'CNY'>;
+    readonly inputCostPerMillionUsd: SourcedValue<number | null>;
+    readonly outputCostPerMillionUsd: SourcedValue<number | null>;
   };
   readonly mail: {
     readonly classification: {
@@ -101,6 +104,69 @@ export interface ConfigOverrides {
 
 const defaultOpenAiBaseUrl = 'https://api.openai.com/v1';
 
+/** 统一模型 ID，兼容中转站前缀、路由后缀和大小写差异。 */
+export function normalizeModelPricingId(model: string): string {
+  return model
+    .trim()
+    .toLowerCase()
+    .split('/')
+    .at(-1)!
+    .split(':')[0]!
+    .replaceAll('@', '-')
+    .replace(/-(?:\d{8}|\d{4}-\d{2}-\d{2})$/u, '');
+}
+
+/** 内置官方公开价种子目录；单位为 USD / 百万 Token。未命中不猜价。 */
+const defaultModelPricing: Readonly<Record<string, readonly [number, number]>> = {
+  // OpenAI
+  'gpt-4o': [2.5, 10],
+  'gpt-4o-mini': [0.15, 0.6],
+  'gpt-4.1': [2, 8],
+  'gpt-4.1-mini': [0.4, 1.6],
+  'gpt-4.1-nano': [0.1, 0.4],
+  o3: [2, 8],
+  'o3-mini': [1.1, 4.4],
+  'o4-mini': [1.1, 4.4],
+  'claude-opus-4-5': [5, 25],
+  'claude-opus-4': [15, 75],
+  'claude-sonnet-4': [3, 15],
+  'claude-3-7-sonnet': [3, 15],
+  'claude-3-5-sonnet': [3, 15],
+  'claude-3-5-haiku': [0.8, 4],
+  'claude-sonnet-4-5': [3, 15],
+  'claude-haiku-4-5': [1, 5],
+  'gpt-5.5': [5, 30],
+  'gpt-5.4': [2.5, 15],
+  'gpt-5.4-mini': [0.2, 1.25],
+  'deepseek-v4-flash': [1 / 7, 2 / 7],
+  'deepseek-v4-pro': [12 / 7, 24 / 7],
+  'deepseek-chat': [0.7 / 7, 2.8 / 7],
+  'deepseek-reasoner': [4 / 7, 16 / 7],
+  'deepseek-v3': [0.7 / 7, 2.8 / 7],
+  'deepseek-r1': [4 / 7, 16 / 7],
+  'kimi-k2': [4 / 7, 16 / 7],
+  'moonshot-v1-8k': [12 / 7, 12 / 7],
+  'moonshot-v1-32k': [24 / 7, 24 / 7],
+  'moonshot-v1-128k': [60 / 7, 60 / 7],
+  'minimax-m2.1': [2.1 / 7, 8.4 / 7],
+  'glm-4.7': [2 / 7, 8 / 7],
+  'glm-4-plus': [5 / 7, 5 / 7],
+  'glm-4-flash': [0.1 / 7, 0.1 / 7],
+  'qwen-plus': [0.8 / 7, 2 / 7],
+  'qwen-turbo': [0.3 / 7, 0.6 / 7],
+  'qwen-max': [2.4 / 7, 9.6 / 7],
+  // Z.ai 海外 API 公开价，单位 USD / 百万 Token；BigModel 国内人民币价需显式覆盖。
+  'glm-5.3': [1.4, 4.4],
+  'glm-5.3-flash': [0.15, 0.5],
+  'glm-5.3-flashx': [0.37, 1.25],
+};
+
+/** 按标准化模型 ID 选择内置价格；显式环境价格优先于内置目录。 */
+function resolveDefaultModelPricing(model: string | null): readonly [number, number] | null {
+  if (!model) return null;
+  return defaultModelPricing[normalizeModelPricingId(model)] ?? null;
+}
+
 const defaultTaskTypeConcurrency: Readonly<Record<string, number>> = {
   'source.sync': 3,
   'source.job-detail': 4,
@@ -128,6 +194,22 @@ function environmentInteger(value: string | undefined, name: string): number | u
   const parsed = Number(text);
   if (!Number.isSafeInteger(parsed)) throw new TypeError(`${name} must be an integer.`);
   return parsed;
+}
+
+/** 解析每百万 Token 的美元价格；未配置表示当前模型尚无可用报价。 */
+function environmentNonNegativeNumber(value: string | undefined, name: string): number | undefined {
+  const text = nonEmpty(value);
+  if (text === undefined) return undefined;
+  const parsed = Number(text);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new TypeError(`${name} must be a non-negative number.`);
+  return parsed;
+}
+
+/** 解析支持的成本货币；价格单位必须与该货币一致，避免混算。 */
+function environmentCostCurrency(value: string | undefined): 'USD' | 'CNY' {
+  const currency = nonEmpty(value)?.toUpperCase() ?? 'USD';
+  if (currency !== 'USD' && currency !== 'CNY') throw new TypeError('MODEL_COST_CURRENCY must be USD or CNY.');
+  return currency;
 }
 
 /** 执行应用层的解析、转换或编排辅助逻辑。 */
@@ -249,6 +331,21 @@ export function resolveAppConfig(input: {
     defaultOpenAiBaseUrl,
   );
   const modelName = choose(nonEmpty(input.cli?.modelName), nonEmpty(environment.MODEL), null);
+  const costCurrency = choose<'USD' | 'CNY'>(
+    undefined,
+    environmentCostCurrency(environment.MODEL_COST_CURRENCY),
+    'USD',
+  );
+  const inputCostPerMillionUsd = choose(
+    undefined,
+    environmentNonNegativeNumber(environment.MODEL_INPUT_COST_PER_MILLION_USD, 'input model price'),
+    resolveDefaultModelPricing(modelName.value)?.[0] ?? null,
+  );
+  const outputCostPerMillionUsd = choose(
+    undefined,
+    environmentNonNegativeNumber(environment.MODEL_OUTPUT_COST_PER_MILLION_USD, 'output model price'),
+    resolveDefaultModelPricing(modelName.value)?.[1] ?? null,
+  );
   const inferredProvider = inferModelProvider(modelBaseUrl.value);
   const pollIntervalMs = choose(
     input.cli?.workerPollIntervalMs,
@@ -359,6 +456,9 @@ export function resolveAppConfig(input: {
         source: modelApiKey.source,
         value: modelApiKey.value === null ? null : new SecretString(modelApiKey.value),
       },
+      costCurrency: { source: 'environment', value: costCurrency.value },
+      inputCostPerMillionUsd,
+      outputCostPerMillionUsd,
     },
     mail: {
       classification: {

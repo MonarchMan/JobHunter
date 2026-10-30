@@ -109,7 +109,8 @@ export const candidateProfileSchema = z
       .default([]),
     professionalSkills: optionalText.default(null),
     selfEvaluation: optionalText.default(null),
-    skills: z.array(
+    skills: z
+      .array(
       z
         .object({
           name: normalizedText,
@@ -117,7 +118,8 @@ export const candidateProfileSchema = z
           evidence: z.array(evidenceSchema),
         })
         .readonly(),
-    ),
+      )
+      .default([]),
     domains: z.array(normalizedText),
     yearsOfExperience: z.number().nonnegative().nullable(),
     managementExperience: z.boolean().nullable(),

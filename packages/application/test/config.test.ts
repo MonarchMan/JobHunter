@@ -6,10 +6,80 @@ import {
   loadRuntimeAppConfig,
   resolveAppConfig,
   resolveBootstrapConfig,
+  normalizeModelPricingId,
   SecretString,
 } from '../src/index.js';
 
 describe('workspace dotenv configuration', () => {
+  it('normalizes model IDs and applies explicit pricing overrides', () => {
+    expect(normalizeModelPricingId('OpenAI/gpt-5.4:free')).toBe('gpt-5.4');
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    const config = resolveAppConfig({
+      bootstrap,
+      environment: {
+        MODEL: 'OpenAI/gpt-5.4',
+        BASE_URL: 'https://models.example.test/v1',
+        API_KEY: 'secret-value',
+      },
+    });
+    expect(config.model.inputCostPerMillionUsd.value).toBe(2.5);
+    expect(config.model.outputCostPerMillionUsd.value).toBe(15);
+    const overridden = resolveAppConfig({
+      bootstrap,
+      environment: {
+        MODEL: 'OpenAI/gpt-5.4',
+        BASE_URL: 'https://models.example.test/v1',
+        API_KEY: 'secret-value',
+        MODEL_INPUT_COST_PER_MILLION_USD: '9',
+        MODEL_OUTPUT_COST_PER_MILLION_USD: '19',
+      },
+    });
+    expect(overridden.model.inputCostPerMillionUsd.value).toBe(9);
+    expect(overridden.model.outputCostPerMillionUsd.value).toBe(19);
+  });
+
+  it('uses the official Z.ai USD catalog for GLM-5.3-Flash', () => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    const config = resolveAppConfig({
+      bootstrap,
+      environment: {
+        MODEL: 'ZHIPU/GLM-5.3-Flash',
+        BASE_URL: 'https://models.example.test/v1',
+        API_KEY: 'secret-value',
+      },
+    });
+    expect(config.model.inputCostPerMillionUsd.value).toBe(0.15);
+    expect(config.model.outputCostPerMillionUsd.value).toBe(0.5);
+  });
+
+  it('uses the official Z.ai USD catalog for GLM-5.3-FlashX', () => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    const config = resolveAppConfig({
+      bootstrap,
+      environment: {
+        MODEL: 'ZHIPU/GLM-5.3-FlashX',
+        BASE_URL: 'https://models.example.test/v1',
+        API_KEY: 'secret-value',
+      },
+    });
+    expect(config.model.inputCostPerMillionUsd.value).toBe(0.37);
+    expect(config.model.outputCostPerMillionUsd.value).toBe(1.25);
+  });
+
+  it.each([
+    ['OpenAI/gpt-4o-mini', 0.15, 0.6],
+    ['anthropic/claude-3-5-sonnet-20241022', 3, 15],
+    ['deepseek/deepseek-chat', 0.7 / 7, 2.8 / 7],
+  ])('uses the built-in seed price for %s', (model, inputPrice, outputPrice) => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    const config = resolveAppConfig({
+      bootstrap,
+      environment: { MODEL: model, BASE_URL: 'https://models.example.test/v1', API_KEY: 'secret-value' },
+    });
+    expect(config.model.inputCostPerMillionUsd.value).toBe(inputPrice);
+    expect(config.model.outputCostPerMillionUsd.value).toBe(outputPrice);
+  });
+
   it('requires explicit mail model consent', () => {
     const bootstrap = resolveBootstrapConfig({ environment: {} });
     expect(resolveAppConfig({ bootstrap, environment: {} }).mail.classification.modelMode).toEqual({
