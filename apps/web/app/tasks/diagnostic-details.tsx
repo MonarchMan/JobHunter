@@ -15,6 +15,7 @@ import {
   agentRunStatusLabels,
   taskStatusLabels,
 } from '../components/status-labels.js';
+import { Icon } from '../components/ui-icon.js';
 import { TaskActions } from './task-actions.js';
 import { TruncatedText } from '../components/lists/truncated-text.js';
 import dataTableStyles from '../components/lists/data-table.module.css';
@@ -75,8 +76,15 @@ function DialogShell({
     >
       <header className={styles.header}>
         <h2 id="diagnostic-dialog-title">{title}</h2>
-        <button type="button" className="button-muted" onClick={onClose} autoFocus>
-          关闭
+        <button
+          type="button"
+          className="button-close"
+          onClick={onClose}
+          autoFocus
+          aria-label="关闭"
+          title="关闭"
+        >
+          <Icon name="close" />
         </button>
       </header>
       {children}

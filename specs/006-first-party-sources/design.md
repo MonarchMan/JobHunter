@@ -69,7 +69,7 @@ packages/sources/
 
 Session 的创建与关闭留在 factory 内，避免浏览器对象泄露到 application/domain。BrowserPool 不负责登录、Cookie 持久化、验证码处理或风控参数生成；没有可用浏览器 runtime 时由装配层不提供 factory，来源按既有 `experimental/blocked` 降级路径运行。
 
-Worker 浏览器装配按“显式 `JOBHUNTER_BROWSER_EXECUTABLE`、操作系统标准安装路径、Playwright 自带 Chromium”的顺序解析运行时。Windows 探测 Edge/Chrome 的 Program Files 路径；macOS 探测系统级和用户级 Applications 目录中的 Chrome/Edge。浏览器启动异常仍映射为可重试的安全任务摘要；完整错误对象只进入 `SafeLogger`，由统一递归脱敏后写入 stderr 与本地轮转日志，数据库和 Web 诊断接口不保存底层错误文本。
+Worker 浏览器装配按“显式 `BROWSER_EXECUTABLE`、操作系统标准安装路径、Playwright 自带 Chromium”的顺序解析运行时。Windows 探测 Edge/Chrome 的 Program Files 路径；macOS 探测系统级和用户级 Applications 目录中的 Chrome/Edge。浏览器启动异常仍映射为可重试的安全任务摘要；完整错误对象只进入 `SafeLogger`，由统一递归脱敏后写入 stderr 与本地轮转日志，数据库和 Web 诊断接口不保存底层错误文本。
 
 浏览器基础设施只校验分页响应外壳并输出中立记录；阿里、字节、得物和华为适配器还必须在发现与归一化边界使用各自 Zod Schema 再次校验职位记录。小红书 JSON 来源遵循同一规则。共享适配器不得仅凭候选字段存在就接受外部数据；逐来源 Schema 失败统一分类为 `parse_changed`，使同步层保留最后成功数据并禁止基于本次缺失关闭职位。
 

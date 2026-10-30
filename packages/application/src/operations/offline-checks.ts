@@ -3,19 +3,20 @@ import { access, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { OfflineDoctorCheck } from './doctor-service.js';
 
-/** 检查当前 Node.js 运行时版本。 */
+/** 按最低版本检查 Node.js，允许后续主版本通过离线诊断。 */
 export function nodeRuntimeCheck(version = process.versions.node): OfflineDoctorCheck {
   return {
     key: 'runtime.node',
     severity: 'required',
     run: () => {
+      // 1. 以主版本判断最低运行要求，不对后续主版本设置上限。
       const major = Number(version.split('.')[0]);
-      const supported = major === 24;
+      const supported = Number.isInteger(major) && major >= 24;
       return {
         status: supported ? 'healthy' : 'failed',
         summary: supported ? `Node ${version} 受支持。` : `Node ${version} 不受支持。`,
-        recommendation: supported ? null : '请使用 Node.js 24.x 运行本项目。',
-        details: { version, requiredRange: '>=24 <25' },
+        recommendation: supported ? null : '请使用 Node.js 24 或以上版本 运行本项目。',
+        details: { version, requiredRange: '>=24' },
       };
     },
   };

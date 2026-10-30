@@ -9,7 +9,7 @@
 
 > 显式覆盖：OPS-001, OPS-002, OPS-003, OPS-004, OPS-005, OPS-006, OPS-007, OPS-008, OPS-009, OPS-010, OPS-011, OPS-012, OPS-013, OPS-014, OPS-015, OPS-016, OPS-Q01, OPS-Q02, OPS-Q03, OPS-Q04
 
-- [x] **OPS-T001** 定义 BootstrapConfig/AppConfig 环境解析、`JOBHUNTER_` 映射、优先级和 SecretString。（OPS-001, OPS-Q02）
+- [x] **OPS-T001** 定义 BootstrapConfig/AppConfig 环境解析、无项目前缀的环境变量映射、优先级和 SecretString。（OPS-001, OPS-Q02）
 - [x] **OPS-T002** 实现 SafeLogger、Pino sink、字段级 redactor 和日志泄漏测试。（OPS-003,004, OPS-Q01）
 - [x] **OPS-T003** 实现离线 doctor、required/degraded 结果和版本诊断。（OPS-002,005,006,010）
 - [x] **OPS-T004** 实现显式 online 来源 health check，证明不做完整同步或模型调用。（OPS-Q04）
@@ -20,3 +20,5 @@
 - [x] **OPS-T009** 添加 Windows 路径、篡改备份、日志秘密和配置优先级端到端测试。（OPS-Q01..04）
 - [x] **OPS-T010** 统一 CLI、Web 与 Worker 的工作区 `.env` 和本地配置加载入口，并覆盖启动目录无关性与环境覆盖优先级。（OPS-001,011, OPS-Q02）
   - 2026-10-13：将模型环境配置收敛为 `BASE_URL`、`MODEL`、`API_KEY`，为 Base URL 增加 OpenAI 官方默认值并自动推断 Provider。（OPS-001,011, OPS-Q02）
+
+- 2026-10-30：移除 `.env.example` 用户配置变量的项目前缀，同步读取入口、进程传递、文档和配置回归测试。（OPS-001, OPS-011）

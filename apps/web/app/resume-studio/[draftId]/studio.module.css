@@ -496,10 +496,6 @@
   .previewHeader p {
     max-width: 15rem;
   }
-  .previewHeader button {
-    flex: none;
-    padding: 0.55rem 0.65rem;
-  }
   .previewFooter {
     padding: 0.7rem 0.8rem;
   }

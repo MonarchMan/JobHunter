@@ -4,7 +4,7 @@
 
 ## 根工具链
 
-- Node.js 24 LTS，通过 `package.json.engines` 和跨平台 preinstall 检查。
+- Node.js >=24，通过 `package.json.engines` 声明最低版本，不配置版本阻断 preinstall；doctor 检查最低版本并提供升级建议（ADR-0058）。
 - pnpm 通过 `package.json.engines` 声明 `>=11.0.0` 的兼容范围，避免把开发环境绑定到单个补丁版本。
 - pnpm workspace 与 `pnpm-lock.yaml`。
 - TypeScript、typescript-eslint、ESLint、Prettier、Vitest。

@@ -853,7 +853,7 @@ const child = spawn(process.execPath, [nextBin, 'dev', '--hostname', '127.0.0.1'
   stdio: 'inherit',
   env: {
     ...process.env,
-    JOBHUNTER_DATA_ROOT: dataRoot,
+    DATA_ROOT: dataRoot,
     JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
     BASE_URL: `http://127.0.0.1:${String(modelAddress.port)}/v1`,
     MODEL: 'browser-fixture',

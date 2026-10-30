@@ -312,7 +312,7 @@ export function ResearchIndex({
                 ))}
               </select>
             </label>
-            <button type="submit">应用筛选</button>
+            <button type="submit">搜索</button>
             {Object.keys(acceptedFilter).length > 0 ? (
               <a className="button-secondary" href="/interview/research">
                 清除

@@ -57,7 +57,7 @@ describe('init and doctor commands', () => {
     const dataRoot = path.join(root.path, '中文 数据');
     try {
       const envPath = path.join(root.path, '.env');
-      await writeFile(envPath, 'JOBHUNTER_LOG_LEVEL=error\n');
+      await writeFile(envPath, 'LOG_LEVEL=error\n');
       const firstOutput = memoryIo();
       const firstExit = await runLocalCli({
         argv: ['--json', '--data-root', dataRoot, 'init'],
@@ -110,7 +110,7 @@ describe('init and doctor commands', () => {
         data: { companies: 20, sources: 62 },
       });
       await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
-      await expect(readFile(envPath, 'utf8')).resolves.toBe('JOBHUNTER_LOG_LEVEL=error\n');
+      await expect(readFile(envPath, 'utf8')).resolves.toBe('LOG_LEVEL=error\n');
 
       const doctorOutput = memoryIo();
       expect(

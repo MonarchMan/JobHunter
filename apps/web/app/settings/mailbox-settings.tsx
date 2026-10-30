@@ -537,7 +537,7 @@ export function MailboxSettings({
           </p>
           {!oauthAvailability.gmail ? (
             <p className="form-feedback error">
-              尚未配置 Gmail OAuth 客户端。请在 .env 中设置 JOBHUNTER_GMAIL_CLIENT_ID。
+              尚未配置 Gmail OAuth 客户端。请在 .env 中设置 GMAIL_CLIENT_ID。
             </p>
           ) : null}
           <button
@@ -570,7 +570,7 @@ export function MailboxSettings({
           </p>
           {!oauthAvailability.microsoftGraph ? (
             <p className="form-feedback error">
-              尚未配置 Microsoft OAuth 客户端。请在 .env 中设置 JOBHUNTER_MICROSOFT_CLIENT_ID。
+              尚未配置 Microsoft OAuth 客户端。请在 .env 中设置 MICROSOFT_CLIENT_ID。
             </p>
           ) : null}
           <button

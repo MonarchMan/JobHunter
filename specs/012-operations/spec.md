@@ -9,7 +9,7 @@
 
 ## 功能需求
 
-- **OPS-001**：运行参数统一存放在工作区根目录 `.env`，按 CLI 临时参数 > 进程环境 > `.env` > 内置默认值解析；输出最终来源但不输出秘密值。不再读取或创建运行配置 JSON，也不提供 `--config`。
+- **OPS-001**：运行参数统一存放在工作区根目录 `.env`，模板中的用户配置变量使用无项目前缀名称（如 `DATA_ROOT`、`LOG_LEVEL`），按 CLI 临时参数 > 进程环境 > `.env` > 内置默认值解析；输出最终来源但不输出秘密值。不再读取或创建运行配置 JSON，也不提供 `--config`。
 - **OPS-002**：启动必须校验 Node、目录读写、SQLite/FTS5、Schema、配置、适配器注册和可选模型配置。
 - **OPS-003**：日志必须为结构化事件，包含 correlation/run/task/source/job/agent ID 中适用字段。
 - **OPS-004**：日志必须字段级脱敏 API Key、Authorization、Cookie、联系方式、简历正文和来源私有敏感字段。

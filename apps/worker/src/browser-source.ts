@@ -48,9 +48,7 @@ function browserDebug(...values: unknown[]): void {
 const systemBrowserRuntime = (): BrowserExecutableRuntime => ({
   platform: process.platform,
   homeDirectory: homedir(),
-  ...(process.env.JOBHUNTER_BROWSER_EXECUTABLE
-    ? { configuredPath: process.env.JOBHUNTER_BROWSER_EXECUTABLE }
-    : {}),
+  ...(process.env.BROWSER_EXECUTABLE ? { configuredPath: process.env.BROWSER_EXECUTABLE } : {}),
   exists: existsSync,
 });
 

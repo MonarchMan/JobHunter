@@ -73,7 +73,7 @@
 JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=kuaishou,bilibili pnpm exec vitest run --project online apps/worker/test/official-source-wave-two.online.test.ts
 ```
 
-本次显式使用系统 Google Chrome（通过 `JOBHUNTER_BROWSER_EXECUTABLE` 指定），无持久化 profile。2026-09-11 11:50 CST，正式测试 2/2 通过，耗时 8.18 秒。输出只包含时间、总数、采样页、页长、样本数、详情 ID、`partial + sampled_pages`，不输出请求凭据。
+本次显式使用系统 Google Chrome（通过 `BROWSER_EXECUTABLE` 指定），无持久化 profile。2026-09-11 11:50 CST，正式测试 2/2 通过，耗时 8.18 秒。输出只包含时间、总数、采样页、页长、样本数、详情 ID、`partial + sampled_pages`，不输出请求凭据。
 
 上述研究结论仅覆盖两个社招协议的边界样本，不证明全量完整性、长期稳定性或另外四个招聘渠道。
 
@@ -122,7 +122,7 @@ JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=kuaishou pnpm exec vitest run
 # 也可只选一个物理来源，例如 JOBHUNTER_ONLINE_SOURCE=kuaishou.intern.campus
 ```
 
-需要时通过 `JOBHUNTER_BROWSER_EXECUTABLE` 指定本机正常 Chrome；不需要 CDP 常驻进程、小号或人工登录。
+需要时通过 `BROWSER_EXECUTABLE` 指定本机正常 Chrome；不需要 CDP 常驻进程、小号或人工登录。
 
 ## 滴滴国内四个物理来源工程化（2026-09-11）
 

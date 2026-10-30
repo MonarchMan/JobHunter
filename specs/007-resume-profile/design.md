@@ -50,3 +50,5 @@ AI 润色同样只由 Worker 执行。Web 用例只提交 `profileId`、来源�
 在线简历底部操作栏在宽屏保留横向排列并允许空间不足时换行；不超过 700px 时使用两列等宽网格，模板入口独占首行并在内部沿用相同列宽和间距，预览与保存占第二行。控件统一为 44px 高且文字不换行；模板打开失败的提示跨越首行两列，避免挤压操作按钮。
 
 提交脱敏的最小 PDF/DOCX/TXT fixtures、空文本和损坏文件。规则测试覆盖清晰章节直接提取、经历条目拆分、未知/含糊结构整体回退且不创建 AgentRun；Fake Agent 测试版本、锁定、章节选择、输出等长校验与建议持久化；Web E2E 覆盖提交、轮询、失败、应用到草稿和最终保存。真实模型只进入离线评测，不进入普通 CI。
+
+v3 Prompt 新增 basicInfo 章节，输出 Schema 使用带 confidence/evidenceRefs 的可空事实字段 name、phone、email、location、website，并映射到领域 basicInfo。未提供 basicInfo 的既有输出按全空处理；Prompt 与输出 Schema 版本同步升级以隔离缓存，不迁移已有画像。

@@ -174,6 +174,81 @@ describe('resume profile Agent boundary schema', () => {
     expect(output).not.toHaveProperty('preferences');
   });
 
+  it('maps evidence-backed basic information and rejects out-of-range contact evidence', () => {
+    // 1、使用合成联系方式验证基础信息只通过已校验的事实值映射。
+    const extracted = '姓名：测试候选人 电话：13800000000 邮箱：candidate@example.com';
+    /** 为合成基础信息生成精确的原文区间和脱敏摘要。 */
+    const fact = (
+      value: string,
+      summary: string,
+    ): {
+      value: string;
+      confidence: number;
+      evidenceRefs: { start: number; end: number; summary: string }[];
+    } => ({
+      value,
+      confidence: 0.95,
+      evidenceRefs: [
+        { start: extracted.indexOf(value), end: extracted.indexOf(value) + value.length, summary },
+      ],
+    });
+    const input = {
+      basicInfo: {
+        name: fact('测试候选人', '候选人姓名'),
+        phone: fact('13800000000', '候选人电话'),
+        email: fact('candidate@example.com', '候选人邮箱'),
+        location: null,
+        website: null,
+      },
+      targetRoles: [],
+      education: [],
+      workExperience: [],
+      projects: [],
+      professionalSkills: [],
+      domains: [],
+      yearsOfExperience: null,
+      managementExperience: null,
+    };
+    const output = parseResumeProfileAgentOutput(input, extracted);
+    expect(toCandidateProfile(output, emptyPreferences).basicInfo).toEqual({
+      name: '测试候选人',
+      phone: '13800000000',
+      email: 'candidate@example.com',
+      location: null,
+      website: null,
+    });
+    // 2、联系方式与其他事实共用证据范围校验，禁止越界引用。
+    expect(() =>
+      parseResumeProfileAgentOutput(
+        {
+          ...input,
+          basicInfo: {
+            ...input.basicInfo,
+            email: {
+              ...input.basicInfo.email,
+              evidenceRefs: [{ start: 0, end: 999, summary: '候选人邮箱' }],
+            },
+          },
+        },
+        extracted,
+      ),
+    ).toThrow(/range exceeds/);
+    // 3、旧输出缺少基础信息时保留全空语义，不根据其他事实猜测。
+    const withoutBasicInfo = { ...input, basicInfo: undefined };
+    expect(
+      toCandidateProfile(
+        parseResumeProfileAgentOutput(withoutBasicInfo, extracted),
+        emptyPreferences,
+      ).basicInfo,
+    ).toEqual({
+      name: null,
+      phone: null,
+      email: null,
+      location: null,
+      website: null,
+    });
+  });
+
   it('rejects facts whose evidence points outside the extracted resume', () => {
     expect(() =>
       parseResumeProfileAgentOutput(
@@ -201,28 +276,28 @@ describe('resume profile Agent boundary schema', () => {
   it('requires the model to output completed education dates', () => {
     const extracted = '某大学 计算机科学 2020年9月';
     const output = parseResumeProfileAgentOutput(
-        {
-          targetRoles: [],
-          education: [
-            {
-              institution: '某大学',
-              degree: '本科',
-              field: '计算机科学',
-              startDate: '2020-09-01',
-              endDate: null,
-              highlights: [],
-              evidenceRefs: [{ start: 0, end: extracted.length, summary: '教育经历' }],
-            },
-          ],
-          workExperience: [],
-          projects: [],
-          professionalSkills: [],
-          domains: [],
-          yearsOfExperience: null,
-          managementExperience: null,
-        },
-        extracted,
-      );
+      {
+        targetRoles: [],
+        education: [
+          {
+            institution: '某大学',
+            degree: '本科',
+            field: '计算机科学',
+            startDate: '2020-09-01',
+            endDate: null,
+            highlights: [],
+            evidenceRefs: [{ start: 0, end: extracted.length, summary: '教育经历' }],
+          },
+        ],
+        workExperience: [],
+        projects: [],
+        professionalSkills: [],
+        domains: [],
+        yearsOfExperience: null,
+        managementExperience: null,
+      },
+      extracted,
+    );
     expect(output.education[0]?.startDate).toBe('2020-09-01');
   });
 });

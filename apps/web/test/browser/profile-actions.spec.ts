@@ -98,6 +98,23 @@ test('窄屏模板选择、打开失败提示和预览仍然可用', async ({ pa
   // 2、预览打开与关闭恢复焦点，保留原有交互行为。
   await preview.click();
   await expect(page.getByRole('dialog')).toBeVisible();
+  // 2.a、窄屏关闭按钮保持红色正方形，避免全局文字按钮样式将其拉宽。
+  const closeButton = page.getByRole('button', { name: '关闭预览', exact: true });
+  const closeBounds = await controlBounds(closeButton);
+  expect(closeBounds.width).toBe(36);
+  expect(closeBounds.height).toBe(36);
+  await expect(closeButton.locator('svg')).toBeVisible();
+  const danger = await closeButton.evaluate((element) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--danger)';
+    element.append(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  });
+  await expect(closeButton).toHaveCSS('color', danger);
+  await closeButton.hover();
+  await expect(closeButton).toHaveCSS('color', danger);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(preview).toBeFocused();

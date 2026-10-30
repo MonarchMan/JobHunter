@@ -54,6 +54,18 @@ describe('offline doctor', () => {
     expect(JSON.stringify(report)).not.toContain('secret path detail');
   });
 
+  it.each([
+    ['24.0.0', 'healthy'],
+    ['26.12.1', 'healthy'],
+    ['23.9.0', 'failed'],
+    ['invalid', 'failed'],
+  ])('diagnoses Node %s as %s', async (version, status) => {
+    expect(await nodeRuntimeCheck(version).run()).toMatchObject({
+      status,
+      details: { requiredRange: '>=24' },
+    });
+  });
+
   it('checks Node 24 and configured adapter registration without network access', async () => {
     const report = await new OfflineDoctorService({
       checks: [
