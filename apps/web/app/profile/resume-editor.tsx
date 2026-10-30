@@ -174,15 +174,14 @@ function prepareDraft(profile: Draft): Draft {
   };
 }
 
+/** 编辑章节只显示标题和字段；章节职责由调用处与字段标签表达。 */
 function EditorSection({
   id,
   title,
-  description,
   children,
 }: Readonly<{
   id: string;
   title: string;
-  description: string;
   children: ReactNode;
 }>): ReactElement {
   return (
@@ -190,7 +189,6 @@ function EditorSection({
       <header>
         <div>
           <h3 id={`${id}-title`}>{title}</h3>
-          <p>{description}</p>
         </div>
       </header>
       {children}
@@ -744,6 +742,7 @@ export function ResumeEditor({
     window.setTimeout(() => previewButton.current?.focus(), 0);
   };
 
+  // 保存表单后创建新的画像版本；资格信息留空表示待确认，随简历统一提交。
   return (
     <form
       className={classNames(styles['structured-resume'], styles['resume-editor-form'])}
@@ -756,7 +755,6 @@ export function ResumeEditor({
       <header className={styles['structured-resume-heading']} data-resume-editor-heading>
         <div>
           <h2>在线简历</h2>
-          <p className="muted">逐项核对解析结果，保存后生成新的画像版本。</p>
         </div>
         <span className="status status-succeeded">可编辑</span>
       </header>
@@ -800,11 +798,7 @@ export function ResumeEditor({
         />
 
         <div className={styles['resume-edit-document']} data-resume-edit-document>
-          <EditorSection
-            id="resume-basic"
-            title="基本信息"
-            description="用于简历抬头和联系，请确认信息准确。"
-          >
+          <EditorSection id="resume-basic" title="基本信息">
             <div className={styles['resume-field-grid']}>
               <Field
                 label="姓名"
@@ -863,11 +857,7 @@ export function ResumeEditor({
             </div>
           </EditorSection>
 
-          <EditorSection
-            id="resume-intention"
-            title="求职意向"
-            description="用于职位筛选和匹配排序。资格信息可留空，留空表示待确认；保存简历后生效。"
-          >
+          <EditorSection id="resume-intention" title="求职意向">
             <div className={styles['resume-field-grid']}>
               <label className={styles['resume-wide-field']}>
                 意向岗位
@@ -1047,11 +1037,7 @@ export function ResumeEditor({
             </div>
           </EditorSection>
 
-          <EditorSection
-            id="resume-education"
-            title="教育经历"
-            description="按时间倒序填写学校、学历与专业。"
-          >
+          <EditorSection id="resume-education" title="教育经历">
             <Repeater
               title="教育经历"
               count={draft.education.length}
@@ -1132,7 +1118,6 @@ export function ResumeEditor({
           <ExperienceEditor
             id="resume-work"
             title="实习与工作经历"
-            description="突出职责、产出与可量化结果。"
             entries={draft.workExperience}
             onChange={(value) => {
               updateArray('workExperience', value);
@@ -1147,7 +1132,6 @@ export function ResumeEditor({
           <SimpleRepeater
             id="resume-works"
             title="作品"
-            description="填写作品、代码仓库或可公开访问的成果。"
             itemLabel="作品"
             items={draft.works}
             fields={[
@@ -1162,7 +1146,6 @@ export function ResumeEditor({
           <SimpleRepeater
             id="resume-competitions"
             title="竞赛"
-            description="记录竞赛名称、奖项和时间。"
             itemLabel="竞赛"
             items={draft.competitions}
             fields={[
@@ -1177,7 +1160,6 @@ export function ResumeEditor({
           <SimpleRepeater
             id="resume-certificates"
             title="证书"
-            description="记录职业、技术或语言类证书。"
             itemLabel="证书"
             items={draft.certificates}
             fields={[
@@ -1192,7 +1174,6 @@ export function ResumeEditor({
           <SimpleRepeater
             id="resume-languages"
             title="语言能力"
-            description="填写语言及听说读写水平或考试成绩。"
             itemLabel="语言"
             items={draft.languages}
             fields={[
@@ -1204,11 +1185,7 @@ export function ResumeEditor({
             }}
           />
 
-          <EditorSection
-            id="resume-skills"
-            title="专业技能"
-            description="用一段连贯文字说明技术栈、工具、专业领域和掌握程度。"
-          >
+          <EditorSection id="resume-skills" title="专业技能">
             <label>
               专业技能
               <textarea
@@ -1222,11 +1199,7 @@ export function ResumeEditor({
               />
             </label>
           </EditorSection>
-          <EditorSection
-            id="resume-evaluation"
-            title="自我评价"
-            description="用简洁事实总结优势、方向与工作方式。"
-          >
+          <EditorSection id="resume-evaluation" title="自我评价">
             <label>
               自我评价
               <textarea
@@ -1275,21 +1248,20 @@ export function ResumeEditor({
   );
 }
 
+/** 编辑工作经历，职责、产出及量化结果由各条经历的描述字段承载。 */
 function ExperienceEditor({
   id,
   title,
-  description,
   entries,
   onChange,
 }: Readonly<{
   id: string;
   title: string;
-  description: string;
   entries: readonly Experience[];
   onChange: (value: Experience[]) => void;
 }>): ReactElement {
   return (
-    <EditorSection id={id} title={title} description={description}>
+    <EditorSection id={id} title={title}>
       <Repeater
         title="经历"
         count={entries.length}
@@ -1377,11 +1349,7 @@ function ProjectEditor({
   onChange,
 }: Readonly<{ entries: readonly Project[]; onChange: (value: Project[]) => void }>): ReactElement {
   return (
-    <EditorSection
-      id="resume-projects"
-      title="项目经历"
-      description="说明项目目标、个人角色和结果。"
-    >
+    <EditorSection id="resume-projects" title="项目经历">
       <Repeater
         title="项目"
         count={entries.length}
@@ -1465,10 +1433,10 @@ function ProjectEditor({
 }
 
 type SimpleItem = Record<string, string | null>;
+/** 按字段定义编辑作品、竞赛、证书和语言列表，不额外重复字段含义。 */
 function SimpleRepeater({
   id,
   title,
-  description,
   itemLabel,
   items,
   fields,
@@ -1476,14 +1444,13 @@ function SimpleRepeater({
 }: Readonly<{
   id: string;
   title: string;
-  description: string;
   itemLabel: string;
   items: readonly SimpleItem[];
   fields: readonly (readonly [string, string])[];
   onChange: (value: SimpleItem[]) => void;
 }>): ReactElement {
   return (
-    <EditorSection id={id} title={title} description={description}>
+    <EditorSection id={id} title={title}>
       <Repeater
         title={itemLabel}
         count={items.length}

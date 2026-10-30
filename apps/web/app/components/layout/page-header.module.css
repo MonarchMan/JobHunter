@@ -16,13 +16,6 @@
   line-height: 1.08;
 }
 
-.header > p {
-  max-width: 34rem;
-  margin-bottom: 0;
-  color: var(--muted-ink);
-  line-height: 1.65;
-}
-
 .header > div:last-child > p {
   margin-bottom: 0;
   line-height: 1.65;

@@ -167,20 +167,13 @@
   margin-bottom: 1rem;
 }
 
-.resume-edit-section > header h3,
-.resume-edit-section > header p {
+.resume-edit-section > header h3 {
   margin: 0;
 }
 
 .resume-edit-section > header h3 {
   margin-top: 0.15rem;
   font-size: 1.15rem;
-}
-
-.resume-edit-section > header p:last-child {
-  margin-top: 0.25rem;
-  color: var(--muted-ink);
-  font-size: 0.9rem;
 }
 
 .resume-edit-section label,

@@ -1,5 +1,15 @@
 # 014 全系统 UI 重设计设计
 
+职位表格与共享 data-table 容器使用 auto 高度、不设最大高度，overflow-x 为 auto、overflow-y 为 hidden，移除 stable scrollbar-gutter；不拦截 wheel 事件，纵向滚轮交由页面处理。弹窗、下拉框与编辑器的滚动独立保留。
+
+移除 CompanySourceCard 的 company-source-meta 提示段落及其专用样式；渠道与来源数量继续由总览统计承载。
+
+官网链接字号为 1rem，链接容器允许收缩并居中；通过 overflow、white-space 与 text-overflow 实现单行省略，title 保留完整 URL。
+
+CompanySourceCard 使用共享 SelectField 替代原生 select，移除全部渠道介绍区；SourcePanel 标题行直接展示 officialUrl 链接，移除渠道名称，状态仍通过徽标、统计和操作控件表达。
+
+移除 EditorSection、ExperienceEditor、SimpleRepeater、PageHeader 的 description 展示与透传属性；内部流程语义转为中文代码注释，作品 description 等业务字段继续保留。同步清理仅用于说明段落的样式。
+
 > 状态：In Progress
 
 职位类别两级选择（UIR-043）：扩展共享 authored `SelectField` 的两级选项变体，沿用 Radix 的弹层、键盘和焦点管理，单入口逐级显示大类和子选项，并可返回上一级。子选项从现有规范细分岗位及领域归类函数生成；只在选择细分或“不限”后原子更新 `targetRoles` 与 `matchingConstraints.targetSubfamily`，中途关闭保持旧值。资格字段组件不再重复渲染独立细分选择，不更改匹配、同步、意向搜索或存储契约。

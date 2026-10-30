@@ -1,13 +1,12 @@
 import type { ReactElement, ReactNode } from 'react';
 import styles from './page-header.module.css';
 
+/** 展示页面标题与可选操作区；页面实现说明保留在代码注释中。 */
 export function PageHeader({
   title,
-  description,
   children,
 }: Readonly<{
   title: string;
-  description?: string;
   children?: ReactNode;
 }>): ReactElement {
   return (
@@ -15,7 +14,7 @@ export function PageHeader({
       <div>
         <h1>{title}</h1>
       </div>
-      {children ?? (description ? <p>{description}</p> : null)}
+      {children}
     </header>
   );
 }

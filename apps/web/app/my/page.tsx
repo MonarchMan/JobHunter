@@ -19,7 +19,7 @@ export default async function MyPage({ searchParams }: MyPageProperties): Promis
   const tab = firstSearchParameter(query, 'tab') === 'applications' ? 'applications' : 'profile';
   return (
     <main id="main-content" className={styles.page} tabIndex={-1}>
-      <PageHeader title="我的" description="管理个人资料，查看全部应聘进展。" />
+      <PageHeader title="我的" />
       <nav className={styles.tabs} aria-label="我的页面分区">
         <a className={tab === 'profile' ? styles.activeTab : undefined} href="/my?tab=profile">
           个人资料
