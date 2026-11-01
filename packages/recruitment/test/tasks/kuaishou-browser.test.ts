@@ -1,4 +1,4 @@
-import type { Page } from 'playwright';
+import { errors, type Page } from 'playwright';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   invokeKuaishouRuntime,
@@ -195,11 +195,40 @@ describe('Kuaishou native browser lifecycle (ADR-0023)', () => {
 
   it('retries when the official runtime is not ready and releases the page', async () => {
     const h = harness();
-    h.page.waitForFunction.mockRejectedValue(new Error('timeout'));
+    h.page.waitForFunction.mockRejectedValue(new errors.TimeoutError('timeout'));
     await expect(h.run()).rejects.toMatchObject({
       category: 'temporary',
       message: 'Kuaishou official runtime did not become ready.',
     });
+    expect(h.page.close).toHaveBeenCalledOnce();
+  });
+
+  it.each(['closed', 'aborted'] as const)(
+    'keeps %s readiness interruptions retryable',
+    async (mode) => {
+      const controller = new AbortController();
+      const h = harness('kuaishou.social', { signal: controller.signal });
+      h.page.goto.mockImplementation(() => {
+        // 1、在导航之后模拟生命周期中断，不能把它误判为脚本协议错误。
+        if (mode === 'closed') h.page.isClosed.mockReturnValue(true);
+        else controller.abort();
+      });
+      h.page.waitForFunction.mockRejectedValue(new Error('interrupted'));
+      await expect(h.run()).rejects.toMatchObject({ category: 'temporary' });
+      expect(h.page.evaluate).not.toHaveBeenCalled();
+      expect(h.page.close).toHaveBeenCalled();
+    },
+  );
+
+  it('reports readiness script failures without retrying or exposing upstream content', async () => {
+    const h = harness();
+    h.page.waitForFunction.mockRejectedValue(new ReferenceError('__name is not defined; private'));
+    await expect(h.run()).rejects.toMatchObject({
+      category: 'parse_changed',
+      message: 'Kuaishou official runtime readiness check failed.',
+      cause: undefined,
+    });
+    expect(h.page.evaluate).not.toHaveBeenCalled();
     expect(h.page.close).toHaveBeenCalledOnce();
   });
 

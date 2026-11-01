@@ -48,6 +48,8 @@ POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、
 
 ## 快手三个渠道
 
+浏览器桥接使用对象方法声明，避免 tsx 为具名箭头属性注入闭包中的函数命名辅助函数。就绪检测仅将 Playwright 超时、页面关闭和任务中止归类为 temporary；脚本执行异常归类为 parse_changed，使用固定摘要避免泄露页面内容。回归测试通过 tsx 子进程加载生产函数并传入真实 Chromium，覆盖桥接注册、重复检测和主站/校园 API 调用。
+
 先独立观察社招、日常实习与校园官网的公开请求，确认筛选参数和岗位深链。协议与频道定义归属 companies/kuaishou，共享公司级解析和归一化，social/intern/campus 各有公开适配器入口与独立身份。
 
 匿名浏览器加载官网之后调用已加载模块的原始公开职位请求方法，保留官网的请求封装、服务器交互和匿名会话，不抽取或重放签名。原生调用只允许经验证的列表、项目和字典操作；模块缺失或接口变化按 parse_changed 失败。接入方式见 [ADR-0023](../../docs/adr/0023-official-runtime-source-driver.md)，通过 SourcePageClient 的 kuaishou-jobs 分发，应用与领域不接触浏览器。

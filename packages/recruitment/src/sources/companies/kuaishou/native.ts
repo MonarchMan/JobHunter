@@ -13,7 +13,8 @@ export function kuaishouRuntimeReady(): boolean {
     root.webpackJsonp.push([
       ['jobhunter_kuaishou_bridge'],
       {
-        jobhunter_kuaishou_bridge: (_module: unknown, _exports: unknown, require: Require) => {
+        // 对象方法不会被 tsx 注入 Node 闭包内的 __name，序列化到浏览器后仍可独立执行。
+        jobhunter_kuaishou_bridge(_module: unknown, _exports: unknown, require: Require) {
           root.__jobhunterKuaishouRequire = require;
         },
       },

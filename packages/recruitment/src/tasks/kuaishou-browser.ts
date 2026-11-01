@@ -14,7 +14,7 @@ import {
   validateKuaishouCollection,
   type KuaishouKey,
 } from '@jobhunter/recruitment';
-import type { Page } from 'playwright';
+import { errors, type Page } from 'playwright';
 import type { BrowserSourceOptions } from './browser-source.js';
 
 /** Worker 持有浏览器生命周期，来源包只提供无浏览器依赖的官网协议函数。 */
@@ -69,11 +69,13 @@ export async function collectKuaishouPages(
   try {
     if (signal.aborted) throw new SourceError('temporary', 'Kuaishou collection was aborted.');
     await page.goto(site.bootstrap, { waitUntil: 'domcontentloaded', timeout: request.timeoutMs });
-    // 2、页面运行时尚未就绪不等于协议已变化；它可能是脚本加载抖动，交由任务退避重试。
+    // 2、仅等待超时或生命周期中断允许重试；脚本错误须显式失败，避免掩盖确定性缺陷。
     await page
       .waitForFunction(kuaishouRuntimeReady, undefined, { timeout: request.timeoutMs })
-      .catch(() => {
-        throw new SourceError('temporary', 'Kuaishou official runtime did not become ready.');
+      .catch((error: unknown) => {
+        if (error instanceof errors.TimeoutError || signal.aborted || page.isClosed())
+          throw new SourceError('temporary', 'Kuaishou official runtime did not become ready.');
+        throw new SourceError('parse_changed', 'Kuaishou official runtime readiness check failed.');
       });
     // 3、主站解码字典；校园站动态选择最新对应性质项目，互不借用社会招聘证据。
     const project = site.campus
