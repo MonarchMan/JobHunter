@@ -1,6 +1,6 @@
 import { createRoot, type Root } from 'react-dom/client';
-import type { ResumeDraftDetail } from '@jobhunter/application/web';
-import { resumeDocumentContentSchema } from '@jobhunter/resume-template';
+import type { ResumeDraftDetail } from '@jobhunter/user/profile';
+import { resumeDocumentContentSchema } from '@jobhunter/user/templates';
 import { ResumeStudio } from '../../app/resume-studio/[draftId]/resume-studio.js';
 import '../../app/styles.css';
 

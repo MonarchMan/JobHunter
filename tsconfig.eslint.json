@@ -3,6 +3,7 @@
   "compilerOptions": {
     "composite": false,
     "noEmit": true,
+    "customConditions": ["development"],
     "jsx": "preserve",
     "lib": ["ES2024", "DOM", "DOM.Iterable"]
   },

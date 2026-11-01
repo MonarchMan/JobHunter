@@ -17,6 +17,9 @@ importers:
       dependency-cruiser:
         specifier: ^17.3.8
         version: 17.4.3
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
       eslint:
         specifier: ^9.39.2
         version: 9.39.5(supports-color@7.1.0)
@@ -41,69 +44,36 @@ importers:
 
   apps/cli:
     dependencies:
-      '@jobhunter/agent-core':
+      '@jobhunter/common':
         specifier: workspace:*
-        version: link:../../packages/agent-core
-      '@jobhunter/application':
-        specifier: workspace:*
-        version: link:../../packages/application
-      '@jobhunter/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
-      '@jobhunter/llm':
-        specifier: workspace:*
-        version: link:../../packages/llm
+        version: link:../../packages/common
       '@jobhunter/matching':
         specifier: workspace:*
         version: link:../../packages/matching
-      '@jobhunter/observability':
+      '@jobhunter/recruitment':
         specifier: workspace:*
-        version: link:../../packages/observability
-      '@jobhunter/sources':
+        version: link:../../packages/recruitment
+      '@jobhunter/user':
         specifier: workspace:*
-        version: link:../../packages/sources
-      '@jobhunter/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
-      '@jobhunter/worker':
-        specifier: workspace:*
-        version: link:../worker
+        version: link:../../packages/user
       commander:
         specifier: ^15.0.0
         version: 15.0.0
 
   apps/web:
     dependencies:
-      '@jobhunter/agent-core':
+      '@jobhunter/common':
         specifier: workspace:*
-        version: link:../../packages/agent-core
-      '@jobhunter/application':
-        specifier: workspace:*
-        version: link:../../packages/application
-      '@jobhunter/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
-      '@jobhunter/llm':
-        specifier: workspace:*
-        version: link:../../packages/llm
-      '@jobhunter/mail-connectors':
-        specifier: workspace:*
-        version: link:../../packages/mail/connectors
+        version: link:../../packages/common
       '@jobhunter/matching':
         specifier: workspace:*
         version: link:../../packages/matching
-      '@jobhunter/resume-template':
+      '@jobhunter/recruitment':
         specifier: workspace:*
-        version: link:../../packages/resume-template
-      '@jobhunter/sources':
+        version: link:../../packages/recruitment
+      '@jobhunter/user':
         specifier: workspace:*
-        version: link:../../packages/sources
+        version: link:../../packages/user
       '@radix-ui/react-select':
         specifier: ^2.3.7
         version: 2.3.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -123,9 +93,6 @@ importers:
       '@axe-core/playwright':
         specifier: ^4.13.0
         version: 4.13.0(playwright-core@1.62.1)
-      '@jobhunter/testkit':
-        specifier: workspace:*
-        version: link:../../packages/testkit
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
@@ -139,282 +106,126 @@ importers:
         specifier: ^4.21.0
         version: 4.23.12
 
-  apps/worker:
+  packages/common:
     dependencies:
-      '@jobhunter/agent-core':
-        specifier: workspace:*
-        version: link:../../packages/agent-core
-      '@jobhunter/application':
-        specifier: workspace:*
-        version: link:../../packages/application
-      '@jobhunter/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
-      '@jobhunter/llm':
-        specifier: workspace:*
-        version: link:../../packages/llm
-      '@jobhunter/mail-connectors':
-        specifier: workspace:*
-        version: link:../../packages/mail/connectors
-      '@jobhunter/matching':
-        specifier: workspace:*
-        version: link:../../packages/matching
-      '@jobhunter/observability':
-        specifier: workspace:*
-        version: link:../../packages/observability
-      '@jobhunter/platform-connectors':
-        specifier: workspace:*
-        version: link:../../packages/platform-connectors
-      '@jobhunter/resume':
-        specifier: workspace:*
-        version: link:../../packages/resume
-      '@jobhunter/source-core':
-        specifier: workspace:*
-        version: link:../../packages/source-core
-      '@jobhunter/sources':
-        specifier: workspace:*
-        version: link:../../packages/sources
-      '@modelcontextprotocol/node':
-        specifier: 2.0.0
-        version: 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.5)
-      '@modelcontextprotocol/server':
-        specifier: 2.0.0
-        version: 2.0.0
-      hono:
-        specifier: ^4.13.5
-        version: 4.13.5
-      playwright:
-        specifier: ^1.62.1
-        version: 1.62.1
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-
-  packages/agent-core:
-    dependencies:
-      zod:
-        specifier: ^4.1.13
-        version: 4.4.3
-
-  packages/application:
-    dependencies:
-      '@jobhunter/agent-core':
-        specifier: workspace:*
-        version: link:../agent-core
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@jobhunter/mail-core':
-        specifier: workspace:*
-        version: link:../mail/core
-      '@jobhunter/matching':
-        specifier: workspace:*
-        version: link:../matching
-      '@jobhunter/platform-core':
-        specifier: workspace:*
-        version: link:../platform-core
-      '@jobhunter/resume':
-        specifier: workspace:*
-        version: link:../resume
-      '@jobhunter/resume-template':
-        specifier: workspace:*
-        version: link:../resume-template
-      '@jobhunter/source-core':
-        specifier: workspace:*
-        version: link:../source-core
-      cron-parser:
-        specifier: ^5.4.0
-        version: 5.10.0
-      html-to-text:
-        specifier: ^10.0.1
-        version: 10.0.1
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@types/html-to-text':
-        specifier: ^9.0.4
-        version: 9.0.4
-
-  packages/db:
-    dependencies:
-      '@jobhunter/agent-core':
-        specifier: workspace:*
-        version: link:../agent-core
-      '@jobhunter/application':
-        specifier: workspace:*
-        version: link:../application
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@jobhunter/matching':
-        specifier: workspace:*
-        version: link:../matching
-      '@jobhunter/platform-core':
-        specifier: workspace:*
-        version: link:../platform-core
-      '@jobhunter/resume':
-        specifier: workspace:*
-        version: link:../resume
-      '@jobhunter/resume-template':
-        specifier: workspace:*
-        version: link:../resume-template
       better-sqlite3:
         specifier: ^12.4.1
         version: 12.11.1
+      cron-parser:
+        specifier: ^5.4.0
+        version: 5.10.0
       drizzle-orm:
         specifier: ^0.45.1
         version: 0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@12.11.1)
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
+      tsx:
+        specifier: ^4.21.0
+        version: 4.23.12
       zod:
         specifier: ^4.1.13
         version: 4.4.3
     devDependencies:
-      '@jobhunter/llm':
-        specifier: workspace:*
-        version: link:../llm
-      '@jobhunter/source-core':
-        specifier: workspace:*
-        version: link:../source-core
-      '@jobhunter/sources':
-        specifier: workspace:*
-        version: link:../sources
-      '@jobhunter/testkit':
-        specifier: workspace:*
-        version: link:../testkit
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
 
-  packages/domain:
+  packages/matching:
     dependencies:
-      zod:
-        specifier: ^4.1.13
-        version: 4.4.3
-
-  packages/llm:
-    dependencies:
-      '@jobhunter/agent-core':
+      '@jobhunter/common':
         specifier: workspace:*
-        version: link:../agent-core
-      zod:
-        specifier: ^4.3.6
-        version: 4.4.3
-
-  packages/mail/connectors:
-    dependencies:
-      '@jobhunter/mail-core':
+        version: link:../common
+      '@jobhunter/recruitment':
         specifier: workspace:*
-        version: link:../core
+        version: link:../recruitment
+      '@jobhunter/user':
+        specifier: workspace:*
+        version: link:../user
+      better-sqlite3:
+        specifier: ^12.4.1
+        version: 12.11.1
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+
+  packages/recruitment:
+    dependencies:
+      '@jobhunter/common':
+        specifier: workspace:*
+        version: link:../common
+      better-sqlite3:
+        specifier: ^12.4.1
+        version: 12.11.1
+      html-to-text:
+        specifier: ^10.0.1
+        version: 10.0.1
       imapflow:
         specifier: ^1.0.181
         version: 1.7.8
       mailparser:
         specifier: ^3.7.4
         version: 3.9.38
+      playwright:
+        specifier: ^1.62.1
+        version: 1.62.1
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/html-to-text':
+        specifier: ^9.0.4
+        version: 9.0.4
 
-  packages/mail/core:
+  packages/user:
     dependencies:
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-
-  packages/matching:
-    dependencies:
-      '@jobhunter/agent-core':
+      '@jobhunter/common':
         specifier: workspace:*
-        version: link:../agent-core
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../domain
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-
-  packages/observability:
-    dependencies:
-      pino:
-        specifier: ^10.3.1
-        version: 10.3.1
-
-  packages/platform-connectors:
-    dependencies:
-      '@jobhunter/platform-core':
-        specifier: workspace:*
-        version: link:../platform-core
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-
-  packages/platform-core: {}
-
-  packages/resume:
-    dependencies:
-      '@jobhunter/agent-core':
-        specifier: workspace:*
-        version: link:../agent-core
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../domain
+        version: link:../common
+      '@modelcontextprotocol/node':
+        specifier: 2.0.0
+        version: 2.0.0(@modelcontextprotocol/server@2.0.0)(hono@4.13.5)
+      '@modelcontextprotocol/server':
+        specifier: 2.0.0
+        version: 2.0.0
       '@tesseract.js-data/chi_sim':
         specifier: ^1.0.0
         version: 1.0.0
       '@tesseract.js-data/eng':
         specifier: ^1.0.0
         version: 1.0.0
+      better-sqlite3:
+        specifier: ^12.4.1
+        version: 12.11.1
+      hono:
+        specifier: ^4.13.5
+        version: 4.13.5
       mammoth:
         specifier: ^1.12.1
         version: 1.12.1
       pdfjs-dist:
         specifier: ^6.2.108
         version: 6.2.108
+      playwright:
+        specifier: ^1.62.1
+        version: 1.62.1
       tesseract.js:
         specifier: ^7.0.0
         version: 7.0.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
-
-  packages/resume-template:
-    dependencies:
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../domain
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-
-  packages/source-core:
-    dependencies:
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../domain
-      zod:
-        specifier: ^4.1.13
-        version: 4.4.3
-
-  packages/sources:
-    dependencies:
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@jobhunter/source-core':
-        specifier: workspace:*
-        version: link:../source-core
-      zod:
-        specifier: ^4.1.13
-        version: 4.4.3
-
-  packages/testkit:
-    dependencies:
-      '@jobhunter/domain':
-        specifier: workspace:*
-        version: link:../domain
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
 
 packages:
 

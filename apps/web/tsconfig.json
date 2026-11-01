@@ -8,16 +8,25 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
-    "plugins": [{ "name": "next" }]
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
   "include": ["next-env.d.ts", "next.config.ts", "app/**/*.ts", "app/**/*.tsx", "src/**/*.ts"],
   "references": [
-    { "path": "../../packages/application" },
-    { "path": "../../packages/db" },
-    { "path": "../../packages/domain" },
-    { "path": "../../packages/matching" },
-    { "path": "../../packages/resume-template" },
-    { "path": "../../packages/sources" },
-    { "path": "../../packages/mail/connectors" }
+    {
+      "path": "../../packages/common"
+    },
+    {
+      "path": "../../packages/matching"
+    },
+    {
+      "path": "../../packages/user"
+    },
+    {
+      "path": "../../packages/recruitment"
+    }
   ]
 }

@@ -1,6 +1,8 @@
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
-import { openSqliteDatabase, SqliteTaskRepository } from '@jobhunter/db';
-import { communityResearchPromptVersion, parseId, utcInstant } from '@jobhunter/domain';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
+import { parseId, utcInstant } from '@jobhunter/common/domain';
+import { communityResearchPromptVersion } from '@jobhunter/user/domain';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';

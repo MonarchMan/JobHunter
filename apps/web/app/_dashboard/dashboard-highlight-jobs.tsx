@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { WebDashboardHighlightJob } from '@jobhunter/application';
+import type { WebDashboardHighlightJob } from '../../src/shared/dashboard-contracts.js';
 import styles from './dashboard-highlight-jobs.module.css';
 
 function formatRelativeTime(dateString: string): string {

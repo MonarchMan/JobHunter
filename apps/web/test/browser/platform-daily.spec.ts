@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
-import type { WebBossSnapshot } from '@jobhunter/application/web';
+import type { WebBossSnapshot } from '@jobhunter/recruitment/platform-application/web-platforms';
 
 /** 日常入口使用本地状态替身；不连接用户浏览器，也不访问招聘网站。 */
 for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {

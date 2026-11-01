@@ -5,13 +5,15 @@ import { Command, Option } from 'commander';
 import {
   bossCommandSchema,
   createPlatformTaskHandler,
-  HandlerRegistry,
-  TaskService,
+} from '@jobhunter/recruitment/platform-application/platforms';
+import { HandlerRegistry, TaskService } from '@jobhunter/common/tasks';
+import {
   platformRetentionCommandSchema,
   createPlatformRetentionTaskHandler,
-} from '@jobhunter/application';
-import { openSqliteDatabase, SqliteTaskRepository } from '@jobhunter/db';
-import { SystemIdGenerator, utcInstant, parseId } from '@jobhunter/domain';
+} from '@jobhunter/recruitment/platform-application/platform-retention';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
+import { SystemIdGenerator, utcInstant, parseId } from '@jobhunter/common/domain';
 import { loadRuntimeConfig } from './runtime-config.js';
 
 /** CLI 仅提交动作或读取脱敏结果；凭据读取与网络执行始终由 Worker 完成。 */

@@ -240,7 +240,7 @@ test('资料缺少具体意向词时禁止请求并提供资料编辑入口', as
   await expect(page.getByRole('button', { name: '获取职位', exact: true })).toBeDisabled();
   await expect(page.getByRole('link', { name: '编辑意向岗位' })).toHaveAttribute(
     'href',
-    '/profile#resume-intention',
+    '/my?tab=profile#resume-intention',
   );
   expect(mutations).toEqual([]);
 });

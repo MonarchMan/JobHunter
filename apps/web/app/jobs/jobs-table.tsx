@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebJobListItem } from '@jobhunter/application/contracts';
+import type { WebJobListItem } from '@jobhunter/matching/contracts/web';
 import type { MouseEvent, ReactElement } from 'react';
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation.js';

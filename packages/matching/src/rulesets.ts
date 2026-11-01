@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import { parseId, type MatchRulesetId } from '@jobhunter/common/domain';
+
+/** 系统默认匹配规则集身份，初始化与 Worker 必须使用同一个稳定值。 */
+export const defaultMatchRulesetId: MatchRulesetId = parseId(
+  '018f0000-0000-7000-8000-000000000305',
+  'MatchRuleset',
+);
 import type { ScoreDimension } from './model.js';
 
 const dimensions = ['skills', 'experience', 'role', 'industry', 'location', 'projects'] as const;

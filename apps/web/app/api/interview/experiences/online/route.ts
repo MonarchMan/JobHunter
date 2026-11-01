@@ -1,4 +1,4 @@
-import { webCreateOnlineExperienceSchema } from '@jobhunter/application/contracts';
+import { webCreateOnlineExperienceSchema } from '@jobhunter/user/contracts/experience-web';
 import { forbiddenResponse, dataResponse } from '../../../../../src/server/http.js';
 import { getWebContainer } from '../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../src/server/csrf.js';

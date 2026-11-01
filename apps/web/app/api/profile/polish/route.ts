@@ -1,5 +1,5 @@
-import { ResumePolishValidationError } from '@jobhunter/application/profile';
-import { webResumePolishRequestSchema } from '@jobhunter/application/contracts';
+import { ResumePolishValidationError } from '@jobhunter/user/profile/resume-polish-service';
+import { webResumePolishRequestSchema } from '@jobhunter/user/contracts/web';
 import { ZodError } from 'zod';
 import {
   badRequestResponse,

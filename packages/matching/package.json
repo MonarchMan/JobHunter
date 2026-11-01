@@ -4,10 +4,85 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./persistence/resource-reference-reader": {
+      "development": "./src/persistence/resource-reference-reader.ts",
+      "types": "./dist/persistence/resource-reference-reader.d.ts",
+      "import": "./dist/persistence/resource-reference-reader.js"
+    },
+    "./profile-platform-search": {
+      "development": "./src/application/profile-platform-search.ts",
+      "types": "./dist/application/profile-platform-search.d.ts",
+      "import": "./dist/application/profile-platform-search.js"
+    },
+    "./persistence/profile-derived-data-manager": {
+      "development": "./src/persistence/profile-derived-data-manager.ts",
+      "types": "./dist/persistence/profile-derived-data-manager.d.ts",
+      "import": "./dist/persistence/profile-derived-data-manager.js"
+    },
+    "./persistence/dashboard-reader": {
+      "development": "./src/persistence/dashboard-reader.ts",
+      "types": "./dist/persistence/dashboard-reader.d.ts",
+      "import": "./dist/persistence/dashboard-reader.js"
+    },
+    "./persistence/web-job-trace-repository": {
+      "development": "./src/persistence/web-job-trace-repository.ts",
+      "types": "./dist/persistence/web-job-trace-repository.d.ts",
+      "import": "./dist/persistence/web-job-trace-repository.js"
+    },
+    "./persistence/job-score-reader": {
+      "development": "./src/persistence/job-score-reader.ts",
+      "types": "./dist/persistence/job-score-reader.d.ts",
+      "import": "./dist/persistence/job-score-reader.js"
+    },
+    "./contracts/web": {
+      "development": "./src/contracts/web.ts",
+      "types": "./dist/contracts/web.d.ts",
+      "import": "./dist/contracts/web.js"
+    },
+    "./domain": {
+      "development": "./src/domain/index.ts",
+      "types": "./dist/domain/index.d.ts",
+      "import": "./dist/domain/index.js"
+    },
+    "./profile-job-intake-policy": {
+      "development": "./src/application/profile-job-intake-policy.ts",
+      "types": "./dist/application/profile-job-intake-policy.d.ts",
+      "import": "./dist/application/profile-job-intake-policy.js"
+    },
+    "./persistence": {
+      "development": "./src/persistence/sqlite-matching-repository.ts",
+      "types": "./dist/persistence/sqlite-matching-repository.d.ts",
+      "import": "./dist/persistence/sqlite-matching-repository.js"
+    },
+    "./application": {
+      "development": "./src/application/index.ts",
+      "types": "./dist/application/index.d.ts",
+      "import": "./dist/application/index.js"
+    },
+    "./application/*": {
+      "development": "./src/application/*.ts",
+      "types": "./dist/application/*.d.ts",
+      "import": "./dist/application/*.js"
+    },
+    "./ports/matching": {
+      "development": "./src/ports/matching.ts",
+      "types": "./dist/ports/matching.d.ts",
+      "import": "./dist/ports/matching.js"
+    },
     ".": {
       "development": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./tasks": {
+      "development": "./src/tasks/index.ts",
+      "types": "./dist/tasks/index.d.ts",
+      "import": "./dist/tasks/index.js"
+    },
+    "./tasks/*": {
+      "development": "./src/tasks/*.ts",
+      "types": "./dist/tasks/*.d.ts",
+      "import": "./dist/tasks/*.js"
     }
   },
   "types": "./dist/index.d.ts",
@@ -15,12 +90,17 @@
     "dist"
   ],
   "dependencies": {
-    "@jobhunter/agent-core": "workspace:*",
-    "@jobhunter/domain": "workspace:*",
+    "@jobhunter/common": "workspace:*",
+    "@jobhunter/recruitment": "workspace:*",
+    "@jobhunter/user": "workspace:*",
+    "better-sqlite3": "^12.4.1",
     "zod": "^4.4.3"
   },
   "scripts": {
     "build": "tsc -b",
     "typecheck": "tsc -b --pretty false"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
   }
 }

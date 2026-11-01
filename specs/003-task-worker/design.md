@@ -10,9 +10,9 @@ Worker 由装配层注入数据库锁忙判定，应用层不依赖 SQLite 驱�
 
 ## 包与入口
 
-- `packages/application/tasks`：enqueue、cancel、retry、query 用例。
-- `packages/db/repositories/task-repository`：原子领取和状态转换。
-- `apps/worker`：生命周期、循环和 Handler 装配。
+- `packages/common/src/tasks`：enqueue、cancel、retry、query、引擎和通用生命周期。
+- `packages/common/src/persistence/task-repository.ts`：原子领取和状态转换。
+- 业务模块 `tasks` 工厂提供处理器；CLI/Web 装配后承载执行，不保留独立 Worker 入口。
 
 Handler 定义 payload/output Schema、默认 maxAttempts、lease duration 和 `execute(ctx, payload)`。`ctx` 提供 AbortSignal、Clock、Logger 和受限应用服务。
 
@@ -28,7 +28,7 @@ Worker 使用 Node 事件循环延迟直方图周期输出 `worker.runtime`，�
 
 Cron 解析使用 `cron-parser` 和 IANA timezone；计算结果统一转换为 UTC epoch milliseconds 后持久化。夏令时重复/跳过时以库的时区语义为准，并用 occurrence UTC 时间参与幂等键。
 
-重试由 `RetryPolicy` 产生 `availableAt`；测试注入确定性随机数。按 ADR-0045，手动 retry 原子记录脱敏失败日志并将原任务重新入队，任务 ID、业务关联与原幂等键不变；操作令牌在日志中去重，自动尝试预算重置。历史子任务链保留。
+重试由 `RetryPolicy` 产生 `availableAt`；测试注入确定性随机数。按 ADR-0045，手动 retry 原子记录脱敏失败日志并将原任务重新入队，任务 ID、业务关联与原幂等键不变；操作令牌在日志中去重，累计 attempt_count 保留，max_attempts 设置为当前 attempt_count 加本轮 Handler 预算；领取及租约恢复继续比较累计次数与累计上限。已有历史计数不回填，失败日志记录重试时的累计快照。历史子任务链保留。
 
 ## 取消
 

@@ -499,22 +499,22 @@ flowchart LR
 ### 8.1 当前代码归属
 
 ```text
-packages/domain/src/interview/
+packages/user/src/domain/interview/
   # ProjectDossier、DrillSession、资料证据、个人/网友面经 Schema 等纯领域模型
 
-packages/application/src/interview/
+packages/user/src/interview/
   # Profile、Markdown 清洗/分块、上下文排序、Agent 定义、项目/面经/研究用例
 
-packages/application/src/ports/
+packages/user/src/ports/
   # Interview Repository、ArtifactStore 与 ExternalResearchExecutor 应用端口
 
-packages/db/src/repositories/interview-*.ts、packages/db/src/artifact-store.ts
+packages/user/src/persistence/interview-*.ts、packages/user/src/persistence/artifact-store.ts
   # SQLite Repository 与通用文件实体实现
 
-apps/worker/src/codex-research-executor.ts
+packages/user/src/tasks/codex-research-executor.ts
   # 当前三种研究执行适配器；只实现应用端口
 
-apps/cli、apps/web、apps/worker
+apps/cli、apps/web
   # 命令/路由/Handler 与最终装配
 ```
 
@@ -524,7 +524,7 @@ apps/cli、apps/web、apps/worker
 apps/* → application → domain
                    → agent-core
                    → application ports ← db / parser adapters
-                   ↖ apps/worker 中的研究执行适配器
+                   ↖ user/tasks 中的研究执行适配器
 ```
 
 应用层不依赖 SQLite、模型供应商或 CLI 具体实现；数据库仓储和 Worker 内的研究适配器分别实现应用端口。若未来提取独立外部执行器包，也必须保持同一依赖方向。
@@ -775,10 +775,10 @@ ResearchBundle 校验至少拒绝：
 
 当前实现路径如下：
 
-- 深档领域与应用：`packages/domain/src/interview/project-drill.ts`，以及 `packages/application/src/interview/` 下的 `material.ts`、`profile.ts`、`context.ts`、`agents.ts`、`service.ts` 和 `task-handlers.ts`。
-- 深档持久化与 Web：`packages/db/src/repositories/interview-project-repository.ts`、`apps/web/app/api/interview/projects/[id]/materials/route.ts`、`apps/web/app/api/interview/projects/[id]/sessions/route.ts` 和 `apps/web/app/interview/projects/[id]/workbench.tsx`。
-- 网友面经领域与应用：`packages/domain/src/interview/community-research.ts`，以及 `packages/application/src/interview/` 下的 `research-prompt.ts`、`research-collection-plan.ts`、`research-normalization.ts`、`research-service.ts`、`research-task-handler.ts`。
-- 网友面经端口与基础设施：`packages/application/src/ports/interview-research.ts`、`packages/application/src/ports/external-research.ts`、`packages/db/src/repositories/interview-research-repository.ts`、`apps/worker/src/codex-research-executor.ts`、`apps/worker/src/research-browser-gateway.ts` 和 Worker 装配 `apps/worker/src/index.ts`。
+- 深档领域与应用：`packages/user/src/domain/interview/project-drill.ts`，以及 `packages/user/src/interview/` 下的 `material.ts`、`profile.ts`、`context.ts`、`agents.ts`、`service.ts` 和 `task-handlers.ts`。
+- 深档持久化与 Web：`packages/user/src/persistence/interview-project-repository.ts`、`apps/web/app/api/interview/projects/[id]/materials/route.ts`、`apps/web/app/api/interview/projects/[id]/sessions/route.ts` 和 `apps/web/app/interview/projects/[id]/workbench.tsx`。
+- 网友面经领域与应用：`packages/user/src/domain/interview/community-research.ts`，以及 `packages/user/src/interview/` 下的 `research-prompt.ts`、`research-collection-plan.ts`、`research-normalization.ts`、`research-service.ts`、`research-task-handler.ts`。
+- 网友面经端口与基础设施：`packages/user/src/ports/interview-research.ts`、`packages/user/src/ports/external-research.ts`、`packages/user/src/persistence/interview-research-repository.ts`、`packages/user/src/tasks/codex-research-executor.ts`、`packages/user/src/tasks/research-browser-gateway.ts` 和 Worker 装配 `apps/web/src/server/task-runtime.ts`。
 - 网友面经 Web：`apps/web/app/api/interview/research/` 与 `apps/web/app/interview/research/`。
 
 [ADR-0010](../adr/0010-interview-preparation-and-external-agent-boundaries.md) 已接受以下跨模块决策：

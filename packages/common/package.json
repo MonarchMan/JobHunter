@@ -1,0 +1,177 @@
+{
+  "name": "@jobhunter/common",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./task-host": {
+      "development": "./src/tasks/configured-host.ts",
+      "types": "./dist/tasks/configured-host.d.ts",
+      "import": "./dist/tasks/configured-host.js"
+    },
+    "./resource-references": {
+      "development": "./src/contracts/resource-references.ts",
+      "types": "./dist/contracts/resource-references.d.ts",
+      "import": "./dist/contracts/resource-references.js"
+    },
+    "./persistence/runtime-reference-reader": {
+      "development": "./src/persistence/runtime-reference-reader.ts",
+      "types": "./dist/persistence/runtime-reference-reader.d.ts",
+      "import": "./dist/persistence/runtime-reference-reader.js"
+    },
+    "./persistence/agent-run-cleanup": {
+      "development": "./src/persistence/agent-run-cleanup.ts",
+      "types": "./dist/persistence/agent-run-cleanup.d.ts",
+      "import": "./dist/persistence/agent-run-cleanup.js"
+    },
+    "./persistence/task-relation-status-reader": {
+      "development": "./src/persistence/task-relation-status-reader.ts",
+      "types": "./dist/persistence/task-relation-status-reader.d.ts",
+      "import": "./dist/persistence/task-relation-status-reader.js"
+    },
+    "./web-contracts": {
+      "development": "./src/contracts/web.ts",
+      "types": "./dist/contracts/web.d.ts",
+      "import": "./dist/contracts/web.js"
+    },
+    "./persistence/connection": {
+      "development": "./src/persistence/connection.ts",
+      "types": "./dist/persistence/connection.d.ts",
+      "import": "./dist/persistence/connection.js"
+    },
+    "./persistence/backup": {
+      "development": "./src/persistence/backup.ts",
+      "types": "./dist/persistence/backup.d.ts",
+      "import": "./dist/persistence/backup.js"
+    },
+    "./persistence/backup-operations": {
+      "development": "./src/persistence/backup-operations.ts",
+      "types": "./dist/persistence/backup-operations.d.ts",
+      "import": "./dist/persistence/backup-operations.js"
+    },
+    "./config/*": {
+      "development": "./src/config/*.ts",
+      "types": "./dist/config/*.d.ts",
+      "import": "./dist/config/*.js"
+    },
+    "./persistence/sqlite-maintenance-repository": {
+      "development": "./src/persistence/sqlite-maintenance-repository.ts",
+      "types": "./dist/persistence/sqlite-maintenance-repository.d.ts",
+      "import": "./dist/persistence/sqlite-maintenance-repository.js"
+    },
+    "./persistence/busy-error": {
+      "development": "./src/persistence/busy-error.ts",
+      "types": "./dist/persistence/busy-error.d.ts",
+      "import": "./dist/persistence/busy-error.js"
+    },
+    "./persistence/cleanup": {
+      "development": "./src/persistence/cleanup.ts",
+      "types": "./dist/persistence/cleanup.d.ts",
+      "import": "./dist/persistence/cleanup.js"
+    },
+    "./persistence/health": {
+      "development": "./src/persistence/health.ts",
+      "types": "./dist/persistence/health.d.ts",
+      "import": "./dist/persistence/health.js"
+    },
+    "./persistence/doctor-check": {
+      "development": "./src/persistence/doctor-check.ts",
+      "types": "./dist/persistence/doctor-check.d.ts",
+      "import": "./dist/persistence/doctor-check.js"
+    },
+    "./operations/*": {
+      "development": "./src/operations/*.ts",
+      "types": "./dist/operations/*.d.ts",
+      "import": "./dist/operations/*.js"
+    },
+    "./persistence/errors": {
+      "development": "./src/persistence/errors.ts",
+      "types": "./dist/persistence/errors.d.ts",
+      "import": "./dist/persistence/errors.js"
+    },
+    "./persistence/maintenance": {
+      "development": "./src/persistence/maintenance-gate.ts",
+      "types": "./dist/persistence/maintenance-gate.d.ts",
+      "import": "./dist/persistence/maintenance-gate.js"
+    },
+    "./persistence/tasks": {
+      "development": "./src/persistence/task-repository.ts",
+      "types": "./dist/persistence/task-repository.d.ts",
+      "import": "./dist/persistence/task-repository.js"
+    },
+    "./persistence/agent-runs": {
+      "development": "./src/persistence/agent-run-store.ts",
+      "types": "./dist/persistence/agent-run-store.d.ts",
+      "import": "./dist/persistence/agent-run-store.js"
+    },
+    "./tasks": {
+      "development": "./src/tasks/index.ts",
+      "types": "./dist/tasks/index.d.ts",
+      "import": "./dist/tasks/index.js"
+    },
+    "./domain": {
+      "development": "./src/domain/index.ts",
+      "types": "./dist/domain/index.d.ts",
+      "import": "./dist/domain/index.js"
+    },
+    "./testing": {
+      "development": "./src/testing/index.ts",
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./agent": {
+      "development": "./src/agent/index.ts",
+      "types": "./dist/agent/index.d.ts",
+      "import": "./dist/agent/index.js"
+    },
+    "./logging": {
+      "development": "./src/logging/index.ts",
+      "types": "./dist/logging/index.d.ts",
+      "import": "./dist/logging/index.js"
+    },
+    "./models": {
+      "development": "./src/models/index.ts",
+      "types": "./dist/models/index.d.ts",
+      "import": "./dist/models/index.js"
+    },
+    "./task-runtime": {
+      "development": "./src/tasks/runtime.ts",
+      "types": "./dist/tasks/runtime.d.ts",
+      "import": "./dist/tasks/runtime.js"
+    },
+    "./task-cleanup": {
+      "development": "./src/tasks/cleanup-capability.ts",
+      "types": "./dist/tasks/cleanup-capability.d.ts",
+      "import": "./dist/tasks/cleanup-capability.js"
+    },
+    "./task-maintenance": {
+      "development": "./src/tasks/sqlite-maintenance.ts",
+      "types": "./dist/tasks/sqlite-maintenance.d.ts",
+      "import": "./dist/tasks/sqlite-maintenance.js"
+    },
+    "./browser/executable": {
+      "development": "./src/browser/executable.ts",
+      "types": "./dist/browser/executable.d.ts",
+      "import": "./dist/browser/executable.js"
+    }
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.1",
+    "better-sqlite3": "^12.4.1",
+    "cron-parser": "^5.4.0",
+    "pino": "^10.3.1",
+    "zod": "^4.1.13",
+    "tsx": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}

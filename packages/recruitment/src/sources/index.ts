@@ -1,0 +1,41 @@
+/** 一方来源适配器的公开导出入口。 */
+export * from './catalog/index.js';
+export * from './companies/alibaba/campus/index.js';
+export * from './companies/baidu/campus/index.js';
+export * from './companies/bilibili/social/index.js';
+export * from './companies/bytedance/index.js';
+export * from './companies/dewu/campus/index.js';
+export * from './companies/huawei/campus/index.js';
+export * from './companies/huawei/social/index.js';
+export * from './companies/jd/social/index.js';
+export * from './companies/jd/campus/index.js';
+export * from './companies/meituan/index.js';
+export * from './companies/netease/mixed/index.js';
+export * from './companies/netease/campus/index.js';
+export * from './companies/netease/intern/index.js';
+export * from './companies/netease/social/index.js';
+export * from './companies/oppo/intern/index.js';
+export * from './companies/oppo/social/index.js';
+export * from './companies/pinduoduo/intern/index.js';
+export * from './companies/qihoo360/social/index.js';
+export * from './companies/qihoo360/campus/index.js';
+export * from './companies/tencent/social/index.js';
+export * from './companies/tencent/intern/index.js';
+export * from './companies/xiaohongshu/campus/index.js';
+export * from './companies/vivo/social/index.js';
+export * from './companies/vivo/campus/index.js';
+export * from './companies/xiaomi/intern/index.js';
+export * from './shared/browser/browser-pool.js';
+export * from './shared/channel-view/index.js';
+export * from './shared/paged-json/index.js';
+export * from './shared/scripted/index.js';
+export * from './shared/normalization/job-taxonomy.js';
+export * from './shared/normalization/recruitment-category.js';
+
+/** Public package identifier used by composition smoke tests. */
+/** 来源适配器使用的稳定配置或常量。 */
+export const packageId = '@jobhunter/recruitment' as const;
+export * from './companies/kuaishou/index.js';
+export * from './companies/didi/index.js';
+export * from './companies/ctrip/index.js';
+export * from './companies/mihoyo/index.js';

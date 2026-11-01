@@ -1,8 +1,10 @@
-import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application';
-import { createBackup, openSqliteDatabase, SqliteArtifactStore, verifyBackup } from '@jobhunter/db';
-import { utcInstant } from '@jobhunter/domain';
-import { createSafeLogger } from '@jobhunter/observability';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
+import { createBackup, verifyBackup } from '@jobhunter/common/persistence/backup';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteArtifactStore } from '@jobhunter/user/persistence/artifact-store';
+import { utcInstant } from '@jobhunter/common/domain';
+import { createSafeLogger } from '@jobhunter/common/logging';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';

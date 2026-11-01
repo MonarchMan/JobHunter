@@ -1,4 +1,4 @@
-import { webDeleteProjectDossierSchema } from '@jobhunter/application/contracts';
+import { webDeleteProjectDossierSchema } from '@jobhunter/user/contracts/interview-web';
 import { getWebContainer } from '../../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../../../../src/server/http.js';

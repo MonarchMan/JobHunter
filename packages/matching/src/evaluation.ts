@@ -1,7 +1,8 @@
-import { candidateProfileSchema, normalizedJobSchema } from '@jobhunter/domain';
+import { candidateProfileSchema, type CandidateProfileData } from '@jobhunter/user/contracts';
+import { normalizedJobSchema, type NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { z } from 'zod';
-import { jobUnderstandingSchema } from './job-understanding.js';
-import { jobAdviceSchema, parseJobAdviceAgentOutput } from './job-advice-agent.js';
+import { jobUnderstandingSchema, type JobUnderstanding } from './job-understanding.js';
+import { jobAdviceSchema, parseJobAdviceAgentOutput, type JobAdvice } from './job-advice-agent.js';
 import { calculateDeterministicMatch } from './scoring.js';
 
 const goldenJobSchema = z
@@ -20,7 +21,7 @@ const goldenJobSchema = z
   .strict();
 
 /** 匹配黄金样例 Schema。 */
-export const matchingGoldenCaseSchema = z
+export const matchingGoldenCaseSchema: z.ZodType<MatchingGoldenCase> = z
   .object({
     id: z.string().trim().min(1),
     profile: candidateProfileSchema,
@@ -39,7 +40,21 @@ export const matchingGoldenCaseSchema = z
   .strict();
 
 /** 模块使用的类型约束。 */
-export type MatchingGoldenCase = z.infer<typeof matchingGoldenCaseSchema>;
+export interface MatchingGoldenCase {
+  readonly id: string;
+  readonly profile: CandidateProfileData;
+  readonly jobs: {
+    readonly job: NormalizedJob;
+    readonly company: {
+      readonly sizeCategory: 'large' | 'medium' | 'other' | null;
+      readonly industry: string | null;
+    };
+    readonly understanding: JobUnderstanding | null;
+    readonly relevant: boolean;
+    readonly mustNotExclude: boolean;
+  }[];
+  readonly adviceSamples: { readonly externalJobId: string; readonly output: JobAdvice }[];
+}
 
 /** 模块数据结构或契约。 */
 export interface MatchingEvaluationMetrics {

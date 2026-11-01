@@ -1,4 +1,4 @@
-import type { TaskRecord, TaskStatus } from '@jobhunter/application';
+import type { TaskRecord, TaskStatus } from '@jobhunter/common/tasks';
 import { Command, CommanderError, Option } from 'commander';
 import type { CliContainer } from './container.js';
 import type { CliIo } from './io.js';
@@ -33,7 +33,6 @@ const helpExamples: Readonly<Record<string, readonly string[]>> = {
   'source list': ['jh --json source list'],
   'source status': ['jh source status tencent-social'],
   'source sync': ['jh source sync tencent-social', 'jh source sync --all --wait'],
-  'worker start': ['jh worker start'],
   'task list': ['jh task list --status pending,running --limit 20'],
   'task show': ['jh --json task show <taskId>'],
   'task retry': ['jh task retry <taskId>'],
@@ -522,25 +521,6 @@ export function createProgram(input: {
         });
       input.onResult({ data: result, human: `取消结果：${result.kind}` });
     });
-
-  program
-    .command('worker')
-    .description('运行后台任务 Worker')
-    .addCommand(
-      new Command('start')
-        .description('启动 Worker；Ctrl+C 或 SIGTERM 优雅关闭')
-        .action(async () => {
-          if (!input.container.worker)
-            throw new CliError({
-              code: 'CONFIGURATION_ERROR',
-              message: 'Worker 服务未装配。',
-              exitCode: cliExitCode.usage,
-            });
-          input.io.stderr.write('Worker 已启动；按 Ctrl+C 优雅关闭。\n');
-          await input.container.worker.start();
-          input.onResult({ data: { status: 'stopped' }, human: 'Worker 已停止。' });
-        }),
-    );
 
   const job = program.command('job').description('查询和导出职位');
   job.addCommand(
@@ -1090,7 +1070,7 @@ export function createProgram(input: {
                 `默认计划：${String(initialized.bootstrap.schedules)} 个`,
               ]
             : []),
-          '下一步：运行 jh doctor，然后启动 jh worker start。',
+          '下一步：运行 jh doctor，然后启动 Web；CLI 等待命令会按需执行任务。',
         ].join('\n'),
       });
     });

@@ -1,4 +1,4 @@
-import type { PromptDescriptor } from '@jobhunter/agent-core';
+import type { PromptDescriptor } from '@jobhunter/common/agent';
 
 /** 模块使用的稳定配置或常量。 */
 export const jobUnderstandingPromptV1: PromptDescriptor = {

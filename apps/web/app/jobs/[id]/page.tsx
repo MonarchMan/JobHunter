@@ -1,4 +1,4 @@
-import { JobNotFoundError } from '@jobhunter/application/jobs';
+import { JobNotFoundError } from '@jobhunter/recruitment/jobs/job-query-service';
 import { matchEvidenceCoverage } from '@jobhunter/matching';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';

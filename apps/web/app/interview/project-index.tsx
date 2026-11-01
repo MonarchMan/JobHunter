@@ -1,9 +1,6 @@
 'use client';
 
-import type {
-  AvailableResumeProject,
-  ProjectDossierSummary,
-} from '@jobhunter/application/interview';
+import type { AvailableResumeProject, ProjectDossierSummary } from '@jobhunter/user/interview';
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useState } from 'react';

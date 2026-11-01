@@ -130,8 +130,7 @@
 }
 
 .outsideMonth {
-  color: #a3a9b3;
-  opacity: 0.62;
+  color: var(--muted-ink);
 }
 
 .today .dayNumber,

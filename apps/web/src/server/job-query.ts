@@ -1,4 +1,4 @@
-import { webJobQuerySchema, type WebJobQuery } from '@jobhunter/application/contracts';
+import { webJobQuerySchema, type WebJobQuery } from '@jobhunter/matching/contracts/web';
 
 /** 模块使用的类型约束。 */
 export type SearchParameterSource = Readonly<

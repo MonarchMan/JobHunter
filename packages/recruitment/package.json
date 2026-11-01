@@ -1,0 +1,243 @@
+{
+  "name": "@jobhunter/recruitment",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./contracts/profile-search": {
+      "development": "./src/contracts/profile-search.ts",
+      "types": "./dist/contracts/profile-search.d.ts",
+      "import": "./dist/contracts/profile-search.js"
+    },
+    "./contracts/platform": {
+      "development": "./src/contracts/platform.ts",
+      "types": "./dist/contracts/platform.d.ts",
+      "import": "./dist/contracts/platform.js"
+    },
+    "./contracts/matching-jobs": {
+      "development": "./src/contracts/matching-jobs.ts",
+      "types": "./dist/contracts/matching-jobs.d.ts",
+      "import": "./dist/contracts/matching-jobs.js"
+    },
+    "./contracts/dashboard": {
+      "development": "./src/contracts/dashboard.ts",
+      "types": "./dist/contracts/dashboard.d.ts",
+      "import": "./dist/contracts/dashboard.js"
+    },
+    "./contracts/job-history": {
+      "development": "./src/contracts/job-history.ts",
+      "types": "./dist/contracts/job-history.d.ts",
+      "import": "./dist/contracts/job-history.js"
+    },
+    "./contracts/job-query": {
+      "development": "./src/contracts/job-query.ts",
+      "types": "./dist/contracts/job-query.d.ts",
+      "import": "./dist/contracts/job-query.js"
+    },
+    "./contracts/job-scores": {
+      "development": "./src/contracts/job-scores.ts",
+      "types": "./dist/contracts/job-scores.d.ts",
+      "import": "./dist/contracts/job-scores.js"
+    },
+    "./diagnostics/*": {
+      "development": "./src/diagnostics/*.ts",
+      "types": "./dist/diagnostics/*.d.ts",
+      "import": "./dist/diagnostics/*.js"
+    },
+    "./contracts/application-progress-web": {
+      "development": "./src/contracts/application-progress-web.ts",
+      "types": "./dist/contracts/application-progress-web.d.ts",
+      "import": "./dist/contracts/application-progress-web.js"
+    },
+    "./contracts/web": {
+      "development": "./src/contracts/web.ts",
+      "types": "./dist/contracts/web.d.ts",
+      "import": "./dist/contracts/web.js"
+    },
+    "./settings": {
+      "development": "./src/settings/system-settings-service.ts",
+      "types": "./dist/settings/system-settings-service.d.ts",
+      "import": "./dist/settings/system-settings-service.js"
+    },
+    "./contracts/domain": {
+      "development": "./src/contracts/domain.ts",
+      "types": "./dist/contracts/domain.d.ts",
+      "import": "./dist/contracts/domain.js"
+    },
+    "./testing": {
+      "development": "./src/testing/index.ts",
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./applications/*": {
+      "development": "./src/applications/*.ts",
+      "types": "./dist/applications/*.d.ts",
+      "import": "./dist/applications/*.js"
+    },
+    "./calendar/*": {
+      "development": "./src/calendar/*.ts",
+      "types": "./dist/calendar/*.d.ts",
+      "import": "./dist/calendar/*.js"
+    },
+    "./platform-application/*": {
+      "development": "./src/platform/application/*.ts",
+      "types": "./dist/platform/application/*.d.ts",
+      "import": "./dist/platform/application/*.js"
+    },
+    "./platform-retention-contracts": {
+      "development": "./src/platform/contracts/platform-retention.ts",
+      "types": "./dist/platform/contracts/platform-retention.d.ts",
+      "import": "./dist/platform/contracts/platform-retention.js"
+    },
+    "./jobs/job-query-service": {
+      "development": "./src/jobs/job-query-service.ts",
+      "types": "./dist/jobs/job-query-service.d.ts",
+      "import": "./dist/jobs/job-query-service.js"
+    },
+    "./ports/job-query": {
+      "development": "./src/ports/job-query.ts",
+      "types": "./dist/ports/job-query.d.ts",
+      "import": "./dist/ports/job-query.js"
+    },
+    "./jobs/*": {
+      "development": "./src/jobs/*.ts",
+      "types": "./dist/jobs/*.d.ts",
+      "import": "./dist/jobs/*.js"
+    },
+    "./domain": {
+      "development": "./src/domain/index.ts",
+      "types": "./dist/domain/index.d.ts",
+      "import": "./dist/domain/index.js"
+    },
+    "./sync/*": {
+      "development": "./src/sync/*.ts",
+      "types": "./dist/sync/*.d.ts",
+      "import": "./dist/sync/*.js"
+    },
+    "./source-management-service": {
+      "development": "./src/sync/source-management-service.ts",
+      "types": "./dist/sync/source-management-service.d.ts",
+      "import": "./dist/sync/source-management-service.js"
+    },
+    "./contracts/job-intake": {
+      "development": "./src/contracts/job-intake.ts",
+      "types": "./dist/contracts/job-intake.d.ts",
+      "import": "./dist/contracts/job-intake.js"
+    },
+    "./sync-model": {
+      "development": "./src/sync/model.ts",
+      "types": "./dist/sync/model.d.ts",
+      "import": "./dist/sync/model.js"
+    },
+    "./ports/*": {
+      "development": "./src/ports/*.ts",
+      "types": "./dist/ports/*.d.ts",
+      "import": "./dist/ports/*.js"
+    },
+    "./persistence/*": {
+      "development": "./src/persistence/*.ts",
+      "types": "./dist/persistence/*.d.ts",
+      "import": "./dist/persistence/*.js"
+    },
+    "./mail-application": {
+      "development": "./src/mail/application/index.ts",
+      "types": "./dist/mail/application/index.d.ts",
+      "import": "./dist/mail/application/index.js"
+    },
+    "./mail-application/*": {
+      "development": "./src/mail/application/*.ts",
+      "types": "./dist/mail/application/*.d.ts",
+      "import": "./dist/mail/application/*.js"
+    },
+    "./platform-contracts": {
+      "development": "./src/platform/contracts/index.ts",
+      "types": "./dist/platform/contracts/index.d.ts",
+      "import": "./dist/platform/contracts/index.js"
+    },
+    "./platform-connectors": {
+      "development": "./src/platform/connectors/index.ts",
+      "types": "./dist/platform/connectors/index.d.ts",
+      "import": "./dist/platform/connectors/index.js"
+    },
+    "./source-contracts": {
+      "development": "./src/source-core/index.ts",
+      "types": "./dist/source-core/index.d.ts",
+      "import": "./dist/source-core/index.js"
+    },
+    "./mail-contracts": {
+      "development": "./src/mail/contracts/index.ts",
+      "types": "./dist/mail/contracts/index.d.ts",
+      "import": "./dist/mail/contracts/index.js"
+    },
+    "./mail-metadata": {
+      "development": "./src/mail/connectors/metadata.ts",
+      "types": "./dist/mail/connectors/metadata.d.ts",
+      "import": "./dist/mail/connectors/metadata.js"
+    },
+    "./mail-config": {
+      "development": "./src/mail/connectors/config.ts",
+      "types": "./dist/mail/connectors/config.d.ts",
+      "import": "./dist/mail/connectors/config.js"
+    },
+    "./mail-oauth": {
+      "development": "./src/mail/connectors/oauth.ts",
+      "types": "./dist/mail/connectors/oauth.d.ts",
+      "import": "./dist/mail/connectors/oauth.js"
+    },
+    "./mail-runtime": {
+      "development": "./src/mail/connectors/factory.ts",
+      "types": "./dist/mail/connectors/factory.d.ts",
+      "import": "./dist/mail/connectors/factory.js"
+    },
+    "./mail-connectors": {
+      "development": "./src/mail/connectors/index.ts",
+      "types": "./dist/mail/connectors/index.d.ts",
+      "import": "./dist/mail/connectors/index.js"
+    },
+    "./catalog-data": {
+      "development": "./src/sources/catalog/sources.ts",
+      "types": "./dist/sources/catalog/sources.d.ts",
+      "import": "./dist/sources/catalog/sources.js"
+    },
+    "./registry": {
+      "development": "./src/sources/catalog/registry.ts",
+      "types": "./dist/sources/catalog/registry.d.ts",
+      "import": "./dist/sources/catalog/registry.js"
+    },
+    ".": {
+      "development": "./src/sources/index.ts",
+      "types": "./dist/sources/index.d.ts",
+      "import": "./dist/sources/index.js"
+    },
+    "./tasks": {
+      "development": "./src/tasks/index.ts",
+      "types": "./dist/tasks/index.d.ts",
+      "import": "./dist/tasks/index.js"
+    },
+    "./tasks/*": {
+      "development": "./src/tasks/*.ts",
+      "types": "./dist/tasks/*.d.ts",
+      "import": "./dist/tasks/*.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@jobhunter/common": "workspace:*",
+    "better-sqlite3": "^12.4.1",
+    "html-to-text": "^10.0.1",
+    "imapflow": "^1.0.181",
+    "mailparser": "^3.7.4",
+    "zod": "^4.4.3",
+    "playwright": "^1.62.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/html-to-text": "^9.0.4"
+  }
+}

@@ -166,6 +166,7 @@
 
 .mailboxSettings {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
   min-width: 0;
   width: min(100%, 46rem);
@@ -183,6 +184,11 @@
   position: relative;
   flex: 0 0 auto;
   margin-inline-end: 0.5rem;
+}
+
+.mailboxHeading > div:first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .mailboxAddButton {

@@ -6,7 +6,7 @@
 
 ## 清理本地生成文件
 
-先停止 Web、Worker 和浏览器测试进程，再执行：
+先停止 Web、CLI 任务和浏览器测试进程，再执行：
 
 - `pnpm clean:cache`：删除 Next.js 缓存、浏览器测试构建目录、测试及覆盖率报告；保留 `.next` 中的非缓存编译产物、各包 `dist` 和 TypeScript 增量信息。
 - `pnpm clean`：额外删除 Web 的 `.next`、各包 `dist` 和 `tsconfig.tsbuildinfo`，用于完全重新构建。
@@ -27,7 +27,7 @@
 <p align="center">
   <a href="docs/guide.md"><strong>上手指南</strong></a> ·
   <a href="docs/arch/overall-arch.md"><strong>总体架构</strong></a> ·
-  <a href="packages/sources/SUPPORT_MATRIX.md"><strong>来源支持矩阵</strong></a> ·
+  <a href="packages/recruitment/SUPPORT_MATRIX.md"><strong>来源支持矩阵</strong></a> ·
   <a href="docs/cli.md"><strong>CLI 指南</strong></a>
 </p>
 
@@ -84,7 +84,7 @@ pnpm --filter @jobhunter/web dev
 
 未配置可选模型时，`doctor` 会显示 `degraded` 并返回退出码 4；基础初始化仍已完成，可以继续启动 Web。
 
-然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。Web 启动器会同时启动独立 Worker，正常使用时不需要手动运行第二个 Worker。
+然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。Web 启动器自动装配四模块任务运行时；不再提供独立 Worker 入口。CLI 等待命令按需执行任务，普通入队命令由运行中的 Web 消费。
 
 Web 开发命令直接使用 workspace 源码，不再在启动前构建全仓。需要持续类型反馈时，在另一个终端运行 `pnpm typecheck:watch`（或 `pnpm --filter @jobhunter/web dev:typecheck`）；提交前仍执行一次 `pnpm typecheck`。正式构建与生产运行继续使用 `dist/`。
 
@@ -100,7 +100,7 @@ Web 开发命令直接使用 workspace 源码，不再在启动前构建全仓�
 | [CLI 指南](docs/cli.md)                                | 命令参数、JSON 输出、备份和恢复  |
 | [总体架构](docs/arch/overall-arch.md)                  | 进程职责、模块边界和数据流       |
 | [功能规格索引](specs/README.md)                        | 当前能力、依赖关系和实现状态     |
-| [招聘来源支持矩阵](packages/sources/SUPPORT_MATRIX.md) | 各企业来源的覆盖范围与限制       |
+| [招聘来源支持矩阵](packages/recruitment/SUPPORT_MATRIX.md) | 各企业来源的覆盖范围与限制       |
 
 <details>
 <summary><strong>开发者验证命令</strong></summary>

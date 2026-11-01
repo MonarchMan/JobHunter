@@ -1,0 +1,144 @@
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
+import { utcInstant } from '@jobhunter/common/domain';
+import { describe, expect, it } from 'vitest';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteRecruitmentMailRepository } from '@jobhunter/recruitment/persistence/sqlite-recruitment-mail-repository';
+
+describe('recruitment mail persistence', () => {
+  it('migrates the three tables and deduplicates message references', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-mail-');
+    const handle = openSqliteDatabase({ dataRoot: root.path });
+    try {
+      const tables = handle.client
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('mail_message_refs', 'job_applications', 'application_events') ORDER BY name`,
+        )
+        .all() as { name: string }[];
+      expect(tables.map((row) => row.name)).toEqual([
+        'application_events',
+        'job_applications',
+        'mail_message_refs',
+      ]);
+      const eventColumns = handle.client.prepare('PRAGMA table_info(application_events)').all() as {
+        name: string;
+      }[];
+      expect(eventColumns.map((column) => column.name)).toEqual(
+        expect.arrayContaining([
+          'activity_type',
+          'scheduled_start_at',
+          'deadline_at',
+          'previous_scheduled_start_at',
+          'time_precision',
+          'timezone_source',
+          'stage_label',
+        ]),
+      );
+      const repository = new SqliteRecruitmentMailRepository(handle.client);
+      const first = {
+        id: 'mail-1',
+        mailboxKey: 'personal',
+        providerKey: 'imap',
+        externalMessageKey: 'INBOX:1:2',
+        folderId: 'INBOX',
+        threadKeyHash: null,
+        sourceUrl: null,
+        receivedAt: 100,
+        contentVersion: '1:2',
+        contentHash: null,
+        processingStatus: 'discovered',
+        lastClassifierKind: null,
+        lastClassifierVersion: null,
+        lastSeenAt: 100,
+        createdAt: 100,
+        updatedAt: 100,
+      } as const;
+      repository.upsertMessageRef(first);
+      repository.upsertMessageRef({
+        ...first,
+        contentVersion: '1:3',
+        lastSeenAt: 200,
+        updatedAt: 200,
+      });
+      expect(repository.findMessageRef('mail-1')?.contentVersion).toBe('1:3');
+      expect(
+        handle.client.prepare('SELECT count(*) AS count FROM mail_message_refs').get(),
+      ).toEqual({ count: 1 });
+      expect(
+        repository.appendAcceptedApplicationEvent({
+          applicationId: 'application-1',
+          companyName: '示例公司',
+          roleTitle: '后端工程师',
+          mailMessageRefId: 'mail-1',
+          sourceContentHash: 'a'.repeat(64),
+          sourceEventNo: 1,
+          acceptanceKind: 'automatic',
+          classifierKind: 'rules',
+          classifierVersion: 'rules-v1',
+          eventType: 'interview_invited',
+          effectiveAt: 300,
+          receivedAt: 100,
+          confidence: 0.9,
+          schedule: {
+            activityType: 'interview',
+            scheduledStartAt: utcInstant(1_800_000_000_000),
+            scheduledEndAt: null,
+            deadlineAt: null,
+            scheduledStartLocalDate: null,
+            scheduledEndLocalDate: null,
+            deadlineLocalDate: null,
+            previousScheduledStartAt: null,
+            previousScheduledStartLocalDate: null,
+            timePrecision: 'exact_time',
+            timezoneSource: 'explicit',
+            timezoneText: 'Asia/Shanghai',
+            stageLabel: '一面',
+          },
+          location: '线上',
+          meetingUrl: 'https://example.com/meeting',
+          actionUrl: 'https://example.com/confirm',
+          payloadJson: '{"schedule":{"activityType":"interview"}}',
+          eventId: 'event-1',
+          now: 300,
+        }),
+      ).toBe(true);
+      expect(
+        repository.appendAcceptedApplicationEvent({
+          applicationId: 'application-1',
+          companyName: '示例公司',
+          roleTitle: '后端工程师',
+          mailMessageRefId: 'mail-1',
+          sourceContentHash: 'a'.repeat(64),
+          sourceEventNo: 1,
+          acceptanceKind: 'automatic',
+          classifierKind: 'rules',
+          classifierVersion: 'rules-v2',
+          eventType: 'interview_invited',
+          effectiveAt: 300,
+          receivedAt: 100,
+          confidence: 0.9,
+          payloadJson: '{}',
+          eventId: 'event-duplicate',
+          now: 301,
+        }),
+      ).toBe(false);
+      expect(
+        handle.client
+          .prepare('SELECT status FROM job_applications WHERE id = ?')
+          .get('application-1'),
+      ).toEqual({ status: 'interview' });
+      const [scheduleEvent] = repository.listScheduleEvents();
+      expect(scheduleEvent).toBeDefined();
+      expect(scheduleEvent?.id).toBe('event-1');
+      expect(scheduleEvent?.companyName).toBe('示例公司');
+      expect(scheduleEvent?.roleTitle).toBe('后端工程师');
+      expect(scheduleEvent?.location).toBe('线上');
+      expect(scheduleEvent?.meetingUrl).toBe('https://example.com/meeting');
+      expect(scheduleEvent?.actionUrl).toBe('https://example.com/confirm');
+      expect(scheduleEvent?.schedule.activityType).toBe('interview');
+      expect(scheduleEvent?.schedule.scheduledStartAt).toBe(1_800_000_000_000);
+      expect(scheduleEvent?.schedule.stageLabel).toBe('一面');
+    } finally {
+      handle.close();
+    }
+  });
+});

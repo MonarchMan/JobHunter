@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseNormalizedJob } from '@jobhunter/domain';
+import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { requirementStatements } from '../src/requirement-language.js';
 
 /** 最小职位原文夹具，不读取真实数据或参考标签。 */

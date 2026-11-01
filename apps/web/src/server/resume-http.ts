@@ -1,7 +1,4 @@
-import {
-  ResumeDraftConflictError,
-  ResumeTemplateNotFoundError,
-} from '@jobhunter/application/profile';
+import { ResumeDraftConflictError, ResumeTemplateNotFoundError } from '@jobhunter/user/profile';
 import { ZodError } from 'zod';
 import { badRequestResponse, conflictResponse, errorResponse, notFoundResponse } from './http.js';
 

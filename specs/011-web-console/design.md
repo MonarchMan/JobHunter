@@ -36,9 +36,9 @@ apps/web/app/
 
 ## 运行时编排
 
-`apps/web/src/server/main.ts` 是本地 Web 启动器。它以两个相互独立的子进程启动 Next.js Web 服务和 `apps/worker/src/main.ts` Worker；Web 进程只提供页面、查询和入队接口，Worker 负责领取并执行耗时任务。任一子进程异常退出时，启动器会停止另一个进程；收到 SIGINT/SIGTERM 时，会将信号转发给两个子进程并清理资源。
+`apps/web/src/server/main.ts` 是本地 Web 宿主。它装配四模块任务能力，在自身进程启动 common 异步任务循环，并启动 Next.js 子进程；HTTP 页面与接口只查询或入队。任务循环失败时停止 Next，Next 退出时停止任务循环；SIGINT/SIGTERM 同时触发停止领取和页面服务关闭，等待在途工作与资源释放。
 
-开发模式通过仓库级 `tsx` 执行 Worker TypeScript 入口，生产模式执行 `apps/worker/dist/main.js`。因此启动 Web 管理台即可获得完整的入队与执行链路，不需要另开终端手动启动 Worker。CLI 独立启动 Worker 仍作为无 Web 场景和调试场景的入口。
+开发宿主通过 Node development 条件与 tsx 加载四模块源码，生产宿主使用模块 dist。启动 Web 即可获得完整执行链路；CLI 等待命令按需装配相同任务运行时。不再提供独立 Worker 包、入口或命令。Next 子进程必须继承工作区根目录，确保配置与唯一历史迁移路径正确。
 
 共享 DTO/Schema 位于 `packages/application/contracts`，不把领域实体直接序列化给 UI。
 

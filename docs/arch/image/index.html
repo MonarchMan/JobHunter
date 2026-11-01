@@ -9,45 +9,107 @@
       :root {
         color-scheme: light;
         font-family: Inter, 'Noto Sans SC', 'Microsoft YaHei UI', system-ui, sans-serif;
-        color: #1c2130;
-        background: #f5f6fa;
-        --ink: #1c2130;
-        --muted-ink: #596275;
-        --line: #dee2ec;
-        --line-soft: #eaecf2;
-        --canvas: #f5f6fa;
-        --canvas-tint: #eef1fb;
+        color: #111827;
+        background: #fafafa;
+
+        /* 基础色彩 - 清爽极简美学 */
+        --ink: #111827;
+        --muted-ink: #5b6472;
+        --line: #e5e7eb;
+        --line-soft: #f3f4f6;
+        --line-hover: #d1d5db;
+        --canvas: #fafafa;
+        --canvas-tint: #f9fafb;
         --surface: #ffffff;
-        --surface-muted: #f8f9fc;
-        --primary: #4e5fbb;
-        --primary-hover: #3f4e9a;
-        --primary-soft: #e9ecff;
-        --action: #e06c5d;
-        --action-soft: #fdece9;
-        --success: #236a8d;
-        --success-soft: #e6f3f8;
-        --warning: #8f5b0c;
-        --warning-soft: #fff3d8;
-        --danger: #a13d32;
-        --danger-soft: #fcebe8;
-        --health-healthy: #2f7d57;
-        --health-healthy-soft: #eef8f2;
-        --health-degraded: #8f5b0c;
-        --health-degraded-soft: #fff7e5;
-        --health-unhealthy: #b5473c;
-        --health-unhealthy-soft: #fdf0ee;
-        --health-unknown: #596275;
-        --health-unknown-soft: #f2f4f7;
-        --shadow-toast: 0 0.75rem 2rem rgb(24 31 52 / 16%);
-        --neutral-soft: #eef0f4;
-        --violet: #6655a6;
-        --violet-soft: #eeefff;
-        --blue: #316d8b;
-        --blue-soft: #e6f3f8;
-        --amber: #8f5b0c;
-        --amber-soft: #fff3d8;
-        --radius-control: 0.5rem;
-        --radius-panel: 0.75rem;
+        --surface-muted: #f9fafb;
+
+        /* 文本层级 */
+        --text-primary: #111827;
+        --text-secondary: #5b6472;
+        --text-tertiary: #5b6472;
+        --text-on-strong: #ffffff;
+
+        /* 边框 */
+        --border: #e5e7eb;
+        --border-hover: #d1d5db;
+
+        /* 主色：深森林绿（专业、成长、机会） */
+        --primary: #1f4d36;
+        --primary-hover: #163a28;
+        --primary-soft: #e7f0ea;
+
+        /* 按钮色：深炭黑（主要操作） */
+        --button-primary: #111827;
+        --button-primary-hover: #000000;
+
+        /* 强调色：深紫色（行动、决策光标） */
+        --action: #7c3aed;
+        --action-hover: #6d28d9;
+        --action-soft: #ede9fe;
+
+        /* 导航与数据表专用色，不改变按钮或业务状态语义。 */
+        --nav-selected-bg: #ede7f6;
+        --nav-selected-ink: #5b347a;
+        --nav-indicator: #7c3aed;
+        --table-header-bg: #f3f0f7;
+        --table-header-ink: #62566f;
+        --table-row-hover: #f8f6fb;
+
+        /* 强调色板（用于 MetricCard 等） */
+        --accent-primary: #1f4d36;
+        --accent-info: #0891b2;
+        --accent-warning: #f59e0b;
+        --accent-purple: #7c3aed;
+
+        /* 语义色 */
+        --success: #047857;
+        --success-soft: #ecfdf5;
+        --warning: #b45309;
+        --warning-hover: #92400e;
+        --warning-soft: #fef3c7;
+        --danger: #b91c1c;
+        --danger-soft: #fee2e2;
+
+        /* 健康状态（专用） */
+        --health-healthy: #047857;
+        --health-healthy-soft: #ecfdf5;
+        --health-degraded: #b45309;
+        --health-degraded-soft: #fef3c7;
+        --health-unhealthy: #b91c1c;
+        --health-unhealthy-soft: #fee2e2;
+        --health-unknown: #5b6472;
+        --health-unknown-soft: #f3f4f6;
+
+        /* 数据可视化色板 */
+        --data-1: #1f4d36;
+        --data-2: #0891b2;
+        --data-3: #7c3aed;
+        --data-4: #f59e0b;
+
+        /* 阴影 */
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+        --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+        --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+        --shadow-popover: 0 16px 40px rgba(17, 24, 39, 0.16);
+        --shadow-dialog: 0 24px 64px rgba(17, 24, 39, 0.2);
+        --shadow-toast: 0 0.75rem 2rem rgba(0, 0, 0, 0.16);
+        --shadow-nav: 0 -0.6rem 1.8rem rgb(17 24 39 / 8%);
+        --shadow-sticky: 0 -0.8rem 1.6rem rgb(17 24 39 / 7%);
+        --overlay-backdrop: rgb(17 24 39 / 48%);
+        --surface-translucent: rgb(255 255 255 / 94%);
+
+        /* 保留兼容性（旧名称映射） */
+        --neutral-soft: #f3f4f6;
+        --violet: #7c3aed;
+        --violet-soft: #ede9fe;
+        --blue: #0891b2;
+        --blue-soft: #cffafe;
+        --amber: #f59e0b;
+        --amber-soft: #fef3c7;
+
+        /* 几何与动效 */
+        --radius-control: 8px;
+        --radius-panel: 8px;
         --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
         --motion-fast: 120ms;
         --motion-standard: 180ms;
@@ -55,7 +117,9 @@
         --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
         --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
         --z-dropdown: 200;
-        scrollbar-color: #aab2c4 #eef0f4;
+
+        /* 滚动条 */
+        scrollbar-color: #9ca3af #f3f4f6;
         scrollbar-width: thin;
       }
 
@@ -67,19 +131,19 @@
 
       body::-webkit-scrollbar-track,
       *::-webkit-scrollbar-track {
-        background: var(--neutral-soft);
+        background: var(--line-soft);
       }
 
       body::-webkit-scrollbar-thumb,
       *::-webkit-scrollbar-thumb {
-        border: 0.2rem solid var(--neutral-soft);
+        border: 0.2rem solid var(--line-soft);
         border-radius: 999px;
-        background: #aab2c4;
+        background: #9ca3af;
       }
 
       body::-webkit-scrollbar-thumb:hover,
       *::-webkit-scrollbar-thumb:hover {
-        background: #838da2;
+        background: #6b7280;
       }
 
       /* 浅色变量由生成器从应用唯一令牌源内联；此处只定义文档专用深色映射。 */
@@ -610,8 +674,9 @@
         <div>
           <h1 id="page-title">看懂每一次机会，如何抵达。</h1>
           <p id="view-description">
-            三个入口协同运行，核心模块完成职位采集、简历解析和 AI
-            处理。箭头表示运行时调用与数据访问，不表示代码导入关系。
+            CLI/Web 两个入口装配 recruitment、user、matching、common 四个共享模块。matching
+            通过公开只读快照关联招聘与用户事实，common
+            提供通用运行能力。箭头表示运行时协作，不表示代码导入关系。
           </p>
         </div>
         <span class="tag">Node.js 24 / TypeScript / SQLite</span>
@@ -661,7 +726,7 @@
         <article>
           <h2>共用内核，职责分明</h2>
           <p>
-            Web 与 CLI 提供入口，Worker 承接后台任务。应用编排用例，领域守住规则，基础设施实现端口。
+            Web 与 CLI 提供入口并承载公共任务运行时。应用编排用例，领域守住规则，基础设施实现端口。
           </p>
         </article>
         <article>
@@ -710,8 +775,9 @@
       >
         <title>JobHunter · 系统架构图</title>
         <desc>
-          三个入口协同运行，核心模块完成职位采集、简历解析和 AI
-          处理。箭头表示运行时调用与数据访问，不表示代码导入关系。
+          CLI/Web 两个入口装配 recruitment、user、matching、common 四个共享模块。matching
+          通过公开只读快照关联招聘与用户事实，common
+          提供通用运行能力。箭头表示运行时协作，不表示代码导入关系。
         </desc>
         <defs>
           <marker
@@ -723,35 +789,35 @@
             markerHeight="6"
             orient="auto-start-reverse"
           >
-            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#596275" />
+            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#5b6472" />
           </marker>
         </defs>
-        <g class="edge" data-from="web" data-to="application">
+        <g class="edge" data-from="web" data-to="recruitment">
           <path
-            d="M 250 138 H 265 V 328 H 300"
+            d="M 250 138 H 265 V 138 H 300"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="265"
-            y="224"
+            x="275"
+            y="129"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            用户操作
+            招聘查询
           </text>
         </g>
-        <g class="edge" data-from="cli" data-to="application">
+        <g class="edge" data-from="web" data-to="user">
           <path
-            d="M 250 328 H 275 V 328 H 300"
+            d="M 250 138 H 275 V 518 H 300"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
@@ -759,83 +825,83 @@
             x="275"
             y="319"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            命令调用
+            个人工作台
           </text>
         </g>
-        <g class="edge" data-from="worker" data-to="application">
+        <g class="edge" data-from="cli" data-to="matching">
           <path
-            d="M 250 518 H 285 V 328 H 300"
+            d="M 250 328 H 420 V 328 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="285"
-            y="414"
+            x="410"
+            y="319"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            执行任务
+            查询与匹配
           </text>
         </g>
-        <g class="edge" data-from="application" data-to="sync-engine">
+        <g class="edge" data-from="task-runtime" data-to="common">
           <path
-            d="M 520 328 H 535 V 138 H 570"
+            d="M 250 518 H 400 V 518 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="535"
-            y="224"
+            x="410"
+            y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            同步职位
+            租约与执行
           </text>
         </g>
-        <g class="edge" data-from="application" data-to="resume-matching">
+        <g class="edge" data-from="matching" data-to="recruitment">
           <path
-            d="M 520 328 H 545 V 328 H 570"
+            d="M 570 328 H 545 V 138 H 520"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
             x="545"
-            y="319"
+            y="224"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            解析评分
+            职位快照
           </text>
         </g>
-        <g class="edge" data-from="application" data-to="ai-engine">
+        <g class="edge" data-from="matching" data-to="user">
           <path
-            d="M 520 328 H 555 V 518 H 570"
+            d="M 570 328 H 555 V 518 H 520"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
@@ -843,104 +909,62 @@
             x="555"
             y="414"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            语义处理
+            画像快照
           </text>
         </g>
-        <g class="edge" data-from="application" data-to="capabilities">
+        <g class="edge" data-from="matching" data-to="common">
           <path
-            d="M 410 376 V 470"
+            d="M 680 376 V 470"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="433"
+            x="703"
             y="423"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            准备制作
+            通用运行
           </text>
         </g>
-        <g class="edge" data-from="sync-engine" data-to="persistence">
+        <g class="edge" data-from="recruitment" data-to="sources">
           <path
-            d="M 790 138 H 815 V 138 H 840"
+            d="M 520 138 H 680 V 328 H 840"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="815"
-            y="129"
+            x="680"
+            y="224"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            保存职位
+            采集招聘
           </text>
         </g>
-        <g class="edge" data-from="sync-engine" data-to="sources">
+        <g class="edge" data-from="common" data-to="models">
           <path
-            d="M 790 138 H 825 V 328 H 840"
+            d="M 790 518 H 825 V 518 H 840"
             fill="none"
-            stroke="#596275"
-            stroke-width="1.4"
-            marker-end="url(#arrow-system)"
-          />
-          <text
-            x="825"
-            y="202"
-            text-anchor="middle"
-            fill="#596275"
-            font-size="12"
-            stroke="#ffffff"
-            stroke-width="7"
-            paint-order="stroke"
-          >
-            读取官网
-          </text>
-        </g>
-        <g class="edge" data-from="resume-matching" data-to="persistence">
-          <path
-            d="M 790 328 H 805 V 138 H 840"
-            fill="none"
-            stroke="#596275"
-            stroke-width="1.4"
-            marker-end="url(#arrow-system)"
-          />
-          <text
-            x="805"
-            y="246"
-            text-anchor="middle"
-            fill="#596275"
-            font-size="12"
-            stroke="#ffffff"
-            stroke-width="7"
-            paint-order="stroke"
-          >
-            读写资料
-          </text>
-        </g>
-        <g class="edge" data-from="ai-engine" data-to="models">
-          <path
-            d="M 790 518 H 815 V 518 H 840"
-            fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
@@ -948,7 +972,7 @@
             x="815"
             y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -957,11 +981,53 @@
             模型调用
           </text>
         </g>
+        <g class="edge" data-from="recruitment" data-to="persistence">
+          <path
+            d="M 520 138 H 670 V 138 H 840"
+            fill="none"
+            stroke="#5b6472"
+            stroke-width="1.4"
+            marker-end="url(#arrow-system)"
+          />
+          <text
+            x="680"
+            y="129"
+            text-anchor="middle"
+            fill="#5b6472"
+            font-size="12"
+            stroke="#ffffff"
+            stroke-width="7"
+            paint-order="stroke"
+          >
+            招聘仓储
+          </text>
+        </g>
+        <g class="edge" data-from="user" data-to="persistence">
+          <path
+            d="M 520 518 H 680 V 138 H 840"
+            fill="none"
+            stroke="#5b6472"
+            stroke-width="1.4"
+            marker-end="url(#arrow-system)"
+          />
+          <text
+            x="680"
+            y="341"
+            text-anchor="middle"
+            fill="#5b6472"
+            font-size="12"
+            stroke="#ffffff"
+            stroke-width="7"
+            paint-order="stroke"
+          >
+            用户仓储
+          </text>
+        </g>
       </svg>
-      <div class="lane-label" style="left: 30px">使用入口</div>
-      <div class="lane-label" style="left: 300px">业务编排</div>
-      <div class="lane-label" style="left: 570px">核心处理模块</div>
-      <div class="lane-label" style="left: 840px">数据与外部服务</div>
+      <div class="lane-label" style="left: 30px">进程入口</div>
+      <div class="lane-label" style="left: 300px">招聘与用户</div>
+      <div class="lane-label" style="left: 570px">匹配与通用运行</div>
+      <div class="lane-label" style="left: 840px">存储与外部服务</div>
       <button
         type="button"
         class="node"
@@ -985,63 +1051,13 @@
       ><button
         type="button"
         class="node"
-        data-id="worker"
-        data-kind="entry"
+        data-id="task-runtime"
+        data-kind="infra"
         aria-pressed="false"
         style="left: 30px; top: 470px"
         title="任务 · 租约 · 重试"
       >
-        <strong>后台 Worker</strong><small>任务 · 租约 · 重试</small></button
-      ><button
-        type="button"
-        class="node"
-        data-id="application"
-        data-kind="core"
-        aria-pressed="false"
-        style="left: 300px; top: 280px"
-        title="同步 · 画像 · 匹配 · 准备"
-      >
-        <strong>任务与业务编排</strong><small>同步 · 画像 · 匹配 · 准备</small></button
-      ><button
-        type="button"
-        class="node"
-        data-id="capabilities"
-        data-kind="core"
-        aria-pressed="false"
-        style="left: 300px; top: 470px"
-        title="项目拷打 · 模板编辑 · 导出"
-      >
-        <strong>面试准备与简历制作</strong><small>项目拷打 · 模板编辑 · 导出</small></button
-      ><button
-        type="button"
-        class="node"
-        data-id="sync-engine"
-        data-kind="contract"
-        aria-pressed="false"
-        style="left: 570px; top: 90px"
-        title="采集 · 标准化 · 去重 · 状态维护"
-      >
-        <strong>职位同步引擎</strong><small>采集 · 标准化 · 去重 · 状态维护</small></button
-      ><button
-        type="button"
-        class="node"
-        data-id="resume-matching"
-        data-kind="contract"
-        aria-pressed="false"
-        style="left: 570px; top: 280px"
-        title="文本 / OCR · 画像 · 评分"
-      >
-        <strong>简历解析与职位匹配</strong><small>文本 / OCR · 画像 · 评分</small></button
-      ><button
-        type="button"
-        class="node"
-        data-id="ai-engine"
-        data-kind="contract"
-        aria-pressed="false"
-        style="left: 570px; top: 470px"
-        title="画像提取 · 语义分析 · 面试提问"
-      >
-        <strong>AI 处理引擎</strong><small>画像提取 · 语义分析 · 面试提问</small></button
+        <strong>公共任务运行时</strong><small>任务 · 租约 · 重试</small></button
       ><button
         type="button"
         class="node"
@@ -1071,7 +1087,47 @@
         style="left: 840px; top: 470px"
         title="OpenAI 兼容 / Anthropic · 可选"
       >
-        <strong>模型服务</strong><small>OpenAI 兼容 / Anthropic · 可选</small>
+        <strong>模型服务</strong><small>OpenAI 兼容 / Anthropic · 可选</small></button
+      ><button
+        type="button"
+        class="node"
+        data-id="recruitment"
+        data-kind="core"
+        aria-pressed="false"
+        style="left: 300px; top: 90px"
+        title="来源 · 平台 · 邮箱 · 职位流程"
+      >
+        <strong>recruitment · 招聘</strong><small>来源 · 平台 · 邮箱 · 职位流程</small></button
+      ><button
+        type="button"
+        class="node"
+        data-id="user"
+        data-kind="core"
+        aria-pressed="false"
+        style="left: 300px; top: 470px"
+        title="画像 · 简历 · 面试准备"
+      >
+        <strong>user · 个人资料</strong><small>画像 · 简历 · 面试准备</small></button
+      ><button
+        type="button"
+        class="node"
+        data-id="matching"
+        data-kind="core"
+        aria-pressed="false"
+        style="left: 570px; top: 280px"
+        title="职位理解 · 过滤评分 · 建议"
+      >
+        <strong>matching · 匹配</strong><small>职位理解 · 过滤评分 · 建议</small></button
+      ><button
+        type="button"
+        class="node"
+        data-id="common"
+        data-kind="contract"
+        aria-pressed="false"
+        style="left: 570px; top: 470px"
+        title="任务 · Agent · 配置 · 存储机制"
+      >
+        <strong>common · 通用运行</strong><small>任务 · Agent · 配置 · 存储机制</small>
       </button></template
     ><template id="export-system"
       ><svg
@@ -1084,8 +1140,9 @@
       >
         <title>JobHunter · 系统架构图</title>
         <desc>
-          三个入口协同运行，核心模块完成职位采集、简历解析和 AI
-          处理。箭头表示运行时调用与数据访问，不表示代码导入关系。
+          CLI/Web 两个入口装配 recruitment、user、matching、common 四个共享模块。matching
+          通过公开只读快照关联招聘与用户事实，common
+          提供通用运行能力。箭头表示运行时协作，不表示代码导入关系。
         </desc>
         <defs>
           <marker
@@ -1097,40 +1154,40 @@
             markerHeight="6"
             orient="auto-start-reverse"
           >
-            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#596275" />
+            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#5b6472" />
           </marker>
         </defs>
-        <rect width="1100" height="640" rx="12" fill="#f8f9fc" />
-        <text x="42" y="45" fill="#596275" font-size="14">使用入口</text>
-        <text x="312" y="45" fill="#596275" font-size="14">业务编排</text>
-        <text x="582" y="45" fill="#596275" font-size="14">核心处理模块</text>
-        <text x="852" y="45" fill="#596275" font-size="14">数据与外部服务</text>
-        <g class="edge" data-from="web" data-to="application">
+        <rect width="1100" height="640" rx="12" fill="#f9fafb" />
+        <text x="42" y="45" fill="#5b6472" font-size="14">进程入口</text>
+        <text x="312" y="45" fill="#5b6472" font-size="14">招聘与用户</text>
+        <text x="582" y="45" fill="#5b6472" font-size="14">匹配与通用运行</text>
+        <text x="852" y="45" fill="#5b6472" font-size="14">存储与外部服务</text>
+        <g class="edge" data-from="web" data-to="recruitment">
           <path
-            d="M 250 138 H 265 V 328 H 300"
+            d="M 250 138 H 265 V 138 H 300"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="265"
-            y="224"
+            x="275"
+            y="129"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            用户操作
+            招聘查询
           </text>
         </g>
-        <g class="edge" data-from="cli" data-to="application">
+        <g class="edge" data-from="web" data-to="user">
           <path
-            d="M 250 328 H 275 V 328 H 300"
+            d="M 250 138 H 275 V 518 H 300"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
@@ -1138,83 +1195,83 @@
             x="275"
             y="319"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            命令调用
+            个人工作台
           </text>
         </g>
-        <g class="edge" data-from="worker" data-to="application">
+        <g class="edge" data-from="cli" data-to="matching">
           <path
-            d="M 250 518 H 285 V 328 H 300"
+            d="M 250 328 H 420 V 328 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="285"
-            y="414"
+            x="410"
+            y="319"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            执行任务
+            查询与匹配
           </text>
         </g>
-        <g class="edge" data-from="application" data-to="sync-engine">
+        <g class="edge" data-from="task-runtime" data-to="common">
           <path
-            d="M 520 328 H 535 V 138 H 570"
+            d="M 250 518 H 400 V 518 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="535"
-            y="224"
+            x="410"
+            y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            同步职位
+            租约与执行
           </text>
         </g>
-        <g class="edge" data-from="application" data-to="resume-matching">
+        <g class="edge" data-from="matching" data-to="recruitment">
           <path
-            d="M 520 328 H 545 V 328 H 570"
+            d="M 570 328 H 545 V 138 H 520"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
             x="545"
-            y="319"
+            y="224"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            解析评分
+            职位快照
           </text>
         </g>
-        <g class="edge" data-from="application" data-to="ai-engine">
+        <g class="edge" data-from="matching" data-to="user">
           <path
-            d="M 520 328 H 555 V 518 H 570"
+            d="M 570 328 H 555 V 518 H 520"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
@@ -1222,104 +1279,62 @@
             x="555"
             y="414"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            语义处理
+            画像快照
           </text>
         </g>
-        <g class="edge" data-from="application" data-to="capabilities">
+        <g class="edge" data-from="matching" data-to="common">
           <path
-            d="M 410 376 V 470"
+            d="M 680 376 V 470"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="433"
+            x="703"
             y="423"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            准备制作
+            通用运行
           </text>
         </g>
-        <g class="edge" data-from="sync-engine" data-to="persistence">
+        <g class="edge" data-from="recruitment" data-to="sources">
           <path
-            d="M 790 138 H 815 V 138 H 840"
+            d="M 520 138 H 680 V 328 H 840"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
           <text
-            x="815"
-            y="129"
+            x="680"
+            y="224"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
             paint-order="stroke"
           >
-            保存职位
+            采集招聘
           </text>
         </g>
-        <g class="edge" data-from="sync-engine" data-to="sources">
+        <g class="edge" data-from="common" data-to="models">
           <path
-            d="M 790 138 H 825 V 328 H 840"
+            d="M 790 518 H 825 V 518 H 840"
             fill="none"
-            stroke="#596275"
-            stroke-width="1.4"
-            marker-end="url(#arrow-system)"
-          />
-          <text
-            x="825"
-            y="202"
-            text-anchor="middle"
-            fill="#596275"
-            font-size="12"
-            stroke="#ffffff"
-            stroke-width="7"
-            paint-order="stroke"
-          >
-            读取官网
-          </text>
-        </g>
-        <g class="edge" data-from="resume-matching" data-to="persistence">
-          <path
-            d="M 790 328 H 805 V 138 H 840"
-            fill="none"
-            stroke="#596275"
-            stroke-width="1.4"
-            marker-end="url(#arrow-system)"
-          />
-          <text
-            x="805"
-            y="246"
-            text-anchor="middle"
-            fill="#596275"
-            font-size="12"
-            stroke="#ffffff"
-            stroke-width="7"
-            paint-order="stroke"
-          >
-            读写资料
-          </text>
-        </g>
-        <g class="edge" data-from="ai-engine" data-to="models">
-          <path
-            d="M 790 518 H 815 V 518 H 840"
-            fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-system)"
           />
@@ -1327,7 +1342,7 @@
             x="815"
             y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1336,88 +1351,124 @@
             模型调用
           </text>
         </g>
-        <g>
-          <rect x="30" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 40 91 H 240" stroke="#316d8b" stroke-width="3" />
-          <text x="46" y="128" fill="#1c2130" font-size="18" font-weight="600">Web 管理台</text>
-          <text x="46" y="155" fill="#596275" font-size="10.5">Next.js · React</text>
-        </g>
-        <g>
-          <rect x="30" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 40 281 H 240" stroke="#316d8b" stroke-width="3" />
-          <text x="46" y="318" fill="#1c2130" font-size="18" font-weight="600">命令行 CLI</text>
-          <text x="46" y="345" fill="#596275" font-size="10.5">初始化 · 查询 · 诊断</text>
-        </g>
-        <g>
-          <rect x="30" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 40 471 H 240" stroke="#316d8b" stroke-width="3" />
-          <text x="46" y="508" fill="#1c2130" font-size="18" font-weight="600">后台 Worker</text>
-          <text x="46" y="535" fill="#596275" font-size="10.5">任务 · 租约 · 重试</text>
-        </g>
-        <g>
-          <rect x="300" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 310 281 H 510" stroke="#4e5fbb" stroke-width="3" />
-          <text x="316" y="318" fill="#1c2130" font-size="18" font-weight="600">
-            任务与业务编排
-          </text>
-          <text x="316" y="345" fill="#596275" font-size="10.5">同步 · 画像 · 匹配 · 准备</text>
-        </g>
-        <g>
-          <rect x="300" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 310 471 H 510" stroke="#4e5fbb" stroke-width="3" />
-          <text x="316" y="508" fill="#1c2130" font-size="18" font-weight="600">
-            面试准备与简历制作
-          </text>
-          <text x="316" y="535" fill="#596275" font-size="10.5">项目拷打 · 模板编辑 · 导出</text>
-        </g>
-        <g>
-          <rect x="570" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 580 91 H 780" stroke="#6655a6" stroke-width="3" />
-          <text x="586" y="128" fill="#1c2130" font-size="18" font-weight="600">职位同步引擎</text>
-          <text x="586" y="155" fill="#596275" font-size="10.5">
-            采集 · 标准化 · 去重 · 状态维护
+        <g class="edge" data-from="recruitment" data-to="persistence">
+          <path
+            d="M 520 138 H 670 V 138 H 840"
+            fill="none"
+            stroke="#5b6472"
+            stroke-width="1.4"
+            marker-end="url(#arrow-system)"
+          />
+          <text
+            x="680"
+            y="129"
+            text-anchor="middle"
+            fill="#5b6472"
+            font-size="12"
+            stroke="#ffffff"
+            stroke-width="7"
+            paint-order="stroke"
+          >
+            招聘仓储
           </text>
         </g>
-        <g>
-          <rect x="570" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 580 281 H 780" stroke="#6655a6" stroke-width="3" />
-          <text x="586" y="318" fill="#1c2130" font-size="18" font-weight="600">
-            简历解析与职位匹配
-          </text>
-          <text x="586" y="345" fill="#596275" font-size="10.5">文本 / OCR · 画像 · 评分</text>
-        </g>
-        <g>
-          <rect x="570" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 580 471 H 780" stroke="#6655a6" stroke-width="3" />
-          <text x="586" y="508" fill="#1c2130" font-size="18" font-weight="600">AI 处理引擎</text>
-          <text x="586" y="535" fill="#596275" font-size="10.5">
-            画像提取 · 语义分析 · 面试提问
+        <g class="edge" data-from="user" data-to="persistence">
+          <path
+            d="M 520 518 H 680 V 138 H 840"
+            fill="none"
+            stroke="#5b6472"
+            stroke-width="1.4"
+            marker-end="url(#arrow-system)"
+          />
+          <text
+            x="680"
+            y="341"
+            text-anchor="middle"
+            fill="#5b6472"
+            font-size="12"
+            stroke="#ffffff"
+            stroke-width="7"
+            paint-order="stroke"
+          >
+            用户仓储
           </text>
         </g>
         <g>
-          <rect x="840" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 850 91 H 1050" stroke="#596275" stroke-width="3" />
-          <text x="856" y="128" fill="#1c2130" font-size="18" font-weight="600">
+          <rect x="30" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 40 91 H 240" stroke="#0891b2" stroke-width="3" />
+          <text x="46" y="128" fill="#111827" font-size="18" font-weight="600">Web 管理台</text>
+          <text x="46" y="155" fill="#5b6472" font-size="10.5">Next.js · React</text>
+        </g>
+        <g>
+          <rect x="30" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 40 281 H 240" stroke="#0891b2" stroke-width="3" />
+          <text x="46" y="318" fill="#111827" font-size="18" font-weight="600">命令行 CLI</text>
+          <text x="46" y="345" fill="#5b6472" font-size="10.5">初始化 · 查询 · 诊断</text>
+        </g>
+        <g>
+          <rect x="30" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 40 471 H 240" stroke="#5b6472" stroke-width="3" />
+          <text x="46" y="508" fill="#111827" font-size="18" font-weight="600">公共任务运行时</text>
+          <text x="46" y="535" fill="#5b6472" font-size="10.5">任务 · 租约 · 重试</text>
+        </g>
+        <g>
+          <rect x="840" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 850 91 H 1050" stroke="#5b6472" stroke-width="3" />
+          <text x="856" y="128" fill="#111827" font-size="18" font-weight="600">
             数据库与本地文件
           </text>
-          <text x="856" y="155" fill="#596275" font-size="10.5">SQLite · 简历文件 · 日志</text>
+          <text x="856" y="155" fill="#5b6472" font-size="10.5">SQLite · 简历文件 · 日志</text>
         </g>
         <g>
-          <rect x="840" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 850 281 H 1050" stroke="#596275" stroke-width="3" />
-          <text x="856" y="318" fill="#1c2130" font-size="18" font-weight="600">企业招聘官网</text>
-          <text x="856" y="345" fill="#596275" font-size="10.5">官网适配器 · HTTP / 浏览器</text>
+          <rect x="840" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 850 281 H 1050" stroke="#5b6472" stroke-width="3" />
+          <text x="856" y="318" fill="#111827" font-size="18" font-weight="600">企业招聘官网</text>
+          <text x="856" y="345" fill="#5b6472" font-size="10.5">官网适配器 · HTTP / 浏览器</text>
         </g>
         <g>
-          <rect x="840" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 850 471 H 1050" stroke="#596275" stroke-width="3" />
-          <text x="856" y="508" fill="#1c2130" font-size="18" font-weight="600">模型服务</text>
-          <text x="856" y="535" fill="#596275" font-size="10.5">
+          <rect x="840" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 850 471 H 1050" stroke="#5b6472" stroke-width="3" />
+          <text x="856" y="508" fill="#111827" font-size="18" font-weight="600">模型服务</text>
+          <text x="856" y="535" fill="#5b6472" font-size="10.5">
             OpenAI 兼容 / Anthropic · 可选
           </text>
         </g>
-        <text x="30" y="615" fill="#596275" font-size="12">
-          JobHunter · 系统架构图 · 11 个节点 / 11 条关系
+        <g>
+          <rect x="300" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 310 91 H 510" stroke="#1f4d36" stroke-width="3" />
+          <text x="316" y="128" fill="#111827" font-size="18" font-weight="600">
+            recruitment · 招聘
+          </text>
+          <text x="316" y="155" fill="#5b6472" font-size="10.5">来源 · 平台 · 邮箱 · 职位流程</text>
+        </g>
+        <g>
+          <rect x="300" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 310 471 H 510" stroke="#1f4d36" stroke-width="3" />
+          <text x="316" y="508" fill="#111827" font-size="18" font-weight="600">
+            user · 个人资料
+          </text>
+          <text x="316" y="535" fill="#5b6472" font-size="10.5">画像 · 简历 · 面试准备</text>
+        </g>
+        <g>
+          <rect x="570" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 580 281 H 780" stroke="#1f4d36" stroke-width="3" />
+          <text x="586" y="318" fill="#111827" font-size="18" font-weight="600">
+            matching · 匹配
+          </text>
+          <text x="586" y="345" fill="#5b6472" font-size="10.5">职位理解 · 过滤评分 · 建议</text>
+        </g>
+        <g>
+          <rect x="570" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 580 471 H 780" stroke="#7c3aed" stroke-width="3" />
+          <text x="586" y="508" fill="#111827" font-size="18" font-weight="600">
+            common · 通用运行
+          </text>
+          <text x="586" y="535" fill="#5b6472" font-size="10.5">
+            任务 · Agent · 配置 · 存储机制
+          </text>
+        </g>
+        <text x="30" y="615" fill="#5b6472" font-size="12">
+          JobHunter · 系统架构图 · 10 个节点 / 11 条关系
         </text>
       </svg> </template
     ><template id="view-flow"
@@ -1443,14 +1494,14 @@
             markerHeight="6"
             orient="auto-start-reverse"
           >
-            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#596275" />
+            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#5b6472" />
           </marker>
         </defs>
         <g class="edge" data-from="resume-input" data-to="profile">
           <path
             d="M 250 328 H 265 V 328 H 300"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1458,7 +1509,7 @@
             x="275"
             y="319"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1471,7 +1522,7 @@
           <path
             d="M 250 518 H 275 V 518 H 300"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1479,7 +1530,7 @@
             x="275"
             y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1492,7 +1543,7 @@
           <path
             d="M 520 328 H 555 V 328 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1500,7 +1551,7 @@
             x="545"
             y="319"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1513,7 +1564,7 @@
           <path
             d="M 520 328 H 535 V 518 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1521,7 +1572,7 @@
             x="535"
             y="414"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1534,7 +1585,7 @@
           <path
             d="M 520 518 H 545 V 518 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1542,7 +1593,7 @@
             x="545"
             y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1555,7 +1606,7 @@
           <path
             d="M 790 518 H 825 V 518 H 840"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1563,7 +1614,7 @@
             x="815"
             y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1576,7 +1627,7 @@
           <path
             d="M 790 328 H 805 V 518 H 840"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1584,7 +1635,7 @@
             x="805"
             y="414"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1597,7 +1648,7 @@
           <path
             d="M 410 280 V 186"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1605,7 +1656,7 @@
             x="433"
             y="233"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1618,7 +1669,7 @@
           <path
             d="M 520 138 H 555 V 138 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1626,7 +1677,7 @@
             x="545"
             y="129"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1639,7 +1690,7 @@
           <path
             d="M 790 138 H 805 V 138 H 840"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1647,7 +1698,7 @@
             x="815"
             y="129"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1785,19 +1836,19 @@
             markerHeight="6"
             orient="auto-start-reverse"
           >
-            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#596275" />
+            <path d="M 0 0 L 10 5 L 0 10 Z" fill="#5b6472" />
           </marker>
         </defs>
-        <rect width="1100" height="640" rx="12" fill="#f8f9fc" />
-        <text x="42" y="45" fill="#596275" font-size="14">收集输入</text>
-        <text x="312" y="45" fill="#596275" font-size="14">整理与核对</text>
-        <text x="582" y="45" fill="#596275" font-size="14">判断与制作</text>
-        <text x="852" y="45" fill="#596275" font-size="14">人工行动</text>
+        <rect width="1100" height="640" rx="12" fill="#f9fafb" />
+        <text x="42" y="45" fill="#5b6472" font-size="14">收集输入</text>
+        <text x="312" y="45" fill="#5b6472" font-size="14">整理与核对</text>
+        <text x="582" y="45" fill="#5b6472" font-size="14">判断与制作</text>
+        <text x="852" y="45" fill="#5b6472" font-size="14">人工行动</text>
         <g class="edge" data-from="resume-input" data-to="profile">
           <path
             d="M 250 328 H 265 V 328 H 300"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1805,7 +1856,7 @@
             x="275"
             y="319"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1818,7 +1869,7 @@
           <path
             d="M 250 518 H 275 V 518 H 300"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1826,7 +1877,7 @@
             x="275"
             y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1839,7 +1890,7 @@
           <path
             d="M 520 328 H 555 V 328 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1847,7 +1898,7 @@
             x="545"
             y="319"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1860,7 +1911,7 @@
           <path
             d="M 520 328 H 535 V 518 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1868,7 +1919,7 @@
             x="535"
             y="414"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1881,7 +1932,7 @@
           <path
             d="M 520 518 H 545 V 518 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1889,7 +1940,7 @@
             x="545"
             y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1902,7 +1953,7 @@
           <path
             d="M 790 518 H 825 V 518 H 840"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1910,7 +1961,7 @@
             x="815"
             y="509"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1923,7 +1974,7 @@
           <path
             d="M 790 328 H 805 V 518 H 840"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1931,7 +1982,7 @@
             x="805"
             y="414"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1944,7 +1995,7 @@
           <path
             d="M 410 280 V 186"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1952,7 +2003,7 @@
             x="433"
             y="233"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1965,7 +2016,7 @@
           <path
             d="M 520 138 H 555 V 138 H 570"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1973,7 +2024,7 @@
             x="545"
             y="129"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -1986,7 +2037,7 @@
           <path
             d="M 790 138 H 805 V 138 H 840"
             fill="none"
-            stroke="#596275"
+            stroke="#5b6472"
             stroke-width="1.4"
             marker-end="url(#arrow-flow)"
           />
@@ -1994,7 +2045,7 @@
             x="815"
             y="129"
             text-anchor="middle"
-            fill="#596275"
+            fill="#5b6472"
             font-size="12"
             stroke="#ffffff"
             stroke-width="7"
@@ -2004,72 +2055,72 @@
           </text>
         </g>
         <g>
-          <rect x="30" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 40 281 H 240" stroke="#316d8b" stroke-width="3" />
-          <text x="46" y="318" fill="#1c2130" font-size="18" font-weight="600">导入简历</text>
-          <text x="46" y="345" fill="#596275" font-size="10.5">PDF · DOCX · JPEG · PNG</text>
+          <rect x="30" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 40 281 H 240" stroke="#0891b2" stroke-width="3" />
+          <text x="46" y="318" fill="#111827" font-size="18" font-weight="600">导入简历</text>
+          <text x="46" y="345" fill="#5b6472" font-size="10.5">PDF · DOCX · JPEG · PNG</text>
         </g>
         <g>
-          <rect x="30" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 40 471 H 240" stroke="#316d8b" stroke-width="3" />
-          <text x="46" y="508" fill="#1c2130" font-size="18" font-weight="600">同步企业官网</text>
-          <text x="46" y="535" fill="#596275" font-size="10.5">实习 · 校招 · 社招</text>
+          <rect x="30" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 40 471 H 240" stroke="#0891b2" stroke-width="3" />
+          <text x="46" y="508" fill="#111827" font-size="18" font-weight="600">同步企业官网</text>
+          <text x="46" y="535" fill="#5b6472" font-size="10.5">实习 · 校招 · 社招</text>
         </g>
         <g>
-          <rect x="300" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 310 281 H 510" stroke="#4e5fbb" stroke-width="3" />
-          <text x="316" y="318" fill="#1c2130" font-size="18" font-weight="600">个人资料</text>
-          <text x="316" y="345" fill="#596275" font-size="10.5">解析 · 校对 · 手动编辑</text>
+          <rect x="300" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 310 281 H 510" stroke="#1f4d36" stroke-width="3" />
+          <text x="316" y="318" fill="#111827" font-size="18" font-weight="600">个人资料</text>
+          <text x="316" y="345" fill="#5b6472" font-size="10.5">解析 · 校对 · 手动编辑</text>
         </g>
         <g>
-          <rect x="300" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 310 471 H 510" stroke="#4e5fbb" stroke-width="3" />
-          <text x="316" y="508" fill="#1c2130" font-size="18" font-weight="600">可追溯职位池</text>
-          <text x="316" y="535" fill="#596275" font-size="10.5">标准化 · 修订 · 状态维护</text>
+          <rect x="300" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 310 471 H 510" stroke="#1f4d36" stroke-width="3" />
+          <text x="316" y="508" fill="#111827" font-size="18" font-weight="600">可追溯职位池</text>
+          <text x="316" y="535" fill="#5b6472" font-size="10.5">标准化 · 修订 · 状态维护</text>
         </g>
         <g>
-          <rect x="570" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 580 471 H 780" stroke="#6655a6" stroke-width="3" />
-          <text x="586" y="508" fill="#1c2130" font-size="18" font-weight="600">
+          <rect x="570" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 580 471 H 780" stroke="#7c3aed" stroke-width="3" />
+          <text x="586" y="508" fill="#111827" font-size="18" font-weight="600">
             职位匹配与解释
           </text>
-          <text x="586" y="535" fill="#596275" font-size="10.5">确定性评分 + 可选 AI 建议</text>
+          <text x="586" y="535" fill="#5b6472" font-size="10.5">确定性评分 + 可选 AI 建议</text>
         </g>
         <g>
-          <rect x="570" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 580 281 H 780" stroke="#6655a6" stroke-width="3" />
-          <text x="586" y="318" fill="#1c2130" font-size="18" font-weight="600">
+          <rect x="570" y="280" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 580 281 H 780" stroke="#7c3aed" stroke-width="3" />
+          <text x="586" y="318" fill="#111827" font-size="18" font-weight="600">
             简历制作与导出
           </text>
-          <text x="586" y="345" fill="#596275" font-size="10.5">模板草稿 · 预览 · PDF / HTML</text>
+          <text x="586" y="345" fill="#5b6472" font-size="10.5">模板草稿 · 预览 · PDF / HTML</text>
         </g>
         <g>
-          <rect x="840" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 850 471 H 1050" stroke="#e06c5d" stroke-width="3" />
-          <text x="856" y="508" fill="#1c2130" font-size="18" font-weight="600">前往官网申请</text>
-          <text x="856" y="535" fill="#596275" font-size="10.5">由本人核对并提交</text>
+          <rect x="840" y="470" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 850 471 H 1050" stroke="#7c3aed" stroke-width="3" />
+          <text x="856" y="508" fill="#111827" font-size="18" font-weight="600">前往官网申请</text>
+          <text x="856" y="535" fill="#5b6472" font-size="10.5">由本人核对并提交</text>
         </g>
         <g>
-          <rect x="300" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 310 91 H 510" stroke="#4e5fbb" stroke-width="3" />
-          <text x="316" y="128" fill="#1c2130" font-size="18" font-weight="600">
+          <rect x="300" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 310 91 H 510" stroke="#1f4d36" stroke-width="3" />
+          <text x="316" y="128" fill="#111827" font-size="18" font-weight="600">
             项目经历/工作经历
           </text>
-          <text x="316" y="155" fill="#596275" font-size="10.5">来自个人资料 · 经历整理</text>
+          <text x="316" y="155" fill="#5b6472" font-size="10.5">来自个人资料 · 经历整理</text>
         </g>
         <g>
-          <rect x="570" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 580 91 H 780" stroke="#6655a6" stroke-width="3" />
-          <text x="586" y="128" fill="#1c2130" font-size="18" font-weight="600">面试准备档案</text>
-          <text x="586" y="155" fill="#596275" font-size="10.5">基于项目建立 · 可补充文档</text>
+          <rect x="570" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 580 91 H 780" stroke="#7c3aed" stroke-width="3" />
+          <text x="586" y="128" fill="#111827" font-size="18" font-weight="600">面试准备档案</text>
+          <text x="586" y="155" fill="#5b6472" font-size="10.5">基于项目建立 · 可补充文档</text>
         </g>
         <g>
-          <rect x="840" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#dee2ec" />
-          <path d="M 850 91 H 1050" stroke="#e06c5d" stroke-width="3" />
-          <text x="856" y="128" fill="#1c2130" font-size="18" font-weight="600">整理练习</text>
-          <text x="856" y="155" fill="#596275" font-size="10.5">问答记录 · Markdown 准备文档</text>
+          <rect x="840" y="90" width="220" height="96" rx="10" fill="#ffffff" stroke="#e5e7eb" />
+          <path d="M 850 91 H 1050" stroke="#7c3aed" stroke-width="3" />
+          <text x="856" y="128" fill="#111827" font-size="18" font-weight="600">整理练习</text>
+          <text x="856" y="155" fill="#5b6472" font-size="10.5">问答记录 · Markdown 准备文档</text>
         </g>
-        <text x="30" y="615" fill="#596275" font-size="12">
+        <text x="30" y="615" fill="#5b6472" font-size="12">
           JobHunter · 求职流程 · 10 个节点 / 10 条关系
         </text>
       </svg>
@@ -2082,8 +2133,8 @@
           {
             "id": "system",
             "title": "系统架构图",
-            "description": "三个入口协同运行，核心模块完成职位采集、简历解析和 AI 处理。箭头表示运行时调用与数据访问，不表示代码导入关系。",
-            "lanes": ["使用入口", "业务编排", "核心处理模块", "数据与外部服务"],
+            "description": "CLI/Web 两个入口装配 recruitment、user、matching、common 四个共享模块。matching 通过公开只读快照关联招聘与用户事实，common 提供通用运行能力。箭头表示运行时协作，不表示代码导入关系。",
+            "lanes": ["进程入口", "招聘与用户", "匹配与通用运行", "存储与外部服务"],
             "nodes": [
               {
                 "id": "web",
@@ -2093,7 +2144,7 @@
                 "path": "apps/web",
                 "x": 30,
                 "y": 90,
-                "description": "职位筛选、个人资料、简历制作和面试准备的可视化入口。启动器同时管理独立 Web 与 Worker 子进程。项目拷打单题生成可在 Web 请求内调用模型，但不进入数据库事务。"
+                "description": "职位筛选、个人资料、简历制作和面试准备的可视化入口。启动器承载公共任务循环并管理 Next 子进程。项目拷打单题生成可在 Web 请求内调用模型，但不进入数据库事务。"
               },
               {
                 "id": "cli",
@@ -2106,71 +2157,21 @@
                 "description": "通过应用用例完成初始化、导入、同步、匹配、查询与诊断，复用内核业务规则。"
               },
               {
-                "id": "worker",
-                "kind": "entry",
-                "title": "后台 Worker",
+                "id": "task-runtime",
+                "kind": "infra",
+                "title": "公共任务运行时",
                 "subtitle": "任务 · 租约 · 重试",
-                "path": "apps/worker",
+                "path": "packages/common/src/tasks",
                 "x": 30,
                 "y": 470,
-                "description": "消费持久化任务，处理官网同步、画像提取、匹配重算、简历导出和面经研究。失败可退避重试，外部调用在短事务之外执行。"
-              },
-              {
-                "id": "application",
-                "kind": "core",
-                "title": "任务与业务编排",
-                "subtitle": "同步 · 画像 · 匹配 · 准备",
-                "path": "packages/application",
-                "x": 300,
-                "y": 280,
-                "description": "组织来源同步、简历画像、匹配与面试准备用例，并通过持久化任务协调后台执行。图中展示运行时协作；代码仍依赖应用端口，由入口装配具体实现，不直接导入数据库或模型供应商。"
-              },
-              {
-                "id": "capabilities",
-                "kind": "core",
-                "title": "面试准备与简历制作",
-                "subtitle": "项目拷打 · 模板编辑 · 导出",
-                "path": "packages",
-                "x": 300,
-                "y": 470,
-                "description": "基于结构化个人资料建立项目准备档案、组织面经审核和简历模板草稿。应用用例复用 resume-template 等共享能力，耗时导出由 Worker 执行。"
-              },
-              {
-                "id": "sync-engine",
-                "kind": "contract",
-                "title": "职位同步引擎",
-                "subtitle": "采集 · 标准化 · 去重 · 状态维护",
-                "path": "packages/source-core",
-                "x": 570,
-                "y": 90,
-                "description": "协调企业官网适配器读取岗位，统一字段、去重并维护新增、变更与下架状态。原始记录、修订和同步进度通过仓储写入 SQLite；来源限制与失败按规则处理。"
-              },
-              {
-                "id": "resume-matching",
-                "kind": "contract",
-                "title": "简历解析与职位匹配",
-                "subtitle": "文本 / OCR · 画像 · 评分",
-                "path": "packages/resume",
-                "x": 570,
-                "y": 280,
-                "description": "resume 提取 PDF、DOCX 和图片文本，形成可校对的经历、项目与技能；matching 将个人画像与职位进行确定性过滤、评分和解释。领域模型负责数据校验与业务规则，持久化由应用层通过仓储端口完成。"
-              },
-              {
-                "id": "ai-engine",
-                "kind": "contract",
-                "title": "AI 处理引擎",
-                "subtitle": "画像提取 · 语义分析 · 面试提问",
-                "path": "packages/agent-core",
-                "x": 570,
-                "y": 470,
-                "description": "组织模型请求、校验结构化结果并记录执行状态，用于画像提取、语义判断和面试问题等能力。模型请求通过 llm 适配器发出，不在数据库事务中执行；AI 不可用不应抹去确定性结果。"
+                "description": "由 CLI/Web 装配各业务模块任务处理器，统一领取、租约、重试与取消；没有独立 Worker 入口。"
               },
               {
                 "id": "persistence",
                 "kind": "infra",
                 "title": "数据库与本地文件",
                 "subtitle": "SQLite · 简历文件 · 日志",
-                "path": "packages/db",
+                "path": "packages/common/src/persistence",
                 "x": 840,
                 "y": 90,
                 "description": "SQLite 保存职位、画像版本、任务和面试记录；简历文件、导出产物及日志保存在配置的数据目录，默认 var/。应用通过仓储端口访问，网络与模型调用在短事务之外完成。"
@@ -2180,39 +2181,74 @@
                 "kind": "infra",
                 "title": "企业招聘官网",
                 "subtitle": "官网适配器 · HTTP / 浏览器",
-                "path": "packages/sources",
+                "path": "packages/recruitment/src/sources",
                 "x": 840,
                 "y": 280,
-                "description": "企业公开招聘页面与接口是职位事实来源。sources 适配器负责连接和读取，必要时使用隔离浏览器；遇到登录、验证码或访问限制安全停止。"
+                "description": "招聘模块接入公开官网与平台，统一来源、职位和同步事实；访问限制在连接器边界安全处理。"
               },
               {
                 "id": "models",
                 "kind": "infra",
                 "title": "模型服务",
                 "subtitle": "OpenAI 兼容 / Anthropic · 可选",
-                "path": "packages/llm",
+                "path": "packages/common/src/models",
                 "x": 840,
                 "y": 470,
-                "description": "按用户配置提供模型推理能力，通过 llm 适配器接入。用于画像、语义分析与面试准备，系统不训练或部署自有大模型。"
+                "description": "按环境配置接入 OpenAI 兼容和 Anthropic 等协议，业务 Prompt 归所属模块；模型调用在数据库事务之外。"
+              },
+              {
+                "id": "recruitment",
+                "kind": "core",
+                "title": "recruitment · 招聘",
+                "subtitle": "来源 · 平台 · 邮箱 · 职位流程",
+                "path": "packages/recruitment",
+                "x": 300,
+                "y": 90,
+                "description": "拥有招聘信息、公司、职位修订、申请流程与连接器，公开只读查询快照；仅依赖 common。"
+              },
+              {
+                "id": "user",
+                "kind": "core",
+                "title": "user · 个人资料",
+                "subtitle": "画像 · 简历 · 面试准备",
+                "path": "packages/user",
+                "x": 300,
+                "y": 470,
+                "description": "拥有个人资料、画像版本、简历与面试准备，提供只读用户快照；仅依赖 common。"
+              },
+              {
+                "id": "matching",
+                "kind": "core",
+                "title": "matching · 匹配",
+                "subtitle": "职位理解 · 过滤评分 · 建议",
+                "path": "packages/matching",
+                "x": 570,
+                "y": 280,
+                "description": "通过 recruitment 和 user 的公开只读端口取得输入，拥有匹配结果与建议，不直接访问两侧业务表。"
+              },
+              {
+                "id": "common",
+                "kind": "contract",
+                "title": "common · 通用运行",
+                "subtitle": "任务 · Agent · 配置 · 存储机制",
+                "path": "packages/common",
+                "x": 570,
+                "y": 470,
+                "description": "提供日志、身份与时间、配置、任务调度、Agent/模型运行以及 SQLite 连接和备份等通用能力，不依赖业务模块。"
               }
             ],
             "edges": [
-              { "from": "web", "to": "application", "label": "用户操作" },
-              { "from": "cli", "to": "application", "label": "命令调用" },
-              { "from": "worker", "to": "application", "label": "执行任务" },
-              { "from": "application", "to": "sync-engine", "label": "同步职位" },
-              { "from": "application", "to": "resume-matching", "label": "解析评分" },
-              { "from": "application", "to": "ai-engine", "label": "语义处理" },
-              { "from": "application", "to": "capabilities", "label": "准备制作" },
-              { "from": "sync-engine", "to": "persistence", "label": "保存职位" },
-              { "from": "sync-engine", "to": "sources", "label": "读取官网", "labelDy": -22 },
-              {
-                "from": "resume-matching",
-                "to": "persistence",
-                "label": "读写资料",
-                "labelDy": 22
-              },
-              { "from": "ai-engine", "to": "models", "label": "模型调用" }
+              { "from": "web", "to": "recruitment", "label": "招聘查询" },
+              { "from": "web", "to": "user", "label": "个人工作台" },
+              { "from": "cli", "to": "matching", "label": "查询与匹配" },
+              { "from": "task-runtime", "to": "common", "label": "租约与执行" },
+              { "from": "matching", "to": "recruitment", "label": "职位快照" },
+              { "from": "matching", "to": "user", "label": "画像快照" },
+              { "from": "matching", "to": "common", "label": "通用运行" },
+              { "from": "recruitment", "to": "sources", "label": "采集招聘" },
+              { "from": "common", "to": "models", "label": "模型调用" },
+              { "from": "recruitment", "to": "persistence", "label": "招聘仓储" },
+              { "from": "user", "to": "persistence", "label": "用户仓储", "labelDy": 22 }
             ]
           },
           {
@@ -2226,7 +2262,7 @@
                 "kind": "entry",
                 "title": "导入简历",
                 "subtitle": "PDF · DOCX · JPEG · PNG",
-                "path": "packages/resume",
+                "path": "packages/user",
                 "x": 30,
                 "y": 280,
                 "description": "读取简历文件并提取文本，图片可通过 OCR 识别；后台画像提取完成后仍需要人工检查。"
@@ -2236,7 +2272,7 @@
                 "kind": "entry",
                 "title": "同步企业官网",
                 "subtitle": "实习 · 校招 · 社招",
-                "path": "packages/sources",
+                "path": "packages/recruitment",
                 "x": 30,
                 "y": 470,
                 "description": "对支持的官网渠道执行任务化采集，限速、去重并保留可追溯的来源信息。具体覆盖以来源支持矩阵为准。"
@@ -2246,7 +2282,7 @@
                 "kind": "core",
                 "title": "个人资料",
                 "subtitle": "解析 · 校对 · 手动编辑",
-                "path": "packages/application",
+                "path": "packages/user",
                 "x": 300,
                 "y": 280,
                 "description": "将简历转换为可编辑的经历、项目、技能等结构化信息，保存画像版本；人工锁定字段避免被后续解析覆盖。"
@@ -2256,7 +2292,7 @@
                 "kind": "core",
                 "title": "可追溯职位池",
                 "subtitle": "标准化 · 修订 · 状态维护",
-                "path": "packages/source-core",
+                "path": "packages/recruitment",
                 "x": 300,
                 "y": 470,
                 "description": "统一公司、岗位、地点等字段，保存原始记录与修订。职位消失时按规则维护 stale/closed 状态，不把部分采集失败误判为下架。"
@@ -2276,7 +2312,7 @@
                 "kind": "contract",
                 "title": "简历制作与导出",
                 "subtitle": "模板草稿 · 预览 · PDF / HTML",
-                "path": "packages/resume-template",
+                "path": "packages/user",
                 "x": 570,
                 "y": 280,
                 "description": "由公开投递字段派生模板草稿，编辑不会反向修改画像。Worker 使用共享模板和 Playwright 生成 PDF。"
@@ -2296,7 +2332,7 @@
                 "kind": "core",
                 "title": "项目经历/工作经历",
                 "subtitle": "来自个人资料 · 经历整理",
-                "path": "packages/application",
+                "path": "packages/user",
                 "x": 300,
                 "y": 90,
                 "description": "项目经历与工作经历来自简历解析后的个人资料，也可由用户手动编辑。当前项目拷打从其中的项目条目建立准备档案，额外项目文档和面经可在后续补充。"
@@ -2306,7 +2342,7 @@
                 "kind": "contract",
                 "title": "面试准备档案",
                 "subtitle": "基于项目建立 · 可补充文档",
-                "path": "packages/application",
+                "path": "packages/user",
                 "x": 570,
                 "y": 90,
                 "description": "从个人资料中选择简历项目建立稳定档案，围绕项目快照开展拷打与练习。可另外上传项目 Markdown 资料、导入个人面经或审核公开面经；这些补充材料不是从简历自动生成的。"

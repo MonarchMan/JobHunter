@@ -9,7 +9,7 @@
   border-bottom: 1px solid var(--line);
 }
 
-.header h1 {
+.header :is(h1, h2) {
   margin: 0;
   font-size: clamp(2rem, 4vw, 2.75rem);
   letter-spacing: -0.045em;
@@ -56,7 +56,7 @@
     padding-bottom: 1rem;
   }
 
-  .header h1 {
+  .header :is(h1, h2) {
     font-size: 2rem;
   }
 }

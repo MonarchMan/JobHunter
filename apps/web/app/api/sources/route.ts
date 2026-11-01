@@ -1,4 +1,4 @@
-import { webPagination } from '@jobhunter/application/contracts';
+import { webPagination } from '@jobhunter/common/web-contracts';
 import { dataResponse, errorResponse } from '../../../src/server/http.js';
 import { getWebContainer } from '../../../src/server/container.js';
 

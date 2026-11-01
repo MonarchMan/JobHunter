@@ -1,0 +1,371 @@
+import {
+  ModelClientError,
+  type ModelClient,
+  type ModelRequest,
+  type ModelResponse,
+  type ModelUsage,
+} from '@jobhunter/common/agent';
+import { z } from 'zod';
+
+const configSchema = z
+  .object({
+    baseUrl: z
+      .string()
+      .trim()
+      .min(1)
+      .refine((value) => {
+        try {
+          return ['http:', 'https:'].includes(new URL(value).protocol);
+        } catch {
+          return false;
+        }
+      }, 'Base URL must be an HTTP(S) URL.'),
+    apiKey: z.string().trim().min(1),
+    model: z.string().trim().min(1),
+    costCurrency: z.enum(['USD', 'CNY']).default('USD'),
+    timeoutMs: z
+      .number()
+      .int()
+      .min(1_000)
+      .max(10 * 60_000)
+      .default(180_000),
+    inputCostPerMillionUsd: z.number().nonnegative().nullable().optional(),
+    outputCostPerMillionUsd: z.number().nonnegative().nullable().optional(),
+  })
+  .strict();
+
+const responseSchema = z.object({
+  choices: z
+    .array(
+      z.object({
+        finish_reason: z.string().nullable().optional(),
+        message: z.object({
+          content: z.string().nullable().optional(),
+          tool_calls: z
+            .array(
+              z.object({
+                id: z.string().min(1),
+                function: z.object({ name: z.string().min(1), arguments: z.string() }),
+              }),
+            )
+            .optional(),
+        }),
+      }),
+    )
+    .min(1),
+  usage: z
+    .object({
+      prompt_tokens: z.number().int().nonnegative().default(0),
+      completion_tokens: z.number().int().nonnegative().default(0),
+    })
+    .optional(),
+});
+
+/** 模块数据结构或契约。 */
+export interface OpenAiCompatibleClientConfig {
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+  readonly costCurrency?: 'USD' | 'CNY';
+  readonly timeoutMs?: number;
+  readonly inputCostPerMillionUsd?: number | null | undefined;
+  readonly outputCostPerMillionUsd?: number | null | undefined;
+  readonly fetchImplementation?: typeof fetch;
+}
+
+/** 将基础地址规范化为 chat/completions 端点。 */
+function endpoint(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  const path = url.pathname.replace(/\/+$/u, '');
+  if (path.endsWith('/chat/completions')) return url.toString();
+  url.pathname = `${path || '/v1'}/chat/completions`;
+  return url.toString();
+}
+
+/** 将供应商 usage 字段转换为统一模型用量。 */
+function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
+  return {
+    inputTokens: value?.prompt_tokens ?? 0,
+    outputTokens: value?.completion_tokens ?? 0,
+    estimatedCostMicros: null,
+  };
+}
+
+/** 将 Token 数和每百万 Token 美元报价换算为微美元；未同时提供报价时返回 null。 */
+function estimateCostMicros(
+  value: z.infer<typeof responseSchema>['usage'],
+  inputPrice: number | null | undefined,
+  outputPrice: number | null | undefined,
+): number | null {
+  if (
+    inputPrice === null ||
+    inputPrice === undefined ||
+    outputPrice === null ||
+    outputPrice === undefined
+  )
+    return null;
+  return Math.round(
+    (value?.prompt_tokens ?? 0) * inputPrice + (value?.completion_tokens ?? 0) * outputPrice,
+  );
+}
+
+/** 判断是否连接 DeepSeek 官方 OpenAI 兼容入口。 */
+function isDeepSeekApi(baseUrl: string): boolean {
+  try {
+    return new URL(baseUrl).hostname === 'api.deepseek.com';
+  } catch {
+    return false;
+  }
+}
+
+/** DeepSeek v4 的结构化任务关闭默认思考模式，避免正文生成延迟。 */
+function shouldDisableDeepSeekThinking(baseUrl: string, model: string): boolean {
+  return isDeepSeekApi(baseUrl) && model.startsWith('deepseek-v4');
+}
+
+/** 严格解析 JSON，并仅兼容包裹整个响应的单层 Markdown JSON 代码围栏。 */
+function parseStructuredContent(
+  content: string,
+): { readonly parsed: true; readonly value: unknown } | { readonly parsed: false } {
+  const trimmed = content.trim();
+  if (!trimmed) return { parsed: false };
+  try {
+    return { parsed: true, value: JSON.parse(trimmed) as unknown };
+  } catch {
+    const fenced = /^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/iu.exec(trimmed);
+    if (!fenced?.[1]) return { parsed: false };
+    try {
+      return { parsed: true, value: JSON.parse(fenced[1].trim()) as unknown };
+    } catch {
+      return { parsed: false };
+    }
+  }
+}
+
+/** 执行模块的解析、转换、评分或调用辅助逻辑。 */
+async function responseError(response: Response): Promise<ModelClientError> {
+  const status = response.status;
+  if (status === 401 || status === 403)
+    return new ModelClientError('invalid_auth', 'Model provider rejected authentication.');
+  if (status === 429)
+    return new ModelClientError('rate_limited', 'Model provider rate limited the request.', true);
+  if (status >= 500)
+    return new ModelClientError('temporary', 'Model provider is temporarily unavailable.', true);
+  let detail = '';
+  try {
+    const body = z
+      .object({
+        error: z.object({
+          code: z.union([z.string(), z.number()]).optional(),
+          param: z.string().optional(),
+        }),
+      })
+      .safeParse(await response.json());
+    if (body.success) {
+      const code = body.data.error.code;
+      const param = body.data.error.param;
+      const safeCode = code === undefined ? '' : String(code).replaceAll(/[^a-zA-Z0-9_.-]/g, '');
+      const safeParam = param?.replaceAll(/[^a-zA-Z0-9_.-]/g, '') ?? '';
+      detail = [safeCode && `code=${safeCode}`, safeParam && `param=${safeParam}`]
+        .filter(Boolean)
+        .join(',');
+    }
+  } catch {
+    // Upstream error bodies are optional and never included verbatim.
+  }
+  return new ModelClientError(
+    'invalid_request',
+    `Model provider rejected the request (${String(status)}${detail ? `; ${detail}` : ''}).`,
+  );
+}
+
+/** OpenAI-compatible Chat Completions adapter. Provider DTOs stay inside this boundary. */
+/** 调用 OpenAI 协议兼容接口并校验响应结构。 */
+export class OpenAiCompatibleModelClient implements ModelClient {
+  readonly #config: z.infer<typeof configSchema>;
+  readonly #fetch: typeof fetch;
+
+  public readonly metadata: ModelClient['metadata'];
+
+  /** 执行模块组件对外暴露的操作。 */
+  public constructor(input: OpenAiCompatibleClientConfig) {
+    this.#config = configSchema.parse({
+      baseUrl: input.baseUrl,
+      apiKey: input.apiKey,
+      model: input.model,
+      costCurrency: input.costCurrency ?? 'USD',
+      ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+      inputCostPerMillionUsd: input.inputCostPerMillionUsd ?? null,
+      outputCostPerMillionUsd: input.outputCostPerMillionUsd ?? null,
+    });
+    this.#fetch = input.fetchImplementation ?? fetch;
+    this.metadata = {
+      provider: 'openai-compatible',
+      model: this.#config.model,
+      config: { baseUrl: this.#config.baseUrl, timeoutMs: this.#config.timeoutMs },
+      costCurrency: this.#config.costCurrency,
+      pricingVersion:
+        this.#config.inputCostPerMillionUsd === null ||
+        this.#config.outputCostPerMillionUsd === null
+          ? 'unpriced'
+          : 'configured',
+    };
+  }
+
+  /** 发送一次模型请求并映射文本、工具调用和用量。 */
+  public async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
+    const timeout = AbortSignal.timeout(this.#config.timeoutMs);
+    const combined = AbortSignal.any([signal, timeout]);
+    const messages = [
+      { role: 'system', content: request.systemPrompt },
+      {
+        role: 'user',
+        content: JSON.stringify({
+          input: request.input,
+          outputContract: {
+            name: request.outputSchemaName,
+            jsonSchema: request.outputJsonSchema,
+          },
+          ...(request.toolResults.length === 0 ? {} : { toolResults: request.toolResults }),
+          ...(request.repair ? { repair: request.repair } : {}),
+        }),
+      },
+    ];
+    try {
+      const baseBody = {
+        model: this.#config.model,
+        messages,
+        ...(request.maxOutputTokens === undefined ? {} : { max_tokens: request.maxOutputTokens }),
+        ...(shouldDisableDeepSeekThinking(this.#config.baseUrl, this.#config.model)
+          ? { thinking: { type: 'disabled' as const } }
+          : {}),
+        ...(request.tools.length === 0
+          ? {}
+          : {
+              tools: request.tools.map((tool) => ({
+                type: 'function',
+                function: {
+                  name: tool.key,
+                  description: tool.description,
+                  parameters: { type: 'object', additionalProperties: true },
+                },
+              })),
+            }),
+      };
+      const dispatch = (responseFormat?: unknown): Promise<Response> =>
+        this.#fetch(endpoint(this.#config.baseUrl), {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${this.#config.apiKey}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...baseBody,
+            ...(responseFormat === undefined ? {} : { response_format: responseFormat }),
+          }),
+          signal: combined,
+        });
+      const deepSeek = isDeepSeekApi(this.#config.baseUrl);
+      // 1、DeepSeek Chat Completions 直接使用 json_object；其他网关优先协商 json_schema。
+      let response = await dispatch(
+        deepSeek
+          ? { type: 'json_object' }
+          : {
+              type: 'json_schema',
+              json_schema: {
+                name: request.outputSchemaName,
+                strict: true,
+                schema: request.outputJsonSchema,
+              },
+            },
+      );
+      // 1.a、通用网关可能只支持 JSON mode；DeepSeek 或 JSON mode 被拒绝后最终回退纯文本。
+      if (!deepSeek && response.status === 400) response = await dispatch({ type: 'json_object' });
+      if (response.status === 400) response = await dispatch();
+      if (!response.ok) throw await responseError(response);
+      const parsed = responseSchema.parse(await response.json());
+      const choice = parsed.choices[0];
+      if (!choice) throw new ModelClientError('invalid_output', 'Model response had no choice.');
+      if (choice.finish_reason === 'content_filter')
+        throw new ModelClientError('content_rejected', 'Model provider rejected the content.');
+      const calls = choice.message.tool_calls;
+      if (calls && calls.length > 0) {
+        return {
+          kind: 'tool_calls',
+          calls: calls.map((call) => {
+            try {
+              return {
+                id: call.id,
+                toolKey: call.function.name,
+                input: JSON.parse(call.function.arguments) as unknown,
+              };
+            } catch {
+              throw new ModelClientError('invalid_output', 'Model tool arguments were not JSON.');
+            }
+          }),
+          usage: {
+            ...usage(parsed.usage),
+            estimatedCostMicros: estimateCostMicros(
+              parsed.usage,
+              this.#config.inputCostPerMillionUsd,
+              this.#config.outputCostPerMillionUsd,
+            ),
+          },
+        };
+      }
+      // 2、代码围栏在本地安全剥离；其他非 JSON（含 DeepSeek 偶发空正文）交给 Runner 修复一次。
+      const content = choice.message.content ?? '';
+      const structured = parseStructuredContent(content);
+      return structured.parsed
+        ? {
+            kind: 'output',
+            output: structured.value,
+            usage: {
+              ...usage(parsed.usage),
+              estimatedCostMicros: estimateCostMicros(
+                parsed.usage,
+                this.#config.inputCostPerMillionUsd,
+                this.#config.outputCostPerMillionUsd,
+              ),
+            },
+          }
+        : {
+            kind: 'unparsed_output',
+            text: content,
+            usage: {
+              ...usage(parsed.usage),
+              estimatedCostMicros: estimateCostMicros(
+                parsed.usage,
+                this.#config.inputCostPerMillionUsd,
+                this.#config.outputCostPerMillionUsd,
+              ),
+            },
+          };
+    } catch (error) {
+      if (error instanceof ModelClientError) throw error;
+      if (combined.aborted) {
+        if (signal.aborted) throw new ModelClientError('cancelled', 'Model request was cancelled.');
+        throw new ModelClientError('timeout', 'Model request timed out.', true);
+      }
+      if (error instanceof z.ZodError)
+        throw new ModelClientError(
+          'invalid_output',
+          'Model provider returned an invalid response.',
+        );
+      throw new ModelClientError('temporary', 'Model provider request failed.', true);
+    }
+  }
+}
+
+/** 将 OpenAI 兼容客户端注册到模型提供方注册表。 */
+export function registerOpenAiCompatibleProvider(registry: {
+  register(
+    provider: string,
+    factory: (config: Readonly<Record<string, unknown>>) => ModelClient,
+  ): void;
+}): void {
+  registry.register(
+    'openai-compatible',
+    (value) => new OpenAiCompatibleModelClient(configSchema.parse(value)),
+  );
+}

@@ -11,7 +11,7 @@
 
 - **CLI-001**：`jh init` 必须创建数据目录、数据库、迁移和幂等 seed，并输出下一步指引。
 - **CLI-002**：`jh source list|status|sync` 必须列出来源、健康、最近运行并手动入队单个/全部来源同步。
-- **CLI-003**：`jh worker start` 必须启动 Worker，支持优雅关闭和可读状态输出。
+- **CLI-003**：CLI 等待操作必须按需启动公共任务运行时并在结束时优雅关闭；删除独立 worker 命令。
 - **CLI-004**：`jh job list|show|export` 必须支持关键词、公司、状态、地点、细分职位类别、最低分和稳定分页。
 - **CLI-005**：`jh resume import`、`jh profile show|history|set|lock|unlock` 必须覆盖导入、画像查看和人工维护。
 - **CLI-006**：`jh match score|list|show` 必须支持单个具体职位评分、任务状态、分项证据和建议；不得提供全量批量匹配入口。

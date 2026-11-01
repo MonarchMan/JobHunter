@@ -2,7 +2,7 @@ import { getWebContainer } from '../../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../../../../src/server/http.js';
 import { interviewErrorResponse } from '../../../../../../src/server/interview-http.js';
-import { webStartDrillSessionSchema } from '@jobhunter/application/contracts';
+import { webStartDrillSessionSchema } from '@jobhunter/user/contracts/interview-web';
 
 /** 模块数据结构或契约。 */
 interface RouteContext {

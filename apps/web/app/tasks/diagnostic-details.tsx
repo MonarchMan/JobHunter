@@ -4,7 +4,7 @@ import type {
   WebAgentRunDetail,
   WebAgentRunSummary,
   WebTask,
-} from '@jobhunter/application/contracts';
+} from '@jobhunter/recruitment/contracts/web';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {

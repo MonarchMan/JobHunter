@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { Command, Option } from 'commander';
-import {
-  createPlatformTaskHandler,
-  HandlerRegistry,
-  TaskService,
-  observePlatformRound,
-} from '@jobhunter/application';
-import { openSqliteDatabase, SqliteTaskRepository, SqlitePlatformRepository } from '@jobhunter/db';
-import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
+import { createPlatformTaskHandler } from '@jobhunter/recruitment/platform-application/platforms';
+import { HandlerRegistry, TaskService } from '@jobhunter/common/tasks';
+import { observePlatformRound } from '@jobhunter/recruitment/platform-application/platform-observation';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
+import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
+import { SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
 /** 与应用观察端口共享平台键，不在入口复制平台身份定义。 */
 type PlatformProviderKey = Parameters<typeof observePlatformRound>[0]['provider'];
 

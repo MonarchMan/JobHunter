@@ -1,8 +1,8 @@
 import {
   CandidateProfileNotFoundError,
   ProfileVersionConflictError,
-} from '@jobhunter/application/profile';
-import { webProfileMutationSchema } from '@jobhunter/application/contracts';
+} from '@jobhunter/user/profile';
+import { webProfileMutationSchema } from '@jobhunter/user/contracts/web';
 import { ZodError } from 'zod';
 import {
   badRequestResponse,

@@ -1,6 +1,6 @@
 'use client';
 
-import type { CandidateProfileData } from '@jobhunter/domain';
+import type { CandidateProfileData } from '@jobhunter/user/domain';
 import type { ReactElement } from 'react';
 import { SelectField } from '../components/forms/select-field.js';
 

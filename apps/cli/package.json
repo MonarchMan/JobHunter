@@ -18,16 +18,10 @@
     "dist"
   ],
   "dependencies": {
-    "@jobhunter/agent-core": "workspace:*",
-    "@jobhunter/application": "workspace:*",
-    "@jobhunter/db": "workspace:*",
-    "@jobhunter/domain": "workspace:*",
-    "@jobhunter/llm": "workspace:*",
+    "@jobhunter/user": "workspace:*",
+    "@jobhunter/common": "workspace:*",
     "@jobhunter/matching": "workspace:*",
-    "@jobhunter/observability": "workspace:*",
-    "@jobhunter/sources": "workspace:*",
-    "@jobhunter/testkit": "workspace:*",
-    "@jobhunter/worker": "workspace:*",
+    "@jobhunter/recruitment": "workspace:*",
     "commander": "^15.0.0"
   },
   "scripts": {

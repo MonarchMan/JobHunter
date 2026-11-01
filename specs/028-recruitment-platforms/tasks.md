@@ -490,7 +490,7 @@ HTTP 前浏览器安全令牌已不同于捕获请求，三次期间浏览器 bs
 
 2026-09-19 Web 追加实现：提供 `/sources?channel=platform` 与 CSRF 保护的 `/api/platforms/boss`，Web 只发布任务；有限历史恢复当前代次最近一批、已保存职位链接、活动任务与安全错误。重复提交使用同一令牌确认，失败保留已成功结果，刷新不访问平台，字段错误聚焦并保留草稿。Worker 启动废弃旧代次、退出持久化断开状态。复用已有 UI 令牌与正式职位详情入口；T007 的在线整体验收仍未完成。
 
-最新真实生产装配复核：新增 `apps/worker/test/boss-platform.online.test.ts`，通过 Web 同一应用发布入口驱动真实生产 Worker、BossCdpSessionProvider、HTTP 与 SQLite。用户批准唯一一次新连接后，连接成功，首批 HTTP 返回 `access_blocked (37)`；立即停止，没有翻页、详情请求或职位写入。finally 关闭 Worker/CDP 并移除该测试创建的临时库，未修改生产库。Chrome 原生窗口及标签页截图均呈空白；一次正常刷新后仍未显示职位，没有处理验证或自动重试。不能以早期桥接成功代替此次完整装配失败，也不能推断只是未登录。
+最新真实生产装配复核：新增 `apps/web/test/task-runtime/boss-platform.online.test.ts`，通过 Web 同一应用发布入口驱动真实生产 Worker、BossCdpSessionProvider、HTTP 与 SQLite。用户批准唯一一次新连接后，连接成功，首批 HTTP 返回 `access_blocked (37)`；立即停止，没有翻页、详情请求或职位写入。finally 关闭 Worker/CDP 并移除该测试创建的临时库，未修改生产库。Chrome 原生窗口及标签页截图均呈空白；一次正常刷新后仍未显示职位，没有处理验证或自动重试。不能以早期桥接成功代替此次完整装配失败，也不能推断只是未登录。
 
 本轮交付不包含平台自动保留清理，T006 仍未完成；网页明确提示尚未启用，没有提供无实现的清理按钮。
 

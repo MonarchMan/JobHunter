@@ -24,8 +24,8 @@ jh --data-root "D:\JobHunter 数据" doctor
 # 导入简历并得到画像提取 task ID
 jh resume import "docs/resumes/nowcoder_1787802316450.jpeg"
 
-# 在另一个终端启动 Worker
-jh worker start
+# 启动 Web 自动消费任务；CLI 的 --wait 操作也会按需执行任务
+pnpm --filter @jobhunter/web dev
 
 # 同步官网并等待结果
 jh source sync tencent-social --wait
@@ -64,7 +64,7 @@ jh backup verify "D:\JobHunter Backups\backup-001"
 jh backup restore "D:\JobHunter Backups\backup-001"
 ```
 
-`backup restore` 默认只执行 dry-run，不修改文件。它会返回绑定备份哈希、目标目录指纹和过期时间的确认令牌。停止 Worker、Web 和其他 CLI 后，原样回传令牌才会执行：
+`backup restore` 默认只执行 dry-run，不修改文件。它会返回绑定备份哈希、目标目录指纹和过期时间的确认令牌。停止 Web 和其他 CLI 后，原样回传令牌才会执行：
 
 ```powershell
 jh backup restore "D:\JobHunter Backups\backup-001" --confirm <dryRunToken>

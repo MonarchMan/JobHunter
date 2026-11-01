@@ -1,4 +1,4 @@
-import { normalizeJobTaxonomy, type NormalizedJob } from '@jobhunter/domain';
+import { normalizeJobTaxonomy, type NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import type {
   DeterministicMatchInput,
   DeterministicMatchOutput,

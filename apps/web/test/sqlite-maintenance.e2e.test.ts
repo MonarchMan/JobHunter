@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { errorResponse } from '../src/server/http.js';
-import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application';
-import { openSqliteDatabase } from '@jobhunter/db';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { createLocalWebContainer } from '../src/server/container.js';
 
 describe('SQLite maintenance HTTP responses', () => {

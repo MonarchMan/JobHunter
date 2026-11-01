@@ -2,13 +2,21 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
-import { createProductionWorkerApplication } from '@jobhunter/worker';
-import { openSqliteDatabase, SqliteTaskRepository, SqlitePlatformRepository } from '@jobhunter/db';
-import { parseId, SystemIdGenerator } from '@jobhunter/domain';
-import { platformRetentionResultSchema } from '@jobhunter/application';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
+import { createProductionTaskApplication } from '../src/task-runtime.js';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
+import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
+import { parseId, SystemIdGenerator } from '@jobhunter/common/domain';
+import { platformRetentionResultSchema } from '@jobhunter/recruitment/platform-application/platform-retention';
 
-const execute = promisify(execFile);
+/** 子进程不继承 Vitest 注入的相对 BASE_URL，确保 CLI 使用完整的模型默认地址。 */
+async function execute(
+  file: string,
+  args: readonly string[],
+): Promise<{ stdout: string; stderr: string }> {
+  return promisify(execFile)(file, [...args], { env: { ...process.env, BASE_URL: '' } });
+}
 
 it('BOSS 恢复 CLI 必须显式确认并保留原失败任务引用，其他平台不得发布', async () => {
   const root = await createTemporaryDataRoot('platform-resume-cli-');
@@ -115,7 +123,7 @@ it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一�
 
 it('publishes preview, confirms and disables retention through real CLI and production Worker', async () => {
   const root = await createTemporaryDataRoot('platform-cli-');
-  const worker = createProductionWorkerApplication({ dataRoot: root.path });
+  const worker = createProductionTaskApplication({ dataRoot: root.path });
   const db = openSqliteDatabase({ dataRoot: root.path });
   /** CLI 只创建任务，真实生产处理器执行控制变更，不接触浏览器。 */
   const run = async (

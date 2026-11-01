@@ -50,8 +50,8 @@
 
    - [同步规格](../../specs/005-job-sync-pipeline/spec.md)：SYNC-010、SYNC-020。
    - [运维规格](../../specs/012-operations/spec.md)：OPS-016。
-   - [同步服务](../../packages/application/src/sync/job-sync-service.ts)、[同步任务处理器](../../packages/application/src/sync/job-sync-handler.ts)。
-   - [维护仓储](../../packages/db/src/sqlite-maintenance-repository.ts)、[SQLite 暂时不可用判定](../../packages/db/src/busy-error.ts)。
+   - [同步服务](../../packages/recruitment/src/sync/job-sync-service.ts)、[同步任务处理器](../../packages/recruitment/src/sync/job-sync-handler.ts)。
+   - [维护仓储](../../packages/common/src/persistence/sqlite-maintenance-repository.ts)、[SQLite 暂时不可用判定](../../packages/common/src/persistence/busy-error.ts)。
 
 ## 2026-09-09
 
@@ -172,8 +172,8 @@
    - [Worker 功能规格](../../specs/003-task-worker/spec.md)：WRK-019、WRK-020。
    - [Worker 设计](../../specs/003-task-worker/design.md)。
    - [ADR-0019：任务诊断写入投影与批量读取](../adr/0019-task-diagnostic-projection.md)。
-   - [诊断仓储实现](../../packages/db/src/web-diagnostics-repository.ts)。
-   - [任务诊断字段迁移](../../packages/db/migrations/0032_task_diagnostic_projection.sql)。
+   - [诊断仓储实现](../../packages/recruitment/src/persistence/web-diagnostics-repository.ts)。
+   - [任务诊断字段迁移](../../packages/common/migrations/legacy/0032_task_diagnostic_projection.sql)。
 
 2. **SQLite 自动阈值维护组件**
 
@@ -209,7 +209,7 @@
 
    - [运维规格](../../specs/012-operations/spec.md)：OPS-012～OPS-015。
    - [ADR-0020：SQLite 阈值维护与跨进程写入保护](../adr/0020-sqlite-automatic-maintenance.md)。
-   - [维护应用服务](../../packages/application/src/operations/sqlite-maintenance-service.ts)。
+   - [维护应用服务](../../packages/common/src/operations/sqlite-maintenance-service.ts)。
 
 3. **首页精选查询与运行时异常恢复**
 
@@ -247,8 +247,8 @@
    本轮不修改评分列表语义、关键词检索、完整性检查策略、业务数据保留策略或官网速率。运行期锁忙后的提交恢复仍遵循既有至少一次执行和幂等约束。需要重启 Web/Worker 才能加载新的运行时逻辑。
 
    - [Worker 设计](../../specs/003-task-worker/design.md)、[Web 设计](../../specs/011-web-console/design.md)。
-   - [首页查询](../../packages/db/src/dashboard-read-model.ts)、[Worker 引擎](../../packages/application/src/tasks/worker-engine.ts)。
-   - [Web 可重试初始化](../../apps/web/src/server/retryable-singleton.ts)、[维护入口](../../apps/worker/src/sqlite-maintenance.ts)。
+   - [首页查询](../../apps/web/src/server/dashboard/read-model.ts)、[Worker 引擎](../../packages/common/src/tasks/worker-engine.ts)。
+   - [Web 可重试初始化](../../apps/web/src/server/retryable-singleton.ts)、[维护入口](../../packages/common/src/tasks/sqlite-maintenance.ts)。
 
 4. **连接校验分层与关键词分页复用**
 

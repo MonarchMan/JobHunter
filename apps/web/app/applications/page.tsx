@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { PageHeader } from '../components/layout/page-header.js';
 import { CompanyLogo } from '../components/company-logo.js';
 import { getWebContainer } from '../../src/server/container.js';
-import type { WebApplicationProgress } from '@jobhunter/application/contracts';
+import type { WebApplicationProgress } from '@jobhunter/recruitment/contracts/application-progress-web';
 import styles from './applications-progress.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -56,12 +56,14 @@ export default function ApplicationsPage(): ReactElement {
 }
 
 /** 应聘进展内容区，供“我的”聚合页复用。 */
-export async function ApplicationsProgressContent(): Promise<ReactElement> {
+export async function ApplicationsProgressContent({
+  embedded = false,
+}: Readonly<{ embedded?: boolean }> = {}): Promise<ReactElement> {
   const container = await getWebContainer();
   const progress = container.services.applications.list();
   return (
     <>
-      <PageHeader title="应聘进展">
+      <PageHeader title="应聘进展" level={embedded ? 2 : 1}>
         <span className={styles.headerHint}>按公司查看岗位流程与面试记录</span>
       </PageHeader>
       {progress.companies.length === 0 ? (

@@ -17,13 +17,13 @@ JobHunter 是一个运行在本机的个人求职工作台。它把简历、企�
 
 ### 招聘平台职位
 
-四个平台正常采集的固定间隔统一在项目根目录 `.env` 配置。`PLATFORM_REQUEST_INTERVAL_MS` 是未单独配置平台的回退值（默认 **0 毫秒**）；`PLATFORM_REQUEST_INTERVAL_MS_BOSS`、`_ZHILIAN`、`_51JOB`、`_LIEPIN` 分别覆盖对应平台，范围均为 0～60000 毫秒。修改后重启 Worker。各连接独立计时；这不启用并发，也不取消网络退避、服务端 Retry-After、安全恢复检查或前程无忧等待新模板。BOSS 浏览器模式仅约束 Worker 主动点击／加载动作，不能限制官网自主产生的网络请求。
+四个平台正常采集的固定间隔统一在项目根目录 `.env` 配置。`PLATFORM_REQUEST_INTERVAL_MS` 是未单独配置平台的回退值（默认 **0 毫秒**）；`PLATFORM_REQUEST_INTERVAL_MS_BOSS`、`_ZHILIAN`、`_51JOB`、`_LIEPIN` 分别覆盖对应平台，范围均为 0～60000 毫秒。修改后重启 Web。各连接独立计时；这不启用并发，也不取消网络退避、服务端 Retry-After、安全恢复检查或前程无忧等待新模板。BOSS 浏览器模式仅约束 Worker 主动点击／加载动作，不能限制官网自主产生的网络请求。
 
 在“职位”页把来源类型切换为“招聘平台”，再选择 BOSS、智联、前程无忧或猎聘。在日常使用的 Chrome 登录平台并启用远程调试；确认借用最小登录上下文后点击“获取职位”。Worker 使用默认第一份个人资料中填写的具体意向岗位，逐词各取一批、合并去重后补齐详情入库；不额外搜索职位大类或细分岗位。每个词使用同一默认 Chrome 配置下的独立后台页，共享登录态，不接管用户页面；后续获取复用各词连接。修改资料后使用“按当前资料重新连接”。不需要选择标签页或填写其 ID；首次逐词初始化可能各需 Chrome 授权，尚未合并为跨词一次授权。断开只关闭 Worker 创建的页；意外断线遗留的专用页可手动关闭。
 
 BOSS 通过浏览器正常搜索和点击详情取得 JSON；智联从主站首页自然请求取得认证，列表和详情使用独立 HTTP，不需要手动搜索；前程无忧专用搜索页提供自然签名模板，下一次获取时正常翻页一次，职位仍由 HTTP 读取；猎聘使用专用搜索页模板与独立 HTTP。CLI `connect` 默认同样使用资料，`--keyword` 可显式调试单个词；智联调试可加 `--city`。旧推荐／校园和 BOSS HTTP 仅保留显式调试路径，不充当关键词搜索。不会自动刷新或抓取所有页；职位页的筛选仅作用于本地库。四平台的两词真实整批验收尚未全部完成，具体状态见 `specs/028-recruitment-platforms/tasks.md`。
 
-默认发现当前系统的 Chrome 标准配置位置。不使用标准位置时，可为 Worker 设置 `JOBHUNTER_CHROME_PORT_FILE`，值为 `DevToolsActivePort` 的绝对路径，或使用折叠的“高级连接设置”。不读取磁盘 Cookie 数据库。Worker 重启后需重新连接并按 Chrome 提示授权；更新此功能后须重启 Worker 加载新命令。
+默认发现当前系统的 Chrome 标准配置位置。不使用标准位置时，可为 Worker 设置 `JOBHUNTER_CHROME_PORT_FILE`，值为 `DevToolsActivePort` 的绝对路径，或使用折叠的“高级连接设置”。不读取磁盘 Cookie 数据库。Worker 重启后需重新连接并按 Chrome 提示授权；更新此功能后须重启 Web 加载新命令。
 
 ## 2. 十分钟启动
 
@@ -31,7 +31,7 @@ BOSS 通过浏览器正常搜索和点击详情取得 JSON；智联从主站首�
 
 | 环境                     | 版本或建议                               | 是否必需 | 用途                                                       |
 | ------------------------ | ---------------------------------------- | -------- | ---------------------------------------------------------- |
-| Node.js                  | `>=24`                                   | 必需     | 运行 CLI、Worker、Web 和项目脚本                           |
+| Node.js                  | `>=24`                                   | 必需     | 运行 CLI、Web 和项目脚本                           |
 | pnpm                     | `>=11.0.0`                               | 必需     | 安装依赖并执行 workspace 命令                              |
 | Microsoft Edge 或 Chrome | 使用仍受支持的稳定版本，可自动探测       | 可选     | 采集需要真实浏览器的动态招聘来源                           |
 | Playwright Chromium      | 使用项目当前 Playwright 版本对应的浏览器 | 可选     | 没有可用系统浏览器时作为采集运行时，也用于浏览器自动化测试 |
@@ -81,7 +81,7 @@ node apps/cli/dist/main.js doctor
 pnpm --filter @jobhunter/web dev
 ```
 
-浏览器访问 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。启动器会同时运行 Web 和一个独立 Worker，因此正常使用时不需要再开第二个 Worker。
+浏览器访问 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。Web 宿主自动运行公共任务引擎，不需要额外启动后台进程；CLI 等待命令按需运行相同引擎。
 
 开发启动直接读取 workspace 源码，不需要预先执行全仓构建。需要持续检查类型时，在独立终端运行 `pnpm typecheck:watch`，也可使用 `pnpm --filter @jobhunter/web dev:typecheck`；这项检查不会阻塞 Web 启动。正式构建和生产运行仍使用各包的 `dist/`。
 
@@ -140,7 +140,7 @@ API_KEY=your-api-key
 MODEL=your-claude-model
 ```
 
-Anthropic 通用代理的地址应保留独立的 `anthropic` 主机标签或路径段，例如 `https://gateway.example.com/anthropic`，否则无法仅根据 URL 区分协议。修改配置后重启 Web，使 Web 与 Worker 使用同一份环境变量。
+Anthropic 通用代理的地址应保留独立的 `anthropic` 主机标签或路径段，例如 `https://gateway.example.com/anthropic`，否则无法仅根据 URL 区分协议。修改配置后重启 Web，使 页面与任务运行时使用同一份环境变量。
 
 不要把 `.env`、密钥、简历或 `var/` 中的运行数据提交到版本库。
 
@@ -204,4 +204,4 @@ pnpm docs:check
 - [CLI 指南](./cli.md)：命令参数、JSON 输出、备份和恢复。
 - [总体架构](./arch/overall-arch.md)：进程职责、模块边界和数据流。
 - [功能规格索引](../specs/README.md)：当前能力及实现状态。
-- [招聘来源支持矩阵](../packages/sources/SUPPORT_MATRIX.md)：各企业来源的覆盖范围与限制。
+- [招聘来源支持矩阵](../packages/recruitment/SUPPORT_MATRIX.md)：各企业来源的覆盖范围与限制。

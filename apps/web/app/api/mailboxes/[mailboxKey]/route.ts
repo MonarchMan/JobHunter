@@ -1,7 +1,7 @@
 import {
   mailboxSettingsUpdateSchema,
   MailboxSettingsError,
-} from '@jobhunter/application/mail-settings';
+} from '@jobhunter/recruitment/mail-application';
 import { ZodError } from 'zod';
 import { getWebContainer } from '../../../../src/server/container.js';
 import {

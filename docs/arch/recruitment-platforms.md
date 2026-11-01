@@ -46,12 +46,12 @@ BOSS 当前按 [ADR-0048](../adr/0048-boss-browser-default-and-page-lifecycle.md
 
 | 模块                         | 所有权                                                                                                |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------- |
-| packages/platform-core       | 平台元数据、能力、候选、分页结果、错误与传输契约；不依赖数据库或浏览器                                |
-| packages/platform-connectors | boss、zhaopin 协议和边界 Schema；session 中的内存凭据与 CDP 实现；transport 中的受限 HTTP／浏览器实现 |
-| packages/application         | 连接、浏览、详情、正式写入和清理用例；声明会话、浏览工作集和仓储端口                                  |
-| packages/domain              | 来源类别、职位身份和纯生命周期规则，不包含会话令牌                                                    |
-| packages/db                  | 来源迁移、统一职位仓储、观察与清理事务                                                                |
-| apps/worker                  | 装配上述端口、执行短任务、管理取消与退出                                                              |
+| packages/recruitment/src/platform/contracts       | 平台元数据、能力、候选、分页结果、错误与传输契约；不依赖数据库或浏览器                                |
+| packages/recruitment/src/platform/connectors | boss、zhaopin 协议和边界 Schema；session 中的内存凭据与 CDP 实现；transport 中的受限 HTTP／浏览器实现 |
+| packages/recruitment/src/platform/application | 连接、浏览、详情、正式写入和清理用例；声明会话、浏览工作集和仓储端口                                  |
+| packages/recruitment/src/domain | 来源类别、职位身份和纯生命周期规则，不包含会话令牌                                                    |
+| packages/recruitment/src/persistence | 来源迁移、统一职位仓储、观察与清理事务                                                                |
+| recruitment/tasks 与 CLI/Web                  | 模块提供任务能力，CLI/Web 注入跨模块端口；common 管理取消与执行                                                              |
 | apps/web                     | 提交请求、展示进度和持久职位，不持有 Cookie 或执行平台网络请求                                        |
 
 基础设施实现应用端口，应用不得反向导入平台实现。跨包只能使用公开入口；避免为复用而将官网私有浏览器代码导入平台包。首版直接在 Worker 使用已有 Node/Playwright 能力，不复制 BossHunter 的独立通用 HTTP-CDP 代理，不新增微服务。

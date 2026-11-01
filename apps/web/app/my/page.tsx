@@ -33,7 +33,7 @@ export default async function MyPage({ searchParams }: MyPageProperties): Promis
       </nav>
       <section className={styles.content} aria-label={tab === 'profile' ? '个人资料' : '应聘进展'}>
         {tab === 'applications' ? (
-          <ApplicationsProgressContent />
+          <ApplicationsProgressContent embedded />
         ) : (
           <ProfilePage searchParams={Promise.resolve(query)} embedded />
         )}

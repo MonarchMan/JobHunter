@@ -1,6 +1,6 @@
-import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application';
-import { openSqliteDatabase } from '@jobhunter/db';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 import { labelAgentErrorCategory, labelAgentKey } from '../app/components/status-labels.js';

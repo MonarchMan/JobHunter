@@ -2,9 +2,11 @@
 
 > 状态：Accepted
 
-> 版本：1.7.1
-> 更新日期：2026-10-14
+> 版本：2.0.0（目标方案）
+> 更新日期：2026-10-31
 > 适用范围：数据内核、Web 管理台、来源同步、招聘进展、简历与面试准备
+
+> 实施状态：四模块与 CLI/Web 双入口已落地。通用任务机制归 common，业务任务由各模块提供，入口显式装配；迁移清单见 [032 规格](../../specs/032-business-module-consolidation/spec.md)。
 
 ## 1. 概述
 
@@ -39,7 +41,7 @@ JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有�
 
 #### 1.2.2 来源范围
 
-职位来自企业官方招聘页面或接口，以及用户显式连接的招聘平台。官网具体企业、招聘渠道、支持状态与限制以 [来源支持矩阵](../../packages/sources/SUPPORT_MATRIX.md) 为准。招聘平台采用用户驱动的按需读取，能力与账号状态独立声明；共用正式职位库，不采用临时职位库或收藏后转正。平台设计已确定、尚未实现，见 [招聘平台架构](./recruitment-platforms.md) 和 [028 规格](../../specs/028-recruitment-platforms/spec.md)。
+职位来自企业官方招聘页面或接口，以及用户显式连接的招聘平台。官网具体企业、招聘渠道、支持状态与限制以 [来源支持矩阵](../../packages/recruitment/SUPPORT_MATRIX.md) 为准。招聘平台采用用户驱动的按需读取，能力与账号状态独立声明；共用正式职位库，不采用临时职位库或收藏后转正。平台接入与保留机制已落地，支持状态与验证边界见 [招聘平台架构](./recruitment-platforms.md) 和 [028 规格](../../specs/028-recruitment-platforms/spec.md)。
 
 用户授权邮箱只作为申请流程事件来源，不是 `JobSource`。邮箱连接器与职位来源适配器分别演进，邮件中的岗位可选择性关联正式职位，但不得反向修改职位事实和生命周期。详细规格见 [029 招聘邮件识别与申请进展跟踪](../../specs/029-recruitment-mail/spec.md)。
 
@@ -94,7 +96,7 @@ JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有�
 
 ### 招聘邮件扩展约束
 
-[ADR-0055](../adr/0055-recruitment-mail-ingestion-and-privacy-boundary.md) 与 [ADR-0056](../adr/0056-encrypted-mail-credential-file.md) 将邮箱协议与具体实现分别放在 `packages/mail/core` 和 `packages/mail/connectors`；应用层只依赖前者，入口装配后者。首版同时实现 Gmail、Microsoft Graph 和通用 IMAP 三个连接器。邮箱读取使用 Worker 本地增量轮询，不建设公网推送入口；凭据进入跨平台加密文件，非敏感邮箱设置进入本地配置，游标进入运行状态文件，SQLite 只持有消息引用和申请事实。邮件事件拥有独立状态机，不复用职位来源同步或职位关闭规则。
+[ADR-0055](../adr/0055-recruitment-mail-ingestion-and-privacy-boundary.md) 与 [ADR-0056](../adr/0056-encrypted-mail-credential-file.md) 将邮箱协议与具体实现分别放在 `packages/recruitment/src/mail/contracts` 和 `packages/recruitment/src/mail/connectors`；应用层只依赖前者，入口装配后者。首版同时实现 Gmail、Microsoft Graph 和通用 IMAP 三个连接器。邮箱读取使用 Worker 本地增量轮询，不建设公网推送入口；凭据进入跨平台加密文件，非敏感邮箱设置进入本地配置，游标进入运行状态文件，SQLite 只持有消息引用和申请事实。邮件事件拥有独立状态机，不复用职位来源同步或职位关闭规则。
 
 ### 2.1 架构驱动因素
 
@@ -117,11 +119,11 @@ JobHunter 是一个面向个人使用的求职辅助系统。系统读取已有�
 
 #### 2.2.2 端口与适配器
 
-领域层只声明纯领域规则及 Clock/ID 等领域级抽象。Repository、事务、日志等应用端口由应用层声明；职位来源、邮箱和 Agent 的通用协议放在独立契约包。SQLite、招聘官网、邮箱提供商、LLM、文件解析和各进程入口实现或装配这些端口，领域层不得感知它们。
+领域规则、用例端口及适配器按业务聚合在模块内部。Repository 等端口由各业务用例声明；职位来源、邮箱协议归 recruitment，用户画像与面试协议归 user，通用 Agent 协议归 common。协议通过模块的纯子路径导出，不另建契约包。领域规则不得依赖数据库、浏览器、模型 SDK 或进程入口。
 
 #### 2.2.3 模块化单体
 
-代码在一个仓库中开发和版本化，但按业务能力设置明确模块边界。Web、CLI 与 Worker 按进程职责运行，共享应用用例、领域包与 SQLite 数据库。
+代码在一个仓库中开发和版本化，但按业务能力设置明确模块边界。Web、CLI 与 Worker 按进程职责运行，共享四个模块的应用用例与 SQLite 数据库。
 
 #### 2.2.4 原始事实与推导结果分离
 
@@ -184,81 +186,31 @@ flowchart LR
 
 ### 3.2 逻辑架构
 
+目标为四个共享模块，箭头表示允许的代码导入关系：
+
 ```mermaid
 flowchart TB
-    subgraph Entry["进程入口"]
-        CLI["CLI"]
-        WORKER["Worker"]
-        WEB["Web"]
-    end
-
-    subgraph App["应用层"]
-        SOURCE_APP["来源同步用例"]
-        RESUME_APP["简历画像用例"]
-        MATCH_APP["职位匹配用例"]
-        TASK_APP["任务调度用例"]
-        QUERY_APP["查询与导出用例"]
-        INTERVIEW_APP["面试准备用例"]
-        MAIL_APP["招聘邮件与申请跟踪用例"]
-    end
-
-    subgraph Domain["领域层"]
-        JOB_DOMAIN["职位领域"]
-        PROFILE_DOMAIN["候选人画像领域"]
-        MATCH_DOMAIN["匹配领域"]
-        TASK_DOMAIN["任务领域"]
-        INTERVIEW_DOMAIN["面试准备领域"]
-        APPLICATION_DOMAIN["求职申请领域"]
-    end
-
-    subgraph Ports["端口"]
-        APP_PORT["应用端口：Repository / Parser / Logger"]
-        SOURCE_PORT["来源契约：JobSourceAdapter"]
-        MAIL_PORT["邮箱契约：MailboxConnector"]
-        AGENT_PORT["Agent 契约：ModelClient / Tool"]
-        RESEARCH_PORT["应用端口：ExternalResearchExecutor"]
-        DOMAIN_PORT["领域抽象：Clock / ID"]
-    end
-
-    subgraph Infra["基础设施适配器"]
-        SOURCES["公司官网适配器"]
-        MAIL_CONNECTORS["邮箱提供商连接器 + 凭据库"]
-        SQLITE["SQLite + Drizzle"]
-        MODELS["模型供应商适配器"]
-        PARSERS["PDF / DOCX / Text 解析"]
-        LOGGING["Pino 日志与运行记录"]
-        CODEX["Codex 本机研究适配器"]
-    end
-
-    CLI --> App
-    WORKER --> App
-    WEB --> App
-    App --> Domain
-    App --> Ports
-    SOURCES --> SOURCE_PORT
-    MAIL_CONNECTORS --> MAIL_PORT
-    SQLITE --> APP_PORT
-    MODELS --> AGENT_PORT
-    PARSERS --> APP_PORT
-    LOGGING --> APP_PORT
-    CODEX --> RESEARCH_PORT
+    Apps["Web / CLI / Worker"] --> Recruitment["recruitment：招聘信息与流程"]
+    Apps --> User["user：资料、简历与面试准备"]
+    Apps --> Matching["matching：招聘与个人之间的匹配"]
+    Apps --> Common["common：通用运行能力"]
+    Matching -->|只读公开契约| Recruitment
+    Matching -->|只读公开契约| User
+    Matching --> Common
+    Recruitment --> Common
+    User --> Common
 ```
 
-1. **从进程入口向内阅读。** CLI、Worker 和 Web 负责请求接入、生命周期管理及依赖装配，然后调用应用层；本图表达模块关系，不是执行时序。
-2. **应用层编排用例。** 来源同步、招聘邮件、申请跟踪、画像、匹配、任务、查询和面试准备协调领域规则与端口，定义事务边界，不导入具体基础设施。
-3. **领域层维护纯业务规则。** 职位、申请、画像、匹配、任务和面试准备模型只处理业务状态与不变量，不感知数据库、邮箱协议、浏览器或模型 SDK。
-4. **端口隔离实现差异。** 应用端口由应用层声明，职位来源、邮箱与 Agent 协议由契约包维护，Clock/ID 等纯领域抽象归领域层；实现细节不穿透这些边界。
-5. **基础设施实现端口。** SQLite、官网适配器、邮箱连接器、凭据库、模型、文件解析、日志和本机研究适配器由入口装配后供用例调用；运行时可以调用实现，但代码依赖不能反向进入基础设施。
+| 模块        | 主要职责与数据                                                                   |
+| ----------- | -------------------------------------------------------------------------------- |
+| recruitment | 来源、平台、采集、职位、邮箱接入、申请进展及求职日历                             |
+| user        | 简历导入/OCR、画像与偏好、简历制作与导出、面试档案/面经/研究/训练                |
+| matching    | 读取两侧快照，理解职位、筛选、评分、解释、建议及派生搜索条件，保存自己的结果     |
+| common      | 配置、日志、Clock/ID、连接与事务、文件机制、任务调度、Agent/模型及通用浏览器能力 |
 
-依赖方向必须保持为：
+recruitment 与 user 互不导入，均不依赖 matching；common 不依赖业务模块。matching 仅消费两侧的纯公开契约，查询实现由入口装配，不直接读取或写入其他模块的表。业务 Schema、仓储、规则与 Prompt 跟随所有者，通用执行机制下沉 common。
 
-```text
-进程入口 → 应用层 → 领域层
-                  → 应用端口 ← 基础设施适配器
-                  → 来源/邮箱/Agent 契约 ← 对应适配器
-```
-
-领域层禁止依赖 CLI、Worker、Drizzle、Playwright、邮箱协议、具体模型 SDK、具体公司或邮箱适配器。
+模块内部维持“用例 → 领域与端口 ← 适配器”的依赖关系，按功能组织代码，无须为每层单独建 workspace 包。跨模块、包内分层与重运行时隔离都必须有边界测试。
 
 ## 4. 代码组织与运行时
 
@@ -267,68 +219,31 @@ flowchart TB
 ```text
 JobHunter/
 ├─ apps/
-│  ├─ cli/                    # 面向用户的命令行入口
-│  ├─ worker/                 # 调度、同步、重试、后台计算与 Codex 研究适配器
-│  └─ web/                    # 管理台与面试准备交互
+│  ├─ cli/                    # 命令与依赖装配
+│  ├─ worker/                 # 后台进程生命周期与 Handler 装配
+│  └─ web/                    # 页面、HTTP 适配与依赖装配
 ├─ packages/
-│  ├─ domain/                 # 纯领域实体、值对象、面试 Schema、Clock/ID 抽象
-│  ├─ application/            # 用例编排、面试上下文构建、应用端口和事务边界
-│  ├─ db/                     # Drizzle schema、通用文件实体、迁移和仓储实现
-│  ├─ source-core/            # 来源协议、同步引擎、限流和标准化
-│  ├─ sources/                # 企业官网或通用 ATS 适配器
-│  ├─ mail/
-│  │  ├─ core/                # 邮箱授权/读取协议、外部邮件 DTO、错误与契约测试
-│  │  └─ connectors/          # Gmail、Graph、IMAP 与加密凭据文件等基础设施实现
-│  ├─ resume/                 # 文件解析、画像提取和人工修正规则
-│  ├─ matching/               # 硬过滤、评分、排序和解释数据
-│  ├─ resume-template/        # 版本化简历模板与共享渲染
-│  ├─ agent-core/             # 轻量 Agent 运行时
-│  ├─ llm/                    # 模型供应商、结构化输出和缓存
-│  ├─ observability/          # 日志、事件、指标和脱敏
-│  └─ testkit/                # 固定样本、伪时钟、假模型和测试工厂
-├─ docs/
-│  ├─ arch/                   # 总体架构与专题架构
-│  │  └─ ui/                  # UI 视觉规范与交互契约
-│  └─ adr/                    # 架构决策记录
+│  ├─ recruitment/            # 招聘信息与流程
+│  ├─ user/                   # 个人资料、简历与面试准备
+│  ├─ matching/               # recruitment 与 user 的匹配
+│  └─ common/             # 通用运行能力
+├─ docs/arch/                 # 总体与专题架构
+├─ docs/adr/                  # 架构决策
 ├─ specs/                     # SDD 功能规格
-└─ var/                       # 默认本地运行数据，不提交版本库
-   ├─ jobhunter.sqlite
-   ├─ raw/
-   ├─ resumes/
-   ├─ interview-prep/
-   ├─ exports/
-   └─ archive/                # 不再使用的历史评测与样本数据
+└─ var/                       # 本地运行数据，不提交版本库
 ```
 
-测试专属的合成样本与对应测试放在各模块的 `test/fixtures/`，不在仓库根目录维护共享样本集。
+模块内部按 profile、interview、sources、mail 等功能组织目录，复杂功能再细分领域、用例和适配器。契约与 runtime 使用独立公开入口，保留 development/src 和 production/dist 条件，避免根 barrel 引入 OCR、邮箱、浏览器或模型的全部实现。
 
-使用 `pnpm workspace` 管理包，所有跨模块调用只能通过包的公开入口，不允许从其他包的内部路径导入。邮箱包使用 `packages/mail/*` 嵌套 workspace 模式，分别发布内部包 `@jobhunter/mail-core` 和 `@jobhunter/mail-connectors`，目录聚合不改变依赖方向。
+测试工具作为 common/testing 子路径，业务合成样本放在所属模块 test/fixtures。入口只保留交互、协议转换、生命周期和装配；可复用业务 Handler 与连接器随模块迁移。
 
-`packages/sources` 是一个 workspace 包，各公司目录是包内模块并在启动时通过编译期 Registry 注册；“插件式”指遵循统一契约和可独立启停，不表示加载任意第三方代码。
-
-内部包依赖必须符合：
-
-| 包                    | 允许依赖的内部包                                               |
-| --------------------- | -------------------------------------------------------------- |
-| `domain`              | 无                                                             |
-| `source-core`         | `domain`                                                       |
-| `mail/core`           | 无业务包                                                       |
-| `mail/connectors`     | `mail/core`                                                    |
-| `agent-core`          | 无业务包                                                       |
-| `resume`、`matching`  | `domain`、`agent-core` 的公开协议                              |
-| `application`         | `domain`、`source-core`、`mail/core`、`agent-core`、业务能力包 |
-| `sources`             | `domain`、`source-core`                                        |
-| `llm`                 | `agent-core`                                                   |
-| `db`、`observability` | `domain`、`application`、`agent-core` 中需要实现的端口         |
-| `apps/*`              | 仅用于装配，可依赖所需包，包括 `mail/connectors`               |
-
-任何内部包都不得依赖 `apps/*`；`application` 不得依赖 `db`、`sources`、`mail/connectors`、`llm`、`observability` 或 Codex CLI 的具体实现。Codex 研究适配器位于 Worker 进程入口并实现 application 端口。
+共享 SQLite 的业务表按模块所有权管理。common 提供连接、事务及迁移执行，apps 汇总各模块迁移清单；不为减少包数量将所有业务仓储重新放回基础模块。
 
 ### 4.2 技术基线
 
 | 能力         | 技术选择                                                        |
 | ------------ | --------------------------------------------------------------- |
-| 运行时与语言 | Node.js >=24、TypeScript strict                               |
+| 运行时与语言 | Node.js >=24、TypeScript strict                                 |
 | Workspace    | pnpm workspace                                                  |
 | Schema       | Zod                                                             |
 | SQLite       | better-sqlite3、Drizzle ORM                                     |
@@ -343,7 +258,7 @@ JobHunter/
 
 ### 4.3 运行时架构
 
-系统包含 CLI、Worker 和 Web 启动器三个进程入口；Web 启动器会编排独立的 Web 与 Worker 子进程。
+系统只包含 CLI 和 Web 两个入口。Web 宿主承载公共任务循环并管理 Next 子进程；CLI 等待操作按需运行同一套任务机制。独立 Worker 入口和命令已移除。
 
 #### 4.3.1 CLI 进程
 
@@ -357,7 +272,7 @@ JobHunter/
 
 CLI 调用应用层用例，不复制 Worker 中的业务逻辑。
 
-#### 4.3.2 Worker 进程
+#### 4.3.2 公共任务运行时
 
 | 任务类别   | 职责与执行边界                                                         |
 | ---------- | ---------------------------------------------------------------------- |
@@ -368,13 +283,13 @@ CLI 调用应用层用例，不复制 Worker 中的业务逻辑。
 | 简历导出   | 使用共享模板生成投递文件                                               |
 | 面试准备   | 执行回答摘要、Markdown 投影和外部面经研究；单题问题生成由 Web 请求处理 |
 
-Worker 可以并发读取网络，但数据库写入必须使用短事务并限制写并发。外部 Codex 研究除研究请求级并发键外，还施加 Worker 进程内全局单并发，限制同时运行的外部研究进程。
+公共任务运行时可以并发读取网络，但数据库写入必须使用短事务并限制写并发。外部 Codex 研究除研究请求级并发键外，还施加宿主进程内全局单并发，限制同时运行的外部研究进程。
 
 #### 4.3.3 Web 启动器与 Web 进程
 
 | 组成         | 职责                                                     | 执行边界                                   |
 | ------------ | -------------------------------------------------------- | ------------------------------------------ |
-| Web 启动器   | 启动独立的 Web 与 Worker 子进程                          | 任一子进程退出时联动关闭另一个             |
+| Web 启动器   | 自身承载公共任务循环，启动 Next 子进程                   | 页面服务与任务循环失败时共同关闭           |
 | Web 管理台   | 提供查询、筛选、配置、邮箱、申请、个人资料与面试准备界面 | 复用应用用例和仓储端口                     |
 | 邮箱授权回调 | 完成本机短生命周期授权并立即交给连接器凭据库             | 不读取邮件正文，不记录授权码或 Token       |
 | 项目单题生成 | 在 HTTP 请求内调用模型，以 SSE 报告执行阶段              | 不在事务内调用模型；阶段事件不携带问题正文 |
@@ -387,7 +302,8 @@ flowchart LR
     LAUNCHER["Web 启动器"] --> WEB["Web 进程"]
     LAUNCHER --> WORKER
     WEB -.-> APP
-    WORKER["Worker 进程"] --> APP
+    WORKER["common 公共任务运行时"] --> APP
+    CLI -->|等待任务时按需运行| WORKER
     APP --> DB[("SQLite WAL")]
     WORKER --> SITE["招聘官网"]
     WORKER --> MAILBOX["用户授权邮箱"]
@@ -555,7 +471,7 @@ sequenceDiagram
 
 首次接入允许按公司实现适配器。在识别出多个公司共享同一 ATS 且协议稳定后，将公共逻辑提取为 ATS 适配器，公司差异下沉为配置。不能仅凭页面外观提前建立错误抽象。
 
-来源支持状态必须诚实标记为 `experimental`、`supported` 或 `blocked`；是否启用由独立 `enabled` 配置表示，运行健康使用 `unknown/healthy/degraded/unhealthy`，三者不得混用。每个来源只有通过契约测试和覆盖验证后才能标记为 `supported`；复杂或受外部条件阻断的来源应保留调查依据并标记相应支持状态。具体覆盖以 [来源支持矩阵](../../packages/sources/SUPPORT_MATRIX.md) 为准，单个来源失败不得阻塞其他业务链路。
+来源支持状态必须诚实标记为 `experimental`、`supported` 或 `blocked`；是否启用由独立 `enabled` 配置表示，运行健康使用 `unknown/healthy/degraded/unhealthy`，三者不得混用。每个来源只有通过契约测试和覆盖验证后才能标记为 `supported`；复杂或受外部条件阻断的来源应保留调查依据并标记相应支持状态。具体覆盖以 [来源支持矩阵](../../packages/recruitment/SUPPORT_MATRIX.md) 为准，单个来源失败不得阻塞其他业务链路。
 
 来源目录分为两层：每家公司固定拥有实习、校招、社招三个逻辑 `SourceChannel`，每个逻辑渠道映射零个、一个或多个物理 `JobSource`。逻辑渠道提供稳定的用户入口、筛选与总开关；物理来源拥有 adapter key、配置、同步策略、支持状态和运行健康。渠道级同步只编排扇出独立的来源级任务，不共享游标、事务或健康状态；具体约束见 `specs/018-logical-source-mapping/` 与 ADR-0009。
 
@@ -1009,9 +925,9 @@ CLI、Web 与 Worker 必须复用应用层唯一的运行时配置加载器，�
 
 以下方向已在 `docs/adr/` 固化：
 
-1. TypeScript 模块化单体（ADR-0007 已替代 ADR-0001，并补充 Node 24 LTS 与端口归属）。
+1. TypeScript 模块化单体；当前架构替代 ADR-0007 的技术分层包布局，以 recruitment、user、matching、common 聚合；运行时最低版本见 ADR-0058。
 2. SQLite 与本地文件存储。
-3. 独立 Worker 与 SQLite 持久化队列。
+3. common 公共任务运行时与 SQLite 持久化队列，由 CLI/Web 承载。
 4. 插件式招聘官网适配器。
 5. 确定性管道优先与轻量 Agent。
 6. 来源事实、标准化事实和推导结果分层。

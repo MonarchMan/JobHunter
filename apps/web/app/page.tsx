@@ -140,7 +140,7 @@ export default async function DashboardPage(): Promise<ReactElement> {
               </span>
               <div>
                 <strong>还没有同步记录</strong>
-                <p>启动 Worker 后，从来源页面同步第一批职位。</p>
+                <p>从来源页面同步第一批职位。</p>
               </div>
               <a
                 className={['button-secondary', styles.emptyAction].filter(Boolean).join(' ')}

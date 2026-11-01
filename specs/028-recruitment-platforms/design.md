@@ -265,7 +265,7 @@ Worker 分别注册 `platform.boss` 与 `platform.zhilian`，各自初始化、�
 
 验收使用合成 CDP 的定向传输测试、真实 CLI／生产 Worker／SQLite 的隔离流程、Web 路由和浏览器交互测试；在线最多一批推荐和一条详情，借用常驻研究连接时明确记录传输边界，不把它冒充新建连接授权验证。此轮不恢复稳定性观察、不推进长期 supported。
 
-先构建并启动单个现有 Worker（`pnpm build`，`pnpm exec tsx apps/worker/src/main.ts`），确保与 CLI 使用同一 data root。启动会执行迁移，正式部署前先备份。用户在 Chrome 登录 BOSS，打开推荐列表并允许该次本机 CDP 连接；不给模型或 CLI 传入 Cookie。
+启动 Web 的公共任务运行时（`pnpm --filter @jobhunter/web dev`），确保与 CLI 使用同一 data root。启动会执行迁移，正式部署前先备份。用户在 Chrome 登录 BOSS，打开推荐列表并允许该次本机 CDP 连接；不给模型或 CLI 传入 Cookie。
 
 ```sh
 pnpm boss connect --port-file /absolute/profile/DevToolsActivePort --target-id TARGET_ID

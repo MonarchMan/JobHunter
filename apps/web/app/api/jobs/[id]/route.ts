@@ -1,4 +1,4 @@
-import { JobNotFoundError } from '@jobhunter/application/jobs';
+import { JobNotFoundError } from '@jobhunter/recruitment/jobs/job-query-service';
 import { ZodError } from 'zod';
 import {
   badRequestResponse,

@@ -1,5 +1,7 @@
-import { parseCandidateProfile, parseId, parseNormalizedJob, utcInstant } from '@jobhunter/domain';
-import { assertPromptMatchesDefinition } from '@jobhunter/agent-core';
+import { parseCandidateProfile } from '@jobhunter/user/contracts';
+import { parseId, utcInstant } from '@jobhunter/common/domain';
+import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
+import { assertPromptMatchesDefinition } from '@jobhunter/common/agent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateDeterministicMatch,

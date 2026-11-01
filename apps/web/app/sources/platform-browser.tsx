@@ -3,7 +3,8 @@ import { PlatformRetentionStatus } from './platform-retention-status.js';
 
 import { useEffect, useRef, useState, type ReactElement, type SyntheticEvent } from 'react';
 import { useRouter } from 'next/navigation.js';
-import type { BossCommand, WebBossSnapshot } from '@jobhunter/application/platform';
+import type { BossCommand } from '@jobhunter/recruitment/platform-application/platforms';
+import type { WebBossSnapshot } from '@jobhunter/recruitment/platform-application/web-platforms';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './boss-browser.module.css';
 

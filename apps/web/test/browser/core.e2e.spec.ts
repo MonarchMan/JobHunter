@@ -811,16 +811,16 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(dialog.getByRole('heading', { name: '作品' })).toHaveCount(0);
     const closePreview = dialog.getByRole('button', { name: '关闭预览' });
     await closePreview.hover();
-    const neutralInk = await page.evaluate(() => {
-      // 1、用运行时语义令牌校验中性按钮，不把已废弃主题的 RGB 固化到测试。
+    const closeIconColor = await page.evaluate(() => {
+      // 1、关闭图标按最新图标规范使用红色，使用语义令牌避免固化旧主题 RGB。
       const probe = document.createElement('span');
-      probe.style.color = 'var(--ink)';
+      probe.style.color = 'var(--danger)';
       document.body.append(probe);
       const expected = getComputedStyle(probe).color;
       probe.remove();
       return expected;
     });
-    await expect(closePreview).toHaveCSS('color', neutralInk);
+    await expect(closePreview).toHaveCSS('color', closeIconColor);
     await expect(closePreview).not.toHaveCSS('background-color', saveBackground);
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
@@ -1041,7 +1041,7 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(taskFilters.locator('[data-authored-select-trigger]')).toHaveCount(2);
     await taskFilters.getByRole('combobox', { name: '状态' }).click();
     await page.getByRole('option', { name: '失败' }).click();
-    await taskFilters.getByRole('button', { name: '应用筛选' }).click();
+    await taskFilters.getByRole('button', { name: '搜索', exact: true }).click();
     await expect(page).toHaveURL(/(?:\?|&)status=failed(?:&|$)/);
     await page.goto('/tasks');
     const taskTitle = page.getByRole('button', { name: '来源同步' }).first();
@@ -1157,7 +1157,7 @@ test.describe('校招实习管理台核心流程', () => {
       await expect(page.getByRole('heading', { name: '确认目标岗位后再同步' })).toBeVisible();
       await expect(page.getByRole('link', { name: '去确认目标岗位' })).toHaveAttribute(
         'href',
-        '/profile#resume-intention',
+        '/my?tab=profile#resume-intention',
       );
       await expect(page.getByRole('button', { name: '全部同步 全部官网来源' })).toBeDisabled();
       await expect(page.getByRole('button', { name: /^立即同步 / }).first()).toBeDisabled();
@@ -1173,7 +1173,7 @@ test.describe('校招实习管理台核心流程', () => {
     await page.goto('/profile');
     await expect(page.locator('select:not([aria-hidden="true"])')).toHaveCount(0);
     // 1、类别下拉框保持原值；旧资料的新增意向为空，只在框内显示指定提示。
-    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(8);
+    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(7);
     const category = page.getByRole('combobox', { name: '职位类别', exact: true });
     await expect(category).toHaveText('研发 / 不限');
     const intendedRoles = page.getByRole('textbox', { name: '意向岗位', exact: true });

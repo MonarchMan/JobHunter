@@ -12,7 +12,7 @@ describe('dependency boundaries', () => {
     delete options.includeOnly;
 
     const result = await cruise(
-      ['packages/domain/test/fixtures/forbidden-import.ts'],
+      ['packages/common/test/domain/fixtures/forbidden-import.ts'],
       {
         ...options,
         outputType: 'err-long',

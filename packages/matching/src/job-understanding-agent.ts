@@ -1,4 +1,4 @@
-import { defineAgent } from '@jobhunter/agent-core';
+import { defineAgent, type AgentDefinition } from '@jobhunter/common/agent';
 import { z } from 'zod';
 import { jobUnderstandingSchema, type JobUnderstanding } from './job-understanding.js';
 import { jobUnderstandingPromptV1 } from './prompts/job-understanding/v1.js';
@@ -19,7 +19,10 @@ export const jobUnderstandingInputSchema = z
 export type JobUnderstandingInput = z.infer<typeof jobUnderstandingInputSchema>;
 
 /** 职位理解 Agent 定义。 */
-export const jobUnderstandingAgentDefinition = defineAgent({
+export const jobUnderstandingAgentDefinition: AgentDefinition<
+  JobUnderstandingInput,
+  JobUnderstanding
+> = defineAgent({
   key: jobUnderstandingPromptV1.agentKey,
   version: '1.0.0',
   promptVersion: jobUnderstandingPromptV1.promptVersion,

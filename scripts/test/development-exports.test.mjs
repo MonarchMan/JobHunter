@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -7,23 +7,10 @@ import { describe, expect, it } from 'vitest';
 const repositoryRoot = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const packageManifests = [
   'apps/cli/package.json',
-  'apps/worker/package.json',
-  'packages/agent-core/package.json',
-  'packages/application/package.json',
-  'packages/db/package.json',
-  'packages/domain/package.json',
-  'packages/llm/package.json',
-  'packages/mail/connectors/package.json',
-  'packages/mail/core/package.json',
   'packages/matching/package.json',
-  'packages/observability/package.json',
-  'packages/platform-connectors/package.json',
-  'packages/platform-core/package.json',
-  'packages/resume/package.json',
-  'packages/resume-template/package.json',
-  'packages/source-core/package.json',
-  'packages/sources/package.json',
-  'packages/testkit/package.json',
+  'packages/common/package.json',
+  'packages/recruitment/package.json',
+  'packages/user/package.json',
 ];
 
 /** 读取仓库内 JSON 文件，供开发导出契约测试复用。 */
@@ -51,6 +38,16 @@ function resolvePackages(cwd, conditions, specifiers) {
 }
 
 describe('workspace development exports', () => {
+  it('keeps exactly four shared modules and removes legacy workspace dependencies', () => {
+    const names = readdirSync(path.join(repositoryRoot, 'packages')).sort();
+    expect(names).toEqual(['common', 'matching', 'recruitment', 'user']);
+    expect(readdirSync(path.join(repositoryRoot, 'apps')).sort()).toEqual(['cli', 'web']);
+    for (const manifestPath of [...packageManifests, 'apps/web/package.json']) {
+      const manifest = readJson(manifestPath);
+      expect(manifest.dependencies?.['@jobhunter/application']).toBeUndefined();
+      expect(manifest.dependencies?.['@jobhunter/db']).toBeUndefined();
+    }
+  });
   it('places source conditions before built runtime exports', () => {
     for (const manifestPath of packageManifests) {
       const manifest = readJson(manifestPath);
@@ -64,50 +61,46 @@ describe('workspace development exports', () => {
 
   it('resolves Web and Worker dependencies from source only under development', () => {
     const webSpecifiers = [
-      '@jobhunter/application/config',
-      '@jobhunter/application/contracts',
-      '@jobhunter/application/profile',
-      '@jobhunter/db/core',
-      '@jobhunter/db/maintenance',
-      '@jobhunter/domain',
-      '@jobhunter/llm',
-      '@jobhunter/mail-connectors/config',
-      '@jobhunter/mail-connectors/metadata',
+      '@jobhunter/common/config/config',
+      '@jobhunter/common/web-contracts',
+      '@jobhunter/user/profile',
+      '@jobhunter/common/persistence/connection',
+      '@jobhunter/common/persistence/maintenance',
+      '@jobhunter/common/domain',
+      '@jobhunter/common/models',
+      '@jobhunter/recruitment/mail-config',
+      '@jobhunter/recruitment/mail-metadata',
       '@jobhunter/matching',
-      '@jobhunter/resume-template',
-      '@jobhunter/sources/catalog-data',
+      '@jobhunter/user/templates',
+      '@jobhunter/recruitment/catalog-data',
     ];
     const applicationSpecifiers = [
-      '@jobhunter/resume/media',
-      '@jobhunter/resume/ocr-contracts',
-      '@jobhunter/resume/parsers',
-      '@jobhunter/resume/polish',
+      '@jobhunter/user/media',
+      '@jobhunter/user/ocr-contracts',
+      '@jobhunter/user/parsers',
+      '@jobhunter/user/polish',
     ];
     const workerSpecifiers = [
-      '@jobhunter/agent-core',
-      '@jobhunter/application',
-      '@jobhunter/db',
-      '@jobhunter/observability',
-      '@jobhunter/platform-connectors',
-      '@jobhunter/source-core',
-      '@jobhunter/sources',
+      '@jobhunter/common/agent',
+      '@jobhunter/common/tasks',
+      '@jobhunter/common/persistence/connection',
+      '@jobhunter/common/logging',
+      '@jobhunter/recruitment/platform-connectors',
+      '@jobhunter/recruitment/source-contracts',
+      '@jobhunter/recruitment',
     ];
 
     for (const [specifier, resolved] of [
       ...resolvePackages('apps/web', ['development'], webSpecifiers),
-      ...resolvePackages('packages/application', ['development'], applicationSpecifiers),
-      ...resolvePackages('apps/worker', ['development'], workerSpecifiers),
+      ...resolvePackages('apps/web', ['development'], applicationSpecifiers),
+      ...resolvePackages('apps/web', ['development'], workerSpecifiers),
     ]) {
       expect(resolved, specifier).toMatch(/[\\/]src[\\/].*\.ts$/u);
     }
     for (const [specifier, resolved] of resolvePackages('apps/web', [], webSpecifiers)) {
       expect(resolved, specifier).toMatch(/[\\/]dist[\\/].*\.js$/u);
     }
-    for (const [specifier, resolved] of resolvePackages(
-      'packages/application',
-      [],
-      applicationSpecifiers,
-    )) {
+    for (const [specifier, resolved] of resolvePackages('apps/web', [], applicationSpecifiers)) {
       expect(resolved, specifier).toMatch(/[\\/]dist[\\/].*\.js$/u);
     }
   });
@@ -116,7 +109,7 @@ describe('workspace development exports', () => {
     const root = readJson('package.json');
     const web = readJson('apps/web/package.json');
     expect(web.scripts.predev).toBeUndefined();
-    expect(web.scripts.dev).toBe('tsx src/server/main.ts');
+    expect(web.scripts.dev).toBe('node --conditions=development --import tsx src/server/main.ts');
     expect(web.scripts['dev:typecheck']).toBe('pnpm --workspace-root typecheck:watch');
     expect(root.scripts['typecheck:watch']).toContain('tsc -b --watch');
   });
@@ -126,7 +119,9 @@ describe('workspace development exports', () => {
     const webUrl = pathToFileURL(
       path.join(repositoryRoot, 'apps/web/src/server/container.ts'),
     ).href;
-    const workerUrl = pathToFileURL(path.join(repositoryRoot, 'apps/worker/src/index.ts')).href;
+    const workerUrl = pathToFileURL(
+      path.join(repositoryRoot, 'apps/web/src/server/task-runtime.ts'),
+    ).href;
     const script = `
       import { registerHooks } from 'node:module';
       registerHooks({
@@ -151,42 +146,73 @@ describe('workspace development exports', () => {
   }, 35_000);
 
   it('keeps lightweight responsibility entries isolated from heavy runtime implementations', () => {
+    // 1、从实际公开 exports 收集全部契约，避免新增入口绕过重运行时隔离验收。
+    const contracts = new Set(['@jobhunter/common/domain']);
+    for (const owner of ['common', 'recruitment', 'user', 'matching']) {
+      const manifest = readJson(`packages/${owner}/package.json`);
+      for (const [key, entry] of Object.entries(manifest.exports)) {
+        if (!key.includes('contracts') && !entry.development.includes('/contracts/')) continue;
+        if (key.includes('*')) {
+          const directory = path.dirname(entry.development);
+          for (const file of readdirSync(path.join(repositoryRoot, 'packages', owner, directory))) {
+            if (file.endsWith('.ts'))
+              contracts.add(`@jobhunter/${owner}${key.slice(1).replace('*', file.slice(0, -3))}`);
+          }
+        } else contracts.add(`@jobhunter/${owner}${key.slice(1)}`);
+      }
+    }
     const cases = [
+      ...[...contracts].sort().map((specifier) => ({
+        cwd: 'apps/web',
+        specifier,
+        forbidden: [
+          '/packages/common/src/agent/runner.ts',
+          '/packages/common/src/models/',
+          '/packages/user/src/resume/parsers/',
+          '/packages/user/src/resume/ocr/index.ts',
+          '/packages/recruitment/src/platform/connectors/',
+          '/packages/recruitment/src/mail/connectors/',
+          '/node_modules/better-sqlite3/',
+          '/node_modules/playwright/',
+          '/node_modules/pdfjs-dist/',
+          '/node_modules/tesseract.js/',
+        ],
+      })),
       {
         cwd: 'apps/web',
-        specifier: '@jobhunter/sources/catalog-data',
+        specifier: '@jobhunter/recruitment/catalog-data',
         forbidden: [
-          '/packages/sources/src/catalog/registry.ts',
-          '/packages/sources/src/companies/',
+          '/packages/recruitment/src/sources/catalog/registry.ts',
+          '/packages/recruitment/src/sources/companies/',
         ],
       },
       {
         cwd: 'apps/web',
-        specifier: '@jobhunter/mail-connectors/metadata',
+        specifier: '@jobhunter/recruitment/mail-metadata',
         forbidden: [
-          '/packages/mail/connectors/src/gmail.ts',
-          '/packages/mail/connectors/src/graph.ts',
-          '/packages/mail/connectors/src/imap.ts',
+          '/packages/recruitment/src/mail/connectors/gmail.ts',
+          '/packages/recruitment/src/mail/connectors/graph.ts',
+          '/packages/recruitment/src/mail/connectors/imap.ts',
           '/node_modules/imapflow/',
           '/node_modules/mailparser/',
         ],
       },
       {
-        cwd: 'packages/application',
-        specifier: '@jobhunter/resume/media',
+        cwd: 'apps/web',
+        specifier: '@jobhunter/user/media',
         forbidden: [
-          '/packages/resume/src/parsers/',
-          '/packages/resume/src/ocr/',
+          '/packages/user/src/resume/parsers/',
+          '/packages/user/src/resume/ocr/',
           '/node_modules/pdfjs-dist/',
           '/node_modules/tesseract.js/',
           '/node_modules/mammoth/',
         ],
       },
       {
-        cwd: 'packages/application',
-        specifier: '@jobhunter/resume/ocr-contracts',
+        cwd: 'apps/web',
+        specifier: '@jobhunter/user/ocr-contracts',
         forbidden: [
-          '/packages/resume/src/ocr/index.ts',
+          '/packages/user/src/resume/ocr/index.ts',
           '/node_modules/tesseract.js/',
           '/node_modules/@tesseract.js-data/',
         ],

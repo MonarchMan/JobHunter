@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebSource, WebSourceChannel } from '@jobhunter/application/contracts';
+import type { WebSource, WebSourceChannel } from '@jobhunter/recruitment/contracts/web';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { Icon } from '../components/ui-icon.js';

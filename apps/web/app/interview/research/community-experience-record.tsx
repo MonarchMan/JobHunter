@@ -1,7 +1,7 @@
 import type {
   CommunityInterviewExperienceRecord,
   CommunityInterviewQuestionRecord,
-} from '@jobhunter/application/contracts';
+} from '@jobhunter/user/ports/index';
 import type { ReactElement, ReactNode } from 'react';
 import styles from './research.module.css';
 

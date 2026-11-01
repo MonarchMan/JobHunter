@@ -6,5 +6,10 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../worker" }]
+  "references": [
+    { "path": "../../packages/common" },
+    { "path": "../../packages/recruitment" },
+    { "path": "../../packages/user" },
+    { "path": "../../packages/matching" }
+  ]
 }

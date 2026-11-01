@@ -1,6 +1,6 @@
 'use client';
 
-import { resumeTemplates, type ResumeTemplateKey } from '@jobhunter/resume-template';
+import { resumeTemplates, type ResumeTemplateKey } from '@jobhunter/user/templates';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';

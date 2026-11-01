@@ -1,10 +1,18 @@
+import { ProfilePlatformSearchProvider } from '@jobhunter/matching/profile-platform-search';
+import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
+import { SqliteAgentRunCleanup } from '@jobhunter/common/persistence/agent-run-cleanup';
+import { SqliteMatchingJobReader } from '@jobhunter/recruitment/persistence/matching-job-reader';
+import { SqliteProfileIdentityReader } from '@jobhunter/user/persistence/profile-identity-reader';
+import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
+import { SqliteJobHistoryReader } from '@jobhunter/recruitment/persistence/job-history-reader';
+import { SqliteTaskRelationStatusReader } from '@jobhunter/common/persistence/task-relation-status-reader';
 import {
   WebBossService,
   WebPlatformService,
-  PlatformActivityService,
-  createPlatformTaskHandler,
-  createPlatformRetentionTaskHandler,
-} from '@jobhunter/application/platform';
+} from '@jobhunter/recruitment/platform-application/web-platforms';
+import { PlatformActivityService } from '@jobhunter/recruitment/platform-application/platform-activity';
+import { createPlatformTaskHandler } from '@jobhunter/recruitment/platform-application/platforms';
+import { createPlatformRetentionTaskHandler } from '@jobhunter/recruitment/platform-application/platform-retention';
 import {
   CandidateProfileService,
   createResumeProfileTaskHandler,
@@ -13,32 +21,30 @@ import {
   createResumePdfExportTaskHandler,
   ProfileInspectionService,
   ProfileManagementService,
-  WebProfileService,
-  WebResumeDeletionService,
   ResumeDeletionService,
   ResumeImportService,
   ResumeProfileWorkflow,
-  ResumePolishService,
   ResumeTemplateService,
-} from '@jobhunter/application/profile';
-import { CalendarQueryService, WebCalendarQueryService } from '@jobhunter/application/calendar';
-import {
-  ApplicationProgressQueryService,
-  WebApplicationProgressService,
-} from '@jobhunter/application/applications';
-import { DashboardQueryService } from '@jobhunter/application/dashboard';
-import {
-  JobQueryService,
-  WebJobDetailService,
-  WebJobQueryService,
-} from '@jobhunter/application/jobs';
+} from '@jobhunter/user/profile';
+import { WebProfileService } from '@jobhunter/user/profile/web-profile-service';
+import { WebResumeDeletionService } from '@jobhunter/user/profile/web-resume-deletion-service';
+import { ResumePolishService } from '@jobhunter/user/profile/resume-polish-service';
+import { CalendarQueryService } from '@jobhunter/recruitment/calendar/calendar-query-service';
+import { WebCalendarQueryService } from '@jobhunter/recruitment/calendar/web-calendar-query-service';
+import { ApplicationProgressQueryService } from '@jobhunter/recruitment/applications/application-progress-service';
+import { WebApplicationProgressService } from '@jobhunter/recruitment/applications/web-application-progress-service';
+import { DashboardQueryService } from './dashboard/query-service.js';
+import { createDashboardReadModel } from './dashboard/runtime.js';
+import { JobQueryService } from '@jobhunter/recruitment/jobs/job-query-service';
+import { WebJobDetailService } from '@jobhunter/matching/application/web-job-detail-service';
+import { WebJobQueryService } from '@jobhunter/matching/application/web-job-query-service';
 import {
   createJobAdviceTaskHandler,
   createJobUnderstandingTaskHandler,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   MatchWorkflowService,
-} from '@jobhunter/application/matching';
+} from '@jobhunter/matching/application';
 import {
   createExperienceResearchTaskHandler,
   createProjectAnswerDigestTaskHandler,
@@ -48,71 +54,58 @@ import {
   InterviewExperienceService,
   InterviewProjectService,
   ProjectQuestionGenerator,
-} from '@jobhunter/application/interview';
-import {
-  createSourceHealthTaskHandler,
-  createSourceSyncTaskHandler,
-  ProfileJobIntakePolicy,
-  SourceManagementService,
-  SourceScheduleReconciliationService,
-  WebSourceService,
-} from '@jobhunter/application/sync';
-import {
-  WebDiagnosticsService,
-  HandlerRegistry,
-  ScheduleService,
-  TaskService,
-} from '@jobhunter/application/tasks';
-import { SystemSettingsService } from '@jobhunter/application/settings';
-import { createCleanupTaskHandler } from '@jobhunter/application/cleanup-handler';
-import { MailboxSettingsService } from '@jobhunter/application/mail-settings';
-import { loadRuntimeAppConfig, type AppConfig } from '@jobhunter/application/config';
-import { AgentRunner, type ModelClient } from '@jobhunter/agent-core';
-import {
-  openSqliteDatabase,
-  SqliteArtifactStore,
-  SqliteSettingsStore,
-  seedSourceCatalog,
-  NodeResumeFileReader,
-} from '@jobhunter/db/core';
-import { SqliteDashboardReadModel } from '@jobhunter/db/dashboard';
+} from '@jobhunter/user/interview';
+import { createSourceHealthTaskHandler } from '@jobhunter/recruitment/sync/source-health-handler';
+import { createSourceSyncTaskHandler } from '@jobhunter/recruitment/sync/job-sync-handler';
+import { ProfileJobIntakePolicy } from '@jobhunter/matching/profile-job-intake-policy';
+import { SourceManagementService } from '@jobhunter/recruitment/source-management-service';
+import { SourceScheduleReconciliationService } from '@jobhunter/recruitment/sync/source-schedule-reconciliation-service';
+import { WebSourceService } from '@jobhunter/recruitment/sync/web-source-service';
+import { WebDiagnosticsService } from '@jobhunter/recruitment/diagnostics/web-diagnostics-service';
+import { HandlerRegistry, ScheduleService, TaskService } from '@jobhunter/common/tasks';
+import { SystemSettingsService } from '@jobhunter/recruitment/settings';
+import { createCleanupTaskHandler } from '@jobhunter/common/operations/cleanup-handler';
+import { MailboxSettingsService } from '@jobhunter/recruitment/mail-application';
+import { loadRuntimeAppConfig, type AppConfig } from '@jobhunter/common/config/index';
+import { AgentRunner, type ModelClient } from '@jobhunter/common/agent';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteArtifactStore } from '@jobhunter/user/persistence/artifact-store';
+import { SqliteSettingsStore } from '@jobhunter/recruitment/persistence/settings';
+import { seedSourceCatalog } from '@jobhunter/recruitment/persistence/source-catalog-seed';
+import { NodeResumeFileReader } from '@jobhunter/user/persistence/resume-file-reader';
 import {
   SqliteCompanyLookupRepository,
   SqliteJobQueryRepository,
-  SqliteMatchingRepository,
-  SqliteWebJobTraceRepository,
-} from '@jobhunter/db/jobs';
-import { SqliteSourceManagementRepository, SqliteWebSourceRepository } from '@jobhunter/db/sources';
-import {
-  SqliteAgentRunStore,
-  SqliteTaskRepository,
-  SqliteWebDiagnosticsRepository,
-} from '@jobhunter/db/tasks';
-import {
-  SqliteCandidateProfileRepository,
-  SqliteResumeDeletionRepository,
-  SqliteResumeDocumentRepository,
-  SqliteResumeDraftRepository,
-} from '@jobhunter/db/profile';
-import {
-  SqliteInterviewProjectRepository,
-  SqliteInterviewExperienceRepository,
-  SqliteInterviewResearchRepository,
-  SqliteInterviewTaskRetryCoordinator,
-  SqliteInterviewTaskPublisher,
-  SqliteProjectNotebookReader,
-  SqliteRecruitmentMailRepository,
-} from '@jobhunter/db/interview';
-import { SqlitePlatformActivityRepository, SqlitePlatformRepository } from '@jobhunter/db/platform';
-import { firstPartySourceCatalog } from '@jobhunter/sources/catalog-data';
-import { SystemIdGenerator, utcInstant } from '@jobhunter/domain';
-import { createConfiguredModelClient } from '@jobhunter/llm';
+} from '@jobhunter/recruitment/persistence/job-query-repository';
+import { SqliteMatchingRepository } from '@jobhunter/matching/persistence';
+import { SqliteWebJobTraceRepository } from '@jobhunter/matching/persistence/web-job-trace-repository';
+import { SqliteSourceManagementRepository } from '@jobhunter/recruitment/persistence/source-management-repository';
+import { SqliteWebSourceRepository } from '@jobhunter/recruitment/persistence/web-source-repository';
+import { SqliteAgentRunStore } from '@jobhunter/common/persistence/agent-runs';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
+import { SqliteWebDiagnosticsRepository } from '@jobhunter/recruitment/persistence/web-diagnostics-repository';
+import { SqliteCandidateProfileRepository } from '@jobhunter/user/persistence';
+import { SqliteResumeDeletionRepository } from '@jobhunter/user/persistence/resume-deletion-repository';
+import { SqliteResumeDocumentRepository } from '@jobhunter/user/persistence/resume-document-repository';
+import { SqliteResumeDraftRepository } from '@jobhunter/user/persistence/resume-draft-repository';
+import { SqliteInterviewProjectRepository } from '@jobhunter/user/persistence/interview-project-repository';
+import { SqliteInterviewExperienceRepository } from '@jobhunter/user/persistence/interview-experience-repository';
+import { SqliteInterviewResearchRepository } from '@jobhunter/user/persistence/interview-research-repository';
+import { SqliteInterviewTaskRetryCoordinator } from '@jobhunter/user/persistence/interview-task-retry-coordinator';
+import { SqliteInterviewTaskPublisher } from '@jobhunter/user/persistence/interview-task-publisher';
+import { SqliteProjectNotebookReader } from '@jobhunter/user/persistence/project-notebook-reader';
+import { SqliteRecruitmentMailRepository } from '@jobhunter/recruitment/persistence/sqlite-recruitment-mail-repository';
+import { SqlitePlatformActivityRepository } from '@jobhunter/recruitment/persistence/platform-activity-repository';
+import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
+import { firstPartySourceCatalog } from '@jobhunter/recruitment/catalog-data';
+import { SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
+import { createConfiguredModelClient } from '@jobhunter/common/models';
 import {
   EncryptedFileCredentialVault,
   FileMailboxConfigStore,
   MailRuntimeStateStore,
-} from '@jobhunter/mail-connectors/config';
-import { mailConnectorMetadata } from '@jobhunter/mail-connectors/metadata';
+} from '@jobhunter/recruitment/mail-config';
+import { mailConnectorMetadata } from '@jobhunter/recruitment/mail-metadata';
 import path from 'node:path';
 import { createRetryableSingleton } from './retryable-singleton.js';
 import { browserFixtureIdentity } from './browser-test-isolation.js';
@@ -228,7 +221,11 @@ export function createLocalWebContainer(
     const recruitmentMailRepository = new SqliteRecruitmentMailRepository(database.client);
     const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
     const resumeDeletion = new ResumeDeletionService({
-      repository: new SqliteResumeDeletionRepository(database.client),
+      repository: new SqliteResumeDeletionRepository(
+        database.client,
+        new SqliteProfileDerivedDataManager(database.client),
+        new SqliteAgentRunCleanup(database.client),
+      ),
       artifacts: new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value),
       clock,
     });
@@ -280,7 +277,10 @@ export function createLocalWebContainer(
       projects: interviewRepository,
       research: interviewResearchRepository,
     });
-    const profileRepository = new SqliteCandidateProfileRepository(database.client);
+    const profileRepository = new SqliteCandidateProfileRepository(
+      database.client,
+      new SqliteProfileDerivedDataManager(database.client),
+    );
     const agentRuns = new SqliteAgentRunStore(database.client);
     const configuredModel =
       config.model.modelName.value && config.model.apiKey.value
@@ -322,7 +322,10 @@ export function createLocalWebContainer(
       profiles: candidateProfiles,
       tasks,
     });
-    const jobRepository = new SqliteJobQueryRepository(database.client);
+    const jobRepository = new SqliteJobQueryRepository(
+      database.client,
+      new SqliteJobScoreReader(database.client),
+    );
     const profileInspection = new ProfileInspectionService({
       profiles: profileRepository,
       agentRuns,
@@ -358,35 +361,40 @@ export function createLocalWebContainer(
         new SqlitePlatformRepository(database.client),
         tasks,
         'boss',
-        profileRepository,
+        new ProfilePlatformSearchProvider(profileRepository),
       ),
       liepin: new WebPlatformService(
         new SqlitePlatformRepository(database.client, 'liepin'),
         tasks,
         'liepin',
-        profileRepository,
+        new ProfilePlatformSearchProvider(profileRepository),
       ),
       '51job': new WebPlatformService(
         new SqlitePlatformRepository(database.client, '51job'),
         tasks,
         '51job',
-        profileRepository,
+        new ProfilePlatformSearchProvider(profileRepository),
       ),
       zhilian: new WebPlatformService(
         new SqlitePlatformRepository(database.client, 'zhilian'),
         tasks,
         'zhilian',
-        profileRepository,
+        new ProfilePlatformSearchProvider(profileRepository),
       ),
       platformActivity: new PlatformActivityService(
         new SqlitePlatformActivityRepository(database.client),
       ),
-      dashboard: new DashboardQueryService(new SqliteDashboardReadModel(database.client)),
+      dashboard: new DashboardQueryService(createDashboardReadModel(database.client)),
       jobs,
       webJobs: new WebJobQueryService(jobs),
       webJobDetails: new WebJobDetailService({
         jobs,
-        trace: new SqliteWebJobTraceRepository(database.client),
+        trace: new SqliteWebJobTraceRepository(
+          database.client,
+          new SqliteJobHistoryReader(database.client),
+          profileRepository,
+          new SqliteTaskRelationStatusReader(database.client),
+        ),
       }),
       sources,
       webSources: new WebSourceService({
@@ -424,7 +432,12 @@ export function createLocalWebContainer(
         management: profiles,
       }),
       matches: new MatchWorkflowService({
-        matching: new SqliteMatchingRepository(database.client),
+        matching: new SqliteMatchingRepository(
+          database.client,
+          new SqliteMatchingJobReader(database.client),
+          new SqliteProfileIdentityReader(database.client),
+          new SqliteAgentRunStore(database.client),
+        ),
         profiles: profileRepository,
         tasks,
         ids,
@@ -506,7 +519,7 @@ const loadSharedContainer = createRetryableSingleton(async () => {
   const workspaceRoot = process.env.JOBHUNTER_WORKSPACE_ROOT ?? process.cwd();
   const config = await loadRuntimeAppConfig({ workspaceRoot });
   return createLocalWebContainer(config, {
-    migrationsFolder: path.join(workspaceRoot, 'packages', 'db', 'migrations'),
+    migrationsFolder: path.join(workspaceRoot, 'packages', 'common', 'migrations', 'legacy'),
   });
 });
 

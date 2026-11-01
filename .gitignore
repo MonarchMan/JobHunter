@@ -2,6 +2,8 @@ node_modules/
 .node-version
 .next/
 .next*/
+# Next.js 自动生成的类型入口包含本机构建目录，不纳入版本控制。
+/apps/web/next-env.d.ts
 dist/
 coverage/
 *.tsbuildinfo

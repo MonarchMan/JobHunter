@@ -1,4 +1,4 @@
-import { webJobMatchMutationSchema } from '@jobhunter/application/contracts';
+import { webJobMatchMutationSchema } from '@jobhunter/matching/contracts/web';
 import { ZodError } from 'zod';
 import { getWebContainer } from '../../../../../src/server/container.js';
 import {

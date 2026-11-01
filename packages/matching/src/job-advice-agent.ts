@@ -1,40 +1,18 @@
-import { AgentRuntimeError, defineAgent } from '@jobhunter/agent-core';
-import { candidateProfileSchema, normalizedJobSchema } from '@jobhunter/domain';
+import { adviceReferenceSchema, jobAdviceSchema, type JobAdvice } from './contracts/job-advice.js';
+export * from './contracts/job-advice.js';
+import { AgentRuntimeError, defineAgent, type AgentDefinition } from '@jobhunter/common/agent';
+import { candidateProfileSchema, type CandidateProfileData } from '@jobhunter/user/contracts';
+import { normalizedJobSchema, type NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { z } from 'zod';
-import { deterministicMatchOutputSchema } from './model.js';
+import { deterministicMatchOutputSchema, type DeterministicMatchOutput } from './model.js';
 import { jobAdvicePromptV2 } from './prompts/job-advice/v2.js';
 
-/** 建议引用的职位或简历证据。 */
-export const adviceReferenceSchema = z
-  .object({
-    kind: z.enum(['evidence', 'missing', 'uncertainty']),
-    value: z.string().trim().min(1).max(500),
-  })
-  .strict();
-
-const advicePointSchema = z
-  .object({
-    text: z.string().trim().min(1).max(500),
-    references: z.array(adviceReferenceSchema).min(1).max(8),
-  })
-  .strict();
-
-/** 职位准备建议结构。 */
-export const jobAdviceSchema = z
-  .object({
-    highlights: z.array(advicePointSchema).max(10),
-    gaps: z.array(advicePointSchema).max(10),
-    uncertainties: z.array(advicePointSchema).max(10),
-    resumeEmphasis: z.array(z.string().trim().min(1).max(500)).max(10),
-    preparation: z.array(z.string().trim().min(1).max(500)).max(10),
-  })
-  .strict();
-
-/** 模块使用的类型约束。 */
-export type JobAdvice = z.infer<typeof jobAdviceSchema>;
-
 /** 职位建议 Agent 输入 Schema。 */
-export const jobAdviceInputSchema = z
+export const jobAdviceInputSchema: z.ZodObject<{
+  profile: typeof candidateProfileSchema;
+  job: typeof normalizedJobSchema;
+  match: typeof deterministicMatchOutputSchema;
+}> = z
   .object({
     profile: candidateProfileSchema,
     job: normalizedJobSchema,
@@ -43,7 +21,11 @@ export const jobAdviceInputSchema = z
   .strict();
 
 /** 模块使用的类型约束。 */
-export type JobAdviceInput = z.infer<typeof jobAdviceInputSchema>;
+export interface JobAdviceInput {
+  readonly profile: CandidateProfileData;
+  readonly job: NormalizedJob;
+  readonly match: DeterministicMatchOutput;
+}
 
 /** 模型输出只携带目录 ID；持久化结构继续使用经系统还原的原文引用。 */
 const referencePointSchema = z
@@ -91,9 +73,7 @@ export function resolveJobAdviceAgentOutput(value: unknown, input: JobAdviceInpu
     buildJobAdviceReferenceCatalog(input).map(({ id, ...reference }) => [id, reference]),
   );
   // 1、所有章节使用相同目录，未知 ID 产生安全的业务错误供 Runner 单次纠正。
-  const resolve = (
-    points: z.infer<typeof referencePointSchema>[],
-  ): z.infer<typeof advicePointSchema>[] =>
+  const resolve = (points: z.infer<typeof referencePointSchema>[]): JobAdvice['highlights'] =>
     points.map((point) => ({
       text: point.text,
       references: point.references.map((id) => {
@@ -119,7 +99,12 @@ export function resolveJobAdviceAgentOutput(value: unknown, input: JobAdviceInpu
 }
 
 /** 职位准备建议 Agent 定义。 */
-export const jobAdviceAgentDefinition = defineAgent({
+export const jobAdviceAgentDefinition: AgentDefinition<
+  JobAdviceInput & {
+    referenceCatalog: (z.infer<typeof adviceReferenceSchema> & { id: string })[];
+  },
+  z.infer<typeof jobAdviceModelOutputSchema>
+> = defineAgent({
   key: jobAdvicePromptV2.agentKey,
   version: '2.0.0',
   promptVersion: jobAdvicePromptV2.promptVersion,

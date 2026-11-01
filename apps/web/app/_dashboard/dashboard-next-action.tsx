@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { WebDashboardNextAction } from '@jobhunter/application';
+import type { WebDashboardNextAction } from '../../src/shared/dashboard-contracts.js';
 import styles from './dashboard-next-action.module.css';
 
 export function DashboardNextAction({

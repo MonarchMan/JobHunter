@@ -1,0 +1,14 @@
+export * from './import/media.js';
+export * from './parsers/index.js';
+export * from './ocr/index.js';
+export * from './profile-agent.js';
+export * from './rule-profile-extractor.js';
+export * from './resume-polish-agent.js';
+export * from './profile-schema/index.js';
+export * from './prompts/resume-profile/v2.js';
+export * from './prompts/resume-profile/v3.js';
+export * from './prompts/resume-polish/v1.js';
+
+/** Public package identifier used by composition smoke tests. */
+/** 模块使用的稳定配置或常量。 */
+export const packageId = '@jobhunter/user' as const;

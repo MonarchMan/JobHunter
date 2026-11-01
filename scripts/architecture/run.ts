@@ -20,12 +20,18 @@ if (!sequence || !pnpmEntry) {
 }
 
 // 2. 顺序执行，前置校验或构建失败时立即退出，不继续启动后续进程。
+// pnpm 可由 JS 入口或独立可执行文件提供，原生入口不能交给 Node 解析。
+const isJavaScriptEntry = /\.[cm]?js$/iu.test(pnpmEntry);
 for (const args of sequence) {
-  const result = spawnSync(process.execPath, [pnpmEntry, ...args], {
-    env: process.env,
-    shell: false,
-    stdio: 'inherit',
-  });
+  const result = spawnSync(
+    isJavaScriptEntry ? process.execPath : pnpmEntry,
+    isJavaScriptEntry ? [pnpmEntry, ...args] : args,
+    {
+      env: process.env,
+      shell: false,
+      stdio: 'inherit',
+    },
+  );
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }

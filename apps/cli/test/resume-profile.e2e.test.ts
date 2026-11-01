@@ -1,12 +1,11 @@
-import { CandidateProfileService } from '@jobhunter/application';
-import { openSqliteDatabase, SqliteCandidateProfileRepository } from '@jobhunter/db';
-import {
-  parseId,
-  SystemIdGenerator,
-  utcInstant,
-  type CandidateProfileData,
-} from '@jobhunter/domain';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
+import { CandidateProfileService } from '@jobhunter/user/profile';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteCandidateProfileRepository } from '@jobhunter/user/persistence';
+import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
+import type { CandidateProfileData } from '@jobhunter/user/domain';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
+import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
@@ -91,7 +90,10 @@ function seedFirstProfileVersion(input: {
       )
       .run(agentRunId, 'a'.repeat(64), 'b'.repeat(64), `fixture:${input.profileId}`);
     const profiles = new CandidateProfileService({
-      repository: new SqliteCandidateProfileRepository(database.client),
+      repository: new SqliteCandidateProfileRepository(
+        database.client,
+        new SqliteProfileDerivedDataManager(database.client),
+      ),
       clock: { now: () => utcInstant(10) },
       ids: new SystemIdGenerator(),
     });
@@ -108,11 +110,13 @@ function seedFirstProfileVersion(input: {
 }
 
 describe('resume and profile commands', () => {
-  it('imports the reference JPEG without exposing content and versions manual profile changes', async () => {
+  it('imports a synthetic JPEG without exposing content and versions manual profile changes', async () => {
     const root = await createTemporaryDataRoot('jobhunter-cli-profile-');
     const dataRoot = path.join(root.path, '中文 数据');
-    const resumePath = path.resolve('docs', 'resumes', 'nowcoder_1787802316450.jpeg');
+    const resumePath = path.join(root.path, 'synthetic-resume.jpeg');
     try {
+      // 1、只提供可识别的 JPEG 签名，避免依赖个人简历或本地文档目录。
+      await writeFile(resumePath, new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]));
       expect((await command(dataRoot, ['init'])).exitCode).toBe(0);
       const imported = await command(dataRoot, ['resume', 'import', resumePath]);
       expect(imported.exitCode).toBe(4);

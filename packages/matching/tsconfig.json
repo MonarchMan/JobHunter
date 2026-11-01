@@ -6,5 +6,15 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../agent-core" }, { "path": "../domain" }]
+  "references": [
+    {
+      "path": "../common"
+    },
+    {
+      "path": "../user"
+    },
+    {
+      "path": "../recruitment"
+    }
+  ]
 }

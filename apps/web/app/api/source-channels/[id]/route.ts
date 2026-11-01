@@ -1,4 +1,4 @@
-import { webSourceChannelMutationSchema } from '@jobhunter/application/contracts';
+import { webSourceChannelMutationSchema } from '@jobhunter/recruitment/contracts/web';
 import { ZodError } from 'zod';
 import {
   badRequestResponse,

@@ -1,34 +1,24 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
+import { loadRuntimeAppConfig } from '@jobhunter/common/config/index';
+import { createConfiguredTaskApplication } from './task-runtime.js';
 import { resolveWebChildEnvironment, resolveWebServerConfig } from './host.js';
 
-// 1、解析 Web 配置；2、启动 Worker；3、启动 Next 服务；4、统一转发退出和子进程错误。
+// 1、Web 宿主同时承载任务循环与 Next 生命周期，不启动独立 Worker 入口。
 const config = resolveWebServerConfig({
   ...process.env,
   ...(process.argv.includes('--production') ? { NODE_ENV: 'production' } : {}),
 });
-const require = createRequire(import.meta.url);
-const nextBin = require.resolve('next/dist/bin/next');
-const tsxBin = path.join(path.dirname(require.resolve('tsx')), 'cli.mjs');
 const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
-const workerSource = path.join(workspaceRoot, 'apps', 'worker', 'src', 'main.ts');
-const workerDist = path.join(workspaceRoot, 'apps', 'worker', 'dist', 'main.js');
-const workerArguments = config.development ? [tsxBin, workerSource] : [workerDist];
-// 2.a、开发子进程通过标准导出条件加载 workspace 源码，保留已有 Node 参数；生产继续使用 dist。
-const childEnvironment = {
-  ...resolveWebChildEnvironment(process.env, config.development),
-  JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
-};
-const worker = spawn(process.execPath, workerArguments, {
-  cwd: workspaceRoot,
-  stdio: 'inherit',
-  env: childEnvironment,
-});
+const runtimeConfig = await loadRuntimeAppConfig({ workspaceRoot });
+const application = createConfiguredTaskApplication(runtimeConfig);
+const abort = new AbortController();
+const require = createRequire(import.meta.url);
 const next = spawn(
   process.execPath,
   [
-    nextBin,
+    require.resolve('next/dist/bin/next'),
     config.development ? 'dev' : 'start',
     '--hostname',
     config.host,
@@ -37,63 +27,50 @@ const next = spawn(
   ],
   {
     stdio: 'inherit',
-    env: childEnvironment,
+    env: {
+      ...resolveWebChildEnvironment(process.env, config.development),
+      JOBHUNTER_WORKSPACE_ROOT: workspaceRoot,
+    },
   },
 );
 
-let shuttingDown = false;
-
-/** 请求单个子进程优雅退出。 */
-function stop(child: ChildProcess): void {
-  if (!child.killed && child.exitCode === null) child.kill('SIGTERM');
+/** 关闭请求同时停止任务领取和 Web，随后等待在途工作及资源释放。 */
+function stop(): void {
+  // 1、取消公共循环；2、请求 Next 优雅退出，重复信号不重复发送。
+  abort.abort();
+  if (!next.killed && next.exitCode === null) next.kill('SIGTERM');
 }
-
-/** 在主进程退出时停止 Web 与 Worker 子进程。 */
-function stopAll(): void {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  stop(next);
-  stop(worker);
-}
-
-/** 处理子进程启动错误并触发统一退出。 */
-function handleChildError(error: Error): void {
-  if (shuttingDown) return;
-  console.error('Web 或 Worker 子进程启动失败:', error);
+process.once('SIGINT', stop);
+process.once('SIGTERM', stop);
+const exited = new Promise<void>((resolve) => {
+  next.once('error', (error) => {
+    console.error('Web 启动失败:', error);
+    process.exitCode = 1;
+    stop();
+    resolve();
+  });
+  next.once('exit', (code, signal) => {
+    if (!abort.signal.aborted) process.exitCode = code ?? (signal ? 1 : 0);
+    abort.abort();
+    resolve();
+  });
+});
+// 2、任务循环异常必须通知宿主并关闭 Web，不能让界面继续声称后台可用。
+const running = application.engine.run(abort.signal).catch((error: unknown) => {
+  console.error('任务运行时失败:', error);
   process.exitCode = 1;
-  shuttingDown = true;
-  stop(next);
-  stop(worker);
+  stop();
+});
+try {
+  await exited;
+  await running;
+} finally {
+  // 3、回收所有模块资源后解除信号监听，内部维护子进程也必须结束。
+  stop();
+  try {
+    await application.close();
+  } finally {
+    process.off('SIGINT', stop);
+    process.off('SIGTERM', stop);
+  }
 }
-
-next.once('error', handleChildError);
-worker.once('error', handleChildError);
-
-next.once('exit', (code, signal) => {
-  if (!shuttingDown) {
-    process.exitCode = code ?? (signal ? 1 : 0);
-    /** 执行模块适配器的该项操作。 */
-    stop(worker);
-  }
-});
-
-worker.once('exit', (code, signal) => {
-  if (!shuttingDown) {
-    process.exitCode = code ?? (signal ? 1 : 0);
-    /** 执行模块适配器的该项操作。 */
-    stop(next);
-  }
-});
-
-const forward = (signal: NodeJS.Signals): void => {
-  shuttingDown = true;
-  if (!next.killed) next.kill(signal);
-  if (!worker.killed) worker.kill(signal);
-};
-process.once('SIGINT', () => {
-  forward('SIGINT');
-});
-process.once('SIGTERM', () => {
-  forward('SIGTERM');
-});
-process.once('exit', stopAll);

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/server/main.ts",
+    "dev": "node --conditions=development --import tsx src/server/main.ts",
     "dev:typecheck": "pnpm --workspace-root typecheck:watch",
     "build": "next build",
     "test:browser": "playwright test",
@@ -12,15 +12,10 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@jobhunter/agent-core": "workspace:*",
-    "@jobhunter/application": "workspace:*",
-    "@jobhunter/db": "workspace:*",
-    "@jobhunter/domain": "workspace:*",
-    "@jobhunter/llm": "workspace:*",
-    "@jobhunter/mail-connectors": "workspace:*",
+    "@jobhunter/common": "workspace:*",
+    "@jobhunter/recruitment": "workspace:*",
     "@jobhunter/matching": "workspace:*",
-    "@jobhunter/resume-template": "workspace:*",
-    "@jobhunter/sources": "workspace:*",
+    "@jobhunter/user": "workspace:*",
     "@radix-ui/react-select": "^2.3.7",
     "next": "^16.3.1",
     "react": "^19.2.8",
@@ -29,7 +24,6 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
-    "@jobhunter/testkit": "workspace:*",
     "@playwright/test": "^1.62.1",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

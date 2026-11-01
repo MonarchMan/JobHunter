@@ -1,5 +1,6 @@
-import { SqlitePlatformRepository, type SqliteDatabaseHandle } from '@jobhunter/db';
-import { SystemIdGenerator } from '@jobhunter/domain';
+import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
+import { type SqliteDatabaseHandle } from '@jobhunter/common/persistence/connection';
+import { SystemIdGenerator } from '@jobhunter/common/domain';
 
 /** 为统一职位查询提供三个完整平台职位；只操作调用方的隔离测试数据库。 */
 export function seedPlatformJobs(database: SqliteDatabaseHandle): void {

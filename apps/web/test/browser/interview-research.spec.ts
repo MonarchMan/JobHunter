@@ -175,7 +175,7 @@ test.describe('外部 Agent 网友面经研究', () => {
     await acceptedArchive.getByRole('combobox', { name: '公司' }).selectOption(firstCompany);
     await acceptedArchive.getByRole('combobox', { name: '岗位' }).selectOption(role);
     await acceptedArchive.getByRole('combobox', { name: '阶段' }).selectOption('技术一面');
-    await acceptedArchive.getByRole('button', { name: '应用筛选' }).click();
+    await acceptedArchive.getByRole('button', { name: '搜索', exact: true }).click();
     await expect
       .poll(() => Object.fromEntries(new URL(page.url()).searchParams.entries()))
       .toEqual({ company: firstCompany, role, stage: '技术一面' });

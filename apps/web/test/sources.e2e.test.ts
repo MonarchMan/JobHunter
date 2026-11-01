@@ -1,8 +1,8 @@
-import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application';
-import { openSqliteDatabase } from '@jobhunter/db';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
-import { parseId } from '@jobhunter/domain';
-import { firstPartySourceCatalog } from '@jobhunter/sources/catalog-data';
+import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
+import { parseId } from '@jobhunter/common/domain';
+import { firstPartySourceCatalog } from '@jobhunter/recruitment/catalog-data';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 

@@ -1,11 +1,8 @@
-import {
-  ResumeDraftConflictError,
-  ResumeTemplateNotFoundError,
-  resolveAppConfig,
-  resolveBootstrapConfig,
-} from '@jobhunter/application';
-import { openSqliteDatabase } from '@jobhunter/db';
-import { createTemporaryDataRoot, makeCandidateProfile } from '@jobhunter/testkit';
+import { ResumeDraftConflictError, ResumeTemplateNotFoundError } from '@jobhunter/user/profile';
+import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
+import { makeCandidateProfile } from '@jobhunter/user/testing';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 

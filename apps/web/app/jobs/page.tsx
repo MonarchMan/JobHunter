@@ -1,4 +1,4 @@
-import { canonicalJobSubfamilies } from '@jobhunter/domain';
+import { canonicalJobSubfamilies } from '@jobhunter/recruitment/domain';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { Pagination } from '../components/lists/pagination.js';

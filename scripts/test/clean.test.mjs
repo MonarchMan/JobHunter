@@ -12,8 +12,8 @@ test('缓存清理保留编译产物，完整清理保留源码、依赖和数�
   const compiled = [
     'apps/web/.next/BUILD_ID',
     'apps/web/.next/server/index.js',
-    'packages/domain/dist/index.js',
-    'packages/domain/tsconfig.tsbuildinfo',
+    'packages/common/dist/index.js',
+    'packages/common/tsconfig.tsbuildinfo',
   ];
   const caches = [
     'apps/web/.next/cache/a',

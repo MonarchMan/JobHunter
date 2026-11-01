@@ -1,0 +1,49 @@
+import type { CompanyId, JobSourceId, SourceChannelId, UtcInstant } from '@jobhunter/common/domain';
+/** 招聘来源可选择的同步渠道。 */
+export type SourceSyncChannel = 'intern' | 'campus' | 'social';
+
+/** 应用层数据结构或端口契约。 */
+export interface SourceOverview {
+  readonly id: JobSourceId;
+  readonly companyId: CompanyId;
+  readonly channelId: SourceChannelId;
+  readonly channel: SourceSyncChannel;
+  readonly companyName: string;
+  readonly slug: string;
+  readonly adapterKey: string;
+  readonly coverageRole: 'required' | 'supplemental';
+  readonly enabled: boolean;
+  readonly effectiveEnabled: boolean;
+  readonly supportStatus: 'experimental' | 'supported' | 'blocked';
+  readonly healthStatus: 'unknown' | 'healthy' | 'degraded' | 'unhealthy';
+  readonly lastRun: {
+    readonly id: string;
+    readonly status: 'running' | 'succeeded' | 'partial' | 'failed' | 'cancelled';
+    readonly coverage: 'complete' | 'partial' | 'unknown';
+    readonly startedAt: UtcInstant;
+    readonly finishedAt: UtcInstant | null;
+  } | null;
+}
+
+/** 应用层数据结构或端口契约。 */
+export interface SourceChannelOverview {
+  readonly id: SourceChannelId;
+  readonly companyId: CompanyId;
+  readonly companyName: string;
+  readonly slug: string;
+  readonly channel: 'intern' | 'campus' | 'social';
+  readonly enabled: boolean;
+  readonly effectiveEnabled: boolean;
+  readonly supportNote: string | null;
+  readonly supportStatus: 'experimental' | 'supported' | 'blocked';
+  readonly healthStatus: 'unknown' | 'healthy' | 'degraded' | 'unhealthy';
+  readonly sources: readonly SourceOverview[];
+}
+
+/** 应用层数据结构或端口契约。 */
+export interface SourceManagementRepository {
+  list(): readonly SourceOverview[];
+  get(id: JobSourceId): SourceOverview | null;
+  listChannels(): readonly SourceChannelOverview[];
+  getChannel(id: SourceChannelId): SourceChannelOverview | null;
+}

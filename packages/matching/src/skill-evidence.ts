@@ -1,4 +1,4 @@
-import type { CandidateProfileData } from '@jobhunter/domain';
+import type { CandidateProfileData } from '@jobhunter/user/contracts';
 import type { DeterministicMatchInput, MatchingEvidence } from './model.js';
 import { skillAliases } from './recruitment-scoring.js';
 import {

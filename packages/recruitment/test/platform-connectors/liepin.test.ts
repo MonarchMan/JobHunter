@@ -1,0 +1,613 @@
+import { expect, it, vi, type Mock } from 'vitest';
+import {
+  LiepinRecommendationHttpSession,
+  liepinCookieHeader,
+  liepinRequestHeaders,
+} from '../../src/platform/connectors/liepin.js';
+
+const signal = new AbortController().signal;
+const url = 'https://www.liepin.com/job/1980000001.shtml';
+const row = {
+  job: {
+    jobId: 80000001,
+    title: '开发工程师',
+    link: url,
+    dq: '成都',
+    salary: '面议',
+    requireEduLevel: '本科',
+  },
+  comp: { compId: 123, compName: '测试企业' },
+};
+const posting = {
+  '@type': 'JobPosting',
+  title: '开发工程师',
+  url,
+  identifier: { propertyID: 'liepin.com', value: '80000001' },
+  hiringOrganization: { name: '测试企业', sameAs: 'https://www.liepin.com/company/123/' },
+  description: '负责业务系统开发、编写单元测试和维护技术文档。',
+};
+const template = {
+  url: 'https://api-c.liepin.com/api/com.liepin.csearch.home-recommend-job-new',
+  body: JSON.stringify({
+    data: {
+      operateKind: 'LOGIN',
+      sortType: 'PC_STU_HP_NEW',
+      selectedExpect: '{}',
+      existFallbackResult: false,
+    },
+  }),
+};
+
+/** 依据真实搜索信封构造脱敏样本，推荐模板仍使用独立测试。 */
+const searchTemplate = {
+  url: 'https://api-c.liepin.com/api/com.liepin.searchfront4c.pc-search-job',
+  body: JSON.stringify({
+    data: {
+      mainSearchPcConditionForm: {
+        key: 'AI应用开发',
+        currentPage: 0,
+        pageSize: 40,
+        city: '410',
+        dq: '410',
+      },
+      passThroughForm: { scene: 'input', skId: '', fkId: '', ckId: 'sample', suggest: null },
+    },
+  }),
+};
+
+it('搜索从零页开始，保持关键词并消费服务端分页与关联上下文', async () => {
+  const response = (page: number): Response =>
+    Response.json({
+      flag: 1,
+      data: {
+        data: {
+          jobCardList: [
+            {
+              ...row,
+              job: {
+                ...row.job,
+                jobId: 80000001 + page,
+                link: `https://www.liepin.com/job/${String(1980000001 + page)}.shtml`,
+              },
+            },
+          ],
+        },
+        pagination: { currentPage: page, pageSize: 40, totalPage: 2, hasNext: page === 0 },
+        passThroughData: { scene: 'input', skId: `next-${String(page)}`, fkId: '', ckId: 'sample' },
+      },
+    });
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(response(0))
+    .mockResolvedValueOnce(response(1));
+  const session = new LiepinRecommendationHttpSession({
+    template: searchTemplate,
+    expectedKeyword: 'AI应用开发',
+    readHeaders: () => Promise.resolve({}),
+    fetch: fetcher,
+  });
+  expect(await session.readNext(signal)).toMatchObject({
+    hasMore: true,
+    candidates: [{ externalJobId: 'job:1980000001' }],
+  });
+  expect(await session.readNext(signal)).toMatchObject({
+    hasMore: false,
+    candidates: [{ externalJobId: 'job:1980000002' }],
+  });
+  const secondBody = fetcher.mock.calls[1]?.[1]?.body;
+  if (typeof secondBody !== 'string') throw new Error('Missing request body');
+  expect(JSON.parse(secondBody)).toMatchObject({
+    data: {
+      mainSearchPcConditionForm: { key: 'AI应用开发', currentPage: 1, pageSize: 40 },
+      passThroughForm: { skId: 'next-0' },
+    },
+  });
+  await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'session_unavailable' });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('搜索模板关键词错配、非首页或推荐接口不得通过初始化', () => {
+  for (const invalid of [
+    template,
+    { ...searchTemplate, body: searchTemplate.body.replace('AI应用开发', 'Python') },
+    { ...searchTemplate, body: searchTemplate.body.replace('"currentPage":0', '"currentPage":1') },
+  ]) {
+    expect(
+      () =>
+        new LiepinRecommendationHttpSession({
+          template: invalid,
+          expectedKeyword: 'AI应用开发',
+          readHeaders: () => Promise.resolve({}),
+        }),
+    ).toThrow();
+  }
+});
+
+it('搜索返回错误页码或者空页仍声明有下一页时拒绝推进', async () => {
+  for (const page of [0, 1]) {
+    const session = new LiepinRecommendationHttpSession({
+      template: searchTemplate,
+      expectedKeyword: 'AI应用开发',
+      readHeaders: () => Promise.resolve({}),
+      fetch: vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          flag: 1,
+          data: {
+            data: { jobCardList: [] },
+            pagination: { currentPage: page, pageSize: 40, totalPage: 2, hasNext: true },
+            passThroughData: { scene: 'input', skId: '', fkId: '', ckId: 'sample' },
+          },
+        }),
+      ),
+    });
+    await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'parse_changed' });
+  }
+});
+
+it('搜索 lptjob 卡片允许缺省学历，详情仍核对完整 JSON-LD 身份', async () => {
+  const link = 'https://www.liepin.com/lptjob/80000001';
+  const { requireEduLevel: _education, ...job } = row.job;
+  void _education;
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      Response.json({
+        flag: 1,
+        data: {
+          data: { jobCardList: [{ ...row, job: { ...job, link } }] },
+          pagination: { currentPage: 0, pageSize: 40, totalPage: 1, hasNext: false },
+          passThroughData: { scene: 'input', skId: '', fkId: '', ckId: 'sample' },
+        },
+      }),
+    )
+    .mockResolvedValueOnce(
+      new Response(
+        `<script type="application/ld+json">${JSON.stringify({ ...posting, url: link })}</script>`,
+        { headers: { 'content-type': 'text/html' } },
+      ),
+    );
+  const session = new LiepinRecommendationHttpSession({
+    template: searchTemplate,
+    expectedKeyword: 'AI应用开发',
+    readHeaders: () => Promise.resolve({}),
+    fetch: fetcher,
+  });
+  expect(await session.readNext(signal)).toMatchObject({
+    candidates: [{ externalJobId: 'lptjob:80000001', education: '' }],
+  });
+  expect(await session.readDetail('lptjob:80000001', signal)).toMatchObject({
+    description: posting.description,
+  });
+});
+
+/** 合成 JSON 和 HTML 替身，不需要浏览器或真实账号。 */
+function fixture(
+  list: unknown = { flag: 1, data: { data: [], addData: [row], hasNextPage: true } },
+  detail: unknown = posting,
+): {
+  session: LiepinRecommendationHttpSession;
+  fetcher: Mock<typeof fetch>;
+  readHeaders: Mock<(target: string) => Promise<{ cookie: string; 'x-xsrf-token': string }>>;
+} {
+  let now = 0;
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(Response.json(list))
+    .mockResolvedValueOnce(
+      new Response(`<script type="application/ld+json">${JSON.stringify(detail)}</script>`, {
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+  const readHeaders = vi.fn((target: string) =>
+    Promise.resolve({
+      cookie: target === url ? 'detail=private-detail' : 'api=private-api',
+      'x-xsrf-token': 'private-token',
+    }),
+  );
+  const session = new LiepinRecommendationHttpSession({
+    template,
+    fetch: fetcher,
+    readHeaders,
+    now: () => (now += 5001),
+  });
+  return { session, fetcher, readHeaders };
+}
+
+it('合并补充推荐并核验 JSON-LD，详情不携带 API 专用头', async () => {
+  const { session, fetcher, readHeaders } = fixture();
+  const batch = await session.readNext(signal);
+  expect(batch).toMatchObject({
+    hasMore: true,
+    candidates: [{ externalJobId: 'job:1980000001', externalCompanyId: '123' }],
+  });
+  expect(await session.readDetail('job:1980000001', signal)).toMatchObject({
+    description: posting.description,
+  });
+  expect(readHeaders.mock.calls.map((call) => call[0])).toEqual([template.url, url]);
+  expect(fetcher.mock.calls[1]?.[1]).toMatchObject({
+    redirect: 'manual',
+    headers: { accept: 'text/html', cookie: 'detail=private-detail' },
+  });
+  expect(fetcher.mock.calls[1]?.[1]?.headers).not.toHaveProperty('x-xsrf-token');
+  expect(JSON.stringify(batch)).not.toContain('private-');
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('首次 LOGIN、续批 UP 保留查询与排序，末批之后不再请求', async () => {
+  const { session, fetcher } = fixture();
+  fetcher
+    .mockReset()
+    .mockResolvedValueOnce(
+      Response.json({ flag: 1, data: { data: [row], addData: [], hasNextPage: true } }),
+    )
+    .mockResolvedValueOnce(
+      Response.json({
+        flag: 1,
+        data: {
+          data: [
+            {
+              ...row,
+              job: {
+                ...row.job,
+                jobId: 80000002,
+                link: 'https://www.liepin.com/job/1980000002.shtml',
+              },
+            },
+          ],
+          addData: [],
+          hasNextPage: false,
+        },
+      }),
+    );
+  await session.readNext(signal);
+  expect(await session.readNext(signal)).toMatchObject({
+    hasMore: false,
+    candidates: [{ externalJobId: 'job:1980000002' }],
+  });
+  expect(
+    fetcher.mock.calls.map((call) => {
+      const body = call[1]?.body;
+      if (typeof body !== 'string') throw new Error('Missing request body');
+      return JSON.parse(body) as unknown;
+    }),
+  ).toEqual([
+    JSON.parse(template.body) as unknown,
+    {
+      data: {
+        operateKind: 'UP',
+        sortType: 'PC_STU_HP_NEW',
+        selectedExpect: '{}',
+        existFallbackResult: false,
+      },
+    },
+  ]);
+  await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'session_unavailable' });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('猎聘按传入配置执行间隔，连接器不写死平台下限', async () => {
+  // 1、真实时钟下放行与 fetch 回调可能跨毫秒边界；用受控时钟验证完整间隔。
+  vi.useFakeTimers();
+  try {
+    const calledAt: number[] = [];
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((target) => {
+      calledAt.push(Date.now());
+      return Promise.resolve(
+        target === template.url
+          ? Response.json({ flag: 1, data: { data: [row], addData: [], hasNextPage: false } })
+          : new Response(`<script type="application/ld+json">${JSON.stringify(posting)}</script>`, {
+              headers: { 'content-type': 'text/html' },
+            }),
+      );
+    });
+    const session = new LiepinRecommendationHttpSession({
+      template,
+      fetch: fetcher,
+      requestIntervalMs: 1000,
+      readHeaders: () => Promise.resolve({ cookie: 'session=private' }),
+    });
+    await session.readNext(signal);
+    const detail = session.readDetail('job:1980000001', signal);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(detail).resolves.toMatchObject({
+      externalJobId: 'job:1980000001',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const [first, second] = calledAt;
+    if (first === undefined || second === undefined) throw new Error('Missing request timestamps');
+    expect(second - first).toBeGreaterThanOrEqual(1000);
+  } finally {
+    vi.useRealTimers();
+  }
+}, 4000);
+
+it('跨批重复身份冻结且不请求旧详情', async () => {
+  const { session, fetcher } = fixture();
+  fetcher
+    .mockReset()
+    .mockImplementation(() =>
+      Promise.resolve(
+        Response.json({ flag: 1, data: { data: [row], addData: [], hasNextPage: true } }),
+      ),
+    );
+  await session.readNext(signal);
+  await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'parse_changed' });
+  await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category: 'session_unavailable',
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('Cookie 按域、路径、过期和同名优先级匹配，不复用浏览器特征头', () => {
+  const cookie = {
+    name: 'sid',
+    value: 'root',
+    domain: '.liepin.com',
+    path: '/',
+    expires: -1,
+    secure: true,
+  };
+  expect(
+    liepinCookieHeader(
+      [
+        cookie,
+        { ...cookie, value: 'job', path: '/job' },
+        { ...cookie, value: 'other', domain: 'api-c.liepin.com' },
+        { ...cookie, value: 'expired', expires: 1 },
+        { ...cookie, value: 'bad;value' },
+        { ...cookie, value: 'prefix', path: '/jo' },
+      ],
+      url,
+      2000,
+    ),
+  ).toBe('sid=job; sid=root');
+  expect(liepinCookieHeader([cookie], 'https://evil.test/job/1', 0)).toBe('');
+  expect(
+    liepinRequestHeaders({
+      Cookie: 'secret',
+      Accept: 'application/json',
+      'User-Agent': 'browser',
+      'X-XSRF-TOKEN': 'token',
+    }),
+  ).toEqual({ accept: 'application/json', 'x-xsrf-token': 'token' });
+});
+
+it.each([
+  { ...posting, identifier: { propertyID: 'liepin.com', value: '999' } },
+  {
+    ...posting,
+    hiringOrganization: { name: '测试企业', sameAs: 'https://www.liepin.com/company/999/' },
+  },
+  { ...posting, url: 'https://evil.test/job/1980000001.shtml' },
+  { ...posting, title: '不同职位' },
+  { ...posting, description: '<p>未经支持的正文</p>' },
+  { ...posting, description: '' },
+])('详情身份或正文异常冻结，不能入库或重试', async (detail) => {
+  const { session, fetcher } = fixture(undefined, detail);
+  await session.readNext(signal);
+  await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category: 'parse_changed',
+  });
+  await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category: 'session_unavailable',
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('重复页和异常空页不能冒充成功', async () => {
+  for (const rows of [[], [row, row]]) {
+    const { session } = fixture({ flag: 1, data: { data: rows, addData: [], hasNextPage: true } });
+    await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'parse_changed' });
+  }
+});
+
+it.each([
+  [{ flag: 1, data: { data: [], hasNextPage: true } }, 'list_extra'],
+  [{ flag: 1, data: { data: 'private-secret', addData: [], hasNextPage: true } }, 'list_main'],
+  [{ flag: 1, data: { data: [], addData: [], hasNextPage: 'private-secret' } }, 'list_pagination'],
+  [
+    {
+      flag: 1,
+      data: { data: [{ ...row, job: { ...row.job, title: '' } }], addData: [], hasNextPage: false },
+    },
+    'list_job',
+  ],
+  [
+    {
+      flag: 1,
+      data: {
+        data: [{ ...row, comp: { ...row.comp, compName: '' } }],
+        addData: [],
+        hasNextPage: false,
+      },
+    },
+    'list_company',
+  ],
+  [{ flag: 1, data: { data: [], addData: [], hasNextPage: true } }, 'list_empty'],
+] as const)('列表结构异常只输出固定 %s 诊断，不泄漏原始值', async (body, stage) => {
+  const { session } = fixture(body);
+  await expect(session.readNext(signal)).rejects.toMatchObject({
+    category: 'parse_changed',
+    reason: stage,
+    message: `Platform request failed: parse_changed [liepin:${stage}]`,
+  });
+});
+
+it('已知缺公司身份计数排除，未知类型仍报错', async () => {
+  const missing = { ...row, comp: { ...row.comp, compId: null } };
+  expect(
+    await fixture({
+      flag: 1,
+      data: { data: [missing], addData: [], hasNextPage: false },
+    }).session.readNext(signal),
+  ).toMatchObject({ candidates: [], skippedMissingCompanyId: 1 });
+  await expect(
+    fixture({
+      flag: 1,
+      data: {
+        data: [{ ...row, comp: { compName: '测试企业', compId: {} } }],
+        addData: [],
+        hasNextPage: false,
+      },
+    }).session.readNext(signal),
+  ).rejects.toMatchObject({ category: 'parse_changed' });
+});
+
+it('未知业务码保留代码但不泄露原始文本或重试', async () => {
+  const { session, fetcher } = fixture({ flag: 0, code: '-1400', msg: 'private-token' });
+  await expect(session.readNext(signal)).rejects.toMatchObject({
+    category: 'upstream_error',
+    businessCode: -1400,
+  });
+  await expect(session.readNext(signal)).rejects.not.toThrow('private-token');
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('重定向登录墙不跟随，不向新目标携带 Cookie', async () => {
+  const { session, fetcher } = fixture();
+  await session.readNext(signal);
+  fetcher
+    .mockReset()
+    .mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: 'https://wow.liepin.com/login' } }),
+    );
+  await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category: 'access_blocked',
+    businessCode: 302,
+    reason: 'redirect_login',
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('详情 GET 的已知瞬时断线可在同一批次有界恢复', async () => {
+  const { session, fetcher, readHeaders } = fixture();
+  await session.readNext(signal);
+  const failure = Object.assign(new Error('private-url?token=secret'), { code: 'ECONNRESET' });
+  fetcher
+    .mockReset()
+    .mockRejectedValueOnce(failure)
+    .mockResolvedValueOnce(
+      new Response(`<script type="application/ld+json">${JSON.stringify(posting)}</script>`, {
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+  await expect(session.readDetail('job:1980000001', signal)).resolves.toMatchObject({
+    description: posting.description,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(readHeaders).toHaveBeenCalledTimes(3);
+});
+
+it('详情网络故障预算耗尽后保留固定底层原因，不泄露异常原文', async () => {
+  const { session, fetcher } = fixture();
+  await session.readNext(signal);
+  fetcher
+    .mockReset()
+    .mockRejectedValue(
+      Object.assign(new Error('private-url?token=secret'), { code: 'UND_ERR_SOCKET' }),
+    );
+  const error: unknown = await session
+    .readDetail('job:1980000001', signal)
+    .catch((e: unknown) => e);
+  expect(error).toMatchObject({ category: 'network_error', reason: 'socket_closed' });
+  expect(error instanceof Error ? error.message : '').toContain(
+    'liepin:detail;reason=socket_closed;code=UND_ERR_SOCKET;name=Error;attempts=3',
+  );
+  expect(error instanceof Error ? error.message : '').not.toContain('private-url');
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});
+
+it('列表 POST 和未知异常不做网络重试', async () => {
+  const list = fixture();
+  list.fetcher
+    .mockReset()
+    .mockRejectedValue(Object.assign(new Error('private-cookie'), { code: 'ECONNRESET' }));
+  await expect(list.session.readNext(signal)).rejects.toMatchObject({
+    category: 'network_error',
+    reason: 'connection_reset',
+  });
+  expect(list.fetcher).toHaveBeenCalledTimes(1);
+  const detail = fixture();
+  await detail.session.readNext(signal);
+  detail.fetcher.mockReset().mockRejectedValue(new TypeError('private-cookie'));
+  await expect(detail.session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category: 'network_error',
+    reason: 'unknown',
+  });
+  expect(detail.fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('详情重试退避可取消，取消后不再发送 HTTP', async () => {
+  const { session, fetcher } = fixture();
+  await session.readNext(signal);
+  fetcher
+    .mockReset()
+    .mockRejectedValue(Object.assign(new Error('private-cookie'), { code: 'ECONNRESET' }));
+  const controller = new AbortController();
+  const pending = session.readDetail('job:1980000001', controller.signal);
+  // 1、确认首次详情已失败并进入退避，再从调用方取消本次操作。
+  await vi.waitFor(() => {
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ category: 'session_unavailable' });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ['https://www.liepin.com/job/1980000002.shtml?token=secret', 'redirect_job'],
+  ['https://www.liepin.com/security/verify?token=secret', 'redirect_challenge'],
+  ['https://www.liepin.com/other?token=secret', 'redirect_internal_other'],
+  ['https://evil.test/steal?token=secret', 'redirect_external'],
+  ['/job/1980000002.shtml', 'redirect_job'],
+  [null, 'redirect_missing_location'],
+  ['http://[', 'redirect_invalid_location'],
+])('302 只保留固定脱敏目标类型：%s', async (location, reason) => {
+  const { session, fetcher } = fixture();
+  await session.readNext(signal);
+  const headers = location === null ? {} : { location };
+  fetcher.mockReset().mockResolvedValue(new Response(null, { status: 302, headers }));
+  await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category: 'access_blocked',
+    businessCode: 302,
+    reason,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('任意模板、未观察详情和取消均不会发网络请求', async () => {
+  expect(
+    () =>
+      new LiepinRecommendationHttpSession({
+        template: { ...template, url: 'https://evil.test' },
+        readHeaders: () => Promise.resolve({}),
+      }),
+  ).toThrow('[liepin:template]');
+  const { session, fetcher } = fixture();
+  await expect(session.readDetail('unknown', signal)).rejects.toMatchObject({
+    category: 'session_unavailable',
+  });
+  expect(fetcher).not.toHaveBeenCalled();
+  const other = fixture();
+  await expect(other.session.readNext(AbortSignal.abort())).rejects.toMatchObject({
+    category: 'session_unavailable',
+  });
+  expect(other.fetcher).not.toHaveBeenCalled();
+});
+
+it('非 JSON、超限或登录壳正文不误报成功', async () => {
+  const { session, fetcher } = fixture();
+  fetcher
+    .mockReset()
+    .mockResolvedValue(new Response('登录', { headers: { 'content-type': 'text/html' } }));
+  await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'parse_changed' });
+  const next = fixture();
+  next.fetcher.mockReset().mockResolvedValue(
+    new Response(' '.repeat(2 * 1024 * 1024 + 1), {
+      headers: { 'content-type': 'application/json' },
+    }),
+  );
+  await expect(next.session.readNext(signal)).rejects.toMatchObject({ category: 'parse_changed' });
+});

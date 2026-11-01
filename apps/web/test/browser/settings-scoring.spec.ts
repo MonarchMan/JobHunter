@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
-import { webSettingsMutationSchema, webSettingsSchema } from '@jobhunter/application/web';
+import { webSettingsMutationSchema, webSettingsSchema } from '@jobhunter/recruitment/contracts/web';
 
 /** 校验设置响应并读取持久化的评分开关，避免用未经检查的测试数据断言。 */
 async function storedScoring(response: { json(): Promise<unknown> }): Promise<boolean> {

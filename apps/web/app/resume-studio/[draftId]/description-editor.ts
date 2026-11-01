@@ -1,4 +1,4 @@
-import type { ResumeDescriptionBlock } from '@jobhunter/resume-template';
+import type { ResumeDescriptionBlock } from '@jobhunter/user/templates';
 
 /** 使用浏览器编辑事务保留撤销栈；Range 手工改 DOM 无法提供等价撤销行为。 */
 export function runEditingCommand(

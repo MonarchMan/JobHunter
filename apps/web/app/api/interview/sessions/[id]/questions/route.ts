@@ -1,7 +1,7 @@
 import type {
   ProjectQuestionGenerationResult,
   ProjectQuestionGenerationStage,
-} from '@jobhunter/application/interview';
+} from '@jobhunter/user/interview';
 import { getWebContainer } from '../../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
 import { forbiddenResponse } from '../../../../../../src/server/http.js';

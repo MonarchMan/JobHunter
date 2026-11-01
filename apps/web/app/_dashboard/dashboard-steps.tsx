@@ -63,7 +63,7 @@ export function DashboardSteps({
         <Step
           number="03"
           title="发现适合的职位"
-          detail={hasJobs ? '职位已就绪，可以开始筛选。' : '启动 Worker，同步最新职位。'}
+          detail={hasJobs ? '职位已就绪，可以开始筛选。' : '从来源页面同步最新职位。'}
           complete={hasJobs}
           href="/jobs"
         />

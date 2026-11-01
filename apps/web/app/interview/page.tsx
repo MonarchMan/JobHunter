@@ -12,9 +12,7 @@ export default async function InterviewPage(): Promise<ReactElement> {
   const container = await getWebContainer();
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader
-        title="简历项目拷打"
-      />
+      <PageHeader title="简历项目拷打" />
       <InterviewSectionNav />
       <InterviewProjectIndex
         availableProjects={container.services.interview.listAvailableProjects()}

@@ -67,10 +67,10 @@
 
 ## 可重复验证
 
-测试文件：`apps/worker/test/official-source-wave-two.online.test.ts`。默认跳过，显式选择公司后执行。每家公司仅请求首页、末页和一条详情；官网初始化所需的字典与会话请求不计作列表页，不会遍历其余职位。
+测试文件：`apps/web/test/task-runtime/official-source-wave-two.online.test.ts`。默认跳过，显式选择公司后执行。每家公司仅请求首页、末页和一条详情；官网初始化所需的字典与会话请求不计作列表页，不会遍历其余职位。
 
 ```sh
-JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=kuaishou,bilibili pnpm exec vitest run --project online apps/worker/test/official-source-wave-two.online.test.ts
+JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=kuaishou,bilibili pnpm exec vitest run --project online apps/web/test/task-runtime/official-source-wave-two.online.test.ts
 ```
 
 本次显式使用系统 Google Chrome（通过 `BROWSER_EXECUTABLE` 指定），无持久化 profile。2026-09-11 11:50 CST，正式测试 2/2 通过，耗时 8.18 秒。输出只包含时间、总数、采样页、页长、样本数、详情 ID、`partial + sampled_pages`，不输出请求凭据。
@@ -79,12 +79,12 @@ JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=kuaishou,bilibili pnpm exec v
 
 ## B 站生产适配器门禁
 
-2026-09-11 12:03 CST，`apps/worker/test/bilibili-social.online.test.ts` 使用 `createBilibiliSocialAdapter` 和实际 `createPlaywrightSourcePageClient` 完成在线验证，1/1 通过，16.77 秒。生产配置每页 50 条、JSON 间隔 5 秒；官网初始化的 10 条首屏后重放配置容量首页和末页，再打开一条详情校验。样本全部完成生产归一化，检查招聘类型、稳定 ID、地点、纯文本职责要求与新站深链，采样状态为 partial / sampled_pages。
+2026-09-11 12:03 CST，`apps/web/test/task-runtime/bilibili-social.online.test.ts` 使用 `createBilibiliSocialAdapter` 和实际 `createPlaywrightSourcePageClient` 完成在线验证，1/1 通过，16.77 秒。生产配置每页 50 条、JSON 间隔 5 秒；官网初始化的 10 条首屏后重放配置容量首页和末页，再打开一条详情校验。样本全部完成生产归一化，检查招聘类型、稳定 ID、地点、纯文本职责要求与新站深链，采样状态为 partial / sampled_pages。
 
 已注册 `bilibili.social@1.0.0`，来源 UUID `018f0000-0000-7000-8000-000000000249`，晋级 supported；source seed 默认启用，但不覆盖既有逻辑渠道开关。物理来源数从 47 增至 48，公司与逻辑渠道数仍为 20 / 60。
 
 ```sh
-JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=bilibili-social pnpm exec vitest run --project online apps/worker/test/bilibili-social.online.test.ts
+JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=bilibili-social pnpm exec vitest run --project online apps/web/test/task-runtime/bilibili-social.online.test.ts
 ```
 
 ## 快手三个渠道工程化复核
@@ -118,7 +118,7 @@ JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=bilibili-social pnpm exec vit
 首轮失败来自错误地只检查 chunk 队列（入口模块实际只保存在运行时注册表）；随后校园失败来自误将 a 实例当构造器；日常实习详情比较差异仅为尾部空格。分别修正固定模块注册判断、精确导出形态和比较前 trim 后，以上四项全部通过。失败不属于已确认风控阻断，没有通过签名复制、指纹修改或登录态复用解决。
 
 ```sh
-JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=kuaishou pnpm exec vitest run --project online apps/worker/test/kuaishou.online.test.ts --reporter=verbose
+JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=kuaishou pnpm exec vitest run --project online apps/web/test/task-runtime/kuaishou.online.test.ts --reporter=verbose
 # 也可只选一个物理来源，例如 JOBHUNTER_ONLINE_SOURCE=kuaishou.intern.campus
 ```
 
@@ -149,7 +149,7 @@ JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=kuaishou pnpm exec vitest run
 - Worker 初始化匿名首页后只调用固定公开列表/详情操作，串行请求间隔至少 5 秒，单请求 30 秒、单次列表采集 300 秒截止，所有出口释放页面与外层 context/browser。health 只取首页；无浏览器时 Moka 报 access_blocked。原始内部配置与会话字段不保存到 fixture 或数据库。
 
 ```sh
-JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=didi pnpm exec vitest run --project online apps/worker/test/didi.online.test.ts --silent=false --reporter=verbose
+JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=didi pnpm exec vitest run --project online apps/web/test/task-runtime/didi.online.test.ts --silent=false --reporter=verbose
 # 可单选 didi.intern / didi.campus / didi.social / didi.campus.elite；只采首尾和一条详情，不执行全量同步。
 ```
 

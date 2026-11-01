@@ -5,14 +5,17 @@ import styles from './page-header.module.css';
 export function PageHeader({
   title,
   children,
+  level = 1,
 }: Readonly<{
   title: string;
   children?: ReactNode;
+  level?: 1 | 2;
 }>): ReactElement {
+  const Heading = level === 2 ? 'h2' : 'h1';
   return (
     <header className={styles.header}>
       <div>
-        <h1>{title}</h1>
+        <Heading>{title}</Heading>
       </div>
       {children}
     </header>

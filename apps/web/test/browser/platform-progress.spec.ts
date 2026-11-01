@@ -11,7 +11,7 @@ test('任务类型筛选完整覆盖四个平台', async ({ page }) => {
   }
   await expect(page.getByRole('option', { name: '智联校园浏览', exact: true })).toHaveCount(0);
   await page.getByRole('option', { name: '猎聘平台浏览', exact: true }).click();
-  await page.getByRole('button', { name: '应用筛选', exact: true }).click();
+  await page.getByRole('button', { name: '搜索', exact: true }).click();
   await expect(page).toHaveURL(/type=platform.liepin/);
   await expect(page.getByRole('combobox', { name: '类型', exact: true })).toHaveText(
     '猎聘平台浏览',

@@ -1,0 +1,147 @@
+{
+  "name": "@jobhunter/user",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./testing": {
+      "development": "./src/testing/index.ts",
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    },
+    "./domain": {
+      "development": "./src/domain/index.ts",
+      "types": "./dist/domain/index.d.ts",
+      "import": "./dist/domain/index.js"
+    },
+    "./contracts/*": {
+      "development": "./src/contracts/*.ts",
+      "types": "./dist/contracts/*.d.ts",
+      "import": "./dist/contracts/*.js"
+    },
+    "./persistence": {
+      "development": "./src/persistence/sqlite-candidate-profile-repository.ts",
+      "types": "./dist/persistence/sqlite-candidate-profile-repository.d.ts",
+      "import": "./dist/persistence/sqlite-candidate-profile-repository.js"
+    },
+    "./persistence/*": {
+      "development": "./src/persistence/*.ts",
+      "types": "./dist/persistence/*.d.ts",
+      "import": "./dist/persistence/*.js"
+    },
+    "./contracts": {
+      "development": "./src/contracts/index.ts",
+      "types": "./dist/contracts/index.d.ts",
+      "import": "./dist/contracts/index.js"
+    },
+    "./profile": {
+      "development": "./src/profile/index.ts",
+      "types": "./dist/profile/index.d.ts",
+      "import": "./dist/profile/index.js"
+    },
+    "./profile/*": {
+      "development": "./src/profile/*.ts",
+      "types": "./dist/profile/*.d.ts",
+      "import": "./dist/profile/*.js"
+    },
+    "./interview": {
+      "development": "./src/interview/index.ts",
+      "types": "./dist/interview/index.d.ts",
+      "import": "./dist/interview/index.js"
+    },
+    "./interview-ports": {
+      "development": "./src/ports/index.ts",
+      "types": "./dist/ports/index.d.ts",
+      "import": "./dist/ports/index.js"
+    },
+    "./ports/*": {
+      "development": "./src/ports/*.ts",
+      "types": "./dist/ports/*.d.ts",
+      "import": "./dist/ports/*.js"
+    },
+    ".": {
+      "development": "./src/resume/index.ts",
+      "types": "./dist/resume/index.d.ts",
+      "import": "./dist/resume/index.js"
+    },
+    "./media": {
+      "development": "./src/resume/import/media.ts",
+      "types": "./dist/resume/import/media.d.ts",
+      "import": "./dist/resume/import/media.js"
+    },
+    "./parsers": {
+      "development": "./src/resume/parsers/index.ts",
+      "types": "./dist/resume/parsers/index.d.ts",
+      "import": "./dist/resume/parsers/index.js"
+    },
+    "./ocr": {
+      "development": "./src/resume/ocr/index.ts",
+      "types": "./dist/resume/ocr/index.d.ts",
+      "import": "./dist/resume/ocr/index.js"
+    },
+    "./ocr-contracts": {
+      "development": "./src/resume/ocr/contracts.ts",
+      "types": "./dist/resume/ocr/contracts.d.ts",
+      "import": "./dist/resume/ocr/contracts.js"
+    },
+    "./profile-agent": {
+      "development": "./src/resume/profile-agent.ts",
+      "types": "./dist/resume/profile-agent.d.ts",
+      "import": "./dist/resume/profile-agent.js"
+    },
+    "./profile-schema": {
+      "development": "./src/resume/profile-schema/index.ts",
+      "types": "./dist/resume/profile-schema/index.d.ts",
+      "import": "./dist/resume/profile-schema/index.js"
+    },
+    "./profile-rules": {
+      "development": "./src/resume/rule-profile-extractor.ts",
+      "types": "./dist/resume/rule-profile-extractor.d.ts",
+      "import": "./dist/resume/rule-profile-extractor.js"
+    },
+    "./polish": {
+      "development": "./src/resume/resume-polish-agent.ts",
+      "types": "./dist/resume/resume-polish-agent.d.ts",
+      "import": "./dist/resume/resume-polish-agent.js"
+    },
+    "./templates": {
+      "development": "./src/templates/index.ts",
+      "types": "./dist/templates/index.d.ts",
+      "import": "./dist/templates/index.js"
+    },
+    "./tasks": {
+      "development": "./src/tasks/index.ts",
+      "types": "./dist/tasks/index.d.ts",
+      "import": "./dist/tasks/index.js"
+    },
+    "./tasks/*": {
+      "development": "./src/tasks/*.ts",
+      "types": "./dist/tasks/*.d.ts",
+      "import": "./dist/tasks/*.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "dependencies": {
+    "@jobhunter/common": "workspace:*",
+    "better-sqlite3": "^12.4.1",
+    "@tesseract.js-data/chi_sim": "^1.0.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "mammoth": "^1.12.1",
+    "pdfjs-dist": "^6.2.108",
+    "tesseract.js": "^7.0.0",
+    "zod": "^4.4.3",
+    "playwright": "^1.62.1",
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "hono": "^4.13.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}

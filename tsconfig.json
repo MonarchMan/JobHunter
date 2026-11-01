@@ -1,24 +1,23 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/domain" },
-    { "path": "./packages/source-core" },
-    { "path": "./packages/mail/core" },
-    { "path": "./packages/mail/connectors" },
-    { "path": "./packages/platform-core" },
-    { "path": "./packages/platform-connectors" },
-    { "path": "./packages/agent-core" },
-    { "path": "./packages/resume" },
-    { "path": "./packages/resume-template" },
-    { "path": "./packages/matching" },
-    { "path": "./packages/application" },
-    { "path": "./packages/sources" },
-    { "path": "./packages/llm" },
-    { "path": "./packages/db" },
-    { "path": "./packages/observability" },
-    { "path": "./packages/testkit" },
-    { "path": "./apps/cli" },
-    { "path": "./apps/worker" },
-    { "path": "./apps/web" }
+    {
+      "path": "./packages/common"
+    },
+    {
+      "path": "./packages/recruitment"
+    },
+    {
+      "path": "./packages/user"
+    },
+    {
+      "path": "./packages/matching"
+    },
+    {
+      "path": "./apps/cli"
+    },
+    {
+      "path": "./apps/web"
+    }
   ]
 }

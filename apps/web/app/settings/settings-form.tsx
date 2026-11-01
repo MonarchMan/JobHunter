@@ -1,6 +1,6 @@
 'use client';
 
-import type { SystemSettings } from '@jobhunter/application/settings';
+import type { SystemSettings } from '@jobhunter/recruitment/settings';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
@@ -68,6 +68,7 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
       }}
       noValidate
     >
+      <p className={styles.fieldHelp}>修改后请点击“保存设置”，新的选项才会生效。</p>
       <fieldset className={styles.channelFieldset}>
         <legend>同步招聘渠道</legend>
         <p className={styles.fieldHelp}>

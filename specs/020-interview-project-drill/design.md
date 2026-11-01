@@ -12,7 +12,7 @@ apps/web ──► packages/application ──► packages/domain
     ▼                                       │
 packages/db ────────────────────────────────┘
 
-apps/worker ──► application handlers ──► AgentRunner / ArtifactStore / repositories
+CLI/Web 任务宿主 ──► application handlers ──► AgentRunner / ArtifactStore / repositories
 ```
 
 本增量不新增通用编排包。稳定的会话状态、不变量和覆盖枚举进入 `packages/domain/interview`；用例、仓储端口、任务 Schema、Agent 定义和 Markdown 渲染进入 `packages/application/interview`。`packages/db` 实现 SQLite 仓储；Web 和 Worker 只做装配。

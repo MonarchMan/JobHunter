@@ -1,4 +1,4 @@
-import { CandidateProfileNotFoundError } from '@jobhunter/application/profile';
+import { CandidateProfileNotFoundError } from '@jobhunter/user/profile';
 import { ZodError } from 'zod';
 import {
   badRequestResponse,

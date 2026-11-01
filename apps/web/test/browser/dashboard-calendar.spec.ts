@@ -5,7 +5,7 @@ test('shows the compact calendar above overview and expands into an accessible d
 }) => {
   await page.goto('/');
 
-  const calendar = page.getByRole('region', { name: '近期日程' });
+  const calendar = page.getByRole('region', { name: '日程' });
   const overview = page.getByRole('heading', { name: '工作台概览' });
   await expect(calendar).toBeVisible();
   await expect(calendar.getByText('未来科技')).toBeVisible();
@@ -46,8 +46,9 @@ test('shows the compact calendar above overview and expands into an accessible d
   await expect(dialog.getByText('已完成')).toBeVisible();
 
   // 日期悬停只改变圆形日期标记，不能再把整个日期单元格变成深色背景。
-  const selectedDay = dialog.getByRole('button', { pressed: true });
+  const selectedDay = dialog.getByRole('button', { pressed: true, name: /项日程$/ });
   const hoverDay = dialog.getByRole('button', { name: /项日程$/ }).nth(1);
+  await selectedDay.hover();
   const todayCircleColor = await selectedDay
     .locator('span')
     .first()

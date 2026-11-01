@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, webkit, expect as browserExpect } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
-import { getResumeTemplate, profileToResumeContent } from '@jobhunter/resume-template';
-import { makeCandidateProfile } from '@jobhunter/testkit';
+import { getResumeTemplate, profileToResumeContent } from '@jobhunter/user/templates';
+import { makeCandidateProfile } from '@jobhunter/user/testing';
 import { it, expect } from 'vitest';
 
 /** 在 about:blank 上测试真实 React + iframe 交互，不启动 Web 服务或读取用户数据。 */

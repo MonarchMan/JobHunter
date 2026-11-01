@@ -1,4 +1,4 @@
-import { webSettingsMutationSchema, webSettingsSchema } from '@jobhunter/application/contracts';
+import { webSettingsMutationSchema, webSettingsSchema } from '@jobhunter/recruitment/contracts/web';
 import { ZodError } from 'zod';
 import { getWebContainer } from '../../../src/server/container.js';
 import {

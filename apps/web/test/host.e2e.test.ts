@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/application';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { createLocalWebContainer } from '../src/server/container.js';
 import {
   normalizeLoopbackHost,

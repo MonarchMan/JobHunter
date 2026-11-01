@@ -5,8 +5,8 @@
     {
       "id": "system",
       "title": "系统架构图",
-      "description": "三个入口协同运行，核心模块完成职位采集、简历解析和 AI 处理。箭头表示运行时调用与数据访问，不表示代码导入关系。",
-      "lanes": ["使用入口", "业务编排", "核心处理模块", "数据与外部服务"],
+      "description": "CLI/Web 两个入口装配 recruitment、user、matching、common 四个共享模块。matching 通过公开只读快照关联招聘与用户事实，common 提供通用运行能力。箭头表示运行时协作，不表示代码导入关系。",
+      "lanes": ["进程入口", "招聘与用户", "匹配与通用运行", "存储与外部服务"],
       "nodes": [
         {
           "id": "web",
@@ -16,7 +16,7 @@
           "path": "apps/web",
           "x": 30,
           "y": 90,
-          "description": "职位筛选、个人资料、简历制作和面试准备的可视化入口。启动器同时管理独立 Web 与 Worker 子进程。项目拷打单题生成可在 Web 请求内调用模型，但不进入数据库事务。"
+          "description": "职位筛选、个人资料、简历制作和面试准备的可视化入口。启动器承载公共任务循环并管理 Next 子进程。项目拷打单题生成可在 Web 请求内调用模型，但不进入数据库事务。"
         },
         {
           "id": "cli",
@@ -29,71 +29,21 @@
           "description": "通过应用用例完成初始化、导入、同步、匹配、查询与诊断，复用内核业务规则。"
         },
         {
-          "id": "worker",
-          "kind": "entry",
-          "title": "后台 Worker",
+          "id": "task-runtime",
+          "kind": "infra",
+          "title": "公共任务运行时",
           "subtitle": "任务 · 租约 · 重试",
-          "path": "apps/worker",
+          "path": "packages/common/src/tasks",
           "x": 30,
           "y": 470,
-          "description": "消费持久化任务，处理官网同步、画像提取、匹配重算、简历导出和面经研究。失败可退避重试，外部调用在短事务之外执行。"
-        },
-        {
-          "id": "application",
-          "kind": "core",
-          "title": "任务与业务编排",
-          "subtitle": "同步 · 画像 · 匹配 · 准备",
-          "path": "packages/application",
-          "x": 300,
-          "y": 280,
-          "description": "组织来源同步、简历画像、匹配与面试准备用例，并通过持久化任务协调后台执行。图中展示运行时协作；代码仍依赖应用端口，由入口装配具体实现，不直接导入数据库或模型供应商。"
-        },
-        {
-          "id": "capabilities",
-          "kind": "core",
-          "title": "面试准备与简历制作",
-          "subtitle": "项目拷打 · 模板编辑 · 导出",
-          "path": "packages",
-          "x": 300,
-          "y": 470,
-          "description": "基于结构化个人资料建立项目准备档案、组织面经审核和简历模板草稿。应用用例复用 resume-template 等共享能力，耗时导出由 Worker 执行。"
-        },
-        {
-          "id": "sync-engine",
-          "kind": "contract",
-          "title": "职位同步引擎",
-          "subtitle": "采集 · 标准化 · 去重 · 状态维护",
-          "path": "packages/source-core",
-          "x": 570,
-          "y": 90,
-          "description": "协调企业官网适配器读取岗位，统一字段、去重并维护新增、变更与下架状态。原始记录、修订和同步进度通过仓储写入 SQLite；来源限制与失败按规则处理。"
-        },
-        {
-          "id": "resume-matching",
-          "kind": "contract",
-          "title": "简历解析与职位匹配",
-          "subtitle": "文本 / OCR · 画像 · 评分",
-          "path": "packages/resume",
-          "x": 570,
-          "y": 280,
-          "description": "resume 提取 PDF、DOCX 和图片文本，形成可校对的经历、项目与技能；matching 将个人画像与职位进行确定性过滤、评分和解释。领域模型负责数据校验与业务规则，持久化由应用层通过仓储端口完成。"
-        },
-        {
-          "id": "ai-engine",
-          "kind": "contract",
-          "title": "AI 处理引擎",
-          "subtitle": "画像提取 · 语义分析 · 面试提问",
-          "path": "packages/agent-core",
-          "x": 570,
-          "y": 470,
-          "description": "组织模型请求、校验结构化结果并记录执行状态，用于画像提取、语义判断和面试问题等能力。模型请求通过 llm 适配器发出，不在数据库事务中执行；AI 不可用不应抹去确定性结果。"
+          "description": "由 CLI/Web 装配各业务模块任务处理器，统一领取、租约、重试与取消；没有独立 Worker 入口。"
         },
         {
           "id": "persistence",
           "kind": "infra",
           "title": "数据库与本地文件",
           "subtitle": "SQLite · 简历文件 · 日志",
-          "path": "packages/db",
+          "path": "packages/common/src/persistence",
           "x": 840,
           "y": 90,
           "description": "SQLite 保存职位、画像版本、任务和面试记录；简历文件、导出产物及日志保存在配置的数据目录，默认 var/。应用通过仓储端口访问，网络与模型调用在短事务之外完成。"
@@ -103,79 +53,118 @@
           "kind": "infra",
           "title": "企业招聘官网",
           "subtitle": "官网适配器 · HTTP / 浏览器",
-          "path": "packages/sources",
+          "path": "packages/recruitment/src/sources",
           "x": 840,
           "y": 280,
-          "description": "企业公开招聘页面与接口是职位事实来源。sources 适配器负责连接和读取，必要时使用隔离浏览器；遇到登录、验证码或访问限制安全停止。"
+          "description": "招聘模块接入公开官网与平台，统一来源、职位和同步事实；访问限制在连接器边界安全处理。"
         },
         {
           "id": "models",
           "kind": "infra",
           "title": "模型服务",
           "subtitle": "OpenAI 兼容 / Anthropic · 可选",
-          "path": "packages/llm",
+          "path": "packages/common/src/models",
           "x": 840,
           "y": 470,
-          "description": "按用户配置提供模型推理能力，通过 llm 适配器接入。用于画像、语义分析与面试准备，系统不训练或部署自有大模型。"
+          "description": "按环境配置接入 OpenAI 兼容和 Anthropic 等协议，业务 Prompt 归所属模块；模型调用在数据库事务之外。"
+        },
+        {
+          "id": "recruitment",
+          "kind": "core",
+          "title": "recruitment · 招聘",
+          "subtitle": "来源 · 平台 · 邮箱 · 职位流程",
+          "path": "packages/recruitment",
+          "x": 300,
+          "y": 90,
+          "description": "拥有招聘信息、公司、职位修订、申请流程与连接器，公开只读查询快照；仅依赖 common。"
+        },
+        {
+          "id": "user",
+          "kind": "core",
+          "title": "user · 个人资料",
+          "subtitle": "画像 · 简历 · 面试准备",
+          "path": "packages/user",
+          "x": 300,
+          "y": 470,
+          "description": "拥有个人资料、画像版本、简历与面试准备，提供只读用户快照；仅依赖 common。"
+        },
+        {
+          "id": "matching",
+          "kind": "core",
+          "title": "matching · 匹配",
+          "subtitle": "职位理解 · 过滤评分 · 建议",
+          "path": "packages/matching",
+          "x": 570,
+          "y": 280,
+          "description": "通过 recruitment 和 user 的公开只读端口取得输入，拥有匹配结果与建议，不直接访问两侧业务表。"
+        },
+        {
+          "id": "common",
+          "kind": "contract",
+          "title": "common · 通用运行",
+          "subtitle": "任务 · Agent · 配置 · 存储机制",
+          "path": "packages/common",
+          "x": 570,
+          "y": 470,
+          "description": "提供日志、身份与时间、配置、任务调度、Agent/模型运行以及 SQLite 连接和备份等通用能力，不依赖业务模块。"
         }
       ],
       "edges": [
         {
           "from": "web",
-          "to": "application",
-          "label": "用户操作"
+          "to": "recruitment",
+          "label": "招聘查询"
+        },
+        {
+          "from": "web",
+          "to": "user",
+          "label": "个人工作台"
         },
         {
           "from": "cli",
-          "to": "application",
-          "label": "命令调用"
+          "to": "matching",
+          "label": "查询与匹配"
         },
         {
-          "from": "worker",
-          "to": "application",
-          "label": "执行任务"
+          "from": "task-runtime",
+          "to": "common",
+          "label": "租约与执行"
         },
         {
-          "from": "application",
-          "to": "sync-engine",
-          "label": "同步职位"
+          "from": "matching",
+          "to": "recruitment",
+          "label": "职位快照"
         },
         {
-          "from": "application",
-          "to": "resume-matching",
-          "label": "解析评分"
+          "from": "matching",
+          "to": "user",
+          "label": "画像快照"
         },
         {
-          "from": "application",
-          "to": "ai-engine",
-          "label": "语义处理"
+          "from": "matching",
+          "to": "common",
+          "label": "通用运行"
         },
         {
-          "from": "application",
-          "to": "capabilities",
-          "label": "准备制作"
-        },
-        {
-          "from": "sync-engine",
-          "to": "persistence",
-          "label": "保存职位"
-        },
-        {
-          "from": "sync-engine",
+          "from": "recruitment",
           "to": "sources",
-          "label": "读取官网",
-          "labelDy": -22
+          "label": "采集招聘"
         },
         {
-          "from": "resume-matching",
-          "to": "persistence",
-          "label": "读写资料",
-          "labelDy": 22
-        },
-        {
-          "from": "ai-engine",
+          "from": "common",
           "to": "models",
           "label": "模型调用"
+        },
+        {
+          "from": "recruitment",
+          "to": "persistence",
+          "label": "招聘仓储"
+        },
+        {
+          "from": "user",
+          "to": "persistence",
+          "label": "用户仓储",
+          "labelDy": 22
         }
       ]
     },
@@ -190,7 +179,7 @@
           "kind": "entry",
           "title": "导入简历",
           "subtitle": "PDF · DOCX · JPEG · PNG",
-          "path": "packages/resume",
+          "path": "packages/user",
           "x": 30,
           "y": 280,
           "description": "读取简历文件并提取文本，图片可通过 OCR 识别；后台画像提取完成后仍需要人工检查。"
@@ -200,7 +189,7 @@
           "kind": "entry",
           "title": "同步企业官网",
           "subtitle": "实习 · 校招 · 社招",
-          "path": "packages/sources",
+          "path": "packages/recruitment",
           "x": 30,
           "y": 470,
           "description": "对支持的官网渠道执行任务化采集，限速、去重并保留可追溯的来源信息。具体覆盖以来源支持矩阵为准。"
@@ -210,7 +199,7 @@
           "kind": "core",
           "title": "个人资料",
           "subtitle": "解析 · 校对 · 手动编辑",
-          "path": "packages/application",
+          "path": "packages/user",
           "x": 300,
           "y": 280,
           "description": "将简历转换为可编辑的经历、项目、技能等结构化信息，保存画像版本；人工锁定字段避免被后续解析覆盖。"
@@ -220,7 +209,7 @@
           "kind": "core",
           "title": "可追溯职位池",
           "subtitle": "标准化 · 修订 · 状态维护",
-          "path": "packages/source-core",
+          "path": "packages/recruitment",
           "x": 300,
           "y": 470,
           "description": "统一公司、岗位、地点等字段，保存原始记录与修订。职位消失时按规则维护 stale/closed 状态，不把部分采集失败误判为下架。"
@@ -240,7 +229,7 @@
           "kind": "contract",
           "title": "简历制作与导出",
           "subtitle": "模板草稿 · 预览 · PDF / HTML",
-          "path": "packages/resume-template",
+          "path": "packages/user",
           "x": 570,
           "y": 280,
           "description": "由公开投递字段派生模板草稿，编辑不会反向修改画像。Worker 使用共享模板和 Playwright 生成 PDF。"
@@ -260,7 +249,7 @@
           "kind": "core",
           "title": "项目经历/工作经历",
           "subtitle": "来自个人资料 · 经历整理",
-          "path": "packages/application",
+          "path": "packages/user",
           "x": 300,
           "y": 90,
           "description": "项目经历与工作经历来自简历解析后的个人资料，也可由用户手动编辑。当前项目拷打从其中的项目条目建立准备档案，额外项目文档和面经可在后续补充。"
@@ -270,7 +259,7 @@
           "kind": "contract",
           "title": "面试准备档案",
           "subtitle": "基于项目建立 · 可补充文档",
-          "path": "packages/application",
+          "path": "packages/user",
           "x": 570,
           "y": 90,
           "description": "从个人资料中选择简历项目建立稳定档案，围绕项目快照开展拷打与练习。可另外上传项目 Markdown 资料、导入个人面经或审核公开面经；这些补充材料不是从简历自动生成的。"

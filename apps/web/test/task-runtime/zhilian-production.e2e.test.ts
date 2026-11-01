@@ -1,0 +1,357 @@
+import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import path from 'node:path';
+import { expect, it, vi } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import {
+  ZhilianCdpSessionProvider,
+  Job51CdpSessionProvider,
+  Job51HttpSession,
+  ZhilianCampusHttpSession,
+  ZhilianSearchHttpSession,
+  type ZhilianSearchTemplates,
+} from '@jobhunter/recruitment/platform-connectors';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
+import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
+import { SqliteJobQueryRepository } from '@jobhunter/recruitment/persistence/job-query-repository';
+import {
+  bossResultSchema,
+  createPlatformTaskHandler,
+} from '@jobhunter/recruitment/platform-application/platforms';
+import { HandlerRegistry, TaskService } from '@jobhunter/common/tasks';
+import { WebPlatformService } from '@jobhunter/recruitment/platform-application/web-platforms';
+import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
+import { createProductionTaskApplication } from '../../src/server/task-runtime.js';
+
+/** 子进程不继承 Vitest 注入的相对 BASE_URL，确保 CLI 使用完整的模型默认地址。 */
+async function execute(
+  file: string,
+  args: readonly string[],
+): Promise<{ stdout: string; stderr: string }> {
+  return promisify(execFile)(file, [...args], { env: { ...process.env, BASE_URL: '' } });
+}
+
+const searchFixture: {
+  readonly templates: ZhilianSearchTemplates;
+  readonly row: unknown;
+  readonly detail: unknown;
+} = {
+  templates: {
+    list: {
+      url: 'https://fe-api.zhaopin.com/c/i/search/positions?at=test-at&rt=test-rt&platform=13&version=0.0.0',
+      headers: { 'x-zp-platform': '13', 'x-zp-business-system': '1' },
+      body: JSON.stringify({
+        S_SOU_FULL_INDEX: '示例岗位',
+        S_SOU_WORK_CITY: '101',
+        S_SOU_WORK_EXPERIENCE: '0305',
+        order: 0,
+        actionid: 'test-action',
+        pageSize: 20,
+        pageIndex: 1,
+        cvNumber: 'test-resume',
+        at: 'test-at',
+        rt: 'test-rt',
+        eventScenario: 'pcSearchedSouSearch',
+        anonymous: 0,
+        resumeNumber: 'test-resume',
+        clickFilterBlackCompany: false,
+        platform: 13,
+        version: '0.0.0',
+        sortType: 'DEFAULT',
+      }),
+    },
+    detail: {
+      url: 'https://fe-api.zhaopin.com/c/i/jobs/position-detailv3?number=TEST_JOB&at=test-at&rt=test-rt&cvNumber=test-resume&resumeNumber=test-resume&identity=1&platform=13&version=0.0.0',
+      headers: { 'x-zp-platform': '13', 'x-zp-business-system': '1' },
+    },
+  },
+  row: {
+    number: 'TEST_JOB',
+    name: '示例工程师',
+    companyNumber: 'TEST_COMPANY',
+    companyName: '示例公司',
+    workCity: '上海',
+    salary60: '面议',
+    education: '本科',
+    workingExp: '3-5年',
+  },
+  detail: {
+    code: 200,
+    apiCode: 200,
+    data: {
+      detailedPosition: {
+        positionNumber: 'TEST_JOB',
+        positionName: '示例工程师',
+        positionWorkCity: '上海',
+        positionWorkingExp: '3-5年',
+        salary: '面议',
+        education: '本科',
+        jobDesc: '<div>负责示例研发。<br><div>编写单元测试。</div></div>',
+      },
+      detailedCompany: { companyNumber: 'TEST_COMPANY', companyName: '示例公司' },
+    },
+  },
+};
+
+/** CLI 真子进程、生产装配和隔离 SQLite；只有浏览器借用及上游响应为合成数据。 */
+it.each(['campus', 'search', '51job'] as const)(
+  'runs Zhilian %s CLI through production Worker, unified jobs and provider-bound Web projection',
+  async (mode) => {
+    const provider = mode === '51job' ? '51job' : 'zhilian';
+    const externalId = mode === '51job' ? '100' : mode === 'search' ? 'TEST_JOB' : 'CC_TEST';
+    const root = { path: await mkdtemp(path.join(tmpdir(), 'zhilian-production-')) };
+    const auth = { at: 'fixture-secret-at', rt: 'fixture-secret-rt', d: 'fixture-secret-d' };
+    let now = 0;
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        Response.json({
+          statusCode: 200,
+          data: {
+            isEndPage: 1,
+            list: [
+              {
+                number: 'CC_TEST',
+                name: '研发实习生',
+                companyNumber: 'KA_TEST',
+                companyName: '测试公司',
+                workCity: '上海',
+                salary60: '面议',
+                education: '本科',
+                workingExp: '',
+              },
+            ],
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          statusCode: 200,
+          data: {
+            positionDetail: {
+              positionNumber: 'CC_TEST',
+              positionName: '研发实习生',
+              jobDesc: '<p>参与研发。</p><ol><li>编写测试。</li></ol>',
+              positionWorkCity: '上海',
+              positionWorkingExp: '',
+              salary60: '面议',
+              education: '本科',
+            },
+            companyDetail: { companyNumber: 'KA_TEST', companyName: '测试公司' },
+          },
+        }),
+      );
+    const search = searchFixture;
+    if (mode === 'search')
+      fetcher
+        .mockReset()
+        .mockResolvedValueOnce(
+          Response.json({
+            code: 200,
+            apiCode: 200,
+            data: {
+              statusCode: 200,
+              isVerification: 0,
+              count: 1,
+              isEndPage: 1,
+              list: [search.row],
+            },
+          }),
+        )
+        .mockResolvedValueOnce(Response.json(search.detail));
+    if (mode === '51job')
+      fetcher.mockReset().mockResolvedValueOnce(
+        Response.json({
+          status: '1',
+          resultbody: {
+            job: {
+              totalCount: 1,
+              items: [
+                {
+                  jobId: '100',
+                  coId: '200',
+                  jobName: '开发工程师',
+                  companyName: '测试公司',
+                  jobAreaString: '上海',
+                  provideSalaryString: '面议',
+                  workYearString: '',
+                  degreeString: '本科',
+                  jobHref: 'https://jobs.51job.com/shanghai/100.html?req=private',
+                  jobDescribe: '参与研发并编写测试。',
+                },
+              ],
+            },
+          },
+        }),
+      );
+    const job51 = new Job51HttpSession({ fetch: fetcher });
+    if (mode === '51job')
+      job51.offer({
+        url: 'https://we.51job.com/api/job/search-pc?api_key=51job&pageNum=1&pageSize=20',
+        headers: { cookie: 'fixture-cookie' },
+      });
+    const connect = vi
+      .spyOn(
+        mode === '51job' ? Job51CdpSessionProvider.prototype : ZhilianCdpSessionProvider.prototype,
+        'connect',
+      )
+      .mockImplementation(() =>
+        Promise.resolve(
+          mode === '51job'
+            ? job51
+            : mode === 'search'
+              ? new ZhilianSearchHttpSession({
+                  templates: search.templates,
+                  fetch: fetcher,
+                  now: () => (now += 5001),
+                })
+              : new ZhilianCampusHttpSession({
+                  fetch: fetcher,
+                  now: () => (now += 30_001),
+                  template: {
+                    url: 'https://cgate.zhaopin.com/positionbusiness/searchRecommendCampus/searchRecommendCampusPcSubject',
+                    headers: {
+                      'x-zp-at': auth.at,
+                      'x-zp-rt': auth.rt,
+                      'x-zp-platform': '14',
+                      'x-zp-business-system': '40',
+                    },
+                    body: JSON.stringify({
+                      ...auth,
+                      identity: '1',
+                      filterMinSalary: 1,
+                      resumeNumber: 'fixture',
+                      subjectType: 1,
+                      eventScenario: 'campusPcRecommend',
+                      pageIndex: 1,
+                      pageSize: 20,
+                      browsedJobNumbers: '',
+                      clickedJobNumbers: [],
+                      channel: 'xiaoyuan',
+                      platform: '14',
+                      version: '0.0.0',
+                    }),
+                  },
+                }),
+        ),
+      );
+    const worker = createProductionTaskApplication({ dataRoot: root.path });
+    const db = openSqliteDatabase({ dataRoot: root.path });
+    const queue = new SqliteTaskRepository(db.client);
+    const registry = new HandlerRegistry();
+    for (const key of ['boss', 'zhilian', '51job'] as const)
+      registry.register(
+        createPlatformTaskHandler(key, {
+          execute: () => Promise.reject(new Error('Publisher only')),
+        }),
+      );
+    const tasks = new TaskService(
+      { queue, ids: new SystemIdGenerator(), clock: { now: () => utcInstant(Date.now()) } },
+      registry,
+    );
+    const web = new WebPlatformService(
+      new SqlitePlatformRepository(db.client, provider),
+      tasks,
+      provider,
+    );
+    const boss = new WebPlatformService(new SqlitePlatformRepository(db.client), tasks);
+    const cli = (
+      args: string[],
+      selectedProvider = provider as string,
+    ): Promise<{ stdout: string; stderr: string }> =>
+      execute(process.execPath, [
+        path.resolve(import.meta.dirname, '../../../cli/dist/platform-main.js'),
+        '--data-root',
+        root.path,
+        '--provider',
+        selectedProvider,
+        ...args,
+      ]);
+    /** 发布和消费同一真实任务，不直接写入业务职位。 */
+    const run = async (args: string[]): Promise<ReturnType<typeof bossResultSchema.parse>> => {
+      const submitted = JSON.parse((await cli(args)).stdout) as { task: { id: string } };
+      expect(await worker.engine.runOnce(`platform.${provider}`)).toBe(true);
+      const task = queue.get(parseId(submitted.task.id, 'Task'));
+      expect(task?.status).toBe('succeeded');
+      expect(
+        (JSON.parse((await cli(['result', submitted.task.id])).stdout) as { id: string }).id,
+      ).toBe(submitted.task.id);
+      await expect(cli(['result', submitted.task.id], 'boss')).rejects.toThrow();
+      return bossResultSchema.parse(task?.result);
+    };
+    try {
+      // 1、独立连接与批次获取；同一任务补齐完整正文才写入正式职位。
+      const beforeBoss = boss.snapshot();
+      const { generation } = await run([
+        'connect',
+        '--port-file',
+        '/fixture/DevToolsActivePort',
+        '--target-id',
+        'fixture',
+      ]);
+      const batch = await run(['next', '--generation', String(generation)]);
+      expect(batch.candidates).toHaveLength(1);
+      expect(web.snapshot().batch?.candidates).toHaveLength(1);
+      expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(1);
+      expect(batch.savedCount).toBe(1);
+      // 2、无需单条详情命令，统一查询直接读取自动入库的职位。
+      const savedJobId = db.client
+        .prepare('SELECT id FROM jobs WHERE external_job_id=?')
+        .pluck()
+        .get(externalId) as string;
+      expect(
+        new SqliteJobQueryRepository(db.client, new SqliteJobScoreReader(db.client)).get(
+          parseId(savedJobId, 'Job'),
+        ),
+      ).not.toBeNull();
+      expect(web.snapshot().batch?.savedCount).toBe(1);
+      expect(boss.snapshot()).toEqual(beforeBoss);
+      expect(connect).toHaveBeenCalledTimes(1);
+      expect(fetcher).toHaveBeenCalledTimes(mode === '51job' ? 1 : 2);
+      // 3、隔离、凭据与官网生命周期不变量必须同时成立。
+      for (const table of [
+        'jobs',
+        'job_revisions',
+        'job_observations',
+        'tasks',
+        'platform_connections',
+      ])
+        for (const secret of [
+          'fixture-secret',
+          'fixture-at',
+          'fixture-rt',
+          'fixture-resume',
+          'fixture-cookie',
+        ])
+          expect(JSON.stringify(db.client.prepare(`SELECT * FROM ${table}`).all())).not.toContain(
+            secret,
+          );
+      expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
+      expect(db.client.prepare('SELECT missing_count FROM jobs').pluck().get()).toBe(0);
+      expect(db.client.pragma('foreign_key_check')).toEqual([]);
+      await run(['disconnect', '--generation', String(generation)]);
+      expect(web.snapshot().connection?.status).toBe('disconnected');
+      expect(boss.snapshot()).toEqual(beforeBoss);
+      // 3.a、猎聘已受支持；跨渠道命令只能进入猎聘队列，不得改变当前渠道或 BOSS 状态。
+      const liepinTask = JSON.parse(
+        (await cli(['next', '--generation', '1'], 'liepin')).stdout,
+      ) as {
+        task: { id: string };
+      };
+      expect(queue.list({ taskType: 'platform.liepin', limit: 10 }).map((task) => task.id)).toEqual(
+        [parseId(liepinTask.task.id, 'Task')],
+      );
+      expect(web.snapshot().connection?.status).toBe('disconnected');
+      expect(boss.snapshot()).toEqual(beforeBoss);
+    } finally {
+      await worker.close();
+      db.close();
+      connect.mockRestore();
+      await rm(root.path, { recursive: true, force: true });
+    }
+  },
+  30_000,
+);

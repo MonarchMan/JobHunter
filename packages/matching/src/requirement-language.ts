@@ -1,4 +1,4 @@
-import type { NormalizedJob } from '@jobhunter/domain';
+import type { NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 
 /** 条件树保存原文与逻辑关系；未实现完整自然语言语法，歧义由消费者保留未知。 */
 export type RequirementNode =

@@ -4,8 +4,8 @@ import {
   canonicalJobFamilies,
   canonicalJobSubfamilies,
   normalizeJobTaxonomy,
-  type CandidateProfileData,
-} from '@jobhunter/domain';
+} from '@jobhunter/recruitment/domain';
+import type { CandidateProfileData } from '@jobhunter/user/domain';
 import type { ReactElement, ReactNode, SyntheticEvent } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -1238,7 +1238,7 @@ export function ResumeEditor({
           >
             预览
           </button>
-          <button type="submit" disabled={busy}>
+          <button type="submit" aria-label="保存简历" disabled={busy}>
             {busy ? '正在保存…' : '保存'}
           </button>
         </div>

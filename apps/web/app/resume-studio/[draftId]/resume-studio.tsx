@@ -1,6 +1,6 @@
 'use client';
 
-import type { ResumeDraftDetail } from '@jobhunter/application/profile';
+import type { ResumeDraftDetail } from '@jobhunter/user/profile';
 import {
   renderResumeHtml,
   addResumeSection,
@@ -13,7 +13,7 @@ import {
   type ResumeDocumentContent,
   type ResumeSectionId,
   type ResumeTextStyle,
-} from '@jobhunter/resume-template';
+} from '@jobhunter/user/templates';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../src/client/csrf.js';

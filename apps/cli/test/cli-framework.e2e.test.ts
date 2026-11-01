@@ -1,10 +1,9 @@
+import type { EnqueueTaskResult, TaskRecord } from '@jobhunter/common/tasks';
 import type {
-  EnqueueTaskResult,
   SourceChannelOverview,
   SourceOverview,
-  TaskRecord,
-} from '@jobhunter/application';
-import { parseId, utcInstant } from '@jobhunter/domain';
+} from '@jobhunter/recruitment/ports/source-management';
+import { parseId, utcInstant } from '@jobhunter/common/domain';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -98,21 +97,17 @@ describe('CLI framework', () => {
     expect(body).not.toContain('private implementation detail');
   });
 
-  it('starts and stops the composed worker with progress on stderr', async () => {
+  it('rejects the removed standalone worker command', async () => {
     const output = memoryIo();
-    const start = vi.fn(() => Promise.resolve());
     const fixture: CliContainer = {
       version: { get: () => ({ app: 'test' }) },
-      worker: { start },
       close: () => Promise.resolve(),
     };
 
     await expect(
       runCli({ argv: ['worker', 'start'], container: fixture, io: output.io }),
-    ).resolves.toBe(cliExitCode.success);
-    expect(start).toHaveBeenCalledOnce();
-    expect(output.stdout.join('')).toBe('Worker 已停止。\n');
-    expect(output.stderr.join('')).toContain('Worker 已启动');
+    ).resolves.toBe(cliExitCode.usage);
+    expect(output.stderr.join('')).toContain('worker');
   });
 
   it('maps a completed partial source synchronization to exit code 4', async () => {

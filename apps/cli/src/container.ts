@@ -1,76 +1,87 @@
+import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
+import { SqliteMatchingJobReader } from '@jobhunter/recruitment/persistence/matching-job-reader';
+import { SqliteProfileIdentityReader } from '@jobhunter/user/persistence/profile-identity-reader';
+import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
 import {
   CandidateProfileService,
-  BackupService,
-  createCleanupTaskHandler,
-  createExperienceResearchTaskHandler,
   createResumeProfileTaskHandler,
   createResumePolishTaskHandler,
+  ProfileInspectionService,
+  ProfileManagementService,
+  ResumeImportService,
+  ResumeProfileWorkflow,
+} from '@jobhunter/user/profile';
+import { BackupService } from '@jobhunter/common/operations/backup-service';
+import { createCleanupTaskHandler } from '@jobhunter/common/operations/cleanup-handler';
+import {
+  createExperienceResearchTaskHandler,
+  createProjectAnswerDigestTaskHandler,
+  createProjectQuestionTaskHandler,
+} from '@jobhunter/user/interview';
+import {
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createJobUnderstandingTaskHandler,
   createJobAdviceTaskHandler,
-  createProjectAnswerDigestTaskHandler,
-  createProjectQuestionTaskHandler,
-  dataRootCheck,
-  InitializationService,
-  modelConfigurationCheck,
-  nodeRuntimeCheck,
-  OfflineDoctorService,
-  type AppConfig,
-  type DoctorReport,
-  type InitializationResult,
-  HandlerRegistry,
-  JobExportService,
-  JobQueryService,
   MatchWorkflowService,
-  ProfileInspectionService,
-  ProfileManagementService,
-  ProfileJobIntakePolicy,
-  ResumeImportService,
-  ResumeProfileWorkflow,
+} from '@jobhunter/matching/application';
+import { dataRootCheck, nodeRuntimeCheck } from '@jobhunter/common/operations/offline-checks';
+import {
+  InitializationService,
+  type InitializationResult,
+} from '@jobhunter/common/operations/initialization-service';
+import {
+  modelConfigurationCheck,
+  OfflineDoctorService,
+  type DoctorReport,
+} from '@jobhunter/common/operations/doctor-service';
+import type { AppConfig } from '@jobhunter/common/config/index';
+import {
+  HandlerRegistry,
   ScheduleService,
-  SourceManagementService,
-  SourceScheduleReconciliationService,
-  SystemSettingsService,
   TaskService,
-  TaskWaitService,
-  createSourceSyncTaskHandler,
   type EnqueueTaskResult,
-  type SourceChannelOverview,
   type TaskListFilter,
   type TaskRecord,
-} from '@jobhunter/application';
+} from '@jobhunter/common/tasks';
+import { JobExportService, JobQueryService } from '@jobhunter/recruitment/jobs/job-query-service';
+import { ProfileJobIntakePolicy } from '@jobhunter/matching/profile-job-intake-policy';
 import {
-  NodeResumeFileReader,
+  SourceManagementService,
+  TaskWaitService,
+} from '@jobhunter/recruitment/source-management-service';
+import { SourceScheduleReconciliationService } from '@jobhunter/recruitment/sync/source-schedule-reconciliation-service';
+import { SystemSettingsService } from '@jobhunter/recruitment/settings';
+import { createSourceSyncTaskHandler } from '@jobhunter/recruitment/sync/job-sync-handler';
+import type { SourceChannelOverview } from '@jobhunter/recruitment/ports/source-management';
+import { NodeResumeFileReader } from '@jobhunter/user/persistence/resume-file-reader';
+import {
   openSqliteDatabase,
-  sqliteFileDoctorCheck,
-  SqliteAgentRunStore,
-  SqliteBackupOperations,
-  SqliteArtifactStore,
-  SqliteCandidateProfileRepository,
-  SqliteSourceManagementRepository,
+  type SqliteDatabaseHandle,
+} from '@jobhunter/common/persistence/connection';
+import { sqliteFileDoctorCheck } from '@jobhunter/common/persistence/doctor-check';
+import { SqliteAgentRunStore } from '@jobhunter/common/persistence/agent-runs';
+import { SqliteBackupOperations } from '@jobhunter/common/persistence/backup-operations';
+import { SqliteArtifactStore } from '@jobhunter/user/persistence/artifact-store';
+import { SqliteCandidateProfileRepository } from '@jobhunter/user/persistence';
+import { SqliteSourceManagementRepository } from '@jobhunter/recruitment/persistence/source-management-repository';
+import {
   SqliteCompanyLookupRepository,
   SqliteJobQueryRepository,
-  SqliteInterviewTaskRetryCoordinator,
-  SqliteMatchingRepository,
-  SqliteResumeDocumentRepository,
-  SqliteSystemInitializer,
-  SqliteTaskRepository,
-  SqliteSettingsStore,
-  type SqliteDatabaseHandle,
-  NodeJobExportFileStore,
-} from '@jobhunter/db';
-import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/domain';
-import { hashCanonical } from '@jobhunter/agent-core';
-import { createConfiguredModelClient } from '@jobhunter/llm';
+} from '@jobhunter/recruitment/persistence/job-query-repository';
+import { SqliteInterviewTaskRetryCoordinator } from '@jobhunter/user/persistence/interview-task-retry-coordinator';
+import { SqliteMatchingRepository } from '@jobhunter/matching/persistence';
+import { SqliteResumeDocumentRepository } from '@jobhunter/user/persistence/resume-document-repository';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
+import { SqliteSettingsStore } from '@jobhunter/recruitment/persistence/settings';
+import { NodeJobExportFileStore } from '@jobhunter/recruitment/persistence/node-job-export-file-store';
+import { SqliteSystemInitializer } from './initializer.js';
+import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
+import { hashCanonical } from '@jobhunter/common/agent';
+import { createConfiguredModelClient } from '@jobhunter/common/models';
 import { jobAdviceAgentDefinition } from '@jobhunter/matching';
-import { createSafeLogger } from '@jobhunter/observability';
-import { firstPartySourceCatalog } from '@jobhunter/sources';
-import {
-  createWorkerSourcePageClient,
-  createProductionWorkerApplication,
-  runWorkerProcess,
-} from '@jobhunter/worker';
+import { firstPartySourceCatalog } from '@jobhunter/recruitment';
+import { createConfiguredTaskApplication } from './task-runtime.js';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -94,7 +105,6 @@ export interface CliContainer {
     cancel(taskId: string): ReturnType<TaskService['cancel']>;
     wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
   };
-  readonly worker?: { start(): Promise<void> };
   readonly job?: {
     list(input: Parameters<JobQueryService['list']>[0]): ReturnType<JobQueryService['list']>;
     show(id: string, profileVersionId?: string): ReturnType<JobQueryService['show']>;
@@ -217,7 +227,10 @@ export function createLocalCliContainer(
       { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
       registry,
     );
-    const profileRepository = new SqliteCandidateProfileRepository(database.client);
+    const profileRepository = new SqliteCandidateProfileRepository(
+      database.client,
+      new SqliteProfileDerivedDataManager(database.client),
+    );
     const jobIntakePolicy = new ProfileJobIntakePolicy(profileRepository);
     const sources = new SourceManagementService({
       sources: new SqliteSourceManagementRepository(database.client),
@@ -233,7 +246,10 @@ export function createLocalCliContainer(
       activeChannel: () => systemSettings.get().sourceSync.channel,
       automation: () => systemSettings.get().sourceAutomation,
     }).reconcile();
-    const jobRepository = new SqliteJobQueryRepository(database.client);
+    const jobRepository = new SqliteJobQueryRepository(
+      database.client,
+      new SqliteJobScoreReader(database.client),
+    );
     const jobs = new JobQueryService({
       jobs: jobRepository,
       companies: new SqliteCompanyLookupRepository(database.client),
@@ -248,7 +264,12 @@ export function createLocalCliContainer(
       agentRuns: new SqliteAgentRunStore(database.client),
     });
     const resumeDocuments = new SqliteResumeDocumentRepository(database.client);
-    const matchingRepository = new SqliteMatchingRepository(database.client);
+    const matchingRepository = new SqliteMatchingRepository(
+      database.client,
+      new SqliteMatchingJobReader(database.client),
+      new SqliteProfileIdentityReader(database.client),
+      new SqliteAgentRunStore(database.client),
+    );
     const modelMetadata =
       config.model.modelName.value && config.model.apiKey.value
         ? createConfiguredModelClient({
@@ -308,6 +329,23 @@ export function createLocalCliContainer(
     };
     return services;
   };
+  let taskApplication: ReturnType<typeof createConfiguredTaskApplication> | undefined;
+  let taskLoop: Promise<void> | undefined;
+  const taskAbort = new AbortController();
+  /** 等待任务时启动同一套公共运行时，取消与退出均等待资源回收。 */
+  async function waitForTask(taskId: string, signal: AbortSignal): Promise<TaskRecord | null> {
+    // 1、只有等待命令启动任务消费，帮助、查询和只入队命令不启动后台工作。
+    operational();
+    taskApplication ??= createConfiguredTaskApplication(config);
+    taskLoop ??= taskApplication.engine.run(taskAbort.signal);
+    // 2、同时观察循环失败，避免后台失败后等待到超时。
+    return Promise.race([
+      operational().wait.wait(parseId(taskId, 'Task'), signal),
+      taskLoop.then(() => {
+        throw new Error('任务运行时在等待完成前停止。');
+      }),
+    ]);
+  }
   return {
     version: { get: () => ({ ...versions, node: process.versions.node }) },
     initialize: {
@@ -438,55 +476,14 @@ export function createLocalCliContainer(
         }
         return service.enqueueSync({ sourceIds: [source.id] });
       },
-      wait: (taskId, signal) => operational().wait.wait(parseId(taskId, 'Task'), signal),
+      wait: (taskId, signal) => waitForTask(taskId, signal),
     },
     task: {
       list: (filter) => operational().tasks.list(filter),
       get: (taskId) => operational().tasks.get(parseId(taskId, 'Task')),
       retry: (taskId) => operational().tasks.retryFailed(parseId(taskId, 'Task'), ids.generate()),
       cancel: (taskId) => operational().tasks.cancel(parseId(taskId, 'Task')),
-      wait: (taskId, signal) => operational().wait.wait(parseId(taskId, 'Task'), signal),
-    },
-    worker: {
-      start: async () => {
-        operational();
-        const logger = createSafeLogger({
-          level: config.logLevel.value,
-          logFile: path.join(config.bootstrap.dataRoot.value, 'logs', 'jobhunter.log'),
-        });
-        const pageClient = createWorkerSourcePageClient();
-        try {
-          await runWorkerProcess(
-            createProductionWorkerApplication({
-              dataRoot: config.bootstrap.dataRoot.value,
-              pollIntervalMs: config.worker.pollIntervalMs.value,
-              maxConcurrentNetworkTasks: config.worker.maxConcurrentNetworkTasks.value,
-              taskTypeConcurrency: config.worker.taskTypeConcurrency.value,
-              logger,
-              pageClient,
-              ...(config.model.modelName.value && config.model.apiKey.value
-                ? {
-                    model: {
-                      provider: config.model.provider.value,
-                      baseUrl: config.model.baseUrl.value,
-                      model: config.model.modelName.value,
-                      apiKey: config.model.apiKey.value.reveal(),
-                      inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value,
-                      outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value,
-                      costCurrency: config.model.costCurrency.value,
-                    },
-                  }
-                : {}),
-            }),
-          );
-        } finally {
-          try {
-            await pageClient.close();
-          } finally {
-            await logger.close();
-          }
-        }
-      },
+      wait: (taskId, signal) => waitForTask(taskId, signal),
     },
     job: {
       list: (input) => operational().jobs.list(input),
@@ -507,7 +504,7 @@ export function createLocalCliContainer(
       scoreForJob: (input) => operational().matches.runForJob(input),
       list: (input) => operational().matches.list(input),
       show: (id) => operational().matches.show(id),
-      wait: (taskId, signal) => operational().wait.wait(parseId(taskId, 'Task'), signal),
+      wait: (taskId, signal) => waitForTask(taskId, signal),
     },
     backup: {
       create: (destination) => backups.create(destination),
@@ -520,9 +517,18 @@ export function createLocalCliContainer(
           ...(input.confirmationToken ? { confirmationToken: input.confirmationToken } : {}),
         }),
     },
-    close: () => {
-      database?.close();
-      return Promise.resolve();
+    close: async () => {
+      // 1、先停止任务消费并等待清理，再关闭命令查询连接。
+      taskAbort.abort();
+      try {
+        await taskLoop;
+      } finally {
+        try {
+          await taskApplication?.close();
+        } finally {
+          database?.close();
+        }
+      }
     },
   };
 }

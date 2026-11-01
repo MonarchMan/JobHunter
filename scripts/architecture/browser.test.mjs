@@ -23,22 +23,22 @@ try {
   await page.context().setOffline(true);
   await page.goto(new URL('../../docs/arch/image/index.html', import.meta.url).href);
   await page.locator('.node').first().waitFor();
-  assert.equal(await page.locator('.node').count(), 11);
+  assert.equal(await page.locator('.node').count(), 10);
   await page.screenshot({ path: `${output}/desktop.png`, fullPage: true, animations: 'disabled' });
-  await page.getByRole('button', { name: '任务与业务编排', exact: false }).click();
-  assert.equal(await page.locator('#detail-title').textContent(), '任务与业务编排');
+  await page.getByRole('button', { name: 'matching · 匹配', exact: false }).click();
+  assert.equal(await page.locator('#detail-title').textContent(), 'matching · 匹配');
   assert.ok((await page.locator('.edge.highlight').count()) >= 3);
   // 2. 搜索入口已移除，取消选择与键盘关系导航仍完整可用。
   assert.equal(await page.getByRole('searchbox').count(), 0);
   assert.equal(await page.getByRole('button', { name: '系统架构图', exact: true }).count(), 1);
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.node[aria-pressed="true"]').count(), 0);
-  const node = page.locator('.node[data-id="worker"]');
+  const node = page.locator('.node[data-id="task-runtime"]');
   await node.focus();
   await page.keyboard.press('Enter');
   assert.equal(await node.getAttribute('aria-pressed'), 'true');
   await page.locator('#relations button').first().click();
-  assert.equal(await page.locator('#detail-title').textContent(), '任务与业务编排');
+  assert.equal(await page.locator('#detail-title').textContent(), 'common · 通用运行');
   await page.getByRole('button', { name: '取消选择' }).click();
   const initialZoom = await page.locator('#zoom-value').textContent();
   await page.getByRole('button', { name: '放大', exact: true }).click();

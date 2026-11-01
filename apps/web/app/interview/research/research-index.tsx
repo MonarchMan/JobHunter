@@ -5,7 +5,7 @@ import type {
   CommunityExperienceSummary,
   ExperienceResearchDetail,
   ExperienceResearchRequestSummary,
-} from '@jobhunter/application/contracts';
+} from '@jobhunter/user/interview';
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement, SyntheticEvent } from 'react';
 import { useRef, useState } from 'react';

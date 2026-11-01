@@ -1,5 +1,5 @@
 import { runLocalCli, type CliIo } from '../src/index.js';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';

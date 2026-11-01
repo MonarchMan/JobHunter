@@ -1,7 +1,9 @@
-import { openSqliteDatabase } from '@jobhunter/db';
-import { canonicalJson, parseCandidateProfile, parseNormalizedJob } from '@jobhunter/domain';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
-import { createProductionWorkerApplication } from '@jobhunter/worker';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { canonicalJson } from '@jobhunter/common/domain';
+import { parseCandidateProfile } from '@jobhunter/user/domain';
+import { parseNormalizedJob } from '@jobhunter/recruitment/domain';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
+import { createProductionTaskApplication } from '../src/task-runtime.js';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
@@ -149,7 +151,7 @@ describe('match commands', () => {
       const taskId = (queued.body as { readonly data: { readonly task: { readonly id: string } } })
         .data.task.id;
 
-      const worker = createProductionWorkerApplication({ dataRoot, workerId: 'match-e2e' });
+      const worker = createProductionTaskApplication({ dataRoot, workerId: 'match-e2e' });
       try {
         for (let attempt = 0; attempt < 5; attempt += 1) {
           await worker.engine.runOnce('match.score-job');

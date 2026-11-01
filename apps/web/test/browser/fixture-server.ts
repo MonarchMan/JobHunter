@@ -6,19 +6,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { makeCandidateProfile, FakeModel } from '@jobhunter/testkit';
-import { openSqliteDatabase, SqliteRecruitmentMailRepository } from '@jobhunter/db';
+import { makeCandidateProfile } from '@jobhunter/user/testing';
+import { FakeModel } from '@jobhunter/common/testing';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteRecruitmentMailRepository } from '@jobhunter/recruitment/persistence/sqlite-recruitment-mail-repository';
 import { seedPlatformJobs } from '../fixtures/platform-jobs.js';
 import { browserFixtureAddress } from '../../src/server/browser-test-isolation.js';
 import { calculateDeterministicMatch, matchRulesetV2 } from '@jobhunter/matching';
-import {
-  contentHash,
-  drillCoverageDimensions,
-  parseNormalizedJob,
-  utcInstant,
-  type CandidateProfileData,
-  type NormalizedJob,
-} from '@jobhunter/domain';
+import { contentHash, utcInstant } from '@jobhunter/common/domain';
+import { parseNormalizedJob, type NormalizedJob } from '@jobhunter/recruitment/domain';
+import type { CandidateProfileData } from '@jobhunter/user/domain';
+import { drillCoverageDimensions } from '@jobhunter/user/domain';
 
 const ids = {
   company: '018f0000-0000-7000-8f00-000000000101',
@@ -493,6 +491,23 @@ async function seedFixture(dataRoot: string): Promise<void> {
         createHash('sha256').update(JSON.stringify(profile)).digest('hex'),
       );
 
+    // 全页面启动验收独占画像，避免预建草稿影响简历制作交互用例。
+    database.client
+      .prepare(
+        "INSERT INTO candidate_profiles (id,name,created_at,updated_at) VALUES (?, '页面验收画像', 4, 4)",
+      )
+      .run('018f0000-0000-7000-8000-000000000631');
+    database.client
+      .prepare(
+        "INSERT INTO profile_versions (id,profile_id,version_no,extracted_json,effective_json,locked_paths_json,content_hash,is_current,created_at) VALUES (?,?,1,?,?,'[]',?,1,4)",
+      )
+      .run(
+        '018f0000-0000-7000-8000-000000000632',
+        '018f0000-0000-7000-8000-000000000631',
+        JSON.stringify(profile),
+        JSON.stringify(profile),
+        createHash('sha256').update(JSON.stringify(profile)).digest('hex'),
+      );
     const deepProject = interviewProfile.projects[1];
     if (!deepProject) throw new Error('Deep drill browser fixture project is missing.');
     const materialText = [

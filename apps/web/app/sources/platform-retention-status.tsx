@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactElement } from 'react';
 import {
   platformRetentionSummarySchema,
   type PlatformRetentionSummary,
-} from '@jobhunter/application/platform-contracts';
+} from '@jobhunter/recruitment/platform-retention-contracts';
 
 /** 清理说明读取真实配置；页面可见时刷新本地状态，不发平台请求。 */
 export function PlatformRetentionStatus(): ReactElement {

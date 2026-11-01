@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
+import { PageHeader } from '../components/layout/page-header.js';
 import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { ProfileEditor } from './profile-editor.js';
 import { ResumeDeletion } from './resume-deletion.js';
 import { ResumeImport } from './resume-import.js';
 import { Pagination } from '../components/lists/pagination.js';
-import { webPagination } from '@jobhunter/application/contracts';
+import { webPagination } from '@jobhunter/common/web-contracts';
 import { ResumeEditor } from './resume-editor.js';
 import styles from './page.module.css';
 
@@ -35,6 +36,7 @@ export default async function ProfilePage({
   if (!selectedId) {
     return (
       <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
+        {!embedded ? <PageHeader title="个人资料" /> : null}
         <ResumeImport />
         <section className="empty-state page-empty-state" aria-labelledby="profile-empty-title">
           <span className="empty-state-icon" aria-hidden="true">
@@ -58,6 +60,7 @@ export default async function ProfilePage({
   if (!selectedProfile?.currentVersionId) {
     return (
       <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
+        {!embedded ? <PageHeader title="个人资料" /> : null}
         {selectedProfile ? <ResumeImport profileId={selectedProfile.id} /> : <ResumeImport />}
         <section className="empty-state page-empty-state" aria-labelledby="profile-pending-title">
           <span className="empty-state-icon" aria-hidden="true">
@@ -83,6 +86,7 @@ export default async function ProfilePage({
   );
   return (
     <Container id={embedded ? undefined : 'main-content'} tabIndex={embedded ? undefined : -1}>
+      {!embedded ? <PageHeader title="个人资料" /> : null}
       <ResumeImport profileId={detail.profile.id} />
       <ResumeEditor
         profileId={detail.profile.id}

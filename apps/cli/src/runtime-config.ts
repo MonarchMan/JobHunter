@@ -1,4 +1,4 @@
-import { loadRuntimeAppConfig, type AppConfig } from '@jobhunter/application';
+import { loadRuntimeAppConfig, type AppConfig } from '@jobhunter/common/config/index';
 
 /** 读取命令行选项的下一个参数。 */
 function optionValue(argv: readonly string[], name: string): string | undefined {

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server.js';
-import { isSqliteMaintenanceError } from '@jobhunter/db/maintenance';
+import { isSqliteMaintenanceError } from '@jobhunter/common/persistence/maintenance';
 
 /** 写锁等待可能先于维护触发器超时，统一返回可重试响应而非内部错误。 */
 function isDatabaseBusy(error: unknown): boolean {

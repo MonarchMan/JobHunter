@@ -1,4 +1,4 @@
-import type { NormalizedJob } from '@jobhunter/domain';
+import type { NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import type { DeterministicMatchInput, RuleOutcome } from './model.js';
 import { evaluateEligibility } from './rules.js';
 

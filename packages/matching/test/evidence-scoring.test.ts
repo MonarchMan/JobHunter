@@ -1,8 +1,5 @@
-import {
-  parseCandidateProfile,
-  parseNormalizedJob,
-  type CandidateProfileData,
-} from '@jobhunter/domain';
+import { parseCandidateProfile, type CandidateProfileData } from '@jobhunter/user/contracts';
+import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { describe, expect, it } from 'vitest';
 import {
   calculateDeterministicMatch,

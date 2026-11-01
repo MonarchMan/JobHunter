@@ -39,7 +39,7 @@ packages/mail/
 
 ```text
 apps/web ─────────────┐
-apps/worker ──────────┼─→ application ─→ domain
+CLI/Web 任务宿主 ──────────┼─→ application ─→ domain
 apps/cli ─────────────┘        │
                               ├─→ mail/core ←─ mail/connectors
                               └─→ agent-core

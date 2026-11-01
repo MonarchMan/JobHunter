@@ -1,7 +1,7 @@
 'use client';
 
-import type { CandidateProfileData } from '@jobhunter/domain';
-import type { WebResumePolishStatus } from '@jobhunter/application/contracts';
+import type { CandidateProfileData } from '@jobhunter/user/domain';
+import type { WebResumePolishStatus } from '@jobhunter/user/contracts/web';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';

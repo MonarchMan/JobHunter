@@ -1,4 +1,5 @@
-import type { CandidateProfileData, NormalizedJob } from '@jobhunter/domain';
+import type { CandidateProfileData } from '@jobhunter/user/contracts';
+import type { NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { z } from 'zod';
 import type { JobUnderstanding } from './job-understanding.js';
 

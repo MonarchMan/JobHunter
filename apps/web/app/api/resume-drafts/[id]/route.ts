@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { resumeDocumentContentSchema } from '@jobhunter/resume-template';
+import { resumeDocumentContentSchema } from '@jobhunter/user/templates';
 import { getWebContainer } from '../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../../src/server/http.js';

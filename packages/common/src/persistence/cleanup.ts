@@ -1,0 +1,160 @@
+import type {
+  CleanupCandidate,
+  CleanupFileStore,
+  CleanupRepository,
+  CleanupDataParticipant,
+  AgentReferenceReader,
+} from '../operations/cleanup-service.js';
+import { readdir, rm, stat } from 'node:fs/promises';
+import path from 'node:path';
+import type Database from 'better-sqlite3';
+import { PersistenceError } from './errors.js';
+
+/** 数据库查询结果对应的行结构。 */
+interface CandidateRow {
+  readonly id: string;
+  readonly relative_path: string | null;
+  readonly byte_size: number | null;
+  readonly created_at: number;
+}
+
+/** 查询可清理的临时文件、任务和过期运行记录。 */
+export class SqliteCleanupRepository implements CleanupRepository {
+  readonly #client: Database.Database;
+
+  public constructor(
+    client: Database.Database,
+    private readonly participants: readonly CleanupDataParticipant[],
+    private readonly references: readonly AgentReferenceReader[],
+  ) {
+    this.#client = client;
+  }
+
+  /** 执行数据库组件对外暴露的操作。 */
+  public listCandidates(
+    cutoffs: Parameters<CleanupRepository['listCandidates']>[0],
+  ): readonly CleanupCandidate[] {
+    const agentRuns = this.#client
+      .prepare(
+        `SELECT run.id, NULL AS relative_path, NULL AS byte_size, run.started_at AS created_at
+         FROM agent_runs run
+         WHERE run.status IN ('failed', 'cancelled') AND run.finished_at < ?
+`,
+      )
+      .all(cutoffs.agentRunsBefore) as CandidateRow[];
+    return [
+      ...this.participants.flatMap((participant) => participant.listCandidates(cutoffs)),
+      ...agentRuns
+        .filter((row) => !this.references.some((reader) => reader.hasAgentRunReferences(row.id)))
+        .map((row) => this.#candidate('agent_run', row)),
+    ];
+  }
+
+  /** 执行数据库组件对外暴露的操作。 */
+  public listRegisteredArtifactPaths(): readonly string[] {
+    return (
+      this.#client.prepare('SELECT relative_path FROM entities WHERE deleted_at IS NULL').all() as {
+        readonly relative_path: string;
+      }[]
+    ).map((row) => row.relative_path);
+  }
+
+  /** 执行数据库组件对外暴露的操作。 */
+  public deleteCandidates(candidates: readonly CleanupCandidate[]): void {
+    this.#client.transaction(() => {
+      // 1、所有者参与同一短事务，通用仓储只负责自己的运行记录。
+      for (const participant of this.participants) participant.deleteCandidates(candidates);
+      for (const candidate of candidates) {
+        if (candidate.kind !== 'agent_run') continue;
+        this.#client.prepare('DELETE FROM agent_runs WHERE id=?').run(candidate.id);
+        this.#client
+          .prepare("DELETE FROM events WHERE stream_type='agent_run' AND stream_id=?")
+          .run(candidate.id);
+      }
+      // 2、大量删除后请求空间补查；只登记检查，不改变清理授权与数据保留策略。
+      if (candidates.length >= 1_000) {
+        this.#client
+          .prepare(
+            `UPDATE database_maintenance SET next_check_at = 0,
+          last_daily_at = NULL WHERE id = 1`,
+          )
+          .run();
+      }
+    })();
+  }
+
+  /** 处理数据库类内部的辅助逻辑。 */
+  #candidate(kind: CleanupCandidate['kind'], row: CandidateRow): CleanupCandidate {
+    return {
+      kind,
+      id: row.id,
+      relativePath: row.relative_path,
+      bytes: row.byte_size ?? 0,
+      createdAt: row.created_at,
+    };
+  }
+}
+
+/** 在数据根目录内执行受限的临时文件删除。 */
+export class DataRootCleanupFileStore implements CleanupFileStore {
+  readonly #dataRoot: string;
+  readonly #artifactRoot: string;
+
+  public constructor(dataRoot: string) {
+    this.#dataRoot = path.resolve(dataRoot);
+    this.#artifactRoot = path.join(this.#dataRoot, 'artifacts');
+  }
+
+  /** 执行数据库组件对外暴露的操作。 */
+  public async listArtifactFiles(): ReturnType<CleanupFileStore['listArtifactFiles']> {
+    const files: { relativePath: string; bytes: number; modifiedAt: number }[] = [];
+    const visit = async (directory: string): Promise<void> => {
+      let entries;
+      try {
+        entries = await readdir(directory, { withFileTypes: true });
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return;
+        throw error;
+      }
+      for (const entry of entries) {
+        const target = path.join(directory, entry.name);
+        if (entry.isSymbolicLink()) continue;
+        if (entry.isDirectory()) await visit(target);
+        else if (entry.isFile()) {
+          const metadata = await stat(target);
+          files.push({
+            relativePath: path.relative(this.#dataRoot, target).replaceAll('\\', '/'),
+            bytes: metadata.size,
+            modifiedAt: metadata.mtimeMs,
+          });
+        }
+      }
+    };
+    await visit(this.#artifactRoot);
+    return files;
+  }
+
+  /** 执行数据库组件对外暴露的操作。 */
+  public async remove(relativePaths: readonly string[]): Promise<void> {
+    for (const relativePath of relativePaths) {
+      const target = this.#resolveArtifact(relativePath);
+      await rm(target, { force: true });
+    }
+  }
+
+  /** 处理数据库类内部的辅助逻辑。 */
+  #resolveArtifact(relativePath: string): string {
+    if (!relativePath || path.isAbsolute(relativePath)) {
+      throw new PersistenceError('ARTIFACT_PATH_INVALID', 'Cleanup path must be relative.');
+    }
+    const target = path.resolve(this.#dataRoot, relativePath);
+    const relation = path.relative(this.#artifactRoot, target);
+    if (!relation || relation.startsWith('..') || path.isAbsolute(relation)) {
+      throw new PersistenceError(
+        'ARTIFACT_PATH_INVALID',
+        'Cleanup path must remain inside the artifact root.',
+      );
+    }
+    return target;
+  }
+}

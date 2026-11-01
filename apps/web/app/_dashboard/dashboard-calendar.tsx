@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebCalendarItem } from '@jobhunter/application/contracts';
+import type { WebCalendarItem } from '@jobhunter/recruitment/contracts/web';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { z } from 'zod';
@@ -77,7 +77,7 @@ export interface DashboardCalendarProps {
   readonly timezone: string;
 }
 
-/** 工作台近期日程缩略卡片及弹窗式完整月历。 */
+/** 工作台日程缩略卡片及弹窗式完整月历。 */
 export function DashboardCalendar({
   initialItems,
   initialMonth,
@@ -148,7 +148,7 @@ export function DashboardCalendar({
             <span className={styles.titleIcon} aria-hidden="true">
               <Icon name="calendar" size={18} />
             </span>
-            <h2 id="dashboard-calendar-title">近期日程</h2>
+            <h2 id="dashboard-calendar-title">日程</h2>
           </div>
           <p>面试、笔试和测评安排</p>
         </div>

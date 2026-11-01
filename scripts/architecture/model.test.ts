@@ -42,8 +42,10 @@ await test('系统架构以实际处理模块解释协作，并明确不是代�
   const system = required(data.views.find((view) => view.id === 'system'));
   assert.equal(system.title, '系统架构图');
   assert.match(system.description, /不表示代码导入/);
-  for (const id of ['sync-engine', 'resume-matching', 'ai-engine'])
-    assert.ok(system.edges.some((edge) => edge.from === 'application' && edge.to === id));
+  for (const id of ['recruitment', 'user', 'matching', 'common'])
+    assert.ok(system.nodes.some((node) => node.id === id && node.path === `packages/${id}`));
+  for (const id of ['recruitment', 'user', 'common'])
+    assert.ok(system.edges.some((edge) => edge.from === 'matching' && edge.to === id));
   assert.ok(!system.nodes.some((node) => ['domain', 'ports', 'contracts'].includes(node.id)));
 });
 

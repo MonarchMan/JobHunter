@@ -4,8 +4,9 @@
 
 - [x] **AGT-T012** 增加成功提交前业务校验、坏缓存失效与共享修复预算测试。（AGT-004,009）
 - [x] **AGT-T013** 统一 Agent 行为版本为三段式 SemVer，拒绝非标准格式，并按 Agent 键迁移现有运行记录。（AGT-014）
+- [x] **AGT-T014** 按标准化模型 ID 查询内置价格，支持显式单价覆盖并将未知成本保留为 `null`。（AGT-015, AGT-016）
 
-> 显式覆盖：AGT-001, AGT-002, AGT-003, AGT-004, AGT-005, AGT-006, AGT-007, AGT-008, AGT-009, AGT-010, AGT-011, AGT-012, AGT-013, AGT-Q01, AGT-Q02, AGT-Q03, AGT-Q04
+> 显式覆盖：AGT-001, AGT-002, AGT-003, AGT-004, AGT-005, AGT-006, AGT-007, AGT-008, AGT-009, AGT-010, AGT-011, AGT-012, AGT-013, AGT-014, AGT-015, AGT-016, AGT-Q01, AGT-Q02, AGT-Q03, AGT-Q04
 
 - [x] **AGT-T001** 定义 ModelClient DTO、错误分类、FakeModelClient 和契约测试。（AGT-001, AGT-Q03）
 - [x] **AGT-T002** 实现 AgentDefinition、ToolDefinition、Registry 与唯一性校验。（AGT-002,006）

@@ -3,7 +3,7 @@
 import type {
   ProjectDossierDetail,
   ProjectQuestionGenerationStage,
-} from '@jobhunter/application/interview';
+} from '@jobhunter/user/interview';
 import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';

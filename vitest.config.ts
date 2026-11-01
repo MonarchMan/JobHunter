@@ -9,8 +9,7 @@ export default defineConfig({
           name: 'unit',
           include: [
             'packages/*/test/**/*.test.ts',
-            'packages/mail/*/test/**/*.test.ts',
-            'apps/worker/test/**/*.test.ts',
+            'apps/*/test/**/*.test.ts',
             'scripts/test/**/*.test.mjs',
           ],
           exclude: ['**/*.integration.test.ts', '**/*.e2e.test.ts', '**/*.online.test.ts'],
@@ -21,7 +20,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'integration',
-          include: ['packages/*/test/**/*.integration.test.ts'],
+          include: [
+            'packages/*/test/**/*.integration.test.ts',
+            'apps/*/test/**/*.integration.test.ts',
+          ],
           sequence: { shuffle: false },
         },
       },

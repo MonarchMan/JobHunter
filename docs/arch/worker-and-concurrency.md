@@ -1,4 +1,4 @@
-# Worker、任务队列与并发设计
+# 公共任务运行时、任务队列与并发设计
 
 > 状态：Accepted
 > 版本：1.3.0
@@ -6,7 +6,7 @@
 
 ## 1. 运行模型
 
-首期运行一个长期 Worker 进程和任意短生命周期 CLI 进程。Web 加入后同样只提交任务，不直接执行网络或模型工作。SQLite 允许并发读，但所有进程都必须保持短写事务。
+仅保留 CLI 和 Web 两个入口。Web 宿主自动启动公共任务循环，CLI 等待命令按需运行同一机制；HTTP 请求只提交任务，耗时网络或模型工作在异步任务循环中执行。SQLite 允许并发读，但所有宿主都必须保持短写事务。
 
 Worker 内部包含：
 
@@ -138,3 +138,7 @@ match.compute:{profileVersionId}:{jobRevisionId}:{jobEnrichmentIdOrNone}:{rulese
 
 Worker 调度循环驱动 SQLite 维护子进程；数据库维护标记与连接级写保护协调 Web 和 Worker 的短暂写入窗口。
 详见 [ADR-0020](../adr/0020-sqlite-automatic-maintenance.md)，应用端口仍由数据库基础设施实现。
+
+## 任务宿主
+
+本文件中的 Worker 表示 common 的任务执行机制，不再表示独立 apps/worker 进程。各业务模块工厂登记处理器，CLI/Web 注入端口后启动 common/task-runtime。Web 自动消费，CLI 等待命令按需执行并回收资源。关闭顺序为停止领取、等待在途工作与维护子进程、释放业务浏览器/日志、关闭数据库。独立 worker 命令已删除。

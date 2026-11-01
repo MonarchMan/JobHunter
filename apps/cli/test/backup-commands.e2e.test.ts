@@ -1,5 +1,5 @@
-import { openSqliteDatabase } from '@jobhunter/db';
-import { createTemporaryDataRoot } from '@jobhunter/testkit';
+import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { appendFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';

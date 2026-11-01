@@ -1,4 +1,4 @@
-import { ProjectDossierNotFoundError } from '@jobhunter/application/interview';
+import { ProjectDossierNotFoundError } from '@jobhunter/user/interview';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';

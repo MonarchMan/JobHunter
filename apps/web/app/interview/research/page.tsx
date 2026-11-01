@@ -1,4 +1,4 @@
-import { webCommunityExperienceFilterSchema } from '@jobhunter/application/contracts';
+import { webCommunityExperienceFilterSchema } from '@jobhunter/user/contracts/research-web';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../../src/server/container.js';
