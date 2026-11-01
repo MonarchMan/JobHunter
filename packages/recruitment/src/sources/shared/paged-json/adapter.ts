@@ -88,6 +88,14 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
     maximumPages: 1_000,
     maximumResponseBytes: 2 * 1024 * 1024,
     pageSize: definition.pageSize(context.config),
+    // 小米分页和重复页重读遵循同一来源限流，避免恢复过程密集重放。
+    ...(definition.browser?.responseShape === 'xiaomi-jobs'
+      ? {
+          minimumRequestIntervalMs: Math.ceil(
+            60_000 / definition.metadata.defaultRateLimit.requestsPerMinute,
+          ),
+        }
+      : {}),
     listEndpointPath: definition.browser?.listEndpointPath ?? '',
     responseShape: definition.browser?.responseShape ?? ('ats-job-posts' as const),
   });

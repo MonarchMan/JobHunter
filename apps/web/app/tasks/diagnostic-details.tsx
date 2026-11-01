@@ -294,7 +294,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
               >
                 <h3 id="task-failure-heading">{presentation.warning ? '警告信息' : '失败原因'}</h3>
                 <p>
-                  <strong>{task.errorCategory ?? '未分类'}</strong>
+                  <strong>{presentation.errorCategory ?? '未分类'}</strong>
                 </p>
                 <p>{presentation.error || '系统未记录可展示的失败原因。'}</p>
               </section>

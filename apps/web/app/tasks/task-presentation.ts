@@ -2,11 +2,15 @@ import type { WebTask } from '@jobhunter/recruitment/contracts/web';
 import { labelStatus, taskStatusLabels } from '../components/status-labels.js';
 
 /** 保留调度中的状态；完成后结合所有来源结果显示警告，并汇总可展示的错误。 */
-export function taskPresentation(task: Pick<WebTask, 'status' | 'sourceSync' | 'errorSummary'>): {
+export function taskPresentation(
+  task: Pick<WebTask, 'status' | 'sourceSync' | 'errorSummary'> &
+    Partial<Pick<WebTask, 'errorCategory'>>,
+): {
   label: string;
   status: string;
   error: string;
   warning: boolean;
+  errorCategory: string | null;
 } {
   const sources = task.sourceSync?.sources?.length
     ? task.sourceSync.sources
@@ -42,5 +46,13 @@ export function taskPresentation(task: Pick<WebTask, 'status' | 'sourceSync' | '
     status: warning ? 'warning' : task.status,
     error: [...new Set(errors)].join('；'),
     warning,
+    errorCategory:
+      task.errorCategory ??
+      ([
+        ...new Set(
+          runs.map((run) => run.errorCategory).filter((value): value is string => Boolean(value)),
+        ),
+      ].join('；') ||
+        null),
   };
 }

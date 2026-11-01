@@ -38,6 +38,19 @@ it('将正常结束的部分同步显示为警告并保留具体原因', () => {
   ).toMatchObject({ label: '警告', status: 'warning', error: '第二页获取失败' });
 });
 
+it('任务没有错误类别时使用来源警告类别，并优先保留任务自身错误', () => {
+  if (!source.run) throw new Error('Missing fixture run');
+  const task = {
+    status: 'succeeded' as const,
+    errorSummary: null,
+    sourceSync: { ...source, run: { ...source.run, errorCategory: 'partial_coverage' } },
+  };
+  expect(taskPresentation(task).errorCategory).toBe('partial_coverage');
+  expect(taskPresentation({ ...task, errorCategory: 'network_temporary' }).errorCategory).toBe(
+    'network_temporary',
+  );
+});
+
 it('不将运行中或失败任务误标为完成或警告', () => {
   for (const status of ['pending', 'running', 'failed', 'cancelled'] as const) {
     expect(taskPresentation({ status, sourceSync: source, errorSummary: null })).toMatchObject({

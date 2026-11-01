@@ -471,8 +471,8 @@ async function requestJsonPage(
   );
 }
 
-/** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
-async function collectJsonPages(
+/** 在匿名会话中收集 JSON 分页，小米重复页仅有限重读一次并重新核验完整性。 */
+export async function collectJsonPages(
   page: Page,
   request: SourcePageCollectionRequest,
   options: BrowserSourceOptions,
@@ -491,87 +491,143 @@ async function collectJsonPages(
   const first = shouldReplayFirstPage(request, firstCapture.page.limit)
     ? await requestJsonPage(page, request, firstTemplate, 1, 0)
     : firstCapture.page;
-  const pages = [];
-  const maximumPages = Math.min(request.maximumPages, options.maximumPages ?? 1_000);
-  let coverage: SourcePageCollection['coverage'] = 'complete';
-  let totalChanged = false;
-  let duplicateIds = 0;
-  const seenIds = new Set<string>();
-  const expectedPages = first.total === 0 ? 0 : Math.ceil(first.total / first.limit);
-  const sampled = options.pageSampling === 'first-last' && expectedPages > maximumPages;
-  const pageNumbers = sampled
-    ? maximumPages <= 1
-      ? [1]
-      : maximumPages === 2
-        ? [1, expectedPages]
-        : [1, Math.ceil(expectedPages / 2), expectedPages]
-    : Array.from({ length: Math.min(expectedPages, maximumPages) }, (_, index) => index + 1);
-  for (const pageNumber of pageNumbers) {
-    if (request.signal.aborted)
-      throw new SourceError('temporary', 'Browser collection was aborted.');
-    const expectedOffset = (pageNumber - 1) * first.limit;
-    const current =
-      pageNumber === 1
-        ? first
-        : await requestJsonPage(page, request, firstTemplate, pageNumber, expectedOffset);
-    if (current.total !== first.total || current.limit !== first.limit) {
-      coverage = 'partial';
-      totalChanged = true;
+  // 1、缓存本轮每页的当前版本；重读必须替换旧页，不能并集历史结果。
+  const snapshots = new Map<number, BrowserListPage>([[1, first]]);
+  let recheckedPages: number[] = [];
+  for (let pass = 0; pass < 2; pass += 1) {
+    const pages = [];
+    const maximumPages = Math.min(request.maximumPages, options.maximumPages ?? 1_000);
+    let coverage: SourcePageCollection['coverage'] = 'complete';
+    let totalChanged = false;
+    let duplicateIds = 0;
+    const seenIds = new Set<string>();
+    const idPages = new Map<string, number[]>();
+    const expectedPages = first.total === 0 ? 0 : Math.ceil(first.total / first.limit);
+    const sampled = options.pageSampling === 'first-last' && expectedPages > maximumPages;
+    const pageNumbers = sampled
+      ? maximumPages <= 1
+        ? [1]
+        : maximumPages === 2
+          ? [1, expectedPages]
+          : [1, Math.ceil(expectedPages / 2), expectedPages]
+      : Array.from({ length: Math.min(expectedPages, maximumPages) }, (_, index) => index + 1);
+    for (const pageNumber of pageNumbers) {
+      if (request.signal.aborted)
+        throw new SourceError('temporary', 'Browser collection was aborted.');
+      const expectedOffset = (pageNumber - 1) * first.limit;
+      const current =
+        snapshots.get(pageNumber) ??
+        (await requestJsonPage(page, request, firstTemplate, pageNumber, expectedOffset));
+      snapshots.set(pageNumber, current);
+      if (current.total !== first.total || current.limit !== first.limit) {
+        coverage = 'partial';
+        totalChanged = true;
+      }
+      if (current.items.length > current.limit) coverage = 'partial';
+      pages.push({
+        page: pageNumber,
+        url: page.url(),
+        records: current.items.map((raw) => {
+          // 2、小米发布职位的身份是 jobPostId，同一 jobId 可以对应不同发布记录。
+          const rawId =
+            request.responseShape === 'xiaomi-jobs'
+              ? raw.jobPostId
+              : (raw.id ??
+                raw.jobId ??
+                raw.jobPostId ??
+                raw.positionId ??
+                raw.publishId ??
+                raw.jobUnionId);
+          const id = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : '';
+          if (!id) throw new SourceError('parse_changed', 'Browser list record has no stable ID.');
+          if (seenIds.has(id)) {
+            coverage = 'partial';
+            duplicateIds += 1;
+          }
+          seenIds.add(id);
+          idPages.set(id, [...(idPages.get(id) ?? []), pageNumber]);
+          const explicitUrl = [raw.detailUrl, raw.sourceUrl, raw.url, raw.positionUrl].find(
+            (value): value is string => typeof value === 'string' && value.startsWith('https://'),
+          );
+          const detailUrl =
+            explicitUrl ??
+            (request.responseShape === 'ats-job-posts' ? detailUrlFor(request.url, id) : null);
+          return {
+            ...raw,
+            id,
+            ...(detailUrl ? { detailUrl } : {}),
+          };
+        }),
+        total: current.total,
+        capturedAt: Date.now(),
+      });
     }
-    if (current.items.length > current.limit) coverage = 'partial';
-    pages.push({
-      page: pageNumber,
-      url: page.url(),
-      records: current.items.map((raw) => {
-        const rawId =
-          raw.id ?? raw.jobId ?? raw.jobPostId ?? raw.positionId ?? raw.publishId ?? raw.jobUnionId;
-        const id = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : '';
-        if (!id) throw new SourceError('parse_changed', 'Browser list record has no stable ID.');
-        if (seenIds.has(id)) {
-          coverage = 'partial';
-          duplicateIds += 1;
-        }
-        seenIds.add(id);
-        const explicitUrl = [raw.detailUrl, raw.sourceUrl, raw.url, raw.positionUrl].find(
-          (value): value is string => typeof value === 'string' && value.startsWith('https://'),
+    if (sampled || pages.length < expectedPages) coverage = 'partial';
+    const truncated = !sampled && pages.length < expectedPages;
+    const duplicates = [...idPages].filter(([, numbers]) => numbers.length > 1);
+    // 3、完整且稳定的小米分页出现重复时，只重读涉及的最多四页一次。
+    if (
+      pass === 0 &&
+      request.responseShape === 'xiaomi-jobs' &&
+      duplicateIds > 0 &&
+      !sampled &&
+      !truncated &&
+      !totalChanged
+    ) {
+      recheckedPages = [...new Set(duplicates.flatMap(([, numbers]) => numbers))]
+        .sort((a, b) => a - b)
+        .slice(0, 4);
+      for (const number of recheckedPages) {
+        if (request.signal.aborted)
+          throw new SourceError('temporary', 'Browser collection was aborted.');
+        snapshots.set(
+          number,
+          await requestJsonPage(page, request, firstTemplate, number, (number - 1) * first.limit),
         );
-        const detailUrl =
-          explicitUrl ??
-          (request.responseShape === 'ats-job-posts' ? detailUrlFor(request.url, id) : null);
-        return {
-          ...raw,
-          id,
-          ...(detailUrl ? { detailUrl } : {}),
-        };
-      }),
-      total: current.total,
-      capturedAt: Date.now(),
-    });
+      }
+      continue;
+    }
+    // 4、重复消失也不等于完整：当前唯一职位数仍须与官网总数相等。
+    const missing =
+      request.responseShape === 'xiaomi-jobs' &&
+      !sampled &&
+      !truncated &&
+      seenIds.size !== first.total;
+    if (missing) coverage = 'partial';
+    return {
+      pages,
+      coverage,
+      diagnostics: {
+        reason: truncated
+          ? 'maximum_pages_reached'
+          : sampled
+            ? 'sampled_pages'
+            : totalChanged
+              ? 'pagination_total_changed'
+              : duplicateIds > 0
+                ? 'duplicate_job_ids'
+                : missing
+                  ? 'discovered_count_mismatch'
+                  : null,
+        retryable: totalChanged,
+        expectedCount: first.total,
+        discoveredCount: seenIds.size,
+        expectedPages,
+        fetchedPages: pages.length,
+        duplicateIds,
+        totalChanged,
+        ...(duplicates.length
+          ? {
+              duplicateJobSamples: duplicates
+                .slice(0, 5)
+                .map(([id, numbers]) => ({ id, pages: [...new Set(numbers)] })),
+            }
+          : {}),
+        ...(recheckedPages.length ? { recheckedPages } : {}),
+      },
+    };
   }
-  if (sampled || pages.length < expectedPages) coverage = 'partial';
-  const truncated = !sampled && pages.length < expectedPages;
-  return {
-    pages,
-    coverage,
-    diagnostics: {
-      reason: truncated
-        ? 'maximum_pages_reached'
-        : sampled
-          ? 'sampled_pages'
-          : totalChanged
-            ? 'pagination_total_changed'
-            : duplicateIds > 0
-              ? 'duplicate_job_ids'
-              : null,
-      retryable: totalChanged,
-      expectedCount: first.total,
-      discoveredCount: seenIds.size,
-      expectedPages,
-      fetchedPages: pages.length,
-      duplicateIds,
-      totalChanged,
-    },
-  };
+  throw new SourceError('parse_changed', 'Browser pagination verification did not finish.');
 }
 
 /** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */
