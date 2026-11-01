@@ -3,6 +3,15 @@ import { expect, test } from '@playwright/test';
 test.describe('校招实习管理台核心流程', () => {
   test('shows the three focused workflow setting groups', async ({ page }) => {
     await page.goto('/settings');
+    // 1、移除说明后，渠道选项只占单行高度，单选框与名称居中对齐。
+    const channels = page.getByRole('group', { name: '同步招聘渠道' });
+    for (const radio of await channels.getByRole('radio').all()) {
+      const option = radio.locator('..');
+      await expect(option).toHaveCSS('align-items', 'center');
+      const bounds = await option.boundingBox();
+      expect(bounds?.height).toBeGreaterThanOrEqual(44);
+      expect(bounds?.height).toBeLessThanOrEqual(64);
+    }
     await expect(page.getByRole('group', { name: '自动同步' })).toBeVisible();
     await expect(page.getByRole('group', { name: '自动匹配' })).toBeVisible();
     await expect(page.getByRole('group', { name: '默认职位视图' })).toBeVisible();
@@ -924,7 +933,7 @@ test.describe('校招实习管理台核心流程', () => {
     await page.reload();
     const panel = page.locator('[data-resume-polish]');
     await expect(panel.getByRole('heading', { name: '按求职意向润色经历' })).toBeVisible();
-    await expect(panel.getByText('仅优化表达，不新增事实')).toBeVisible();
+    await expect(panel.getByText('仅优化表达，不新增事实')).toHaveCount(0);
     const panelBox = await panel.boundingBox();
     expect(panelBox?.height).toBeLessThan(220);
     const projectOption = panel.getByLabel('项目经历');
@@ -996,12 +1005,12 @@ test.describe('校招实习管理台核心流程', () => {
       });
     });
 
-    await panel.getByRole('button', { name: '生成 AI 润色建议' }).click();
+    await panel.getByRole('button', { name: 'AI 润色', exact: true }).click();
     await expect(panel.getByRole('alert')).toContainText('至少选择一项');
     await projectOption.focus();
     await page.keyboard.press('Space');
     await expect(projectOption).toBeChecked();
-    await panel.getByRole('button', { name: '生成 AI 润色建议' }).click();
+    await panel.getByRole('button', { name: 'AI 润色', exact: true }).click();
     await expect(
       page.getByRole('region', { name: '通知', exact: true }).getByText('AI 润色任务已创建。'),
     ).toBeVisible();

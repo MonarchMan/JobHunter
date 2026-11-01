@@ -81,7 +81,7 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
               ['campus', '校招', '同步应届毕业生和校园招聘正式岗位'],
               ['social', '社招', '同步面向有工作经验候选人的岗位'],
             ] as const
-          ).map(([value, label, description]) => (
+          ).map(([value, label]) => (
             <label className={styles.channelOption} key={value}>
               <input
                 type="radio"
@@ -94,7 +94,6 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
               />
               <span>
                 <strong>{label}</strong>
-                <small>{description}</small>
               </span>
             </label>
           ))}

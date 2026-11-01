@@ -157,7 +157,8 @@ input[type='radio'] {
   color: var(--primary-hover);
 }
 
-.status-stale {
+.status-stale,
+.status-warning {
   background: var(--warning-soft);
   color: var(--warning);
 }

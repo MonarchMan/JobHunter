@@ -371,6 +371,7 @@ function Repeater({
   );
 }
 
+/** 以垃圾桶图标删除单个条目，保留具体条目名称供辅助技术和悬停识别。 */
 function RemoveButton({
   label,
   onRemove,
@@ -378,11 +379,12 @@ function RemoveButton({
   return (
     <button
       type="button"
-      className={classNames('button-link', styles['resume-remove'])}
+      className={styles['resume-remove']}
       onClick={onRemove}
       aria-label={`删除${label}`}
+      title={`删除${label}`}
     >
-      删除
+      <Icon name="trash" />
     </button>
   );
 }

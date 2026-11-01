@@ -163,7 +163,6 @@ export function ResumePolish({
             目标岗位 <strong>{draft.targetRoles[0] ?? '尚未确认'}</strong>
           </p>
         </div>
-        <p className={styles.guardrail}>仅优化表达，不新增事实</p>
       </header>
       <div className={styles.controls}>
         <fieldset className={styles.options}>
@@ -191,9 +190,8 @@ export function ResumePolish({
           </div>
         </fieldset>
         <div className={styles.actions}>
-          <span>生成后先预览，不会自动覆盖简历</span>
           <button type="button" disabled={busy} onClick={() => void generate()}>
-            {busy ? '正在生成…' : '生成 AI 润色建议'}
+            {busy ? '正在生成…' : 'AI 润色'}
           </button>
         </div>
       </div>

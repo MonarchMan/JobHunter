@@ -51,9 +51,38 @@
   padding: 1.5rem;
 }
 
+.body :global(.status) {
+  width: fit-content;
+  justify-self: center;
+  align-self: center;
+}
+
 .batchDetail {
   padding-top: 1.25rem;
   border-top: 1px solid var(--line);
+}
+
+.body .sourceFacts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.sourceFacts > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.warningDetail {
+  padding: 1rem;
+  border-left: 0.25rem solid var(--warning);
+  border-radius: 0.5rem;
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+@media (max-width: 40rem) {
+  .body .sourceFacts {
+    grid-template-columns: 1fr;
+  }
 }
 
 .failureDetail {

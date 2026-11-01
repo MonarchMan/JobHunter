@@ -27,9 +27,26 @@
 }
 
 .desktopTable .taskTable th,
-.desktopTable .taskTable td {
+.desktopTable .taskTable td,
+.desktopTable .agentTable th,
+.desktopTable .agentTable td {
   text-align: center;
   vertical-align: middle;
+}
+
+.desktopTable .taskTable th:first-child {
+  width: 12rem;
+}
+
+.taskTable td:first-child > strong > button {
+  display: inline-block;
+  width: 10em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  text-align: center;
 }
 
 .card {

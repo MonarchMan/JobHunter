@@ -350,6 +350,18 @@
   position: absolute;
   top: 0.55rem;
   right: 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  min-height: 2.25rem;
+  padding: 0;
+  background: transparent;
+  color: var(--danger);
+}
+
+.resume-remove:hover:not(:disabled) {
+  background: var(--danger-soft);
   color: var(--danger);
 }
 

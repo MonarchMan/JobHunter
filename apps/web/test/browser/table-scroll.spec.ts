@@ -8,6 +8,14 @@ for (const route of ['/jobs', '/tasks']) {
     const table = page.locator('table').first();
     const container = table.locator('..');
     await expect(table).toBeVisible();
+    // Agent 运行列表单独居中，不修改其他表格的公共对齐样式。
+    if (route === '/tasks') {
+      const agentTable = page.locator('[data-agent-table]');
+      for (const cell of await agentTable.locator('th, td').all()) {
+        await expect(cell).toHaveCSS('text-align', 'center');
+        await expect(cell).toHaveCSS('vertical-align', 'middle');
+      }
+    }
     await expect(container).toHaveCSS('overflow-x', 'auto');
     await expect(container).toHaveCSS('overflow-y', 'hidden');
     await expect(container).toHaveCSS('scrollbar-gutter', 'auto');

@@ -21,6 +21,7 @@ import { TruncatedText } from '../components/lists/truncated-text.js';
 import dataTableStyles from '../components/lists/data-table.module.css';
 import styles from './diagnostic-details.module.css';
 import { AgentBillingDetails } from './agent-billing-details.js';
+import { taskPresentation } from './task-presentation.js';
 
 function time(value: string | null): string {
   return value
@@ -34,12 +35,11 @@ const sourceChannelLabels = { intern: '实习', campus: '校招', social: '社�
 const sourceTriggerLabels = { manual: '手动', schedule: '定时', retry: '重试' } as const;
 const syncRunStatusLabels = {
   running: '运行中',
-  succeeded: '成功',
-  partial: '退化',
+  succeeded: '完成',
+  partial: '警告',
   failed: '失败',
   cancelled: '已取消',
 } as const;
-const syncCoverageLabels = { complete: '完整', partial: '部分', unknown: '未知' } as const;
 
 function DialogShell({
   title,
@@ -94,17 +94,17 @@ function DialogShell({
 }
 
 export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactElement {
+  const presentation = taskPresentation(task);
   const [open, setOpen] = useState(false);
   const triggerReference = useRef<HTMLButtonElement>(null);
-  const displayName = task.jobDetailBatch
-    ? `${task.jobDetailBatch.companyName}职位详情同步`
-    : labelTaskType(task.taskType);
+  const displayName = task.jobDetailBatch ? '职位详情同步' : labelTaskType(task.taskType);
   return (
     <>
       <button
         ref={triggerReference}
         type="button"
         className={['button-link', styles.trigger].filter(Boolean).join(' ')}
+        title={displayName}
         onClick={() => {
           setOpen(true);
         }}
@@ -128,8 +128,8 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
               <div>
                 <dt>状态</dt>
                 <dd>
-                  <span className={`status status-${task.status}`}>
-                    {labelStatus(taskStatusLabels, task.status)}
+                  <span className={`status status-${presentation.status}`}>
+                    {presentation.label}
                   </span>
                 </dd>
               </div>
@@ -152,9 +152,9 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                 <dd>{time(task.createdAt)}</dd>
               </div>
               <div>
-                <dt>开始 / 完成</dt>
+                <dt>开始 - 完成</dt>
                 <dd>
-                  {time(task.startedAt)} / {time(task.finishedAt)}
+                  {time(task.startedAt)} - {time(task.finishedAt)}
                 </dd>
               </div>
             </dl>
@@ -209,15 +209,13 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                         </h4>
                         <p>
                           <code>{source.adapterKey}</code>：
-                          {source.run
-                            ? `${syncRunStatusLabels[source.run.status]} / ${syncCoverageLabels[source.run.coverage]}`
-                            : '尚未开始同步运行'}
+                          {source.run ? syncRunStatusLabels[source.run.status] : '尚未开始同步运行'}
                         </p>
                         {source.run?.errorSummary ? <p>{source.run.errorSummary}</p> : null}
                       </section>
                     ))
                   : null}
-                <dl className="facts">
+                <dl className={['facts', styles.sourceFacts].filter(Boolean).join(' ')}>
                   <div>
                     <dt>公司 / 招聘渠道</dt>
                     <dd>
@@ -226,27 +224,14 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                   </div>
                   <div>
                     <dt>物理来源</dt>
-                    <dd>
-                      {task.sourceSync.sourceSlug}
-                      <small>
-                        <code>{task.sourceSync.adapterKey}</code>
-                      </small>
-                    </dd>
+                    <dd>{task.sourceSync.sourceSlug}</dd>
                   </div>
                   <div>
                     <dt>触发方式</dt>
                     <dd>{sourceTriggerLabels[task.sourceSync.trigger]}</dd>
                   </div>
                   <div>
-                    <dt>同步运行 / 覆盖度</dt>
-                    <dd>
-                      {task.sourceSync.run
-                        ? `${syncRunStatusLabels[task.sourceSync.run.status]} / ${syncCoverageLabels[task.sourceSync.run.coverage]}`
-                        : '尚未开始同步运行'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>本次获取职位</dt>
+                    <dt>职位总数</dt>
                     <dd>{task.sourceSync.run?.stats.discovered ?? '—'}</dd>
                   </div>
                   <div>
@@ -264,7 +249,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                     </dd>
                   </div>
                   <div>
-                    <dt>后续详情任务</dt>
+                    <dt>关联详情任务</dt>
                     <dd>
                       {task.sourceSync.run
                         ? String(task.sourceSync.run.stats.followupEnqueued)
@@ -300,18 +285,18 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                     </dd>
                   </div>
                 </dl>
-                {task.sourceSync.run?.errorSummary ? (
-                  <p>{task.sourceSync.run.errorSummary}</p>
-                ) : null}
               </section>
             ) : null}
-            {task.status === 'failed' ? (
-              <section className={styles.failureDetail} aria-labelledby="task-failure-heading">
-                <h3 id="task-failure-heading">失败原因</h3>
+            {task.status === 'failed' || presentation.warning ? (
+              <section
+                className={presentation.warning ? styles.warningDetail : styles.failureDetail}
+                aria-labelledby="task-failure-heading"
+              >
+                <h3 id="task-failure-heading">{presentation.warning ? '警告信息' : '失败原因'}</h3>
                 <p>
                   <strong>{task.errorCategory ?? '未分类'}</strong>
                 </p>
-                <p>{task.errorSummary ?? '系统未记录可展示的失败原因。'}</p>
+                <p>{presentation.error || '系统未记录可展示的失败原因。'}</p>
               </section>
             ) : null}
             {task.kind === 'task' ? (

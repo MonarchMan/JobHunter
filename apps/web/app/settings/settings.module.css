@@ -88,9 +88,10 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.7rem;
-  align-items: start;
-  min-height: 7rem;
-  padding: 1rem;
+  /* 渠道只剩单行名称，使用紧凑热区并让单选框与文字垂直居中。 */
+  align-items: center;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-panel);
   background: var(--surface);
@@ -118,20 +119,8 @@
 .channelOption input {
   width: 1.15rem;
   min-height: 1.15rem;
-  margin-top: 0.15rem;
+  margin: 0;
   accent-color: var(--primary);
-}
-
-.channelOption span {
-  display: grid;
-  gap: 0.35rem;
-}
-
-.channelOption small {
-  color: var(--muted-ink);
-  font-size: 0.78rem;
-  font-weight: 500;
-  line-height: 1.5;
 }
 
 .settingsToggle {
@@ -439,10 +428,6 @@
 @media (max-width: 720px) {
   .channelOptions {
     grid-template-columns: 1fr;
-  }
-
-  .channelOption {
-    min-height: auto;
   }
 
   .compactFields {

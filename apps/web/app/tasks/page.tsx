@@ -1,11 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
-import {
-  agentRunStatusLabels,
-  labelStatus,
-  taskTypeLabels,
-  taskStatusLabels,
-} from '../components/status-labels.js';
+import { agentRunStatusLabels, labelStatus, taskTypeLabels } from '../components/status-labels.js';
 import { PageHeader } from '../components/layout/page-header.js';
 import { TruncatedText } from '../components/lists/truncated-text.js';
 import { Pagination } from '../components/lists/pagination.js';
@@ -16,6 +11,7 @@ import {
   type SearchParameterSource,
 } from '../../src/server/job-query.js';
 import { TaskActions } from './task-actions.js';
+import { taskPresentation } from './task-presentation.js';
 import { TaskAutoRefresh } from './task-auto-refresh.js';
 import { AgentRunDetailsDialog, TaskDetailsDialog } from './diagnostic-details.js';
 import { CurrencySelect } from './currency-select.js';
@@ -32,6 +28,19 @@ function time(value: string | null): string {
         new Date(value),
       )
     : '—';
+}
+
+/** 根据开始和完成时间显示执行耗时；时间缺失时不推算未完成任务的最终耗时。 */
+function taskDuration(startedAt: string | null, finishedAt: string | null): string {
+  if (!startedAt || !finishedAt) return '—';
+  const milliseconds = Date.parse(finishedAt) - Date.parse(startedAt);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return '—';
+  if (milliseconds < 1000) return `${String(milliseconds / 1000)} s`;
+  const seconds = Math.floor(milliseconds / 1000);
+  if (seconds < 60) return `${String(seconds)} s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${String(minutes)} min ${String(seconds % 60)} s`;
+  return `${String(Math.floor(minutes / 60))} h ${String(minutes % 60)} min ${String(seconds % 60)} s`;
 }
 
 function positivePage(source: SearchParameterSource, name: string): number {
@@ -51,7 +60,7 @@ function formatCost(
   const amount = micros / 1_000_000;
   const converted =
     source === displayCurrency ? amount : displayCurrency === 'CNY' ? amount * rate : amount / rate;
-  return `${converted.toFixed(6)} ${displayCurrency}`;
+  return `${displayCurrency === 'CNY' ? '¥' : '$'}${converted.toFixed(4)}`;
 }
 
 interface TasksPageProperties {
@@ -157,7 +166,7 @@ export default async function TasksPage({
                 <th scope="col">状态</th>
                 <th scope="col">重试</th>
                 <th scope="col">错误</th>
-                <th scope="col">开始 / 完成</th>
+                <th scope="col">耗时</th>
                 <th scope="col">操作</th>
               </tr>
             </thead>
@@ -178,10 +187,9 @@ export default async function TasksPage({
                       </strong>
                     </td>
                     <td>
-                      <span className={`status status-${task.status}`}>
-                        {labelStatus(taskStatusLabels, task.status)}
+                      <span className={`status status-${taskPresentation(task).status}`}>
+                        {taskPresentation(task).label}
                       </span>
-                      {task.cancelRequested ? <small>等待 Worker 取消</small> : null}
                     </td>
                     <td>
                       {task.jobDetailBatch
@@ -189,18 +197,9 @@ export default async function TasksPage({
                         : `${String(task.attemptCount)} / ${String(task.maxAttempts)}`}
                     </td>
                     <td>
-                      <TruncatedText
-                        value={
-                          task.errorCategory
-                            ? `${task.errorCategory}: ${task.errorSummary ?? '无错误摘要'}`
-                            : '—'
-                        }
-                      />
+                      <TruncatedText value={taskPresentation(task).error || '—'} />
                     </td>
-                    <td>
-                      {time(task.startedAt)}
-                      <small>{time(task.finishedAt)}</small>
-                    </td>
+                    <td>{taskDuration(task.startedAt, task.finishedAt)}</td>
                     <td>
                       {task.kind === 'task' ? (
                         <TaskActions
@@ -225,15 +224,11 @@ export default async function TasksPage({
                 <strong>
                   <TaskDetailsDialog task={task} />
                 </strong>
-                <span className={`status status-${task.status}`}>
-                  {labelStatus(taskStatusLabels, task.status)}
+                <span className={`status status-${taskPresentation(task).status}`}>
+                  {taskPresentation(task).label}
                 </span>
               </div>
-              <p>
-                {task.errorCategory
-                  ? `${task.errorCategory}: ${task.errorSummary ?? '无错误摘要'}`
-                  : '暂无错误'}
-              </p>
+              <p>{taskPresentation(task).error || '暂无错误'}</p>
               {task.jobDetailBatch ? (
                 <p>
                   总数 {String(task.jobDetailBatch.counts.total)}，成功{' '}
@@ -268,7 +263,7 @@ export default async function TasksPage({
           className={[dataTableStyles.scroll, styles.desktopTable].filter(Boolean).join(' ')}
           data-agent-table
         >
-          <table>
+          <table className={styles.agentTable}>
             <caption className="sr-only">Agent 运行列表</caption>
             <thead>
               <tr>

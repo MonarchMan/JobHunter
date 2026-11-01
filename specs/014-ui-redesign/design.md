@@ -1,5 +1,13 @@
 # 014 全系统 UI 重设计设计
 
+任务列表与详情复用展示映射，结合各物理来源同步结果识别警告并汇总错误摘要，不修改持久化任务状态和重试语义。官网同步 facts 使用局部三列网格，窄屏降为单列。
+
+Agent 运行表格使用局部 agentTable 类，通过 .desktopTable .agentTable th/td 设置 text-align: center 和 vertical-align: middle，不调整共享 data-table 样式。
+
+channelOption 移除 7rem 最小高度，改用 3rem 操作热区、居中对齐和紧凑内边距；清理已无用途的说明文字与标题说明间距样式，保留选中、悬停、焦点及窄屏单列状态。
+
+共享 RemoveButton 复用 Icon 的 trash 图标，以红色图标按钮替代删除文字，保留 aria-label 并增加同名 title。
+
 职位表格与共享 data-table 容器使用 auto 高度、不设最大高度，overflow-x 为 auto、overflow-y 为 hidden，移除 stable scrollbar-gutter；不拦截 wheel 事件，纵向滚轮交由页面处理。弹窗、下拉框与编辑器的滚动独立保留。
 
 移除 CompanySourceCard 的 company-source-meta 提示段落及其专用样式；渠道与来源数量继续由总览统计承载。
