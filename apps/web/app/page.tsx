@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import { DashboardHero } from './_dashboard/dashboard-hero.js';
+import { TaskDetailsDialog } from './tasks/diagnostic-details.js';
 import { DashboardNextAction } from './_dashboard/dashboard-next-action.js';
 import { DashboardHighlightJobs } from './_dashboard/dashboard-highlight-jobs.js';
 import { DashboardSteps } from './_dashboard/dashboard-steps.js';
@@ -12,7 +13,7 @@ import {
   dateInTimezone,
   monthStart,
 } from './_dashboard/dashboard-calendar-date.js';
-import { labelStatus, syncRunStatusLabels } from './components/status-labels.js';
+import { labelStatus, taskStatusLabels, labelTaskType } from './components/status-labels.js';
 import { getWebContainer } from '../src/server/container.js';
 import panelStyles from './dashboard-panel.module.css';
 import styles from './page.module.css';
@@ -24,6 +25,11 @@ export default async function DashboardPage(): Promise<ReactElement> {
   const dashboard = container.services.dashboard.get();
   const hasSources = dashboard.sources.total > 0;
   const hasJobs = dashboard.activeJobs > 0;
+  const activities = container.services.tasks.list({
+    statuses: ['succeeded', 'failed', 'cancelled'],
+    order: 'finished_desc',
+    limit: 8,
+  });
   const calendarTimezone = 'Asia/Shanghai';
   const today = dateInTimezone(Date.now(), calendarTimezone);
   const initialMonth = monthStart(today);
@@ -90,65 +96,52 @@ export default async function DashboardPage(): Promise<ReactElement> {
       <DashboardHighlightJobs jobs={dashboard.highlightJobs} />
 
       <div className={styles.columns}>
-        <DashboardSteps hasSources={hasSources} hasJobs={hasJobs} />
+        <DashboardSteps
+          hasProfile={dashboard.hasProfile}
+          hasSources={hasSources}
+          hasJobs={hasJobs}
+        />
         <section
           className={[panelStyles.panel, styles.syncPanel].filter(Boolean).join(' ')}
           aria-labelledby="latest-sync-title"
         >
           <div className={['section-heading', styles.tightHeading].filter(Boolean).join(' ')}>
             <div>
-              <h2 id="latest-sync-title">最近同步</h2>
+              <h2 id="latest-sync-title">最近活动</h2>
             </div>
-            <a className={styles.textLink} href="/sources">
-              查看来源 <span aria-hidden="true">↗</span>
+            <a className={styles.textLink} href="/tasks">
+              查看任务 <span aria-hidden="true">↗</span>
             </a>
           </div>
-          {dashboard.latestSync ? (
-            <div className={styles.syncContent}>
-              <span className={styles.syncIcon} aria-hidden="true">
-                ↻
-              </span>
-              <div>
-                <strong>{dashboard.latestSync.sourceName}</strong>
-                <p>
-                  {labelStatus(syncRunStatusLabels, dashboard.latestSync.status)} ·{' '}
-                  <time dateTime={dashboard.latestSync.finishedAt}>
-                    {new Intl.DateTimeFormat('zh-CN', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    }).format(new Date(dashboard.latestSync.finishedAt))}
-                  </time>
-                </p>
-              </div>
-              <span
-                className={[
-                  styles.syncState,
-                  dashboard.latestSync.status === 'succeeded'
-                    ? undefined
-                    : styles.syncNeedsAttention,
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              >
-                {dashboard.latestSync.status === 'succeeded' ? '正常' : '需关注'}
-              </span>
-            </div>
+          {activities.length ? (
+            <ol className={styles.activityList}>
+              {activities.map((activity) => {
+                const detail = container.services.diagnostics.getTask(activity.id);
+                return (
+                  <li key={activity.id}>
+                    <div>
+                      {detail ? (
+                        <TaskDetailsDialog task={detail} />
+                      ) : (
+                        <strong>{labelTaskType(activity.taskType)}</strong>
+                      )}
+                      <span>{labelStatus(taskStatusLabels, activity.status)}</span>
+                      <time
+                        dateTime={new Date(activity.finishedAt ?? activity.createdAt).toISOString()}
+                      >
+                        {new Intl.DateTimeFormat('zh-CN', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                          timeZone: 'Asia/Shanghai',
+                        }).format(new Date(activity.finishedAt ?? activity.createdAt))}
+                      </time>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
           ) : (
-            <div className={[styles.syncContent, styles.syncEmpty].filter(Boolean).join(' ')}>
-              <span className={styles.syncIcon} aria-hidden="true">
-                ✦
-              </span>
-              <div>
-                <strong>还没有同步记录</strong>
-                <p>从来源页面同步第一批职位。</p>
-              </div>
-              <a
-                className={['button-secondary', styles.emptyAction].filter(Boolean).join(' ')}
-                href="/sources"
-              >
-                去配置来源
-              </a>
-            </div>
+            <p>暂无活动。任务完成或失败后会显示在这里。</p>
           )}
         </section>
       </div>

@@ -134,6 +134,8 @@ export interface TaskRetryCoordinator {
 
 /** 应用层数据结构或端口契约。 */
 export interface TaskListFilter {
+  /** 首页活动按实际结束时间排序，默认仍按创建时间。 */
+  readonly order?: 'finished_desc';
   readonly statuses?: readonly TaskStatus[];
   readonly taskType?: string;
   readonly limit?: number;

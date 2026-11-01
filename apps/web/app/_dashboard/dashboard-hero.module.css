@@ -1,9 +1,9 @@
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(19rem, 0.65fr);
-  gap: clamp(2rem, 7vw, 7rem);
-  min-height: 22rem;
-  padding: clamp(2rem, 5vw, 4rem);
+  gap: 1.5rem;
+  min-height: 0;
+  padding: 1.5rem;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -21,7 +21,7 @@
   max-width: 13ch;
   margin: 0 0 1rem;
   color: var(--text-primary);
-  font-size: clamp(3rem, 5vw, 4.5rem);
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
   letter-spacing: -0.07em;
   line-height: 0.98;
 }
@@ -45,7 +45,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
-  margin-top: 2rem;
+  margin-top: 1rem;
 }
 
 .primaryAction {
@@ -203,7 +203,7 @@
   }
 
   .hero h1 {
-    font-size: 3rem;
+    font-size: 1.75rem;
   }
 
   .brandSymbol img {
@@ -223,5 +223,17 @@
 @media (forced-colors: active) {
   .note::before {
     background: Highlight;
+  }
+}
+
+.note {
+  display: none;
+}
+.aside {
+  align-self: center;
+}
+@media (max-width: 900px) {
+  .aside {
+    display: none;
   }
 }

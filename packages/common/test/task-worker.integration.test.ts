@@ -151,6 +151,30 @@ function engine(
 }
 
 describe('persistent task queue', () => {
+  it('orders recent terminal activity by finish time without changing default creation order', async () => {
+    const input = await setup();
+    const { tasks } = services(input, registryWith({ execute: () => undefined }));
+    // 1、先创建的任务较晚结束，活动顺序应与创建顺序不同。
+    const older = enqueueSync(tasks, 'older');
+    input.clock.advance(100);
+    const newer = enqueueSync(tasks, 'newer', 'source-2');
+    tasks.cancel(newer.task.id);
+    input.clock.advance(100);
+    tasks.cancel(older.task.id);
+    input.clock.advance(100);
+    const pending = enqueueSync(tasks, 'pending');
+    // 2、活动只取终态并遵守数量限制；普通任务列表仍按创建时间排序。
+    expect(
+      input.queue
+        .list({ statuses: ['succeeded', 'failed', 'cancelled'], order: 'finished_desc', limit: 1 })
+        .map((task) => task.id),
+    ).toEqual([older.task.id]);
+    expect(input.queue.list({}).map((task) => task.id)).toEqual([
+      pending.task.id,
+      newer.task.id,
+      older.task.id,
+    ]);
+  });
   it('persists partial results and restores them on manual retry after reopening', async () => {
     const input = await setup();
     const registry = new HandlerRegistry();

@@ -63,6 +63,7 @@ describe('SQLite dashboard read model', () => {
         .run();
 
       expect(createDashboardReadModel(handle.client).snapshot()).toEqual({
+        hasProfile: false,
         activeJobs: 1,
         currentMatches: 0,
         sources: { healthy: 1, total: 1 },

@@ -73,6 +73,7 @@ export type WebDashboardHighlightJob = z.infer<typeof webDashboardHighlightJobSc
 /** 首页仪表盘聚合数据 Schema。 */
 export const webDashboardSchema = z
   .object({
+    hasProfile: z.boolean().default(false),
     activeJobs: z.number().int().nonnegative(),
     currentMatches: z.number().int().nonnegative(),
     sources: z.object({

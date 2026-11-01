@@ -72,3 +72,7 @@
   background: var(--success-soft);
   color: var(--success);
 }
+
+.list[hidden] {
+  display: none;
+}

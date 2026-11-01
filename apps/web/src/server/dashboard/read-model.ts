@@ -43,6 +43,7 @@ export class DashboardSnapshotReader implements DashboardReadModel {
     else if (matching.currentMatches > 0)
       nextAction = { type: 'all_good', message: '工作台运行正常，继续关注新职位' };
     return {
+      hasProfile: this.profiles.hasProfiles(),
       activeJobs: recruitment.activeJobs,
       currentMatches: matching.currentMatches,
       sources: recruitment.sources,

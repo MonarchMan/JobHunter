@@ -348,7 +348,7 @@ export class SqliteTaskRepository implements TaskQueue {
       .prepare(
         `SELECT ${TASK_COLUMNS} FROM tasks
          ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
-         ORDER BY created_at DESC, id ASC LIMIT ? OFFSET ?`,
+         ORDER BY ${filter.order === 'finished_desc' ? 'finished_at' : 'created_at'} DESC, id ASC LIMIT ? OFFSET ?`,
       )
       .all(...parameters, limit, offset) as TaskRow[];
     return rows.map(taskFromRow);
