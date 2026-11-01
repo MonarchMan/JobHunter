@@ -13,6 +13,10 @@ export interface ConfiguredModelClientInput {
   readonly inputCostPerMillionUsd?: number | null;
   readonly outputCostPerMillionUsd?: number | null;
   readonly timeoutMs?: number;
+  readonly autoModelPricing?: boolean;
+  readonly cacheReadPrice?: number | null | undefined;
+  readonly cacheWritePrice?: number | null | undefined;
+  readonly cacheWrite1hPrice?: number | null | undefined;
 }
 
 /** 按 provider registry 解析配置并创建模型客户端。 */
@@ -21,6 +25,10 @@ export function createConfiguredModelClient(input: ConfiguredModelClientInput): 
   registerOpenAiCompatibleProvider(registry);
   registerAnthropicProvider(registry);
   return registry.create(input.provider, {
+    autoModelPricing: input.autoModelPricing,
+    cacheReadPrice: input.cacheReadPrice,
+    cacheWritePrice: input.cacheWritePrice,
+    cacheWrite1hPrice: input.cacheWrite1hPrice,
     baseUrl: input.baseUrl,
     apiKey: input.apiKey,
     model: input.model,

@@ -15,6 +15,7 @@ export interface AgentRunnerResult<TOutput> {
 
 /** 模块数据结构或契约。 */
 interface Totals {
+  billingCalls: NonNullable<AgentRunUsage['billingCalls']>[number][];
   inputTokens: number;
   outputTokens: number;
   estimatedCostMicros: number | null;
@@ -22,6 +23,7 @@ interface Totals {
 
 /** 将单次模型响应的用量累加到运行总量。 */
 function addUsage(totals: Totals, usage: ModelUsage): void {
+  if (usage.billing) totals.billingCalls.push(usage.billing);
   totals.inputTokens += usage.inputTokens;
   totals.outputTokens += usage.outputTokens;
   if (usage.estimatedCostMicros === null) totals.estimatedCostMicros = null;
@@ -151,7 +153,12 @@ export class AgentRunner {
 
     const timeout = AbortSignal.timeout(definition.limits.timeoutMs);
     const signal = AbortSignal.any([input.signal, timeout]);
-    const totals: Totals = { inputTokens: 0, outputTokens: 0, estimatedCostMicros: 0 };
+    const totals: Totals = {
+      billingCalls: [],
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostMicros: 0,
+    };
     // 3、执行 Agent 并将最终输出原子写入运行记录；并发竞争时使用胜者结果。
     try {
       const output = await this.#execute(definition, parsedInput, runId, signal, totals);
@@ -347,7 +354,9 @@ export class AgentRunner {
     return {
       ...totals,
       costCurrency: this.#model.metadata.costCurrency,
-      pricingVersion: this.#model.metadata.pricingVersion,
+      pricingVersion: totals.billingCalls.length
+        ? [...new Set(totals.billingCalls.map((call) => call.pricingVersion))].join(',')
+        : this.#model.metadata.pricingVersion,
     };
   }
 }

@@ -1,3 +1,4 @@
+import type { ModelBilling } from '../contracts/model-usage.js';
 import type { AgentErrorCategory } from './errors.js';
 
 /** 模块使用的类型约束。 */
@@ -5,6 +6,7 @@ export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /** 模块数据结构或契约。 */
 export interface AgentRunRecord {
+  readonly billingCalls?: readonly ModelBilling[] | null;
   readonly id: string;
   readonly agentKey: string;
   readonly agentVersion: string;
@@ -28,6 +30,7 @@ export interface AgentRunRecord {
 
 /** 模块数据结构或契约。 */
 export interface AgentRunUsage {
+  readonly billingCalls?: readonly ModelBilling[] | null;
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly estimatedCostMicros: number | null;
@@ -76,3 +79,12 @@ export interface AgentRunStore {
 
 /** 模块使用的类型约束。 */
 export type AgentRunReader = Pick<AgentRunStore, 'get'>;
+
+/** 维护已完成运行的缺失成本；预期时间和用量用于阻止并发覆盖。 */
+export interface AgentRunCostCorrectionStore {
+  backfillUnpricedCost(input: {
+    readonly id: string;
+    readonly startedAt: number;
+    readonly usage: AgentRunUsage;
+  }): boolean;
+}

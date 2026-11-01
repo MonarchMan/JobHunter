@@ -179,6 +179,56 @@ function runner(store: MemoryStore, model: ModelClient): AgentRunner {
 }
 
 describe('agent runtime', () => {
+  it('sums independently priced calls across a repair without losing unknown cache counts', async () => {
+    const store = new MemoryStore();
+    const base = {
+      model: 'deepseek-flash',
+      requestedAt: Date.parse('2026-10-30T03:59:59Z'),
+      inputTokens: 3,
+      outputTokens: 2,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      uncachedInputTokens: null,
+      inputCostMicros: 1,
+      outputCostMicros: 2,
+      cacheReadCostMicros: 0,
+      cacheWriteCostMicros: 0,
+      totalCostMicros: 3,
+      currency: 'USD' as const,
+      pricingVersion: 'peak',
+      period: 'peak' as const,
+      precision: 'cache-miss-assumed' as const,
+      rates: null,
+    };
+    const second = {
+      ...base,
+      requestedAt: Date.parse('2026-10-30T04:00:01Z'),
+      totalCostMicros: 2,
+      outputCostMicros: 1,
+      pricingVersion: 'off-peak',
+      period: 'off-peak' as const,
+    };
+    const model = new QueueModel([
+      {
+        kind: 'unparsed_output',
+        text: 'invalid JSON',
+        usage: { ...usage, estimatedCostMicros: 3, billing: base },
+      },
+      {
+        kind: 'output',
+        output: { answer: 'ok' },
+        usage: { ...usage, estimatedCostMicros: 2, billing: second },
+      },
+    ]);
+    const result = await runner(store, model).run({
+      definition: definition(),
+      value: { text: 'test' },
+      signal: new AbortController().signal,
+    });
+    expect(result.run.estimatedCostMicros).toBe(5);
+    expect(result.run.billingCalls).toEqual([base, second]);
+    expect(result.run.pricingVersion).toBe('peak,off-peak');
+  });
   it('requires three-part semantic agent versions', () => {
     expect(() => definition({ version: 'v1' })).toThrow(
       'Agent version must use MAJOR.MINOR.PATCH format.',

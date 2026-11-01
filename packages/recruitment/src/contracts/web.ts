@@ -1,3 +1,4 @@
+import { modelBillingSchema } from '@jobhunter/common/web-contracts';
 import { z } from 'zod';
 import {
   recruitmentScheduleActivityTypeSchema,
@@ -284,6 +285,7 @@ export const webAgentRunSummarySchema = z
     estimatedCostMicros: z.number().int().nonnegative().nullable(),
     costCurrency: z.string().nullable(),
     pricingVersion: z.string().nullable(),
+    billingCalls: z.array(modelBillingSchema).nullable().optional(),
     startedAt: z.iso.datetime(),
     finishedAt: z.iso.datetime().nullable(),
   })

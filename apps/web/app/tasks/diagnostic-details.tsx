@@ -20,6 +20,7 @@ import { TaskActions } from './task-actions.js';
 import { TruncatedText } from '../components/lists/truncated-text.js';
 import dataTableStyles from '../components/lists/data-table.module.css';
 import styles from './diagnostic-details.module.css';
+import { AgentBillingDetails } from './agent-billing-details.js';
 
 function time(value: string | null): string {
   return value
@@ -412,6 +413,7 @@ export function AgentRunDetailsDialog({
                 </dd>
               </div>
             </dl>
+            <AgentBillingDetails calls={detail?.billingCalls ?? run.billingCalls} />
             {run.status === 'failed' ? (
               <section className={styles.failureDetail} aria-labelledby="agent-failure-heading">
                 <h3 id="agent-failure-heading">失败原因</h3>

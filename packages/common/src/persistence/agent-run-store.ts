@@ -1,14 +1,17 @@
+import { modelBillingSchema } from '../contracts/model-usage.js';
 import {
   agentErrorCategories,
   type AgentErrorCategory,
   type AgentRunRecord,
   type AgentRunStore,
+  type AgentRunCostCorrectionStore,
   type ToolCallRecord,
 } from '@jobhunter/common/agent';
 import type Database from 'better-sqlite3';
 
 /** 数据库查询结果对应的行结构。 */
 interface AgentRunRow {
+  readonly model_usage_json: string | null;
   readonly id: string;
   readonly agent_key: string;
   readonly agent_version: string;
@@ -33,7 +36,7 @@ interface AgentRunRow {
 const columns = `id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
                  cache_key, status, output_json, output_hash, error_category, error_summary, input_tokens,
                  output_tokens, estimated_cost_micros, cost_currency, pricing_version,
-                 started_at, finished_at`;
+                 started_at, finished_at, model_usage_json`;
 
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function isStatus(value: string): value is AgentRunRecord['status'] {
@@ -59,6 +62,9 @@ function toRecord(row: AgentRunRow): AgentRunRecord {
     throw new TypeError(`Invalid stored agent error category: ${row.error_category}.`);
   }
   return {
+    ...(row.model_usage_json === null
+      ? {}
+      : { billingCalls: modelBillingSchema.array().parse(JSON.parse(row.model_usage_json)) }),
     id: row.id,
     agentKey: row.agent_key,
     agentVersion: row.agent_version,
@@ -92,11 +98,48 @@ function isUniqueConstraint(error: unknown): boolean {
 }
 
 /** 保存 Agent 运行状态、缓存键和输出摘要。 */
-export class SqliteAgentRunStore implements AgentRunStore {
+export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectionStore {
   readonly #client: Database.Database;
 
   public constructor(client: Database.Database) {
     this.#client = client;
+  }
+
+  /** 仅回填已完成的未定价记录，不覆盖已有金额或修改运行输出。 */
+  public backfillUnpricedCost(
+    input: Parameters<AgentRunCostCorrectionStore['backfillUnpricedCost']>[0],
+  ): boolean {
+    // 1、维护输入必须为合法微单位金额与 Token 数，价格版本记录计算依据。
+    const { usage } = input;
+    if (
+      ![input.startedAt, usage.inputTokens, usage.outputTokens, usage.estimatedCostMicros].every(
+        (value) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0,
+      ) ||
+      !['USD', 'CNY'].includes(usage.costCurrency) ||
+      !usage.pricingVersion.trim() ||
+      usage.pricingVersion === 'unpriced'
+    )
+      throw new TypeError('Invalid cost correction.');
+    // 2、在单条条件更新内核对时间和用量；重复回填或并发变化均不生效。
+    return (
+      this.#client
+        .prepare(
+          `UPDATE agent_runs
+      SET estimated_cost_micros = ?, cost_currency = ?, pricing_version = ?
+      WHERE id = ? AND started_at = ? AND input_tokens = ? AND output_tokens = ?
+        AND status IN ('succeeded', 'failed', 'cancelled')
+        AND pricing_version = 'unpriced' AND estimated_cost_micros IS NULL`,
+        )
+        .run(
+          usage.estimatedCostMicros,
+          usage.costCurrency,
+          usage.pricingVersion,
+          input.id,
+          input.startedAt,
+          usage.inputTokens,
+          usage.outputTokens,
+        ).changes === 1
+    );
   }
 
   /** 执行数据库组件对外暴露的操作。 */
@@ -156,11 +199,14 @@ export class SqliteAgentRunStore implements AgentRunStore {
       const changed = this.#client
         .prepare(
           `UPDATE agent_runs
-           SET status = 'succeeded', output_json = ?, output_hash = ?, input_tokens = ?, output_tokens = ?,
+           SET model_usage_json = ?, status = 'succeeded', output_json = ?, output_hash = ?, input_tokens = ?, output_tokens = ?,
                estimated_cost_micros = ?, cost_currency = ?, pricing_version = ?, finished_at = ?
            WHERE id = ? AND status = 'running'`,
         )
         .run(
+          input.usage.billingCalls
+            ? JSON.stringify(modelBillingSchema.array().parse(input.usage.billingCalls))
+            : null,
           input.output === null ? null : JSON.stringify(input.output),
           input.outputHash,
           input.usage.inputTokens,
@@ -181,13 +227,16 @@ export class SqliteAgentRunStore implements AgentRunStore {
         this.#client
           .prepare(
             `UPDATE agent_runs
-             SET status = 'failed', error_category = 'cache_race_resolved',
+             SET model_usage_json = ?, status = 'failed', error_category = 'cache_race_resolved',
                  error_summary = 'Equivalent successful run won cache race.',
                  input_tokens = ?, output_tokens = ?, estimated_cost_micros = ?,
                  cost_currency = ?, pricing_version = ?, finished_at = ?
              WHERE id = ? AND status = 'running'`,
           )
           .run(
+            input.usage.billingCalls
+              ? JSON.stringify(modelBillingSchema.array().parse(input.usage.billingCalls))
+              : null,
             input.usage.inputTokens,
             input.usage.outputTokens,
             input.usage.estimatedCostMicros,
@@ -206,12 +255,15 @@ export class SqliteAgentRunStore implements AgentRunStore {
     const changed = this.#client
       .prepare(
         `UPDATE agent_runs
-         SET status = ?, error_category = ?, error_summary = ?, input_tokens = ?,
+         SET model_usage_json = ?, status = ?, error_category = ?, error_summary = ?, input_tokens = ?,
              output_tokens = ?, estimated_cost_micros = ?, cost_currency = ?,
              pricing_version = ?, finished_at = ?
          WHERE id = ? AND status = 'running'`,
       )
       .run(
+        input.usage.billingCalls
+          ? JSON.stringify(modelBillingSchema.array().parse(input.usage.billingCalls))
+          : null,
         input.status,
         input.category,
         input.summary,

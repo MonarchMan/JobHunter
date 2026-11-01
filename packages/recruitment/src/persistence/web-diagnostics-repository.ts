@@ -16,6 +16,7 @@ import type Database from 'better-sqlite3';
 
 /** 数据库查询结果对应的行结构。 */
 interface AgentRunRow {
+  readonly model_usage_json: string | null;
   readonly id: string;
   readonly agent_key: string;
   readonly agent_version: string;
@@ -44,7 +45,7 @@ interface ToolCallRow {
 
 const columns = `id, agent_key, agent_version, prompt_version, model_config_hash, status,
   error_category, error_summary, input_tokens, output_tokens, estimated_cost_micros,
-  cost_currency, pricing_version, started_at, finished_at`;
+  cost_currency, pricing_version, started_at, finished_at, model_usage_json`;
 
 /** 数据库查询结果对应的行结构。 */
 interface TaskEntryRow {
@@ -150,6 +151,7 @@ function summary(row: AgentRunRow): WebAgentRunSummary {
     estimatedCostMicros: row.estimated_cost_micros,
     costCurrency: row.cost_currency,
     pricingVersion: row.pricing_version,
+    billingCalls: row.model_usage_json ? (JSON.parse(row.model_usage_json) as unknown) : null,
     startedAt: new Date(row.started_at).toISOString(),
     finishedAt: row.finished_at === null ? null : new Date(row.finished_at).toISOString(),
   });

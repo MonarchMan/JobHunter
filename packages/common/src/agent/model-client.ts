@@ -1,5 +1,7 @@
+import type { ModelBilling } from '../contracts/model-usage.js';
 /** 模块数据结构或契约。 */
 export interface ModelUsage {
+  readonly billing?: ModelBilling;
   readonly inputTokens: number;
   readonly outputTokens: number;
   /** 未配置供应商报价时为 null，不能把未知成本误记为 0。 */

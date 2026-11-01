@@ -1,3 +1,5 @@
+import { calculateBilling } from './billing.js';
+import { cacheCreationSchema, cacheWriteTotal, optionalTokenCount } from './cache-usage.js';
 import {
   ModelClientError,
   type ModelClient,
@@ -29,6 +31,10 @@ const configSchema = z
       .min(1_000)
       .max(10 * 60_000)
       .default(180_000),
+    autoModelPricing: z.boolean().optional(),
+    cacheReadPrice: z.number().nonnegative().nullable().optional(),
+    cacheWritePrice: z.number().nonnegative().nullable().optional(),
+    cacheWrite1hPrice: z.number().nonnegative().nullable().optional(),
     inputCostPerMillionUsd: z.number().nonnegative().nullable().optional(),
     outputCostPerMillionUsd: z.number().nonnegative().nullable().optional(),
   })
@@ -39,10 +45,12 @@ const responseSchema = z.object({
   stop_reason: z.string().nullable().optional(),
   usage: z
     .object({
-      input_tokens: z.number().int().nonnegative().default(0),
-      output_tokens: z.number().int().nonnegative().default(0),
-      cache_creation_input_tokens: z.number().int().nonnegative().optional(),
-      cache_read_input_tokens: z.number().int().nonnegative().optional(),
+      input_tokens: z.number().int().nonnegative().optional(),
+      output_tokens: z.number().int().nonnegative().optional(),
+      cache_creation_input_tokens: optionalTokenCount,
+      cache_read_input_tokens: optionalTokenCount,
+      cache_creation: cacheCreationSchema,
+      service_tier: z.string().nullable().optional(),
     })
     .optional(),
 });
@@ -65,6 +73,10 @@ export interface AnthropicClientConfig {
   readonly inputCostPerMillionUsd?: number | null | undefined;
   readonly outputCostPerMillionUsd?: number | null | undefined;
   readonly fetchImplementation?: typeof fetch;
+  readonly autoModelPricing?: boolean | undefined;
+  readonly cacheReadPrice?: number | null | undefined;
+  readonly cacheWritePrice?: number | null | undefined;
+  readonly cacheWrite1hPrice?: number | null | undefined;
 }
 
 /** 将基础地址规范化为 Anthropic messages 端点。 */
@@ -83,31 +95,11 @@ function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
   return {
     inputTokens:
       (value?.input_tokens ?? 0) +
-      (value?.cache_creation_input_tokens ?? 0) +
+      (cacheWriteTotal(value?.cache_creation_input_tokens, value?.cache_creation) ?? 0) +
       (value?.cache_read_input_tokens ?? 0),
     outputTokens: value?.output_tokens ?? 0,
     estimatedCostMicros: null,
   };
-}
-
-/** 将 Anthropic Token 数按每百万 Token 美元报价换算为微美元。 */
-function estimateCostMicros(
-  value: z.infer<typeof responseSchema>['usage'],
-  inputPrice: number | null | undefined,
-  outputPrice: number | null | undefined,
-): number | null {
-  if (
-    inputPrice === null ||
-    inputPrice === undefined ||
-    outputPrice === null ||
-    outputPrice === undefined
-  )
-    return null;
-  const inputTokens =
-    (value?.input_tokens ?? 0) +
-    (value?.cache_creation_input_tokens ?? 0) +
-    (value?.cache_read_input_tokens ?? 0);
-  return Math.round(inputTokens * inputPrice + (value?.output_tokens ?? 0) * outputPrice);
 }
 
 /** 执行模块的解析、转换、评分或调用辅助逻辑。 */
@@ -148,6 +140,10 @@ export class AnthropicModelClient implements ModelClient {
   /** 执行模块组件对外暴露的操作。 */
   public constructor(input: AnthropicClientConfig) {
     this.#config = configSchema.parse({
+      autoModelPricing: input.autoModelPricing,
+      cacheReadPrice: input.cacheReadPrice,
+      cacheWritePrice: input.cacheWritePrice,
+      cacheWrite1hPrice: input.cacheWrite1hPrice,
       baseUrl: input.baseUrl,
       apiKey: input.apiKey,
       model: input.model,
@@ -172,6 +168,7 @@ export class AnthropicModelClient implements ModelClient {
 
   /** 发送一次 Anthropic 模型请求并返回统一响应。 */
   public async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
+    const requestedAt = Date.now();
     const timeout = AbortSignal.timeout(this.#config.timeoutMs);
     const combined = AbortSignal.any([signal, timeout]);
     const baseBody = {
@@ -239,14 +236,30 @@ export class AnthropicModelClient implements ModelClient {
           ? [{ id: call.data.id, toolKey: call.data.name, input: call.data.input }]
           : [];
       });
-      const responseUsage = {
-        ...usage(parsed.usage),
-        estimatedCostMicros: estimateCostMicros(
-          parsed.usage,
-          this.#config.inputCostPerMillionUsd,
-          this.#config.outputCostPerMillionUsd,
-        ),
-      };
+      // Anthropic 输入为未缓存部分，归一化总量后按互斥分量计价。
+      const raw = parsed.usage;
+      const totals = usage(raw);
+      const billing = calculateBilling({
+        model: this.#config.model,
+        baseUrl: this.#config.baseUrl,
+        requestedAt,
+        currency: this.#config.costCurrency,
+        inputTokens: raw?.input_tokens === undefined ? null : totals.inputTokens,
+        outputTokens: raw?.output_tokens ?? null,
+        cacheReadTokens: raw?.cache_read_input_tokens ?? null,
+        cacheWriteTokens: cacheWriteTotal(raw?.cache_creation_input_tokens, raw?.cache_creation),
+        cacheWrite5mTokens: raw?.cache_creation?.ephemeral_5m_input_tokens ?? null,
+        cacheWrite1hTokens: raw?.cache_creation?.ephemeral_1h_input_tokens ?? null,
+        serviceTier: raw?.service_tier,
+        uncachedInputTokens: raw?.input_tokens ?? null,
+        inputPrice: this.#config.inputCostPerMillionUsd,
+        outputPrice: this.#config.outputCostPerMillionUsd,
+        cacheReadPrice: this.#config.cacheReadPrice,
+        cacheWritePrice: this.#config.cacheWritePrice,
+        cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
+        autoModelPricing: this.#config.autoModelPricing,
+      });
+      const responseUsage = { ...totals, billing, estimatedCostMicros: billing.totalCostMicros };
       if (calls.length > 0) return { kind: 'tool_calls', calls, usage: responseUsage };
 
       const content = parsed.content.flatMap((block) => {

@@ -6,6 +6,7 @@ import {
   type SqliteDatabaseHandle,
 } from '@jobhunter/common/persistence/connection';
 import { SqliteAgentRunStore } from '@jobhunter/common/persistence/agent-runs';
+import { calculateBilling } from '../src/models/billing.js';
 
 const resources: {
   readonly root: Awaited<ReturnType<typeof createTemporaryDataRoot>>;
@@ -64,6 +65,69 @@ const usage: AgentRunUsage = {
 };
 
 describe('SQLite agent run store', () => {
+  it('persists nullable per-request cache details and leaves legacy rows without invented data', async () => {
+    const { store, handle } = await setup();
+    store.createRunning(running('billing'));
+    const billing = calculateBilling({
+      model: 'deepseek-flash',
+      baseUrl: 'https://api.deepseek.com',
+      requestedAt: Date.parse('2026-10-30T14:00:00Z'),
+      currency: 'USD',
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      uncachedInputTokens: null,
+    });
+    store.completeSucceeded({
+      id: 'billing',
+      cacheKey: 'cache-key',
+      output: { ok: true },
+      outputHash: 'c'.repeat(64),
+      finishedAt: 10,
+      usage: { ...usage, estimatedCostMicros: billing.totalCostMicros, billingCalls: [billing] },
+    });
+    expect(store.get('billing')?.billingCalls).toEqual([billing]);
+    store.createRunning(running('legacy', 'legacy-cache'));
+    expect(
+      handle.client
+        .prepare('SELECT model_usage_json FROM agent_runs WHERE id = ?')
+        .pluck()
+        .get('legacy'),
+    ).toBeNull();
+    expect(store.get('legacy')?.billingCalls ?? null).toBeNull();
+  });
+  it('backfills only matching completed unpriced costs and preserves the run facts', async () => {
+    const { store } = await setup();
+    // 1、构造已完成但未定价的运行，输出与时间必须在回填后保持不变。
+    store.createRunning(running('cost-backfill'));
+    store.completeSucceeded({
+      id: 'cost-backfill',
+      cacheKey: 'cache-key',
+      output: { result: 'synthetic' },
+      outputHash: 'c'.repeat(64),
+      finishedAt: 10,
+      usage: { ...usage, estimatedCostMicros: null, pricingVersion: 'unpriced' },
+    });
+    const before = store.get('cost-backfill');
+    const correction = { id: 'cost-backfill', startedAt: 1, usage };
+    // 2、用量不符时拒绝覆盖；成功后只改变三个计价字段，重复回填无效。
+    expect(store.backfillUnpricedCost({ ...correction, startedAt: 2 })).toBe(false);
+    expect(store.backfillUnpricedCost(correction)).toBe(true);
+    expect(store.get('cost-backfill')).toEqual({
+      ...before,
+      estimatedCostMicros: usage.estimatedCostMicros,
+      costCurrency: usage.costCurrency,
+      pricingVersion: usage.pricingVersion,
+    });
+    expect(store.backfillUnpricedCost(correction)).toBe(false);
+    expect(() =>
+      store.backfillUnpricedCost({
+        ...correction,
+        usage: { ...usage, estimatedCostMicros: -1 },
+      }),
+    ).toThrow(/Invalid cost correction/);
+  });
   it('invalidates a bad success without deleting its audit and allows a new winner', async () => {
     const { store } = await setup();
     store.createRunning(running('invalid'));

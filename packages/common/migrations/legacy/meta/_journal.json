@@ -316,6 +316,13 @@
       "when": 1792387200000,
       "tag": "0044_source_sync_aggregate_projection",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1793548800000,
+      "tag": "0045_agent_model_usage",
+      "breakpoints": true
     }
   ]
 }

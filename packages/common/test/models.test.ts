@@ -88,7 +88,7 @@ describe('Anthropic model client', () => {
       },
     });
 
-    await expect(client.complete(request, new AbortController().signal)).resolves.toEqual({
+    await expect(client.complete(request, new AbortController().signal)).resolves.toMatchObject({
       kind: 'output',
       output: { ok: true },
       usage: { inputTokens: 3, outputTokens: 2, estimatedCostMicros: null },
@@ -239,7 +239,7 @@ describe('OpenAI-compatible model client', () => {
       fetchImplementation,
     });
 
-    await expect(client.complete(request, new AbortController().signal)).resolves.toEqual({
+    await expect(client.complete(request, new AbortController().signal)).resolves.toMatchObject({
       kind: 'output',
       output: { ok: true },
       usage: { inputTokens: 3, outputTokens: 2, estimatedCostMicros: null },
@@ -311,7 +311,7 @@ describe('OpenAI-compatible model client', () => {
           ),
       });
 
-      await expect(client.complete(request, new AbortController().signal)).resolves.toEqual({
+      await expect(client.complete(request, new AbortController().signal)).resolves.toMatchObject({
         kind: 'unparsed_output',
         text: content,
         usage: { inputTokens: 0, outputTokens: 0, estimatedCostMicros: null },

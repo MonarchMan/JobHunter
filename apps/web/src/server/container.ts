@@ -289,6 +289,21 @@ export function createLocalWebContainer(
             baseUrl: config.model.baseUrl.value,
             model: config.model.modelName.value,
             apiKey: config.model.apiKey.value.reveal(),
+            cacheReadPrice:
+              config.model.cacheReadPrice.source === 'default'
+                ? undefined
+                : config.model.cacheReadPrice.value,
+            cacheWritePrice:
+              config.model.cacheWritePrice.source === 'default'
+                ? undefined
+                : config.model.cacheWritePrice.value,
+            cacheWrite1hPrice:
+              config.model.cacheWrite1hPrice.source === 'default'
+                ? undefined
+                : config.model.cacheWrite1hPrice.value,
+            autoModelPricing:
+              config.model.inputCostPerMillionUsd.source === 'default' &&
+              config.model.outputCostPerMillionUsd.source === 'default',
             inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value,
             outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value,
             costCurrency: config.model.costCurrency.value,

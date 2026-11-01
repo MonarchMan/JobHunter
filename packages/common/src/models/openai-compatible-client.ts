@@ -1,3 +1,11 @@
+import { calculateBilling } from './billing.js';
+import {
+  cacheCreationSchema,
+  cacheWriteTotal,
+  inputTokenDetailsSchema,
+  kimiCacheDurations,
+  optionalTokenCount,
+} from './cache-usage.js';
 import {
   ModelClientError,
   type ModelClient,
@@ -29,6 +37,10 @@ const configSchema = z
       .min(1_000)
       .max(10 * 60_000)
       .default(180_000),
+    autoModelPricing: z.boolean().optional(),
+    cacheReadPrice: z.number().nonnegative().nullable().optional(),
+    cacheWritePrice: z.number().nonnegative().nullable().optional(),
+    cacheWrite1hPrice: z.number().nonnegative().nullable().optional(),
     inputCostPerMillionUsd: z.number().nonnegative().nullable().optional(),
     outputCostPerMillionUsd: z.number().nonnegative().nullable().optional(),
   })
@@ -53,10 +65,22 @@ const responseSchema = z.object({
       }),
     )
     .min(1),
+  service_tier: z.string().nullable().optional(),
   usage: z
     .object({
-      prompt_tokens: z.number().int().nonnegative().default(0),
-      completion_tokens: z.number().int().nonnegative().default(0),
+      prompt_cache_hit_tokens: z.number().int().nonnegative().nullable().optional(),
+      prompt_cache_miss_tokens: z.number().int().nonnegative().nullable().optional(),
+      prompt_tokens_details: inputTokenDetailsSchema,
+      input_tokens_details: inputTokenDetailsSchema,
+      cache_read_input_tokens: optionalTokenCount,
+      cache_creation_input_tokens: optionalTokenCount,
+      cache_creation: cacheCreationSchema,
+      completion_tokens_details: z
+        .object({ reasoning_tokens: optionalTokenCount })
+        .nullable()
+        .optional(),
+      prompt_tokens: z.number().int().nonnegative().optional(),
+      completion_tokens: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });
@@ -71,6 +95,11 @@ export interface OpenAiCompatibleClientConfig {
   readonly inputCostPerMillionUsd?: number | null | undefined;
   readonly outputCostPerMillionUsd?: number | null | undefined;
   readonly fetchImplementation?: typeof fetch;
+  readonly autoModelPricing?: boolean | undefined;
+  readonly cacheReadPrice?: number | null | undefined;
+  readonly cacheWritePrice?: number | null | undefined;
+  readonly cacheWrite1hPrice?: number | null | undefined;
+  readonly now?: () => number;
 }
 
 /** 将基础地址规范化为 chat/completions 端点。 */
@@ -89,24 +118,6 @@ function usage(value: z.infer<typeof responseSchema>['usage']): ModelUsage {
     outputTokens: value?.completion_tokens ?? 0,
     estimatedCostMicros: null,
   };
-}
-
-/** 将 Token 数和每百万 Token 美元报价换算为微美元；未同时提供报价时返回 null。 */
-function estimateCostMicros(
-  value: z.infer<typeof responseSchema>['usage'],
-  inputPrice: number | null | undefined,
-  outputPrice: number | null | undefined,
-): number | null {
-  if (
-    inputPrice === null ||
-    inputPrice === undefined ||
-    outputPrice === null ||
-    outputPrice === undefined
-  )
-    return null;
-  return Math.round(
-    (value?.prompt_tokens ?? 0) * inputPrice + (value?.completion_tokens ?? 0) * outputPrice,
-  );
 }
 
 /** 判断是否连接 DeepSeek 官方 OpenAI 兼容入口。 */
@@ -184,12 +195,17 @@ async function responseError(response: Response): Promise<ModelClientError> {
 export class OpenAiCompatibleModelClient implements ModelClient {
   readonly #config: z.infer<typeof configSchema>;
   readonly #fetch: typeof fetch;
+  readonly #now: () => number;
 
   public readonly metadata: ModelClient['metadata'];
 
   /** 执行模块组件对外暴露的操作。 */
   public constructor(input: OpenAiCompatibleClientConfig) {
     this.#config = configSchema.parse({
+      autoModelPricing: input.autoModelPricing,
+      cacheReadPrice: input.cacheReadPrice,
+      cacheWritePrice: input.cacheWritePrice,
+      cacheWrite1hPrice: input.cacheWrite1hPrice,
       baseUrl: input.baseUrl,
       apiKey: input.apiKey,
       model: input.model,
@@ -199,6 +215,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       outputCostPerMillionUsd: input.outputCostPerMillionUsd ?? null,
     });
     this.#fetch = input.fetchImplementation ?? fetch;
+    this.#now = input.now ?? Date.now;
     this.metadata = {
       provider: 'openai-compatible',
       model: this.#config.model,
@@ -214,6 +231,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
 
   /** 发送一次模型请求并映射文本、工具调用和用量。 */
   public async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
+    const requestedAt = this.#now();
     const timeout = AbortSignal.timeout(this.#config.timeoutMs);
     const combined = AbortSignal.any([signal, timeout]);
     const messages = [
@@ -284,6 +302,65 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       if (response.status === 400) response = await dispatch();
       if (!response.ok) throw await responseError(response);
       const parsed = responseSchema.parse(await response.json());
+      // 1、优先采用官方缓存字段；显式零必须保留，缺失才回退兼容字段。
+      const raw = parsed.usage;
+      const headerDurations = kimiCacheDurations(this.#config.baseUrl, response.headers);
+      const durations = {
+        ephemeral_5m_input_tokens:
+          headerDurations?.ephemeral_5m_input_tokens ??
+          raw?.cache_creation?.ephemeral_5m_input_tokens ??
+          null,
+        ephemeral_1h_input_tokens:
+          headerDurations?.ephemeral_1h_input_tokens ??
+          raw?.cache_creation?.ephemeral_1h_input_tokens ??
+          null,
+      };
+      const read = isDeepSeekApi(this.#config.baseUrl)
+        ? (raw?.prompt_cache_hit_tokens ?? raw?.prompt_tokens_details?.cached_tokens ?? null)
+        : (raw?.cache_read_input_tokens ??
+          raw?.input_tokens_details?.cached_tokens ??
+          raw?.prompt_tokens_details?.cached_tokens ??
+          raw?.prompt_cache_hit_tokens ??
+          null);
+      const write = cacheWriteTotal(
+        raw?.cache_creation_input_tokens ??
+          raw?.input_tokens_details?.cache_write_tokens ??
+          raw?.prompt_tokens_details?.cache_write_tokens,
+        durations,
+      );
+      const inputTokens = raw?.prompt_tokens ?? null;
+      const miss =
+        raw?.prompt_cache_miss_tokens ??
+        (inputTokens !== null && read !== null ? inputTokens - read - (write ?? 0) : null);
+      const billing = calculateBilling({
+        model: this.#config.model,
+        baseUrl: this.#config.baseUrl,
+        requestedAt,
+        currency: this.#config.costCurrency,
+        inputTokens,
+        outputTokens: raw?.completion_tokens ?? null,
+        cacheReadTokens: read,
+        cacheWriteTokens: write,
+        cacheWrite5mTokens: durations.ephemeral_5m_input_tokens,
+        cacheWrite1hTokens: durations.ephemeral_1h_input_tokens,
+        serviceTier: parsed.service_tier,
+        thinking:
+          raw?.completion_tokens_details?.reasoning_tokens == null
+            ? null
+            : raw.completion_tokens_details.reasoning_tokens > 0,
+        uncachedInputTokens: miss,
+        inputPrice: this.#config.inputCostPerMillionUsd,
+        outputPrice: this.#config.outputCostPerMillionUsd,
+        cacheReadPrice: this.#config.cacheReadPrice,
+        cacheWritePrice: this.#config.cacheWritePrice,
+        cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
+        autoModelPricing: this.#config.autoModelPricing,
+      });
+      const responseUsage = {
+        ...usage(raw),
+        estimatedCostMicros: billing.totalCostMicros,
+        billing,
+      };
       const choice = parsed.choices[0];
       if (!choice) throw new ModelClientError('invalid_output', 'Model response had no choice.');
       if (choice.finish_reason === 'content_filter')
@@ -303,14 +380,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
               throw new ModelClientError('invalid_output', 'Model tool arguments were not JSON.');
             }
           }),
-          usage: {
-            ...usage(parsed.usage),
-            estimatedCostMicros: estimateCostMicros(
-              parsed.usage,
-              this.#config.inputCostPerMillionUsd,
-              this.#config.outputCostPerMillionUsd,
-            ),
-          },
+          usage: responseUsage,
         };
       }
       // 2、代码围栏在本地安全剥离；其他非 JSON（含 DeepSeek 偶发空正文）交给 Runner 修复一次。
@@ -320,26 +390,12 @@ export class OpenAiCompatibleModelClient implements ModelClient {
         ? {
             kind: 'output',
             output: structured.value,
-            usage: {
-              ...usage(parsed.usage),
-              estimatedCostMicros: estimateCostMicros(
-                parsed.usage,
-                this.#config.inputCostPerMillionUsd,
-                this.#config.outputCostPerMillionUsd,
-              ),
-            },
+            usage: responseUsage,
           }
         : {
             kind: 'unparsed_output',
             text: content,
-            usage: {
-              ...usage(parsed.usage),
-              estimatedCostMicros: estimateCostMicros(
-                parsed.usage,
-                this.#config.inputCostPerMillionUsd,
-                this.#config.outputCostPerMillionUsd,
-              ),
-            },
+            usage: responseUsage,
           };
     } catch (error) {
       if (error instanceof ModelClientError) throw error;
