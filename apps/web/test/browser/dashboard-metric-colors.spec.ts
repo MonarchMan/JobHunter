@@ -48,10 +48,4 @@ test('dashboard hero keeps brand, action, and decision colors distinct', async (
     await expect(primaryAction).toHaveCSS('color', 'rgb(255, 255, 255)');
     await hero.screenshot({ path: testInfo.outputPath(`hero-${String(width)}.png`) });
   }
-
-  const sourceLink = page
-    .locator('section[aria-labelledby="latest-sync-title"]')
-    .getByRole('link', { name: '查看任务' });
-  await sourceLink.hover();
-  await expect(sourceLink).toHaveCSS('color', 'rgb(31, 77, 54)');
 });

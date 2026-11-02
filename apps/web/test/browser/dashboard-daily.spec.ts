@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 for (const width of [1280, 390]) {
-  test(`daily dashboard supports activity details and persistent setup folding at ${String(width)}px`, async ({
+  test(`daily dashboard supports persistent setup folding at ${String(width)}px`, async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
@@ -15,13 +15,8 @@ for (const width of [1280, 390]) {
     await expect(steps.locator('ol')).toBeVisible();
     await steps.getByRole('button', { name: '收起引导' }).click();
     await expect(steps.locator('ol')).toBeHidden();
-    // 2、活动结果有界且可以查看详情，窄屏不溢出。
-    const activity = page.locator('section[aria-labelledby="latest-sync-title"]');
-    await expect(activity.getByRole('heading', { name: '最近活动' })).toBeVisible();
-    expect(await activity.locator('li').count()).toBeLessThanOrEqual(8);
-    await activity.getByRole('button').first().click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await page.keyboard.press('Escape');
+    // 2、活动板块已移除，窄屏仍不溢出。
+    await expect(page.getByRole('heading', { name: '最近活动' })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       width,
     );

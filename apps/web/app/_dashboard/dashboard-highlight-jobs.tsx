@@ -14,22 +14,33 @@ function formatRelativeTime(dateString: string): string {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date);
 }
 
+/** 公司与地点同排展示，标题保留原文，由样式控制视觉宽度和省略。 */
 function HighlightJobCard({ job }: Readonly<{ job: WebDashboardHighlightJob }>): ReactElement {
+  // 1、保留完整标题与地点，避免按字符截断造成中英文可用宽度不一致。
   return (
     <a href={`/jobs/${job.id}`} className={styles.card}>
       <div className={styles.header}>
         <div className={styles.company}>
           <strong>{job.companyName}</strong>
           {job.isNew ? <span className={styles.newBadge}>新</span> : null}
+          {job.locations.length > 0 ? (
+            <span className={styles.locations} title={job.locations.join(' · ')}>
+              {job.locations.slice(0, 3).join(' · ')}
+            </span>
+          ) : null}
+        </div>
+        <time className={styles.time} dateTime={job.publishedAt ?? job.updatedAt}>
+          {formatRelativeTime(job.publishedAt ?? job.updatedAt)}
+        </time>
+      </div>
+      <div className={styles.titleRow}>
+        <div className={styles.title} title={job.title}>
+          {job.title}
         </div>
         {job.score !== null ? (
           <span className={styles.score}>{Math.round(job.score)} 分</span>
         ) : null}
       </div>
-      <div className={styles.title}>{job.title}</div>
-      {job.locations.length > 0 ? (
-        <div className={styles.locations}>{job.locations.slice(0, 3).join(' · ')}</div>
-      ) : null}
       {job.matchReasons.length > 0 ? (
         <div className={styles.reasons}>
           {job.matchReasons.map((reason, idx) => (
@@ -39,11 +50,6 @@ function HighlightJobCard({ job }: Readonly<{ job: WebDashboardHighlightJob }>):
           ))}
         </div>
       ) : null}
-      <div className={styles.meta}>
-        <time dateTime={job.publishedAt ?? job.updatedAt}>
-          {formatRelativeTime(job.publishedAt ?? job.updatedAt)}
-        </time>
-      </div>
     </a>
   );
 }
