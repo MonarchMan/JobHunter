@@ -65,6 +65,7 @@ interface FixtureJob {
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 interface AdapterScenario {
+  absenceReliable?: boolean;
   jobs: FixtureJob[];
   coverage: 'complete' | 'partial';
   cursor: string;
@@ -120,6 +121,15 @@ function fixtureAdapter(
         cursor: scenario.cursor,
         pages: 1,
         discoveredCount: count,
+        ...(scenario.absenceReliable === undefined
+          ? {}
+          : {
+              diagnostics: {
+                reason: null,
+                retryable: false,
+                absenceReliable: scenario.absenceReliable,
+              },
+            }),
       };
     },
     ...(deferredDetails || requiredDetails
@@ -798,6 +808,24 @@ describe('JobSyncService', () => {
       .pluck()
       .get();
     expect(lastCursor).not.toContain('must-not-commit');
+  });
+
+  it('saves successful deduplicated results without treating uncertain absences as closed jobs', async () => {
+    const fixture = await setup();
+    await run(fixture);
+    fixture.scenario.jobs = fixture.scenario.jobs.slice(0, 2);
+    fixture.scenario.absenceReliable = false;
+    const result = await run(fixture);
+    expect(result).toMatchObject({
+      status: 'succeeded',
+      coverage: 'complete',
+      stats: { discovered: 2, staled: 0, closed: 0 },
+    });
+    expect(
+      fixture.handle.client
+        .prepare("SELECT status, missing_count FROM jobs WHERE external_job_id = 'job-3'")
+        .get(),
+    ).toMatchObject({ status: 'active', missing_count: 0 });
   });
 
   it('transitions complete-run misses to stale and closed, then restores the job', async () => {

@@ -73,6 +73,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
   definition: InlinePagedJsonDefinition<TConfig, TRecord>,
 ): JobSourceAdapter<TConfig, never> {
   const officialHosts = definition.metadata.officialHosts;
+  const actualCount = definition.browser?.responseShape === 'netease-jobs';
   const browserRequest = (context: {
     readonly requestId: string;
     readonly signal: AbortSignal;
@@ -88,8 +89,8 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
     maximumPages: 1_000,
     maximumResponseBytes: 2 * 1024 * 1024,
     pageSize: definition.pageSize(context.config),
-    // 小米分页和重复页重读遵循同一来源限流，避免恢复过程密集重放。
-    ...(definition.browser?.responseShape === 'xiaomi-jobs'
+    // 支持重复页恢复的来源，其普通分页与重读遵循相同限流，避免密集重放。
+    ...(['xiaomi-jobs', 'netease-jobs'].includes(definition.browser?.responseShape ?? '')
       ? {
           minimumRequestIntervalMs: Math.ceil(
             60_000 / definition.metadata.defaultRateLimit.requestsPerMinute,
@@ -140,7 +141,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
             const record = definition.parseRecord(value);
             const fields = definition.fields(record);
             if (seen.has(fields.externalJobId)) {
-              coverage = 'partial';
+              if (!actualCount) coverage = 'partial';
               continue;
             }
             seen.add(fields.externalJobId);
@@ -171,6 +172,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
       let expectedTotal: number | null = null;
       let expectedPages = 1;
       let totalChanged = false;
+      let paginationChanged = false;
       let duplicateIds = 0;
       let discoveredCount = 0;
       let fetchedPages = 0;
@@ -185,6 +187,8 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
           expectedPages = Math.max(1, Math.ceil(expectedTotal / pageSize));
         } else if (parsed.total !== expectedTotal) {
           totalChanged = true;
+          if (!actualCount || Math.max(1, Math.ceil(parsed.total / pageSize)) !== expectedPages)
+            paginationChanged = true;
         }
         if (parsed.records.length > pageSize) {
           throw new SourceError(
@@ -215,9 +219,8 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
       }
 
       const complete =
-        !totalChanged &&
-        duplicateIds === 0 &&
-        discoveredCount === expectedTotal &&
+        !paginationChanged &&
+        (actualCount || (duplicateIds === 0 && discoveredCount === expectedTotal)) &&
         fetchedPages === expectedPages;
       yield {
         type: 'complete',
@@ -228,12 +231,18 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
         diagnostics: {
           reason: complete
             ? null
-            : totalChanged
+            : paginationChanged
               ? 'pagination_total_changed'
               : duplicateIds > 0
                 ? 'duplicate_job_ids'
                 : 'discovered_count_mismatch',
-          retryable: totalChanged,
+          retryable: paginationChanged,
+          ...(actualCount
+            ? {
+                absenceReliable:
+                  duplicateIds === 0 && !totalChanged && discoveredCount === expectedTotal,
+              }
+            : {}),
           expectedCount: expectedTotal,
           discoveredCount,
           expectedPages,

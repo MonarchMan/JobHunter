@@ -123,6 +123,8 @@ export type DiscoveryCoverage = 'complete' | 'partial' | 'unknown';
 
 /** 来源适配器使用的数据结构或契约。 */
 export interface DiscoveryDiagnostics {
+  /** 为 false 时，本轮未见记录不足以证明旧职位下架；不影响已发现记录的同步成功。 */
+  readonly absenceReliable?: boolean;
   readonly reason: string | null;
   readonly retryable: boolean;
   readonly expectedCount?: number | null;

@@ -471,7 +471,7 @@ async function requestJsonPage(
   );
 }
 
-/** 在匿名会话中收集 JSON 分页，小米重复页仅有限重读一次并重新核验完整性。 */
+/** 在匿名会话中收集 JSON 分页，支持的来源仅有限重读重复页一次并重新核验完整性。 */
 export async function collectJsonPages(
   page: Page,
   request: SourcePageCollectionRequest,
@@ -493,12 +493,16 @@ export async function collectJsonPages(
     : firstCapture.page;
   // 1、缓存本轮每页的当前版本；重读必须替换旧页，不能并集历史结果。
   const snapshots = new Map<number, BrowserListPage>([[1, first]]);
+  // 网易数量以实际去重为准，不为官网重复重放；小米继续严格校验并有限恢复。
+  const actualCount = request.responseShape === 'netease-jobs';
+  const recheckLimit = request.responseShape === 'xiaomi-jobs' ? 4 : 0;
   let recheckedPages: number[] = [];
   for (let pass = 0; pass < 2; pass += 1) {
     const pages = [];
     const maximumPages = Math.min(request.maximumPages, options.maximumPages ?? 1_000);
     let coverage: SourcePageCollection['coverage'] = 'complete';
     let totalChanged = false;
+    let paginationChanged = false;
     let duplicateIds = 0;
     const seenIds = new Set<string>();
     const idPages = new Map<string, number[]>();
@@ -519,9 +523,15 @@ export async function collectJsonPages(
         snapshots.get(pageNumber) ??
         (await requestJsonPage(page, request, firstTemplate, pageNumber, expectedOffset));
       snapshots.set(pageNumber, current);
-      if (current.total !== first.total || current.limit !== first.limit) {
+      if (current.total !== first.total) totalChanged = true;
+      if (
+        current.limit !== first.limit ||
+        (actualCount
+          ? Math.ceil(current.total / current.limit) !== expectedPages
+          : current.total !== first.total)
+      ) {
         coverage = 'partial';
-        totalChanged = true;
+        paginationChanged = true;
       }
       if (current.items.length > current.limit) coverage = 'partial';
       pages.push({
@@ -541,7 +551,7 @@ export async function collectJsonPages(
           const id = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : '';
           if (!id) throw new SourceError('parse_changed', 'Browser list record has no stable ID.');
           if (seenIds.has(id)) {
-            coverage = 'partial';
+            if (!actualCount) coverage = 'partial';
             duplicateIds += 1;
           }
           seenIds.add(id);
@@ -565,10 +575,10 @@ export async function collectJsonPages(
     if (sampled || pages.length < expectedPages) coverage = 'partial';
     const truncated = !sampled && pages.length < expectedPages;
     const duplicates = [...idPages].filter(([, numbers]) => numbers.length > 1);
-    // 3、完整且稳定的小米分页出现重复时，只重读涉及的最多四页一次。
+    // 3、仅完整且总数稳定的分页允许恢复，按来源预算重读涉及页一次。
     if (
       pass === 0 &&
-      request.responseShape === 'xiaomi-jobs' &&
+      recheckLimit > 0 &&
       duplicateIds > 0 &&
       !sampled &&
       !truncated &&
@@ -576,7 +586,7 @@ export async function collectJsonPages(
     ) {
       recheckedPages = [...new Set(duplicates.flatMap(([, numbers]) => numbers))]
         .sort((a, b) => a - b)
-        .slice(0, 4);
+        .slice(0, recheckLimit);
       for (const number of recheckedPages) {
         if (request.signal.aborted)
           throw new SourceError('temporary', 'Browser collection was aborted.');
@@ -588,11 +598,7 @@ export async function collectJsonPages(
       continue;
     }
     // 4、重复消失也不等于完整：当前唯一职位数仍须与官网总数相等。
-    const missing =
-      request.responseShape === 'xiaomi-jobs' &&
-      !sampled &&
-      !truncated &&
-      seenIds.size !== first.total;
+    const missing = recheckLimit > 0 && !sampled && !truncated && seenIds.size !== first.total;
     if (missing) coverage = 'partial';
     return {
       pages,
@@ -602,14 +608,17 @@ export async function collectJsonPages(
           ? 'maximum_pages_reached'
           : sampled
             ? 'sampled_pages'
-            : totalChanged
+            : paginationChanged
               ? 'pagination_total_changed'
-              : duplicateIds > 0
+              : duplicateIds > 0 && !actualCount
                 ? 'duplicate_job_ids'
                 : missing
                   ? 'discovered_count_mismatch'
                   : null,
-        retryable: totalChanged,
+        retryable: paginationChanged,
+        ...(actualCount
+          ? { absenceReliable: duplicateIds === 0 && !totalChanged && seenIds.size === first.total }
+          : {}),
         expectedCount: first.total,
         discoveredCount: seenIds.size,
         expectedPages,

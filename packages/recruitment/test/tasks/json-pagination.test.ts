@@ -13,27 +13,39 @@ function fixture(
     sampled?: boolean;
     sharedJob?: boolean;
     many?: boolean;
+    netease?: boolean;
+    pageCount?: number;
+    maximumPages?: number;
+    secondTotal?: number;
   } = {},
 ): { calls: number[]; run: () => Promise<SourcePageCollection> } {
   const calls: number[] = [];
   const counts = new Map<number, number>();
-  const total = options.many ? 10 : 4;
-  const url = 'https://hr.xiaomi.com/website/api/agent/searchJobPage?pageNum=1&pageSize=2&type=3';
+  const total = options.pageCount ? options.pageCount * 2 : options.many ? 10 : 4;
+  const url = options.netease
+    ? 'https://hr.163.com/api/hr163/position/queryPage'
+    : 'https://hr.xiaomi.com/website/api/agent/searchJobPage?pageNum=1&pageSize=2&type=3';
   /** 按页码和请求轮次生成响应，重读只替换当前页。 */
   function response(number: number): {
-    data: { total: number; list: { jobPostId: string; jobId: string }[] };
+    data: { total: number; list: { id: string; jobPostId: string; jobId: string }[] };
   } {
     const count = (counts.get(number) ?? 0) + 1;
     counts.set(number, count);
     let ids = number === 1 ? ['a', 'b'] : ['b', 'd'];
-    if (options.many) ids = ['a', `page-${String(number)}`];
+    if (options.many || options.pageCount) ids = ['a', `page-${String(number)}`];
     else if (options.sharedJob) ids = number === 1 ? ['a', 'b'] : ['c', 'd'];
     else if (count > 1 && options.recovery)
       ids = number === 1 ? ['a', 'c'] : options.recovery === 'missing' ? ['b'] : ['b', 'd'];
     return {
       data: {
-        total: count > 1 && options.recovery === 'changed' ? 5 : total,
+        total:
+          number === 2 && options.secondTotal !== undefined
+            ? options.secondTotal
+            : count > 1 && options.recovery === 'changed'
+              ? 5
+              : total,
         list: ids.map((id) => ({
+          id,
           jobPostId: id,
           jobId: options.sharedJob ? 'shared-job' : `job-${id}`,
         })),
@@ -47,27 +59,37 @@ function fixture(
       Promise.resolve({
         url: () => url,
         status: () => 200,
-        request: () => ({ method: () => 'GET', headers: () => ({}), postData: () => null }),
+        request: () => ({
+          method: () => (options.netease ? 'POST' : 'GET'),
+          headers: () => ({}),
+          postData: () => null,
+          postDataJSON: () => ({ currentPage: 1, pageSize: 2 }),
+        }),
         json: () => Promise.resolve(response(1)),
       }),
-    evaluate: (_fn: unknown, input: { target: { url: string } }) => {
-      const number = Number(new URL(input.target.url).searchParams.get('pageNum'));
+    evaluate: (
+      _fn: unknown,
+      input: { target: { url: string; body: { currentPage?: number } } },
+    ) => {
+      const number = options.netease
+        ? Number(input.target.body.currentPage)
+        : Number(new URL(input.target.url).searchParams.get('pageNum'));
       calls.push(number);
       return Promise.resolve({ url: input.target.url, status: 200, body: response(number) });
     },
   } as unknown as Page;
   const request: SourcePageCollectionRequest = {
-    sourceKey: 'xiaomi.intern',
+    sourceKey: options.netease ? 'netease.mixed' : 'xiaomi.intern',
     requestId: 'fixture',
     url,
-    allowedHosts: ['hr.xiaomi.com'],
+    allowedHosts: [new URL(url).hostname],
     signal: new AbortController().signal,
     timeoutMs: 1000,
-    maximumPages: 10,
+    maximumPages: options.maximumPages ?? 40,
     maximumResponseBytes: 100_000,
     pageSize: 2,
-    responseShape: 'xiaomi-jobs',
-    listEndpointPath: '/website/api/agent/searchJobPage',
+    responseShape: options.netease ? 'netease-jobs' : 'xiaomi-jobs',
+    listEndpointPath: new URL(url).pathname,
   };
   return {
     calls,
@@ -139,5 +161,42 @@ describe('Xiaomi publication identity and bounded pagination recovery', () => {
     expect(result.coverage).toBe('partial');
     expect(result.diagnostics?.recheckedPages).toEqual([1, 2, 3, 4]);
     expect(h.calls).toEqual([2, 3, 4, 5, 1, 2, 3, 4]);
+  });
+});
+
+describe('Netease actual unique count policy', () => {
+  it('accepts duplicate records without replay or count warnings', async () => {
+    const h = fixture({ netease: true });
+    const result = await h.run();
+    expect(h.calls).toEqual([2]);
+    expect(result.coverage).toBe('complete');
+    expect(result.diagnostics).toMatchObject({
+      reason: null,
+      expectedCount: 4,
+      discoveredCount: 3,
+      duplicateIds: 1,
+      absenceReliable: false,
+    });
+    expect(result.diagnostics?.recheckedPages).toBeUndefined();
+  });
+  it.each([3, 5])('uses total %s only as a page-count reference', async (secondTotal) => {
+    const result = await fixture({ netease: true, secondTotal }).run();
+    expect(result.coverage).toBe(secondTotal === 3 ? 'complete' : 'partial');
+    expect(result.diagnostics?.reason).toBe(secondTotal === 3 ? null : 'pagination_total_changed');
+    expect(result.diagnostics?.absenceReliable).toBe(false);
+  });
+  it('does not replay even when many pages contain duplicates', async () => {
+    const h = fixture({ netease: true, pageCount: 34 });
+    const result = await h.run();
+    expect(result.coverage).toBe('complete');
+    expect(result.diagnostics?.recheckedPages).toBeUndefined();
+    expect(h.calls).toHaveLength(33);
+  });
+  it('does not recheck truncated collections', async () => {
+    const h = fixture({ netease: true, pageCount: 3, maximumPages: 2 });
+    const result = await h.run();
+    expect(result.diagnostics?.reason).toBe('maximum_pages_reached');
+    expect(result.diagnostics?.recheckedPages).toBeUndefined();
+    expect(h.calls).toEqual([2]);
   });
 });

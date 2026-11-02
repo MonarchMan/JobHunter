@@ -527,7 +527,13 @@ export class JobSyncService {
       completion?.coverage ?? (stats.discovered > 0 ? 'partial' : 'unknown');
     const cancelled = signal.aborted;
     if (runError || cancelled) coverage = stats.discovered > 0 ? 'partial' : 'unknown';
-    if (!runError && !cancelled && completion?.coverage === 'complete') {
+    // 已去重的网易结果可以成功保存，但有重复或数量差异时不能用“未见”判定旧职位下架。
+    if (
+      !runError &&
+      !cancelled &&
+      completion?.coverage === 'complete' &&
+      completion.diagnostics?.absenceReliable !== false
+    ) {
       try {
         this.#processUnseen({ source, runId, stats });
       } catch (error) {
