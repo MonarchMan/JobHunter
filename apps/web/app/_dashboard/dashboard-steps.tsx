@@ -1,6 +1,7 @@
 'use client';
 
 import { useSyncExternalStore, useState, type ReactElement } from 'react';
+import { Icon } from '../components/ui-icon.js';
 import panelStyles from '../dashboard-panel.module.css';
 import styles from './dashboard-steps.module.css';
 
@@ -62,18 +63,20 @@ export function DashboardSteps({
   return (
     <section className={panelStyles.panel} aria-labelledby="setup-title">
       <div className={['section-heading', styles.heading].filter(Boolean).join(' ')}>
-        <div>
+        <div className={styles.titleGroup}>
           <h2 id="setup-title">三步开始使用</h2>
+          <button
+            type="button"
+            className={styles.toggle}
+            aria-label={expanded ? '收起引导' : '展开引导'}
+            title={expanded ? '收起引导' : '展开引导'}
+            aria-expanded={expanded}
+            aria-controls="dashboard-setup-steps"
+            onClick={toggle}
+          >
+            <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={20} />
+          </button>
         </div>
-        <button
-          type="button"
-          className="button-secondary"
-          aria-expanded={expanded}
-          aria-controls="dashboard-setup-steps"
-          onClick={toggle}
-        >
-          {expanded ? '收起引导' : '展开引导'}
-        </button>
       </div>
       {complete ? <p>初始设置已完成</p> : null}
       <ol id="dashboard-setup-steps" className={styles.list} hidden={!expanded}>

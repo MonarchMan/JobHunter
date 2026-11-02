@@ -1,8 +1,33 @@
-.count {
-  color: var(--primary-hover);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+.titleGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--border-hover);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  border-color: var(--primary);
+  background: var(--surface-muted);
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 .heading {
