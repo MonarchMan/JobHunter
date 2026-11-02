@@ -38,6 +38,57 @@ it('将正常结束的部分同步显示为警告并保留具体原因', () => {
   ).toMatchObject({ label: '警告', status: 'warning', error: '第二页获取失败' });
 });
 
+it('运行中的未知覆盖不生成错误或警告，真实摘要仍保留', () => {
+  if (!source.run) throw new Error('Missing fixture run');
+  const running = {
+    ...source,
+    run: {
+      ...source.run,
+      status: 'running' as const,
+      coverage: 'unknown' as const,
+      errorSummary: null,
+    },
+  };
+  for (const status of ['pending', 'running', 'succeeded'] as const) {
+    expect(taskPresentation({ status, sourceSync: running, errorSummary: null })).toMatchObject({
+      error: '',
+      warning: false,
+    });
+  }
+  expect(
+    taskPresentation({ status: 'running', sourceSync: running, errorSummary: '真实错误' }).error,
+  ).toBe('真实错误');
+  expect(
+    taskPresentation({
+      status: 'running',
+      sourceSync: { ...running, run: { ...running.run, errorSummary: '来源错误' } },
+      errorSummary: null,
+    }).error,
+  ).toBe('来源错误');
+  const combined = taskPresentation({
+    status: 'running',
+    sourceSync: { ...source, run: null, sources: [running, { ...source, sourceSlug: 'finished' }] },
+    errorSummary: null,
+  });
+  expect(combined.error).toBe('finished：第二页获取失败');
+});
+
+it('终态且覆盖未知时仍保留不完整提示', () => {
+  if (!source.run) throw new Error('Missing fixture run');
+  const result = taskPresentation({
+    status: 'succeeded',
+    errorSummary: null,
+    sourceSync: {
+      ...source,
+      run: { ...source.run, status: 'succeeded', coverage: 'unknown', errorSummary: null },
+    },
+  });
+  expect(result).toMatchObject({
+    warning: true,
+    error: '同步未完整完成，系统未记录具体错误原因。',
+  });
+});
+
 it('任务没有错误类别时使用来源警告类别，并优先保留任务自身错误', () => {
   if (!source.run) throw new Error('Missing fixture run');
   const task = {

@@ -18,22 +18,20 @@ export function taskPresentation(
       ? [task.sourceSync]
       : [];
   const runs = sources.flatMap((source) => (source.run ? [source.run] : []));
-  const warning =
-    task.status === 'succeeded' &&
-    runs.some(
-      (run) => run.status === 'partial' || run.status === 'failed' || run.coverage !== 'complete',
-    );
+  /** 只有已结束的运行才能判定覆盖不完整，执行中 unknown 是正常初始值。 */
+  const incomplete = (run: (typeof runs)[number]): boolean =>
+    run.status !== 'running' &&
+    (run.status === 'partial' || run.status === 'failed' || run.coverage !== 'complete');
+  // 1、任务结束后再汇总来源警告，运行中的未知覆盖不算异常。
+  const warning = task.status === 'succeeded' && runs.some(incomplete);
+  // 2、保留真实摘要；仅已结束且不完整的来源生成兜底提示。
   const errors = [
     task.errorSummary,
     ...sources.map((source) => {
       if (!source.run) return null;
       const reason =
         source.run.errorSummary ??
-        (source.run.status === 'partial' ||
-        source.run.status === 'failed' ||
-        source.run.coverage !== 'complete'
-          ? '同步未完整完成，系统未记录具体错误原因。'
-          : null);
+        (incomplete(source.run) ? '同步未完整完成，系统未记录具体错误原因。' : null);
       return reason && sources.length > 1 ? `${source.sourceSlug}：${reason}` : reason;
     }),
   ].filter((value): value is string => Boolean(value));
