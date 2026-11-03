@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './task-actions.module.css';
+import { Icon } from '../components/ui-icon.js';
 import { useToast } from '../components/toast-provider.js';
 
 interface ActionResponse {
@@ -55,7 +56,7 @@ export function TaskActions({
             void act('retry');
           }}
         >
-          重试
+          <Icon name="refresh" size={16} />
         </button>
       ) : (
         <button
@@ -67,7 +68,7 @@ export function TaskActions({
             void act('cancel');
           }}
         >
-          取消
+          <Icon name="close" size={16} />
         </button>
       )}
     </div>

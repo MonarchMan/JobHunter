@@ -402,9 +402,13 @@ export class WorkerEngine implements TaskCancellationNotifier {
       // 1、周期维护自行判断持久化到期时间；异常只记录，不终止任务调度。
       try {
         await this.#periodicWork?.(this.#lifecycle.signal);
-      } catch {
-        if (!this.#lifecycle.signal.aborted)
-          this.#logger.warn('worker.periodic_work_failed', { result: 'failed' });
+      } catch (error) {
+        if (!this.#lifecycle.signal.aborted) {
+          this.#logger.error('worker.periodic_work_failed', {
+            result: 'failed',
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
       try {
         await this.#delay.wait(this.#options.schedulerPollMs, this.#lifecycle.signal);

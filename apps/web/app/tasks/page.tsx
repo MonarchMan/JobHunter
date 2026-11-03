@@ -228,7 +228,15 @@ export default async function TasksPage({
                   {taskPresentation(task).label}
                 </span>
               </div>
-              <p>{taskPresentation(task).error || '暂无错误'}</p>
+              <p className={styles.metaRow}>
+                <span>{taskDuration(task.startedAt, task.finishedAt)}</span>
+                <span
+                  className={styles.errorText}
+                  title={taskPresentation(task).error || undefined}
+                >
+                  {taskPresentation(task).error || '暂无错误'}
+                </span>
+              </p>
               {task.jobDetailBatch ? (
                 <p>
                   总数 {String(task.jobDetailBatch.counts.total)}，成功{' '}
@@ -236,9 +244,7 @@ export default async function TasksPage({
                   {String(task.jobDetailBatch.counts.failed)}
                 </p>
               ) : null}
-              {task.kind === 'task' ? (
-                <TaskActions taskId={task.id} status={task.status} taskType={task.taskType} />
-              ) : null}
+              <TaskActions taskId={task.id} status={task.status} taskType={task.taskType} />
             </article>
           ))}
         </div>

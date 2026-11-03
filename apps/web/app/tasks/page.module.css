@@ -56,6 +56,8 @@
   border: 1px solid var(--line);
   border-radius: 0.85rem;
   background: var(--surface);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sectionHeading {
@@ -79,6 +81,27 @@
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.metaRow span:first-child {
+  flex: 0 0 auto;
+  font-size: 0.8rem;
+}
+
+.metaRow span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
 }
 
 .card p {

@@ -1,5 +1,18 @@
 .cell {
   display: grid;
+  justify-items: center;
   gap: 0.35rem;
-  min-width: 7rem;
+  min-width: 0;
+}
+
+.cell :global(.button-muted) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  min-width: auto;
+  border-radius: 0.5rem;
+  line-height: 1;
 }
