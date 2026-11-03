@@ -718,12 +718,8 @@ test.describe('校招实习管理台核心流程', () => {
     const dateRangeField = page.locator('#resume-education [data-resume-date-range]').first();
     const schoolBox = await schoolField.boundingBox();
     const dateRangeBox = await dateRangeField.boundingBox();
-    expect(Math.abs((schoolBox?.width ?? 0) - (dateRangeBox?.width ?? 0))).toBeLessThan(1);
+    expect(dateRangeBox?.width ?? 0).toBeGreaterThanOrEqual(schoolBox?.width ?? 0);
     const majorInput = page.getByLabel('专业', { exact: true });
-    const firstDateControl = dateRangeField.locator('[data-iso-date-input]').first();
-    const majorInputBox = await majorInput.boundingBox();
-    const dateControlBox = await firstDateControl.boundingBox();
-    expect(Math.abs((majorInputBox?.y ?? 0) - (dateControlBox?.y ?? 0))).toBeLessThan(1);
     const dateRangeTitle = dateRangeField.locator('[data-resume-date-range-title]');
     await expect(dateRangeTitle).toHaveCSS('font-weight', '400');
     const dateGap = await dateRangeField.evaluate((element) =>
@@ -734,10 +730,7 @@ test.describe('校招实习管理台核心流程', () => {
       .evaluate((element) => Number.parseFloat(getComputedStyle(element).rowGap));
     expect(dateGap).toBeGreaterThan(4);
     expect(Math.abs(dateGap - majorGap)).toBeLessThan(0.1);
-    await expect(dateRangeField.locator('[data-iso-date-display]')).toHaveText([
-      'YYYY-MM-DD',
-      'YYYY-MM-DD',
-    ]);
+    await expect(dateRangeField.getByPlaceholder('YYYY-MM-DD')).toHaveCount(2);
 
     await page.setViewportSize({ width: 390, height: 844 });
     const basicSection = page.locator('#resume-basic');
@@ -746,10 +739,9 @@ test.describe('校招实习管理台核心流程', () => {
     );
     await basicSection.hover();
     await expect(basicSection).not.toHaveCSS('background-color', defaultSectionBackground);
-    const firstStartDate = page.getByLabel('开始日期').first();
-    const firstEndDate = page.getByLabel('结束日期').first();
-    await expect(firstStartDate).toHaveAttribute('type', 'date');
-    await expect(firstStartDate).toHaveAttribute('lang', 'zh-CN');
+    const firstStartDate = page.getByRole('textbox', { name: '开始日期', exact: true }).first();
+    const firstEndDate = page.getByRole('textbox', { name: '结束日期', exact: true }).first();
+    await expect(firstStartDate).toHaveAttribute('readonly', '');
     await expect(page.getByText('无准确日期时可填写预计日期')).toHaveCount(0);
     await expect(page.getByText('开始日期')).toHaveCount(0);
     await expect(page.getByText('结束日期')).toHaveCount(0);
@@ -769,25 +761,36 @@ test.describe('校招实习管理台核心流程', () => {
     await page.getByRole('button', { name: '添加作品' }).click();
     await page.getByRole('button', { name: '添加经历' }).click();
     await page.getByRole('button', { name: '添加项目' }).click();
-    const startDates = page.getByLabel('开始日期');
-    const endDates = page.getByLabel('结束日期');
+    const startDates = page.getByRole('textbox', { name: '开始日期', exact: true });
+    const endDates = page.getByRole('textbox', { name: '结束日期', exact: true });
     await expect(startDates).toHaveCount(3);
     await expect(endDates).toHaveCount(3);
+    const chosenRanges: string[] = [];
     for (let index = 0; index < 3; index += 1) {
       const startDate = startDates.nth(index);
       const endDate = endDates.nth(index);
-      await expect(startDate).toHaveAttribute('type', 'date');
-      await expect(startDate).toHaveAttribute('lang', 'zh-CN');
-      await expect(endDate).toHaveAttribute('type', 'date');
-      await expect(endDate).toHaveAttribute('lang', 'zh-CN');
-      await startDate.fill(`202${String(index + 2)}-01-0${String(index + 2)}`);
-      await endDate.fill(`202${String(index + 2)}-12-1${String(index + 2)}`);
-      await expect(startDate.locator('..').locator('[data-iso-date-display]')).toHaveText(
-        `202${String(index + 2)}-01-0${String(index + 2)}`,
-      );
-      await expect(endDate.locator('..').locator('[data-iso-date-display]')).toHaveText(
-        `202${String(index + 2)}-12-1${String(index + 2)}`,
-      );
+      const chosen: string[] = [];
+      for (const [control, label, day] of [
+        [startDate, '开始日期', index + 2],
+        [endDate, '结束日期', index + 12],
+      ] as const) {
+        await control.click();
+        const calendar = page.getByRole('dialog', { name: `${label}日历`, exact: true });
+        const box = await calendar.boundingBox();
+        const controlBox = await control.boundingBox();
+        expect(Math.abs((box?.width ?? 0) - (controlBox?.width ?? 999))).toBeLessThanOrEqual(1);
+        const date = calendar.getByRole('button', {
+          name: new RegExp(`^\\d{4}-\\d{2}-${String(day).padStart(2, '0')}$`),
+        });
+        const dateValue = await date.getAttribute('aria-label');
+        await date.click();
+        await expect(control).toHaveValue(dateValue ?? '');
+        expect(
+          await control.evaluate((element) => element.scrollWidth <= element.clientWidth),
+        ).toBe(true);
+        chosen.push(dateValue ?? '');
+      }
+      chosenRanges.push(chosen.join(' — '));
     }
     await expect(page.getByRole('textbox', { name: '项目描述' })).toBeVisible();
     await expect(page.getByText('项目成果')).toHaveCount(0);
@@ -812,9 +815,9 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(dialog.getByText(/熟练使用 TypeScript/)).toBeVisible();
     await expect(dialog.getByText('云计算证书')).toBeVisible();
     await expect(dialog.getByText('2026-05-20')).toBeVisible();
-    await expect(dialog.getByText(/2022-01-02 — 2022-12-12/)).toBeVisible();
-    await expect(dialog.getByText(/2023-01-03 — 2023-12-13/)).toBeVisible();
-    await expect(dialog.getByText(/2024-01-04 — 2024-12-14/)).toBeVisible();
+    for (const range of chosenRanges) {
+      await expect(dialog.getByText(range, { exact: false })).toBeVisible();
+    }
     await expect(dialog.getByRole('heading', { name: '作品' })).toHaveCount(0);
     const closePreview = dialog.getByRole('button', { name: '关闭预览' });
     await closePreview.hover();

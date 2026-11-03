@@ -7,6 +7,7 @@ import { Icon } from '../ui-icon.js';
 
 interface DatePickerProps {
   readonly label: string;
+  readonly compact?: boolean;
   readonly name?: string;
   readonly value?: string;
   readonly onChange?: (value: string) => void;
@@ -20,7 +21,13 @@ function formatDate(year: number, month: number, day: number): string {
 }
 
 /** 页面内日期选择器：日历宽度始终跟随输入框，避免原生弹层的浏览器差异。 */
-export function DatePicker({ label, name, value, onChange }: DatePickerProps): ReactElement {
+export function DatePicker({
+  label,
+  name,
+  value,
+  onChange,
+  compact = false,
+}: DatePickerProps): ReactElement {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -82,16 +89,20 @@ export function DatePicker({ label, name, value, onChange }: DatePickerProps): R
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   return (
-    <div className={styles.root} ref={root}>
-      <label htmlFor={id}>{label}</label>
+    <div
+      className={[styles.root, compact ? styles.compact : undefined].filter(Boolean).join(' ')}
+      ref={root}
+    >
+      {!compact && <label htmlFor={id}>{label}</label>}
       <div className={styles.control}>
         <input
           ref={input}
           id={id}
+          aria-label={compact ? label : undefined}
           name={name}
           value={selected}
           readOnly
-          placeholder="选择日期"
+          placeholder={compact ? 'YYYY-MM-DD' : '选择日期'}
           aria-haspopup="dialog"
           onClick={toggleOpen}
         />

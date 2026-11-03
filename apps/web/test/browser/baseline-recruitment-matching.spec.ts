@@ -25,7 +25,16 @@ for (const width of [1280, 390]) {
     await page.getByRole('option', { name: '3 天', exact: true }).click();
     await page.getByLabel('毕业届别（年份）').fill('2027');
     await page.getByLabel('可持续实习月数').fill('6');
-    await page.getByLabel('最早可到岗日期').fill('2026-10-01');
+    const dateInput = page.getByRole('textbox', { name: '最早可到岗日期', exact: true });
+    await dateInput.click();
+    const calendar = page.getByRole('dialog', { name: '最早可到岗日期日历' });
+    const inputBox = await dateInput.boundingBox();
+    const calendarBox = await calendar.boundingBox();
+    expect(Math.abs((inputBox?.width ?? 0) - (calendarBox?.width ?? 999))).toBeLessThanOrEqual(1);
+    expect(Math.abs((inputBox?.x ?? 0) - (calendarBox?.x ?? 999))).toBeLessThanOrEqual(1);
+    const firstDay = calendar.getByRole('button', { name: /^\d{4}-\d{2}-01$/ });
+    const chosenDate = await firstDay.getAttribute('aria-label');
+    await firstDay.click();
     const save = page.getByRole('button', { name: '保存简历', exact: true });
     await page.getByLabel('毕业届别（年份）').fill('1800');
     await save.click();
@@ -42,7 +51,9 @@ for (const width of [1280, 390]) {
     await expect(student).toContainText('在读（非应届）');
     await expect(days).toContainText('3 天');
     await expect(page.getByLabel('毕业届别（年份）')).toHaveValue('2027');
-    await expect(page.getByLabel('最早可到岗日期')).toHaveValue('2026-10-01');
+    await expect(page.getByRole('textbox', { name: '最早可到岗日期', exact: true })).toHaveValue(
+      chosenDate ?? '',
+    );
     // 2. 服务端失败保留草稿；随后重试，清空日期/数字不会变为零或非法日期。
     await page.route('**/api/profile', async (route) => {
       if (route.request().method() !== 'PATCH') return route.continue();
@@ -57,7 +68,8 @@ for (const width of [1280, 390]) {
     await expect(page.getByLabel('毕业届别（年份）')).toHaveValue('2028');
     await page.unroute('**/api/profile');
     await page.getByLabel('毕业届别（年份）').fill('');
-    await page.getByLabel('最早可到岗日期').fill('');
+    await dateInput.click();
+    await calendar.getByRole('button', { name: '清除', exact: true }).click();
     await page.getByLabel('可持续实习月数').fill('');
     const cleared = page.waitForResponse(
       (response) =>
@@ -67,7 +79,9 @@ for (const width of [1280, 390]) {
     expect((await cleared).ok()).toBe(true);
     await expect(page.getByText('结构化简历已保存为新版本。')).toBeVisible();
     await expect(page.getByLabel('毕业届别（年份）')).toHaveValue('');
-    await expect(page.getByLabel('最早可到岗日期')).toHaveValue('');
+    await expect(page.getByRole('textbox', { name: '最早可到岗日期', exact: true })).toHaveValue(
+      '',
+    );
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page
       .locator('#resume-intention')

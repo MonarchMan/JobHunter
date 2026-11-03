@@ -3,6 +3,7 @@
 import type { CandidateProfileData } from '@jobhunter/user/domain';
 import type { ReactElement } from 'react';
 import { SelectField } from '../components/forms/select-field.js';
+import { DatePicker } from '../components/forms/date-picker.js';
 
 /** 用户确认的资格事实；空值表示未知，不根据当前日期自动推断。 */
 type Constraints = NonNullable<CandidateProfileData['matchingConstraints']>;
@@ -122,16 +123,13 @@ export function MatchingConstraintsFields({
           </span>
         )}
       </label>
-      <label>
-        最早可到岗日期
-        <input
-          type="date"
-          value={facts.availableFrom ?? ''}
-          onChange={(event) => {
-            onChange({ ...facts, availableFrom: event.currentTarget.value || null });
-          }}
-        />
-      </label>
+      <DatePicker
+        label="最早可到岗日期"
+        value={facts.availableFrom ?? ''}
+        onChange={(date) => {
+          onChange({ ...facts, availableFrom: date || null });
+        }}
+      />
     </>
   );
 }

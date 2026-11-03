@@ -111,3 +111,32 @@
   margin-top: 0.35rem;
   border-top: 1px solid var(--line);
 }
+
+/* 起止日期并排时隐藏重复标签，留足完整 ISO 日期及图标的空间。 */
+.compact {
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.compact .control input {
+  min-width: 0;
+  padding-left: 0.4rem;
+  padding-right: 1.8rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.compact .trigger {
+  width: 1.8rem;
+}
+
+.compact .calendar {
+  padding: 0.3rem;
+}
+
+.compact .monthBar button,
+.compact .actions button {
+  min-width: 1.5rem;
+  padding-inline: 0.2rem;
+}

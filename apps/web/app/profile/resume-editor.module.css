@@ -196,6 +196,12 @@
   gap: 0.8rem;
 }
 
+/* 求职意向保留双列表单宽度，下拉框与相邻字段对齐。 */
+.intentionFields :global([data-authored-select-trigger]) {
+  width: 100%;
+  max-width: 100%;
+}
+
 .resume-field-grid > label,
 .resume-edit-section > label,
 .resume-date-range {
@@ -209,6 +215,7 @@
 }
 
 .resume-date-range {
+  grid-column: 1 / -1;
   min-width: 0;
 }
 
@@ -216,61 +223,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.65rem;
-}
-
-.iso-date-input {
-  position: relative;
-  display: block;
-  min-width: 0;
-  min-height: 2.75rem;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-  background: var(--surface);
-  transition:
-    border-color var(--motion-fast) var(--ease-standard),
-    box-shadow var(--motion-fast) var(--ease-standard),
-    background-color var(--motion-fast) var(--ease-standard);
-}
-
-.iso-date-input:hover {
-  border-color: var(--border-hover);
-}
-
-.iso-date-input:focus-within {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 0.2rem var(--primary-soft);
-}
-
-.iso-date-display {
-  display: flex;
-  min-height: 2.75rem;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0 0.75rem;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.01em;
-}
-
-.iso-date-display.is-placeholder {
-  color: var(--muted-ink);
-}
-
-.iso-date-native {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  opacity: 0;
-  cursor: pointer;
+  gap: 0.4rem;
 }
 
 .resume-professional-skills {

@@ -10,6 +10,7 @@ import type { ReactElement, ReactNode, SyntheticEvent } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import { DatePicker } from '../components/forms/date-picker.js';
 import { SelectField } from '../components/forms/select-field.js';
 import { useToast } from '../components/toast-provider.js';
 import { ResumePolish } from './resume-polish.js';
@@ -291,28 +292,15 @@ function IsoDateInput({
   value: string | null;
   onChange: (value: string | null) => void;
 }>): ReactElement {
-  const normalized = dateInputValue(value);
   return (
-    <span className={styles['iso-date-input']} data-iso-date-input>
-      <span
-        className={classNames(styles['iso-date-display'], !normalized && styles['is-placeholder'])}
-        data-iso-date-display
-        aria-hidden="true"
-      >
-        <span>{normalized || 'YYYY-MM-DD'}</span>
-        <Icon name="calendar" />
-      </span>
-      <input
-        className={styles['iso-date-native']}
-        type="date"
-        lang="zh-CN"
-        aria-label={label}
-        value={normalized}
-        onChange={(event) => {
-          onChange(text(event.currentTarget.value));
-        }}
-      />
-    </span>
+    <DatePicker
+      compact
+      label={label}
+      value={dateInputValue(value)}
+      onChange={(date) => {
+        onChange(text(date));
+      }}
+    />
   );
 }
 
@@ -860,7 +848,7 @@ export function ResumeEditor({
           </EditorSection>
 
           <EditorSection id="resume-intention" title="求职意向">
-            <div className={styles['resume-field-grid']}>
+            <div className={classNames(styles['resume-field-grid'], styles.intentionFields)}>
               <label className={styles['resume-wide-field']}>
                 意向岗位
                 <input
