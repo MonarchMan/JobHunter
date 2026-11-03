@@ -16,7 +16,7 @@ JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=bilibili-social pnpm exec vit
 
 ## 校招与实习
 
-`bilibili.campus@1.0.0` 使用 `/campus/positions`，`bilibili.intern@1.0.0` 使用 `/campus/positions?type=0`。校园列表按性质 3/0 区分，请求 recruitType 可为官网初始化 null，响应必须分别满足 1/全职、0/实习。实习覆盖空 practiceTypes 的总列表，不限定年份或项目 ID。详情深链均为 `/campus/positions/<id>`。
+`bilibili.campus@1.0.0` 使用 `/campus/positions`，`bilibili.intern@1.0.0` 使用 `/campus/positions?type=0`。校园列表按性质 3/0 区分，请求 recruitType 可为官网初始化 null，校招响应必须满足 1/全职；实习总列表允许 recruitType=0 或 1，但职位性质必须为实习。实习覆盖空 practiceTypes 的总列表，不限定年份或项目 ID。详情深链均为 `/campus/positions/<id>`。
 
 两渠道复用公司内正文/日期转换与分页保护，默认 50 条、间隔 5 秒，无浏览器即 access_blocked；错误业务码与未知类别显式失败。列表正文内联，不逐岗位请求详情。物理来源默认开启，已有用户开关不被 seed 覆盖。
 
@@ -24,4 +24,6 @@ JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=bilibili-social pnpm exec vit
 JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=bilibili-campus,bilibili-intern pnpm exec vitest run --project online apps/web/test/task-runtime/bilibili-campus.online.test.ts apps/web/test/task-runtime/bilibili-intern.online.test.ts --maxWorkers=1
 ```
 
-2026-11-03 独立生产 smoke 通过：校招 88 条，仅两页且边界闭合为 complete；实习 308 条，首尾 58 条为 partial/sampled_pages。测试固定上限两页及一条详情，不随总数扩大而遍历全站，不写业务数据库。
+2026-11-03 独立生产 smoke 通过：校招 88 条，仅两页且边界闭合为 complete；实习 308 条，首尾 58 条为 partial/sampled_pages。当时测试固定上限两页及一条详情，不随总数扩大而遍历全站，不写业务数据库。
+
+实习在线 smoke 现采样首、中、末三页及一条详情，避免只查首尾遗漏中间页的招聘体系差异。2026-11-03 排查发现 308 条实习中有 9 条 recruitType=1、299 条为 0，均为官网实习性质；不依据标题判定实习。

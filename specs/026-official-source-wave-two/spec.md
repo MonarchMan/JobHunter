@@ -50,5 +50,5 @@
 
 在线门禁固定最多两页配置容量列表及一条详情；若全部职位恰好不超过两页且完整性校验闭合，可报告 complete。超过采样范围或出现分页异常时仍必须报告 partial。
 
-- **SWT-020**：新增 bilibili.campus 与 bilibili.intern 两个 required 来源，分别访问校园全职与实习入口；校招记录校验 recruitType=1/全职，实习校验 recruitType=0/实习。请求性质分别为 3/0，允许官网匿名初始化的 recruitType=null 或对应记录类型；空 practiceTypes 覆盖官网实习总列表，不按年份、项目或标题推测类别。
+- **SWT-020**：新增 bilibili.campus 与 bilibili.intern 两个 required 来源，分别访问校园全职与实习入口；校招记录校验 recruitType=1/全职，实习校验 recruitType 为 0 或 1 且职位性质为实习。请求性质分别为 3/0，允许官网匿名初始化的 recruitType=null 或对应记录类型；空 practiceTypes 覆盖官网实习总列表，不按年份、项目或标题推测类别。
 - **SWT-021**：两个渠道复用匿名浏览器分页与正文转换，默认容量 50、请求间隔至少 5 秒；忽略响应 pages/size，严格校验业务码、字段、总数、边界及唯一 ID。无会话显式失败，采样及异常保持 partial，不触发旧岗位缺失下线。使用独立生产适配器首页/末页及详情 smoke 后晋级 supported，新增来源不覆盖已有用户开关。

@@ -26,11 +26,11 @@ const selected = new Set((process.env.JOBHUNTER_ONLINE_SOURCE ?? '').split(','))
 describe.skipIf(!enabled || !selected.has('bilibili-intern'))(
   'Bilibili intern production boundary smoke (SWT-021)',
   () => {
-    it('normalizes first/last through the real browser driver and verifies one official detail', async () => {
-      // 1、按生产默认容量重放首页，最多取两页边界；UI 初始化额外产生一条首页请求。
+    it('normalizes first/middle/last through the real browser driver and verifies one official detail', async () => {
+      // 1、按生产默认容量重放首页，最多取首、中、末三页边界；UI 初始化额外产生一条首页请求。
       const config = bilibiliCampusConfigSchema.parse({});
       const page = createPlaywrightSourcePageClient({
-        maximumPages: 2,
+        maximumPages: 3,
         pageSampling: 'first-last',
       });
       const collect = page.collect;
@@ -68,9 +68,13 @@ describe.skipIf(!enabled || !selected.has('bilibili-intern'))(
       if (typeof total !== 'number' || total <= 0)
         throw new Error('Expected positive official total.');
       const lastPage = Math.ceil(total / config.pageSize);
-      expect(captured.pages.map((item) => item.page)).toEqual([...new Set([1, lastPage])]);
+      const expectedPageNumbers =
+        lastPage > 3
+          ? [1, Math.ceil(lastPage / 2), lastPage]
+          : Array.from({ length: lastPage }, (_, index) => index + 1);
+      expect(captured.pages.map((item) => item.page)).toEqual(expectedPageNumbers);
       expect(completion.diagnostics).toMatchObject({ duplicateIds: 0, totalChanged: false });
-      if (lastPage > 2)
+      if (lastPage > 3)
         expect(completion).toMatchObject({
           coverage: 'partial',
           diagnostics: { reason: 'sampled_pages' },

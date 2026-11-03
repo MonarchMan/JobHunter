@@ -12,11 +12,12 @@ import { bilibiliSocialJobSchema, bilibiliSocialConfigSchema } from '../social/s
 export const bilibiliCampusConfigSchema = bilibiliSocialConfigSchema;
 /** 校园来源配置，不接受额外筛选。 */
 export type BilibiliCampusConfig = z.infer<typeof bilibiliCampusConfigSchema>;
-/** 创建校园协议解析器；实习虽然位于校园站，记录 recruitType 仍为 0。 */
+/** 创建校园协议解析器；实习总列表跨招聘体系，以职位性质约束归属。 */
 export function bilibiliCampusProtocol(channel: 'campus' | 'intern'): BilibiliCampusProtocol {
   const intern = channel === 'intern';
   const jobSchema = bilibiliSocialJobSchema.extend({
-    recruitType: z.literal(intern ? 0 : 1),
+    // 官网实习总列表包含 recruitType=0/1，不能把招聘体系等同于职位性质。
+    recruitType: intern ? z.union([z.literal(0), z.literal(1)]) : z.literal(1),
     positionTypeName: z.literal(intern ? '实习' : '全职'),
   });
   const requestSchema = z

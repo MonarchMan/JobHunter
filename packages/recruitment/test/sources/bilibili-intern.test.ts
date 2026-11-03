@@ -178,8 +178,46 @@ describe('Bilibili intern contract (SWT-020, SWT-021)', () => {
     ).rejects.toMatchObject({ category: 'parse_changed' });
   });
 
-  it('rejects non-social records, changed fields and unavailable sessions', async () => {
-    expect(() => parseBilibiliSocialJob({ ...job, recruitType: 1 })).toThrow();
+  it('accepts internships from both recruitment systems and normalizes the mixed collection', async () => {
+    const mixed = parseBilibiliSocialPage({
+      code: 0,
+      data: { total: 2, list: [job, { ...job, id: '900000011', recruitType: 1 }] },
+    });
+    expect(mixed.records.map((record) => record.recruitType)).toEqual([0, 1]);
+    const ctx = context({
+      coverage: 'complete',
+      pages: mixed.records.map((record, index) => ({
+        page: index + 1,
+        url: 'https://jobs.bilibili.com/campus/positions?type=0',
+        records: [record],
+        total: mixed.total,
+        capturedAt: 0,
+      })),
+    });
+    const adapter = createBilibiliInternAdapter();
+    let count = 0;
+    for await (const event of adapter.discover(ctx)) {
+      if (event.type === 'complete') expect(event.coverage).toBe('complete');
+      if (event.type !== 'job') continue;
+      const normalized = await adapter.normalize({ discovered: event.job, detail: null }, ctx);
+      expect(normalized.job.recruitmentCategory).toBe('internship');
+      expect(normalized.job.employmentType).toBe('实习');
+      count += 1;
+    }
+    expect(count).toBe(2);
+  });
+
+  it('rejects full-time and unknown recruitment types, changed fields and unavailable sessions', async () => {
+    expect(() => parseBilibiliSocialJob({ ...job, recruitType: 2 })).toThrow();
+    expect(() => parseBilibiliSocialJob({ ...job, recruitType: null })).toThrow();
+    for (const recruitType of [0, 1]) {
+      expect(() =>
+        parseBilibiliSocialPage({
+          code: 0,
+          data: { total: 1, list: [{ ...job, recruitType, positionTypeName: '全职' }] },
+        }),
+      ).toThrow('schema changed');
+    }
     expect(() => parseBilibiliSocialJob({ ...job, positionDescription: '' })).toThrow();
     expect(() =>
       parseBilibiliSocialPage({ code: -101, data: null, message: 'private session' }),

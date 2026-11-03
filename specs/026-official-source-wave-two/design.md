@@ -83,3 +83,5 @@ POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、
 ## B 站校园渠道接入
 
 将 B 站日期、正文转换与 collection 完整性保护提取为公司内共享工厂，社招保持原契约。campus/intern 各有公开工厂入口，校园 Schema 根据渠道校验请求性质与响应记录；Worker 增加 bilibili-campus/bilibili-intern responseShape，仅负责传输与分页。列表正文内联，详情深链统一为 /campus/positions/<id>，实习入口包含 ?type=0。新增两个 required 物理来源，维持逻辑渠道仅实习默认开启规则和既有 ID。依赖方向、数据归属与进程职责不变，无需新增 ADR。
+
+实习总列表按官网职位性质筛选（positionTypeList/workTypeList=0），其中 recruitType 可为 0 或 1；解析器保留该原始字段，并以 positionTypeName=实习约束记录归属。不得将已知校招体系下的实习误判为协议漂移，也不得接受全职或未知 recruitType。
