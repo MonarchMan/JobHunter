@@ -51,7 +51,6 @@ export default async function DashboardPage(): Promise<ReactElement> {
           <div>
             <h2 id="snapshot-title">工作台概览</h2>
           </div>
-          <p className={styles.description}>所有关键进展，都从这里开始。</p>
         </div>
         <div className={styles.metrics} aria-label="核心指标">
           <MetricCard

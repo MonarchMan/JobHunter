@@ -71,7 +71,6 @@ export function DashboardResources(): ReactElement {
     >
       <div className={styles.heading}>
         <h2 id="resources-title">面试充电站</h2>
-        <p id="resources-hint">精选外部资源 · 在新标签页打开</p>
       </div>
       <ul className={styles.grid}>
         {resources.map((resource) => (
@@ -81,7 +80,6 @@ export function DashboardResources(): ReactElement {
               href={resource.href}
               target="_blank"
               rel="noopener noreferrer"
-              aria-describedby="resources-hint"
             >
               <span className={styles.title}>
                 <span className={styles.identity}>

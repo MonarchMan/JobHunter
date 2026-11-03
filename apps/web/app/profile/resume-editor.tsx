@@ -1188,32 +1188,28 @@ export function ResumeEditor({
           />
 
           <EditorSection id="resume-skills" title="专业技能">
-            <label>
-              专业技能
-              <textarea
-                className={classNames('resize-none', styles['resume-professional-skills'])}
-                rows={8}
-                value={draft.professionalSkills ?? ''}
-                onChange={(event) => {
-                  updateArray('professionalSkills', text(event.currentTarget.value));
-                }}
-                placeholder="例如：熟练使用 TypeScript 与 React，具备大模型应用、Agent 工作流和评测体系建设经验……"
-              />
-            </label>
+            <textarea
+              aria-label="专业技能"
+              className={classNames('resize-none', styles['resume-professional-skills'])}
+              rows={8}
+              value={draft.professionalSkills ?? ''}
+              onChange={(event) => {
+                updateArray('professionalSkills', text(event.currentTarget.value));
+              }}
+              placeholder="例如：熟练使用 TypeScript 与 React，具备大模型应用、Agent 工作流和评测体系建设经验……"
+            />
           </EditorSection>
           <EditorSection id="resume-evaluation" title="自我评价">
-            <label>
-              自我评价
-              <textarea
-                className="resize-none"
-                rows={7}
-                value={draft.selfEvaluation ?? ''}
-                onChange={(event) => {
-                  updateArray('selfEvaluation', text(event.currentTarget.value));
-                }}
-                placeholder="建议控制在 200–400 字"
-              />
-            </label>
+            <textarea
+              aria-label="自我评价"
+              className="resize-none"
+              rows={7}
+              value={draft.selfEvaluation ?? ''}
+              onChange={(event) => {
+                updateArray('selfEvaluation', text(event.currentTarget.value));
+              }}
+              placeholder="建议控制在 200–400 字"
+            />
           </EditorSection>
         </div>
       </div>
