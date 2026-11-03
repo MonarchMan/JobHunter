@@ -1,3 +1,5 @@
+import { createBilibiliCampusAdapter } from '../companies/bilibili/campus/index.js';
+import { createBilibiliInternAdapter } from '../companies/bilibili/intern/index.js';
 import type { AdapterRegistry } from '@jobhunter/recruitment/source-contracts';
 import {
   createMihoyoSocialAdapter,
@@ -98,6 +100,8 @@ export function registerFirstPartyAdapters(registry: AdapterRegistry): void {
   registry.register(createDewuSocialAdapter());
   registry.register(createBaiduSocialAdapter());
   registry.register(createBilibiliSocialAdapter());
+  registry.register(createBilibiliCampusAdapter());
+  registry.register(createBilibiliInternAdapter());
   registry.register(createDidiSocialAdapter());
   registry.register(createCtripSocialAdapter());
   registry.register(createMihoyoSocialAdapter());

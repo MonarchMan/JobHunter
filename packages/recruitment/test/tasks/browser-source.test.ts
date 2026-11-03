@@ -91,6 +91,27 @@ describe('browser JSON pagination', () => {
     expect(template.body.pageNum).toBe(1);
     expect(template.body.pageSize).toBe(10);
   });
+  it.each(['bilibili-campus', 'bilibili-intern'] as const)(
+    'preserves %s channel filters during replay',
+    (shape) => {
+      const body = {
+        pageNum: 1,
+        pageSize: 10,
+        recruitType: null,
+        positionTypeList: [shape === 'bilibili-intern' ? '0' : '3'],
+        practiceTypes: [],
+      };
+      const target = buildBrowserPageRequest(
+        { url: 'https://jobs.bilibili.com/api/campus/position/positionList', headers: {}, body },
+        shape,
+        7,
+        300,
+        50,
+      );
+      expect(target.body).toEqual({ ...body, pageNum: 7, pageSize: 50 });
+      expect(body.pageNum).toBe(1);
+    },
+  );
   it('overrides the NetEase UI page size with the adapter configuration', () => {
     const target = buildBrowserPageRequest(
       {

@@ -9,6 +9,8 @@ import {
 } from '@jobhunter/recruitment/source-contracts';
 import {
   createMeituanAdapter,
+  createBilibiliCampusAdapter,
+  createBilibiliInternAdapter,
   createTencentAdapter,
   createKuaishouAdapter,
   createDidiAdapter,
@@ -244,6 +246,88 @@ describe('first-party source seed and sync', () => {
         status: 'active',
         missing_count: 0,
       });
+    },
+  );
+  it.each(['campus', 'intern'] as const)(
+    'Bilibili %s persists inline jobs and protects missing state (SWT-021)',
+    async (channel) => {
+      // 1、临时 SQLite 验证真实目录、适配器与同步服务，不访问网络。
+      const { handle } = await database();
+      seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 1 });
+      const source = firstPartyPhysicalSourceCatalog.find(
+        (v) => v.source.adapterKey === `bilibili.${channel}`,
+      );
+      if (!source) throw new Error('Missing Bilibili source.');
+      handle.client
+        .prepare('UPDATE source_channels SET enabled = 1 WHERE id = ?')
+        .run(source.channel.id);
+      const job = JSON.parse(
+        await readFile(
+          new URL(`./sources/fixtures/bilibili/${channel}/job.json`, import.meta.url),
+          'utf8',
+        ),
+      ) as { id: number };
+      const registry = new AdapterRegistry();
+      registry.register(
+        channel === 'campus' ? createBilibiliCampusAdapter() : createBilibiliInternAdapter(),
+      );
+      let partial = false;
+      const service = new JobSyncService({
+        uow: new SqliteUnitOfWork(handle.client),
+        registry,
+        http: { request: () => Promise.reject(new Error('No online HTTP.')) },
+        clock: new FixedClock(),
+        ids: new SequentialIds(),
+        options: { normalizerVersion: 'normalize-v1' },
+        page: {
+          snapshot: () => Promise.reject(new Error('No navigation.')),
+          collect: () =>
+            Promise.resolve({
+              coverage: 'complete',
+              pages: [
+                {
+                  page: 1,
+                  url: source.source.baseUrl,
+                  total: 1,
+                  capturedAt: 0,
+                  records: partial ? [] : [job],
+                },
+              ],
+            }),
+        },
+      });
+      const sourceId = parseId(source.source.id, 'JobSource');
+      await expect(
+        service.run({ sourceId, trigger: 'manual' }, new AbortController().signal),
+      ).resolves.toMatchObject({ kind: 'completed', status: 'succeeded', stats: { created: 1 } });
+      // 2、即使客户端声称 complete，短页也必须降级，旧岗位不增加缺失计数。
+      partial = true;
+      await expect(
+        service.run({ sourceId, trigger: 'manual' }, new AbortController().signal),
+      ).resolves.toMatchObject({ kind: 'completed', status: 'partial', coverage: 'partial' });
+      expect(
+        handle.client.prepare('SELECT external_job_id, status, missing_count FROM jobs').get(),
+      ).toEqual({ external_job_id: String(job.id), status: 'active', missing_count: 0 });
+      // 3、重复 seed 不重置用户关闭的逻辑渠道与物理来源。
+      handle.client
+        .prepare('UPDATE source_channels SET enabled = 0 WHERE id = ?')
+        .run(source.channel.id);
+      handle.client
+        .prepare('UPDATE job_sources SET enabled = 0 WHERE id = ?')
+        .run(source.source.id);
+      seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 2 });
+      expect(
+        handle.client
+          .prepare('SELECT enabled FROM source_channels WHERE id = ?')
+          .pluck()
+          .get(source.channel.id),
+      ).toBe(0);
+      expect(
+        handle.client
+          .prepare('SELECT enabled FROM job_sources WHERE id = ?')
+          .pluck()
+          .get(source.source.id),
+      ).toBe(0);
     },
   );
   it.each(['ctrip.social', 'ctrip.intern', 'ctrip.campus'] as const)(
@@ -563,7 +647,7 @@ describe('first-party source seed and sync', () => {
 
     expect(handle.client.prepare('SELECT count(*) FROM companies').pluck().get()).toBe(20);
     expect(handle.client.prepare('SELECT count(*) FROM source_channels').pluck().get()).toBe(60);
-    expect(handle.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(62);
+    expect(handle.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(64);
     expect(
       handle.client
         .prepare('SELECT support_status, enabled FROM job_sources WHERE slug = ?')

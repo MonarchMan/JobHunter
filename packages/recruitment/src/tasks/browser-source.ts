@@ -5,6 +5,7 @@ import {
   type BrowserSession,
   type BrowserSessionFactory,
   createPooledSourcePageClient,
+  bilibiliCampusProtocol,
   parseBilibiliSocialPage,
   parseBilibiliSocialRequest,
 } from '@jobhunter/recruitment';
@@ -141,6 +142,8 @@ export function buildBrowserPageRequest(
       body.currentPage = pageNumber;
       if (pageSize !== undefined) body.pageSize = pageSize;
       break;
+    case 'bilibili-campus':
+    case 'bilibili-intern':
     case 'bilibili-social':
       // B 站容量必须来自适配器配置，响应 pages/size 在末页不可靠。
       body.pageNum = pageNumber;
@@ -275,8 +278,16 @@ function readListResponse(
       limit = Number(requestBody.pageSize);
       currentPage = Number(requestBody.currentPage);
       break;
+    case 'bilibili-campus':
+    case 'bilibili-intern':
     case 'bilibili-social': {
-      const pagination = parseBilibiliSocialRequest(requestBody);
+      const pagination = (
+        request.responseShape === 'bilibili-social'
+          ? parseBilibiliSocialRequest
+          : bilibiliCampusProtocol(
+              request.responseShape === 'bilibili-intern' ? 'intern' : 'campus',
+            ).parseRequest
+      )(requestBody);
       limit = pagination.pageSize;
       currentPage = pagination.pageNum;
       break;
@@ -349,9 +360,17 @@ function readListResponse(
       items = body.data.list;
       total = Number(body.data.total);
       break;
+    case 'bilibili-campus':
+    case 'bilibili-intern':
     case 'bilibili-social': {
-      // 公司模块校验业务 code 与社招字段，Worker 只负责浏览器传输。
-      const parsed = parseBilibiliSocialPage(body);
+      // 公司模块按渠道校验业务 code 与职位性质，Worker 只负责浏览器传输。
+      const parsed = (
+        request.responseShape === 'bilibili-social'
+          ? parseBilibiliSocialPage
+          : bilibiliCampusProtocol(
+              request.responseShape === 'bilibili-intern' ? 'intern' : 'campus',
+            ).parsePage
+      )(body);
       items = parsed.records;
       total = parsed.total;
       break;

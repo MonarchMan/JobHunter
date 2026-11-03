@@ -39,3 +39,6 @@ export * from './companies/kuaishou/index.js';
 export * from './companies/didi/index.js';
 export * from './companies/ctrip/index.js';
 export * from './companies/mihoyo/index.js';
+
+export * from './companies/bilibili/campus/index.js';
+export * from './companies/bilibili/intern/index.js';

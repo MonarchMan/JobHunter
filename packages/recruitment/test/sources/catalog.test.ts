@@ -196,6 +196,8 @@ describe('first-party source catalog', () => {
       'netease',
       'tencent',
       'bilibili',
+      'bilibili',
+      'bilibili',
       'kuaishou',
       'kuaishou',
       'kuaishou',
@@ -215,7 +217,7 @@ describe('first-party source catalog', () => {
       expect(record.source.baseUrl).toMatch(/^https:\/\//);
     }
     expect(new Set(firstPartyPhysicalSourceCatalog.map((record) => record.source.id)).size).toBe(
-      62,
+      64,
     );
     expect(
       firstPartySourceCatalog
@@ -253,7 +255,11 @@ describe('first-party source catalog', () => {
     const channels = firstPartySourceCatalog.filter((record) => targets.has(record.company.slug));
     expect(channels).toHaveLength(15);
     for (const record of channels) {
-      if (record.company.slug === 'ctrip' || record.company.slug === 'mihoyo') {
+      if (
+        record.company.slug === 'ctrip' ||
+        record.company.slug === 'mihoyo' ||
+        (record.company.slug === 'bilibili' && record.channel.type !== 'social')
+      ) {
         expect(record.sources).toHaveLength(1);
         expect(record.sources[0]).toMatchObject({
           adapterKey: `${record.company.slug}.${record.channel.type}`,

@@ -12,4 +12,16 @@
 JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=bilibili-social pnpm exec vitest run --project online apps/web/test/task-runtime/bilibili-social.online.test.ts
 ```
 
-测试使用真实生产适配器和 Worker 浏览器客户端，最多三次列表请求（UI 首屏、配置容量首页、末页）及一条详情。已通过 2026-09-11 门禁，catalog 物理来源默认启用；社招逻辑渠道开关仍遵循既有默认规则，seed 不覆盖用户已有开关。校招和实习尚未接入。
+测试使用真实生产适配器和 Worker 浏览器客户端，最多三次列表请求（UI 首屏、配置容量首页、末页）及一条详情。已通过 2026-09-11 门禁，catalog 物理来源默认启用；社招逻辑渠道开关仍遵循既有默认规则，seed 不覆盖用户已有开关。
+
+## 校招与实习
+
+`bilibili.campus@1.0.0` 使用 `/campus/positions`，`bilibili.intern@1.0.0` 使用 `/campus/positions?type=0`。校园列表按性质 3/0 区分，请求 recruitType 可为官网初始化 null，响应必须分别满足 1/全职、0/实习。实习覆盖空 practiceTypes 的总列表，不限定年份或项目 ID。详情深链均为 `/campus/positions/<id>`。
+
+两渠道复用公司内正文/日期转换与分页保护，默认 50 条、间隔 5 秒，无浏览器即 access_blocked；错误业务码与未知类别显式失败。列表正文内联，不逐岗位请求详情。物理来源默认开启，已有用户开关不被 seed 覆盖。
+
+```sh
+JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=bilibili-campus,bilibili-intern pnpm exec vitest run --project online apps/web/test/task-runtime/bilibili-campus.online.test.ts apps/web/test/task-runtime/bilibili-intern.online.test.ts --maxWorkers=1
+```
+
+2026-11-03 独立生产 smoke 通过：校招 88 条，仅两页且边界闭合为 complete；实习 308 条，首尾 58 条为 partial/sampled_pages。测试固定上限两页及一条详情，不随总数扩大而遍历全站，不写业务数据库。

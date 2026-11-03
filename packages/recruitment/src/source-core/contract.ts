@@ -14,6 +14,8 @@ export type SourcePageCollectionResponseShape =
   | 'qihoo360-jobs'
   | 'xiaomi-jobs'
   | 'bilibili-social'
+  | 'bilibili-campus'
+  | 'bilibili-intern'
   | 'kuaishou-jobs'
   | 'didi-moka'
   | 'didi-moka-detail'

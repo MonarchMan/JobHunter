@@ -24,7 +24,7 @@
 | 360      | supported | supported | supported |
 | 网易     | supported | supported | supported |
 | 快手     | supported | supported | supported |
-| 哔哩哔哩 | blocked   | blocked   | supported |
+| 哔哩哔哩 | supported | supported | supported |
 | 滴滴     | supported | supported | supported |
 | 携程     | supported | supported | supported |
 | 米哈游   | supported | supported | supported |
@@ -34,6 +34,8 @@
 2026-09-11 新增五家公司共 15 个逻辑渠道。B 站社招、快手三渠道、滴滴四个物理来源、携程三渠道及米哈游三渠道已工程化。滴滴实习与常规校招通过独立边界/详情 smoke；社招经用户手动确认官网分页缺陷后明确验收 supported，保留 partial 保护；未来精英无真实详情，仍 experimental/default off。其余 2 个新增逻辑渠道（B 站校园/实习）仍无适配器。blocked 表示待接入，不代表已确认官网拦截；详见 [第二批研究台账](../../specs/026-official-source-wave-two/research.md)。目录合计 20 家公司、60 个逻辑渠道、62 个物理来源。
 
 ## 已验证来源明细
+
+B 站校园：`bilibili.campus@1.0.0` 与 `bilibili.intern@1.0.0` 于 2026-11-03 20:52 CST 通过独立生产浏览器首页/末页/一详情 smoke。每页 50、请求间隔至少 5 秒；校招 88（1/2，50/38），实习 308（1/7，50/8）。校招仅两页且 ID/总数闭合，coverage=complete；实习保持 partial/sampled_pages。详情 31063/31166 身份与正文通过。社招共享工厂回归通过（473，1/10，50/23，partial）。新增物理来源 required/default on，seed 保留既有开关；目录现为 20 公司、60 逻辑渠道、64 物理来源，替代上文 2026-09-11 的待接入状态。
 
 米哈游：`mihoyo.social`、`mihoyo.intern`、`mihoyo.campus` 均 `1.0.0 / supported`。2026-09-11 独立生产首尾页/一详情 smoke 通过：社招 662（1/67，10/2）、校园实习 144（1/15，10/4）、应届校招 118（1/12，10/8）。社招包括第三方编制，保留用工性质，不冒充直聘；校园按 hireType/jobNatures 拆分，不写死届次或项目 ID。匿名 HTTP 无需浏览器/凭据，required 详情失败不写占位。采样均 partial/sampled_pages，未运行全量在线门禁。物理来源默认开，逻辑渠道仍仅实习默认开；社招实习当前零岗位，不将未验证独立入口列入支持范围。
 

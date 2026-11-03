@@ -196,3 +196,44 @@ JOBHUNTER_ONLINE_SOURCES=1 JOBHUNTER_ONLINE_SOURCE=didi pnpm exec vitest run --p
 每项仅两次列表请求和一次详情请求，生产 TokenBucket 限流 12/min、burst=1。同次两端总数稳定、页长自洽、样本 ID 不重复，采样全记录归一化通过，三项都明确 partial/sampled_pages，total 不是实际全量入库数。校招初次工程化测试因错误要求首职位必须在上海而失败，真实首职位为南通；修正测试为核对响应地点及中文语言偏好后，15:55:13 / 15:55:23 / 15:55:33 CST 最终三项独立通过，没有放宽分页或身份校验。
 
 三条来源 supported/default on，逻辑渠道沿用仅实习默认开；稳定公司 ID 后缀 119，来源 ID 后缀 258/259/260。未操作已有业务数据库开关。离线异常测试覆盖错误业务 envelope、招聘分区错配、缺少正文、非法日期/ID、重复/短页/总数变化、有限采样、取消及健康检查。SQLite 独立验证三个来源入库及 partial 不增加既有岗位 missing_count。留用实习开放后仍需独立验证再决定新增物理来源。
+
+## B 站校园渠道不可用排查（2026-11-03）
+
+本节更新此前“校园两渠道待验证”的研究结论，不代表生产适配器已接入或 support 状态已晋级。
+
+### 仓库直接原因
+
+目录仅注册 `bilibili.social@1.0.0`。实习、校招逻辑渠道的物理来源集合为空，`source-management-repository.ts` 和 `web-source-repository.ts` 将没有 required 来源的渠道派生为 blocked；目录提示“尚未发现可验证的官方物理来源”。这是尚未实现接入，不是本次证实的官网停招、登录过期或同步任务故障。单独打开渠道开关不能补齐 adapter。
+
+### 匿名官网实测
+
+使用全新匿名 Chrome 上下文，打开官网并捕获原生列表请求；同会话串行重放末页，每次主动请求至少间隔 5 秒，再打开一条官方详情。每渠道仅两页边界和一条详情，没有全量遍历、登录或修改业务数据库。
+
+| 渠道 | 官方入口 | total | 首页 / 末页 | 条数 | 详情 ID | 样本分类 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 应届校招 | https://jobs.bilibili.com/campus/positions | 88 | 1 / 9 | 10 / 8 | 31063 | recruitType=1、positionTypeName=全职；详情 positionType="3" |
+| 实习 | https://jobs.bilibili.com/campus/positions?type=0 | 308 | 1 / 31 | 10 / 8 | 31166 | recruitType=0、positionTypeName=实习；详情 positionType="0" |
+
+两渠道列表使用 `POST /api/campus/position/positionList`，详情使用 `GET /api/campus/position/detail/<id>`，业务 code 均为 0，首尾 total 一致，各渠道 18 个样本 ID 不重复。详情身份及类别与列表一致，正文分别为 1364 / 983 字符。列表内联 `positionDescription`、地点、发布时间和类别，可评估沿用 inline 详情模式。官网列表当前还包含 B-UP 校招岗位，不能固定项目 ID 或按标题年份过滤。
+
+原生请求容量为 10，校招 `workTypeList/positionTypeList=["3"]`，实习均为 `["0"]`；`practiceTypes=[]`，职位、城市、部门过滤为空，`onlyHotRecruit=0`。本轮捕获的两个原生请求 `recruitType` 均为 null，响应记录却有明确且不同的 recruitType，故不能将“校园接口”直接等同于“记录 recruitType=1”，也不能未经验证把请求字段强制改成 1。应按官网入口、请求性质筛选、记录级类别及详情交叉确认；日常与转正实习子分类仍需单独验证字典及筛选含义。
+
+裸 HTTP 调用校园列表返回 `code=-101,data=null,message=ajSessionId不能为空`。匿名浏览器会话内保留原生必要请求头、只修改 pageNum 后，末页请求成功；未持久化 Cookie 或匿名会话请求头。原始公开响应及探测脚本位于忽略提交的 `var/research/bilibili-campus/`。
+
+末页沿用社招已知上游异常：校招实际第 9 页回显 pages=11、size=8，实习实际第 31 页回显 pages=39、size=8。应使用 total 与请求容量计算末页，不能用末页 pages/size 扩展分页计划。以上仅为边界采样证据，不声明完整覆盖。
+
+### 解决方案与验收边界
+
+推荐新增 `bilibili.campus`、`bilibili.intern` 两个适配器，复用现有匿名浏览器会话和 JSON 重放机制；公司内共享 HTML 转文本及分页完整性检查。社招现有 Schema 限制 recruitType=0、全职及请求性质 3，不能直接重用或放宽到混合渠道。校园渠道需要独立的请求、响应 Schema 和浏览器 responseShape 分发，并注册物理来源与对应逻辑渠道绑定。
+
+工程化前按 SDD 更新 spec/design/tasks，再补合成 fixture、类型错配与匿名会话失败测试、重复/短页/总数漂移保护、partial 不触发缺失下线测试；最后通过生产适配器自身的首页/末页/详情在线 smoke 后才晋级 supported。本次研究脚本成功不能替代生产门禁。保留既有用户渠道开关，不因 seed 更新自动覆盖。
+
+短期可直接使用以上官网入口查阅职位。没有证据表明必须引入账号 Cookie、代理或第三方招聘聚合源；优先复用已有匿名浏览器能力即可推进接入。
+
+### 2026-11-03 工程化完成
+
+以上“尚未接入”是排查时点结论。现已注册 bilibili.campus@1.0.0（来源 UUID 后缀 264）和 bilibili.intern@1.0.0（后缀 265），required/supported，物理来源默认开启，seed 不覆盖已有开关。目录现为 20 公司 / 60 逻辑渠道 / 64 物理来源。
+
+20:52 CST 最终生产 smoke 三项通过：实习 total=308、页 1/7、50/8 条、详情 31166，partial/sampled_pages；校招 total=88、页 1/2、50/38 条、详情 31063，两页恰好完整覆盖且身份/总数闭合，coverage=complete；社招共享工厂回归 total=473、页 1/10、50/23 条、详情 31092，partial/sampled_pages。每项均固定最多两页配置容量列表（加官网初始化首屏）和一条详情，没有执行全量同步或写入已有数据库。
+
+实习内部规范化类别使用 internship，来源元数据 recruitmentType 使用 campus，与现有契约一致。定向单元 49/49、SQLite 集成 20/20；覆盖分类错配、会话失败、短页/缺页/重复/总数漂移、健康检查及 HTML/日期。SQLite 验证短页即使声称 complete 仍不增加旧岗位 missing_count，重复 seed 保留用户开关。类型、定向 ESLint、文档和依赖边界检查通过。
