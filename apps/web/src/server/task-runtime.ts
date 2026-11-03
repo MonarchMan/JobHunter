@@ -17,10 +17,13 @@ import { SqliteProfileIdentityReader } from '@jobhunter/user/persistence/profile
 import { SqliteUserResourceReferenceReader } from '@jobhunter/user/persistence/resource-reference-reader';
 import { SqliteUserAgentReferenceReader } from '@jobhunter/user/persistence/agent-reference-reader';
 import { createMatchingTasks } from '@jobhunter/matching/tasks';
+import { createAutoScoringOnSyncCompleted } from '@jobhunter/matching/application';
 import { ProfileJobIntakePolicy } from '@jobhunter/matching/profile-job-intake-policy';
 import { ProfilePlatformSearchProvider } from '@jobhunter/matching/profile-platform-search';
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
 import { SqliteMatchingResourceReferenceReader } from '@jobhunter/matching/persistence/resource-reference-reader';
+import { SystemSettingsService } from '@jobhunter/recruitment/settings';
+import { SqliteSettingsStore } from '@jobhunter/recruitment/persistence/settings';
 
 /** 入口只组合四模块的任务能力，业务实现与通用机制分别由所有者提供。 */
 export function createProductionTaskApplication(
@@ -44,12 +47,32 @@ export function createProductionTaskApplication(
     },
     [
       (context) => {
+        // 先装配匹配能力并取得其仓储，再以回调形式注入同步，遵循 recruitment 不依赖 matching 的边界。
         const client = context.database.client;
         const profiles = new SqliteCandidateProfileRepository(
           client,
           new SqliteProfileDerivedDataManager(client),
         );
-        return createRecruitmentTasks(context, {
+        const settings = new SystemSettingsService({
+          repository: new SqliteSettingsStore(client),
+          clock: context.clock,
+        });
+        const matching = createMatchingTasks(context, {
+          jobs: new SqliteMatchingJobReader(client),
+          identities: new SqliteProfileIdentityReader(client),
+          profiles,
+        });
+        const onSyncCompleted = createAutoScoringOnSyncCompleted({
+          matching: matching.matchingRepository,
+          profiles,
+          tasks: context.tasks,
+          ids: context.ids,
+          clock: context.clock,
+          automation: {
+            readMatchingAutomation: () => settings.get().matchingAutomation,
+          },
+        });
+        const recruitment = createRecruitmentTasks(context, {
           ...input,
           jobIntakePolicy: new ProfileJobIntakePolicy(profiles),
           searchProvider: new ProfilePlatformSearchProvider(profiles),
@@ -58,23 +81,24 @@ export function createProductionTaskApplication(
             new SqliteUserResourceReferenceReader(client),
             new SqliteMatchingResourceReferenceReader(client),
           ],
+          onSyncCompleted,
         });
+        // 两个能力共用同一运行时；以组合能力对外释放，保持与原有逐一登记一致的关闭顺序。
+        return {
+          initialize() {
+            matching.initialize?.();
+            recruitment.initialize?.();
+          },
+          async close() {
+            await recruitment.close();
+            await matching.close();
+          },
+        };
       },
       (context) =>
         createUserTasks(context, {
           derivedData: new SqliteProfileDerivedDataManager(context.database.client),
         }),
-      (context) => {
-        const client = context.database.client;
-        return createMatchingTasks(context, {
-          jobs: new SqliteMatchingJobReader(client),
-          identities: new SqliteProfileIdentityReader(client),
-          profiles: new SqliteCandidateProfileRepository(
-            client,
-            new SqliteProfileDerivedDataManager(client),
-          ),
-        });
-      },
       (context) => {
         const client = context.database.client;
         return createCleanupTasks(context, {

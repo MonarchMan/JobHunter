@@ -1,5 +1,6 @@
 import type { TaskRuntimeContext, TaskCapability } from '@jobhunter/common/task-runtime';
 import type { MatchingJobReader } from '@jobhunter/recruitment/contracts/matching-jobs';
+import type { MatchingRepository } from '@jobhunter/matching/ports/matching';
 import type {
   MatchingProfileIdentityReader,
   CandidateProfileReader,
@@ -16,6 +17,11 @@ import {
 import { SqliteAgentRunStore } from '@jobhunter/common/persistence/agent-runs';
 import { SqliteMatchingRepository } from '@jobhunter/matching/persistence';
 
+/** 匹配任务能力额外暴露已装配的匹配仓储，供入口构造同步后自动评分回调。 */
+export interface MatchingTaskCapability extends TaskCapability {
+  readonly matchingRepository: MatchingRepository;
+}
+
 /** 匹配任务仅通过公开只读端口取得招聘与资料快照。 */
 export function createMatchingTasks(
   context: TaskRuntimeContext,
@@ -24,7 +30,7 @@ export function createMatchingTasks(
     readonly identities: MatchingProfileIdentityReader;
     readonly profiles: CandidateProfileReader;
   },
-): TaskCapability {
+): MatchingTaskCapability {
   // 1、只装配匹配仓储，招聘和资料的读取实现由入口提供。
   const { database, clock, ids, registry, runner } = context;
   const profileRepository = input.profiles;
@@ -64,5 +70,5 @@ export function createMatchingTasks(
       advice: adviceHandler,
     }),
   );
-  return { close: () => Promise.resolve() };
+  return { matchingRepository, close: () => Promise.resolve() };
 }

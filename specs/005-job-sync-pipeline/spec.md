@@ -20,7 +20,7 @@
 - **SYNC-007**：仅 coverage=`complete` 的成功或可安全完成运行才能处理未观察职位；partial/failed/cancelled 不得增加缺失。
 - **SYNC-008**：达到来源策略阈值时 active→stale→closed；明确 not_found 可按策略直接关闭。
 - **SYNC-009**：只有同步成功且游标有效时才提交 cursorOut；失败时保留 cursorIn。
-- **SYNC-010**：新 Revision 不得自动创建匹配、职位理解或 Agent 建议任务；匹配只能由用户针对具体职位显式触发。关闭自动任务不得删除历史结果。
+- **SYNC-010**：同步不直接创建匹配、职位理解或 Agent 建议任务。同步事务提交后，由入口注入的回调依据 WEB-016 已保存的自动评分策略，对本运行新增/修订的职位修订补入匹配任务；该策略关闭或未注入回调时不得创建任何匹配任务。关闭自动任务不得删除历史结果。
 - **SYNC-011**：单个职位解析失败必须隔离并计数，不能写入不完整 Job。若已知 externalJobId 且对应已有职位，必须保存原始证据并将其标记为本轮已观察，避免误判关闭；无法确定失败项身份时整轮 coverage 必须降为 partial。
 - **SYNC-012**：运行结束必须校验计数一致性，并更新来源健康状态。
 - **SYNC-013**：`skippedOutOfScope`、`skippedNonDomestic`、`skippedUnknownRegion` 是已成功处理的业务过滤结果；只要采集覆盖完整且没有运行错误或无法安全归属的隔离项，就不得因此把运行降为 partial 或累计来源失败次数。

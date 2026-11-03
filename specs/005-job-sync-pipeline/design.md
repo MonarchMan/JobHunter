@@ -47,11 +47,11 @@ Adapter 结束时提供 coverage，但应用层只在以下证据同时成立时
 
 ## 后续任务顺序
 
-同步不产生匹配、职位理解或建议任务；规则/LLM 评分只由用户在职位列表针对单条或勾选职位显式触发。详情补全是唯一允许由列表同步派生的职位级任务。
+同步事务本身不创建匹配、职位理解或建议任务；详情补全是唯一在同步事务内派生的职位级任务。同步运行提交后，由入口注入的回调（recruitment 不 import matching）读取 WEB-016 自动评分策略，对本运行新增/修订的职位修订调用匹配入队；策略关闭或未注入回调时不产生任何匹配任务。回调在事务外执行，不计入 `followupEnqueued`，也不延长同步写事务。
 
 ## 可观测性
 
-按 runId 聚合 discovered、rawStored、created、unchanged、revised、restored、staled、closed、isolated、skippedOutOfScope、followupEnqueued。职位理解和匹配不属于同步后续任务，`followupEnqueued` 必须保持为 0；最终必须满足可推导计数等式，否则运行标记 failed/internal_invariant。
+按 runId 聚合 discovered、rawStored、created、unchanged、revised、restored、staled、closed、isolated、skippedOutOfScope、followupEnqueued。`followupEnqueued` 只统计详情补全任务；自动评分任务由同步提交后的回调在事务外创建，不计入该统计。最终必须满足可推导计数等式，否则运行标记 failed/internal_invariant。
 
 SyncRun 创建时即写入与最终统计同构的完整零值对象，不能以 `{}` 表示“尚未完成”。任务诊断因此可以在运行中、取消或孤儿恢复阶段继续使用严格 Schema。已有统计通过破坏性数据迁移统一投影为当前 12 个字段：缺失值填 0，并移除 `rawStored` 等废弃或未知字段；读取层不保留旧形状兼容分支。
 

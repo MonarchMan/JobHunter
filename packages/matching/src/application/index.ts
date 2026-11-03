@@ -1,3 +1,4 @@
+export * from './auto-scoring.js';
 export * from './current-match-query-service.js';
 export * from './job-advice-handler.js';
 export * from './job-understanding-handler.js';
