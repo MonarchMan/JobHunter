@@ -4,6 +4,7 @@ import type { WebSource, WebSourceChannel } from '@jobhunter/recruitment/contrac
 import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { Icon } from '../components/ui-icon.js';
 import { SourceScheduleEditor } from './source-schedule-editor.js';
+import { scheduleLabel } from './schedule-label.js';
 import { sourceName } from './source-name.js';
 import { CompanyLogo } from '../components/company-logo.js';
 import { SelectField } from '../components/forms/select-field.js';
@@ -111,7 +112,13 @@ function SourcePanel({
         <div>
           <dt>同步计划</dt>
           <dd>
-            <SourceScheduleEditor source={source} syncReady={syncReady} />
+            {detailed ? (
+              <SourceScheduleEditor source={source} syncReady={syncReady} />
+            ) : source.schedule?.enabled ? (
+              scheduleLabel(source.schedule.cronExpression)
+            ) : (
+              '无'
+            )}
           </dd>
         </div>
         {detailed ? (

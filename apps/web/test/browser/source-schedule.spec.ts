@@ -11,7 +11,10 @@ test('edits a source schedule with weekly controls and restores global settings'
   const channel = card.getByRole('combobox', { name: '腾讯招聘渠道', exact: true });
   await channel.click();
   await page.getByRole('option', { name: '校招', exact: true }).click();
-  await card.getByRole('button', { name: '设置 腾讯 的同步计划' }).click();
+  await expect(card.getByRole('button', { name: '设置 腾讯 的同步计划' })).toHaveCount(0);
+  await card.getByRole('button', { name: '查看详情' }).click();
+  const details = page.getByRole('dialog', { name: '官网来源详情' });
+  await details.getByRole('button', { name: '设置 腾讯 的同步计划' }).click();
   const dialog = page.getByRole('dialog', { name: '设置同步计划' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('radio', { name: '每周', exact: true }).check();
@@ -26,17 +29,13 @@ test('edits a source schedule with weekly controls and restores global settings'
   await dialog.getByRole('button', { name: '保存', exact: true }).click();
   expect((await saved).ok()).toBe(true);
   await expect(dialog).toHaveCount(0);
-  await expect(card.getByRole('button', { name: '设置 腾讯 的同步计划' })).toContainText(
-    '每周三 09:45',
-  );
+  await details.getByRole('button', { name: '关闭详情' }).click();
+  await expect(card.getByText('每周三 09:45', { exact: true })).toBeVisible();
   await page.reload();
   await channel.click();
   await page.getByRole('option', { name: '校招', exact: true }).click();
-  await expect(card.getByRole('button', { name: '设置 腾讯 的同步计划' })).toContainText(
-    '每周三 09:45',
-  );
+  await expect(card.getByText('每周三 09:45', { exact: true })).toBeVisible();
   await card.getByRole('button', { name: '查看详情' }).click();
-  const details = page.getByRole('dialog', { name: '官网来源详情' });
   await details.getByRole('button', { name: '设置 腾讯 的同步计划' }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: '关闭同步计划' }).click();

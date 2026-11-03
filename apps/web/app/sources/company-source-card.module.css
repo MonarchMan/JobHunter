@@ -487,23 +487,6 @@
     font-size: 1.3rem;
   }
 
-  .company-source-controls {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .company-channel-selector {
-    justify-content: space-between;
-  }
-
-  .company-source-header-actions {
-    width: 100%;
-  }
-
-  .company-source-header-actions > :last-child {
-    margin-left: auto;
-  }
-
   .company-source-panel .source-facts {
     grid-template-columns: 1fr;
   }
