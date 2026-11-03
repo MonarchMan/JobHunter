@@ -131,7 +131,7 @@
 /* 下拉框视觉由公共组件负责，卡片只约束布局宽度。 */
 .company-channel-selector > button {
   width: auto;
-  min-width: 7.5rem;
+  min-width: 5.5rem;
 }
 
 .company-sync-channel {

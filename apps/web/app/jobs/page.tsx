@@ -1,3 +1,5 @@
+import { SearchButton } from '../components/forms/search-button.js';
+import { listPageSize } from '../../src/server/job-query.js';
 import { canonicalJobSubfamilies } from '@jobhunter/recruitment/domain';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
@@ -51,7 +53,11 @@ export default async function JobsPage({
       ? effectiveParameters
       : { ...effectiveParameters, profile: defaultProfileId },
   );
-  const page = container.services.webJobs.list(query);
+  const page = container.services.webJobs.list({
+    ...query,
+    limit: listPageSize(parameters),
+    pageSize: listPageSize(parameters),
+  });
   // 1、普通筛选的清除和空状态恢复保持平台范围，不能隐式跳到另一个平台。
   const scope = new URLSearchParams();
   if (query.sourceKind === 'platform') {
@@ -95,126 +101,130 @@ export default async function JobsPage({
           {query.sourceKind === 'platform' && query.providerKey && (
             <input type="hidden" name="provider" value={query.providerKey} />
           )}
-          <label>
-            招聘类别
-            <SelectField
-              name="category"
-              label="招聘类别"
-              defaultValue={query.recruitmentCategory}
-              options={[
-                { value: 'all', label: '全部' },
-                { value: 'internship', label: '实习' },
-                { value: 'campus', label: '校招' },
-                { value: 'social', label: '社招' },
-              ]}
-            />
-          </label>
-          <label>
-            关键词
-            <input
-              name="q"
-              defaultValue={fieldValue(parameters, 'q')}
-              placeholder="Agent、大模型应用…"
-            />
-          </label>
-          <label>
-            公司
-            <CompanyCombobox
-              companies={
-                query.sourceKind === 'platform'
-                  ? page.items.map((job) => job.companyName)
-                  : companies.map((company) => company.companyName)
-              }
-              defaultValue={fieldValue(parameters, 'company')}
-            />
-          </label>
-          <label>
-            地点
-            <input
-              name="location"
-              defaultValue={fieldValue(parameters, 'location')}
-              placeholder="北京,深圳"
-            />
-          </label>
-          <label>
-            职位类别
-            <SelectField
-              name="subfamily"
-              label="职位类别"
-              defaultValue={fieldValue(parameters, 'subfamily')}
-              options={[
-                { value: '', label: '全部' },
-                ...canonicalJobSubfamilies.map((subfamily) => ({
-                  value: subfamily,
-                  label: subfamily,
-                })),
-              ]}
-            />
-          </label>
-          <label>
-            状态
-            <SelectField
-              name="status"
-              label="状态"
-              defaultValue={fieldValue(parameters, 'status')}
-              options={[
-                { value: '', label: '在招和待确认' },
-                { value: 'active', label: '仅在招' },
-                { value: 'stale', label: '仅待确认' },
-                { value: 'closed', label: '仅已关闭' },
-                { value: 'active,stale,closed', label: '全部状态' },
-              ]}
-            />
-          </label>
-          <label>
-            排序
-            <SelectField
-              name="sort"
-              label="排序"
-              defaultValue={fieldValue(parameters, 'sort') || jobListPreferences.defaultSort}
-              options={[
-                { value: 'updated_desc', label: '最近更新' },
-                { value: 'published_desc', label: '最近发布' },
-                { value: 'score_desc', label: '匹配分数' },
-              ]}
-            />
-          </label>
-          <label>
-            最低分
-            <input
-              name="minScore"
-              type="number"
-              min="0"
-              max="100"
-              defaultValue={fieldValue(parameters, 'minScore')}
-            />
-          </label>
-          <label>
-            个人资料版本
-            <SelectField
-              name="profile"
-              label="个人资料版本"
-              defaultValue={
-                fieldValue(parameters, 'profile')
-                  ? fieldValue(parameters, 'profile')
-                  : (defaultProfileId ?? '')
-              }
-              options={[
-                { value: '', label: '不使用资料匹配' },
-                ...profiles
-                  .filter((profile) => profile.currentVersionId !== null)
-                  .map((profile) => ({
-                    value: profile.currentVersionId ?? '',
-                    label: profile.name,
+          <div className={styles.selectRow}>
+            <label>
+              招聘类别
+              <SelectField
+                name="category"
+                label="招聘类别"
+                defaultValue={query.recruitmentCategory}
+                options={[
+                  { value: 'all', label: '全部' },
+                  { value: 'internship', label: '实习' },
+                  { value: 'campus', label: '校招' },
+                  { value: 'social', label: '社招' },
+                ]}
+              />
+            </label>
+            <label>
+              职位类别
+              <SelectField
+                name="subfamily"
+                label="职位类别"
+                defaultValue={fieldValue(parameters, 'subfamily')}
+                options={[
+                  { value: '', label: '全部' },
+                  ...canonicalJobSubfamilies.map((subfamily) => ({
+                    value: subfamily,
+                    label: subfamily,
                   })),
-              ]}
-            />
-          </label>
-          <div className={styles.filterActions}>
-            <button type="submit">搜索</button>
-            <a className="button-secondary" href={clearHref}>
-              清除
-            </a>
+                ]}
+              />
+            </label>
+            <label>
+              状态
+              <SelectField
+                name="status"
+                label="状态"
+                defaultValue={fieldValue(parameters, 'status')}
+                options={[
+                  { value: '', label: '在招和待确认' },
+                  { value: 'active', label: '仅在招' },
+                  { value: 'stale', label: '仅待确认' },
+                  { value: 'closed', label: '仅已关闭' },
+                  { value: 'active,stale,closed', label: '全部状态' },
+                ]}
+              />
+            </label>
+            <label>
+              排序
+              <SelectField
+                name="sort"
+                label="排序"
+                defaultValue={fieldValue(parameters, 'sort') || jobListPreferences.defaultSort}
+                options={[
+                  { value: 'updated_desc', label: '最近更新' },
+                  { value: 'published_desc', label: '最近发布' },
+                  { value: 'score_desc', label: '匹配分数' },
+                ]}
+              />
+            </label>
+            <label>
+              个人资料版本
+              <SelectField
+                name="profile"
+                label="个人资料版本"
+                defaultValue={
+                  fieldValue(parameters, 'profile')
+                    ? fieldValue(parameters, 'profile')
+                    : (defaultProfileId ?? '')
+                }
+                options={[
+                  { value: '', label: '不使用资料匹配' },
+                  ...profiles
+                    .filter((profile) => profile.currentVersionId !== null)
+                    .map((profile) => ({
+                      value: profile.currentVersionId ?? '',
+                      label: profile.name,
+                    })),
+                ]}
+              />
+            </label>
+            <label className={styles.companyField}>
+              公司
+              <CompanyCombobox
+                companies={
+                  query.sourceKind === 'platform'
+                    ? page.items.map((job) => job.companyName)
+                    : companies.map((company) => company.companyName)
+                }
+                defaultValue={fieldValue(parameters, 'company')}
+              />
+            </label>
+          </div>
+          <div className={styles.inputRow}>
+            <label>
+              关键词
+              <input
+                name="q"
+                defaultValue={fieldValue(parameters, 'q')}
+                placeholder="Agent、大模型应用…"
+              />
+            </label>
+            <label>
+              地点
+              <input
+                name="location"
+                defaultValue={fieldValue(parameters, 'location')}
+                placeholder="北京,深圳"
+              />
+            </label>
+            <label className={styles.scoreField}>
+              最低分
+              <input
+                name="minScore"
+                type="number"
+                min="0"
+                max="100"
+                defaultValue={fieldValue(parameters, 'minScore')}
+              />
+            </label>
+            <div className={styles.filterActions}>
+              <SearchButton />
+              <a className="button-secondary" href={clearHref}>
+                清除
+              </a>
+            </div>
           </div>
         </form>
       </details>
@@ -258,6 +268,7 @@ export default async function JobsPage({
         </>
       )}
       <Pagination
+        pageSize={page.page.pageSize}
         currentPage={page.page.current}
         totalPages={page.page.totalPages}
         label="职位分页"

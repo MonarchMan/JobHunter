@@ -1,3 +1,4 @@
+import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { PageHeader } from '../components/layout/page-header.js';
@@ -44,7 +45,11 @@ export default async function SourcesPage({
     }, new Map<string, WebSourceChannel[]>()),
     ([companyId, channels]) => ({ companyId, channels }),
   );
-  const sourcePage = webPagination(companies.length, pageNumber, 10);
+  const sourcePage = webPagination(
+    companies.length,
+    pageNumber,
+    listPageSize(parameters, 'pageSize', 10),
+  );
   const officialCompanies =
     channel === 'official'
       ? companies.slice(
@@ -114,11 +119,12 @@ export default async function SourcesPage({
             ))}
           </div>
           <Pagination
+            pageSize={sourcePage.pageSize}
             currentPage={sourcePage.current}
             totalPages={sourcePage.totalPages}
             label="招聘来源分页"
             createHref={(page) =>
-              `/sources?${new URLSearchParams({ page: String(page) }).toString()}`
+              `/sources?${new URLSearchParams({ page: String(page), pageSize: String(sourcePage.pageSize) }).toString()}`
             }
           />
         </>

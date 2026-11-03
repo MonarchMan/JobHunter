@@ -1,3 +1,5 @@
+import { SearchButton } from '../components/forms/search-button.js';
+import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { agentRunStatusLabels, labelStatus, taskTypeLabels } from '../components/status-labels.js';
@@ -98,6 +100,8 @@ export default async function TasksPage({
     ...(taskType ? { taskType } : {}),
     taskPage,
     agentPage,
+    taskPageSize: listPageSize(parameters, 'taskPageSize'),
+    agentPageSize: listPageSize(parameters, 'agentPageSize'),
   });
   return (
     <main id="main-content" tabIndex={-1}>
@@ -142,7 +146,7 @@ export default async function TasksPage({
             ]}
           />
         </label>
-        <button type="submit">搜索</button>
+        <SearchButton />
         <a className="button-secondary" href="/tasks">
           清除
         </a>
@@ -251,6 +255,9 @@ export default async function TasksPage({
           ))}
         </div>
         <Pagination
+          pageSize={diagnostics.taskPagination.pageSize}
+          pageParameter="taskPage"
+          sizeParameter="taskPageSize"
           currentPage={diagnostics.taskPagination.current}
           totalPages={diagnostics.taskPagination.totalPages}
           label="后台任务分页"
@@ -339,6 +346,9 @@ export default async function TasksPage({
           ))}
         </div>
         <Pagination
+          pageSize={diagnostics.agentPagination.pageSize}
+          pageParameter="agentPage"
+          sizeParameter="agentPageSize"
           currentPage={diagnostics.agentPagination.current}
           totalPages={diagnostics.agentPagination.totalPages}
           label="Agent 运行分页"

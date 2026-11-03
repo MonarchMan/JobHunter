@@ -1,5 +1,7 @@
 'use client';
 
+import { SearchButton } from '../../components/forms/search-button.js';
+
 import type {
   CommunityExperienceFilter,
   CommunityExperienceSummary,
@@ -312,7 +314,7 @@ export function ResearchIndex({
                 ))}
               </select>
             </label>
-            <button type="submit">搜索</button>
+            <SearchButton />
             {Object.keys(acceptedFilter).length > 0 ? (
               <a className="button-secondary" href="/interview/research">
                 清除

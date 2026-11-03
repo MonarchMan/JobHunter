@@ -253,7 +253,7 @@ test.describe('校招实习管理台核心流程', () => {
       expect(triggerBox).not.toBeNull();
       expect(listboxBox).not.toBeNull();
       if (triggerBox && listboxBox) {
-        expect(Math.abs(listboxBox.width - triggerBox.width)).toBeLessThanOrEqual(1);
+        expect(listboxBox.width).toBeGreaterThanOrEqual(triggerBox.width - 1);
         expect(Math.abs(listboxBox.x - triggerBox.x)).toBeLessThanOrEqual(1);
         expect(listboxBox.y).toBeGreaterThan(triggerBox.y + triggerBox.height);
       }
@@ -1180,7 +1180,7 @@ test.describe('校招实习管理台核心流程', () => {
     await page.goto('/profile');
     await expect(page.locator('select:not([aria-hidden="true"])')).toHaveCount(0);
     // 1、类别下拉框保持原值；旧资料的新增意向为空，只在框内显示指定提示。
-    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(7);
+    await expect(page.locator('[data-authored-select-trigger]')).toHaveCount(8);
     const category = page.getByRole('combobox', { name: '职位类别', exact: true });
     await expect(category).toHaveText('研发 / 不限');
     const intendedRoles = page.getByRole('textbox', { name: '意向岗位', exact: true });
@@ -1196,14 +1196,14 @@ test.describe('校招实习管理台核心流程', () => {
       animations: 'disabled',
     });
 
-    // 2、共享下拉弹层保持等宽，键盘修改类别不覆盖意向；填值后占位提示消失。
+    // 2、共享下拉弹层不窄于触发框，键盘修改类别不覆盖意向；填值后占位提示消失。
     const triggerBox = await category.boundingBox();
     await category.focus();
     await page.keyboard.press('ArrowDown');
     const listbox = page.getByRole('listbox');
     await expect(listbox).toBeVisible();
     const popupBox = await listbox.boundingBox();
-    expect(Math.abs((triggerBox?.width ?? 0) - (popupBox?.width ?? 0))).toBeLessThanOrEqual(1);
+    expect(popupBox?.width ?? 0).toBeGreaterThanOrEqual((triggerBox?.width ?? 0) - 1);
     await expect(page.getByRole('option', { name: '请选择职位大类', exact: true })).toBeFocused();
     await page.screenshot({
       path: test.info().outputPath('profile-category-open.png'),

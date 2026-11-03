@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { PageSizeSelect } from './page-size-select.js';
 import styles from './pagination.module.css';
 
 interface PaginationProperties {
@@ -6,6 +7,9 @@ interface PaginationProperties {
   readonly totalPages: number;
   readonly createHref: (page: number) => string;
   readonly label: string;
+  readonly pageSize: number;
+  readonly pageParameter?: string;
+  readonly sizeParameter?: string;
 }
 
 function pageItems(currentPage: number, totalPages: number): readonly (number | 'ellipsis')[] {
@@ -36,28 +40,41 @@ export function Pagination({
   totalPages,
   createHref,
   label,
+  pageSize,
+  pageParameter = 'page',
+  sizeParameter = 'pageSize',
 }: PaginationProperties): ReactElement {
   return (
     <nav className={styles.pagination} aria-label={label}>
-      <span className={styles.summary}>
-        第 {currentPage} / {totalPages} 页
-      </span>
-      {pageItems(currentPage, totalPages).map((item, index) =>
-        item === 'ellipsis' ? (
-          <span className={styles.ellipsis} key={`ellipsis-${String(index)}`} aria-hidden="true">
-            …
-          </span>
-        ) : (
-          <a
-            className={item === currentPage ? styles.current : undefined}
-            href={createHref(item)}
-            key={item}
-            aria-current={item === currentPage ? 'page' : undefined}
-          >
-            {item}
-          </a>
-        ),
-      )}
+      <div className={styles.pages}>
+        {pageItems(currentPage, totalPages).map((item, index) =>
+          item === 'ellipsis' ? (
+            <span className={styles.ellipsis} key={`ellipsis-${String(index)}`} aria-hidden="true">
+              …
+            </span>
+          ) : (
+            <a
+              className={item === currentPage ? styles.current : undefined}
+              href={createHref(item)}
+              key={item}
+              aria-current={item === currentPage ? 'page' : undefined}
+            >
+              {item}
+            </a>
+          ),
+        )}
+      </div>
+      <div className={styles.details}>
+        <span className={styles.summary}>
+          第 {currentPage} / {totalPages} 页
+        </span>
+        <PageSizeSelect
+          pageSize={pageSize}
+          pageParameter={pageParameter}
+          sizeParameter={sizeParameter}
+          label={label}
+        />
+      </div>
     </nav>
   );
 }

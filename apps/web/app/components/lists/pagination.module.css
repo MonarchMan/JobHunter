@@ -1,11 +1,49 @@
 .pagination {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  justify-content: center;
+  gap: 0.75rem;
   margin-top: 1rem;
   color: var(--text-secondary);
+}
+
+.pages {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.details {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  white-space: nowrap;
+}
+
+/* 窄屏将辅助控件整体移至下一行，避免挤偏页码或横向溢出。 */
+@media (max-width: 900px) {
+  .pagination {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  .pages {
+    grid-column: 1;
+  }
+}
+
+.pageSize {
+  width: 6.5rem;
+}
+
+.pageSize > button {
+  min-height: 2.15rem;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.86rem;
 }
 
 .pagination a {

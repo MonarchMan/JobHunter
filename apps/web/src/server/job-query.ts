@@ -107,3 +107,13 @@ export function pageHref(
   const query = parameters.toString();
   return query ? `?${query}` : '';
 }
+
+/** 每页数量限定为公开选项，非法或缺失值回退到列表默认值。 */
+export function listPageSize(
+  source: SearchParameterSource,
+  name = 'pageSize',
+  defaultSize: 10 | 20 = 20,
+): number {
+  const value = Number(firstSearchParameter(source, name));
+  return [10, 20, 50, 100].includes(value) ? value : defaultSize;
+}

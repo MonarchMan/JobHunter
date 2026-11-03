@@ -1,7 +1,7 @@
 'use client';
 
 import * as SelectPrimitive from '@radix-ui/react-select';
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from '../ui-icon.js';
 import styles from './select-field.module.css';
@@ -39,6 +39,7 @@ export function SelectField({
   const selectedValue = value ?? uncontrolledValue;
   const [branch, setBranch] = useState<SelectFieldOption | null>(null);
   const [open, setOpen] = useState(false);
+  const [popupFont, setPopupFont] = useState<CSSProperties>({});
   const [portalContainer, setPortalContainer] = useState<HTMLElement | undefined>();
   const changingLevel = useRef(false);
   const openRef = useRef(false);
@@ -67,7 +68,19 @@ export function SelectField({
         open={open}
         onOpenChange={(nextOpen) => {
           // 原生模态窗口之外的节点会被设为 inert，选项需挂在当前 dialog 内。
-          if (nextOpen) setPortalContainer(trigger.current?.closest('dialog') ?? undefined);
+          if (nextOpen) {
+            setPortalContainer(trigger.current?.closest('dialog') ?? undefined);
+            // 弹层经 Portal 脱离表单，显式继承触发框的实际字体，避免回退到页面字号。
+            if (trigger.current) {
+              const font = getComputedStyle(trigger.current);
+              setPopupFont({
+                fontSize: font.fontSize,
+                fontFamily: font.fontFamily,
+                lineHeight: font.lineHeight,
+                fontWeight: font.fontWeight,
+              });
+            }
+          }
           // 1、父项选中后的自动关闭只属于旧层，不得关闭刚打开的子层。
           if (!nextOpen && changingLevel.current) {
             changingLevel.current = false;
@@ -102,6 +115,7 @@ export function SelectField({
           ref={trigger}
           className={styles.trigger}
           aria-label={label}
+          title={selectedLabel}
           data-authored-select-trigger
         >
           <SelectPrimitive.Value placeholder={cascading ? selectedLabel : undefined}>
@@ -121,6 +135,7 @@ export function SelectField({
             }}
             aria-label={branch ? `${label}：${branch.label}` : label}
             className={styles.content}
+            style={popupFont}
             position="popper"
             side="bottom"
             sideOffset={6}
@@ -142,6 +157,7 @@ export function SelectField({
                   className={styles.item}
                   key={encode(option.value)}
                   value={encode(option.value)}
+                  title={option.label}
                 >
                   <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
                   <SelectPrimitive.ItemIndicator className={styles.indicator}>

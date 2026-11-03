@@ -1,3 +1,4 @@
+import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { PageHeader } from '../components/layout/page-header.js';
@@ -79,7 +80,11 @@ export default async function ProfilePage({
     );
   }
   const detail = container.services.webProfiles.get(selectedId);
-  const versionPagination = webPagination(detail.versions.length, versionPageNumber, 10);
+  const versionPagination = webPagination(
+    detail.versions.length,
+    versionPageNumber,
+    listPageSize(query),
+  );
   const visibleVersions = detail.versions.slice(
     (versionPagination.current - 1) * versionPagination.pageSize,
     versionPagination.current * versionPagination.pageSize,
@@ -139,11 +144,16 @@ export default async function ProfilePage({
             ))}
           </ol>
           <Pagination
+            pageSize={versionPagination.pageSize}
             currentPage={versionPagination.current}
             totalPages={versionPagination.totalPages}
             label="画像版本分页"
             createHref={(page) => {
-              const parameters = new URLSearchParams({ profile: selectedId, page: String(page) });
+              const parameters = new URLSearchParams({
+                profile: selectedId,
+                page: String(page),
+                pageSize: String(versionPagination.pageSize),
+              });
               return `${embedded ? '/my?tab=profile&' : '/profile?'}${parameters.toString()}`;
             }}
           />

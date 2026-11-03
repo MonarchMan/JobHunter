@@ -1,7 +1,7 @@
 .filters {
-  display: grid;
-  grid-template-columns: minmax(10rem, 1fr) minmax(13rem, 1fr) auto auto;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 0.75rem;
   margin: 0 0 1.25rem;
   padding: 1rem;
@@ -11,11 +11,15 @@
 }
 
 .filters label {
-  display: grid;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
   gap: 0.4rem;
   color: var(--text-secondary);
   font-size: 0.84rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .filters :global(.button-secondary) {
@@ -129,11 +133,6 @@
 
 @media (max-width: 600px) {
   .filters {
-    grid-template-columns: 1fr;
-  }
-
-  .filters button,
-  .filters :global(.button-secondary) {
-    width: 100%;
+    gap: 0.625rem;
   }
 }

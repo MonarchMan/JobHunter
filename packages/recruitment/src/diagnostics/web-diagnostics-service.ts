@@ -172,9 +172,12 @@ export class WebDiagnosticsService {
       readonly taskPage?: number;
       readonly agentPage?: number;
       readonly pageSize?: number;
+      readonly taskPageSize?: number;
+      readonly agentPageSize?: number;
     } = {},
   ): WebDiagnostics {
-    const pageSize = input.pageSize ?? 25;
+    const taskPageSize = input.taskPageSize ?? input.pageSize ?? 25;
+    const agentPageSize = input.agentPageSize ?? input.pageSize ?? 25;
     const taskPage = input.taskPage ?? 1;
     const agentPage = input.agentPage ?? 1;
     const taskFilter = {
@@ -183,22 +186,28 @@ export class WebDiagnosticsService {
     };
     let taskPageResult = this.#repository.listTaskEntries({
       ...taskFilter,
-      limit: pageSize,
-      offset: (taskPage - 1) * pageSize,
+      limit: taskPageSize,
+      offset: (taskPage - 1) * taskPageSize,
     });
-    const taskPagination = webPagination(taskPageResult.total, taskPage, pageSize);
+    const taskPagination = webPagination(taskPageResult.total, taskPage, taskPageSize);
     if (taskPagination.current !== taskPage) {
       taskPageResult = this.#repository.listTaskEntries({
         ...taskFilter,
-        limit: pageSize,
-        offset: (taskPagination.current - 1) * pageSize,
+        limit: taskPageSize,
+        offset: (taskPagination.current - 1) * taskPageSize,
       });
     }
-    const agentPageResult = this.#repository.listAgentRuns({
-      limit: pageSize,
-      offset: (agentPage - 1) * pageSize,
+    let agentPageResult = this.#repository.listAgentRuns({
+      limit: agentPageSize,
+      offset: (agentPage - 1) * agentPageSize,
     });
-    const agentPagination = webPagination(agentPageResult.total, agentPage, pageSize);
+    const agentPagination = webPagination(agentPageResult.total, agentPage, agentPageSize);
+    if (agentPagination.current !== agentPage) {
+      agentPageResult = this.#repository.listAgentRuns({
+        limit: agentPageSize,
+        offset: (agentPagination.current - 1) * agentPageSize,
+      });
+    }
     // 1、确定有效页后一次性读取普通任务，避免逐条查询任务及同步运行。
     const details = new Map(
       this.#repository

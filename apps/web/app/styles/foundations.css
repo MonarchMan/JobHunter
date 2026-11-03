@@ -117,6 +117,13 @@ textarea {
   font: inherit;
 }
 
+/* 原生下拉框也按选项宽度布局，长选项受容器与最大宽度约束。 */
+select {
+  width: fit-content;
+  min-width: 5.5rem;
+  max-width: min(100%, 18rem);
+}
+
 textarea {
   padding: 0.75rem;
   resize: vertical;

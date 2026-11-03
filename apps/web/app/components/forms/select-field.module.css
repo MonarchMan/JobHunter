@@ -1,11 +1,13 @@
 .trigger {
   display: flex;
-  width: 100%;
+  width: max-content;
+  min-width: 5.5rem;
+  max-width: min(100%, 18rem);
   min-height: 2.75rem;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0 0.75rem;
+  gap: 0.5rem;
+  padding: 0 0.6rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--surface);
@@ -17,6 +19,14 @@
     border-color var(--motion-fast) var(--ease-standard),
     box-shadow var(--motion-fast) var(--ease-standard),
     background-color var(--motion-fast) var(--ease-standard);
+}
+
+/* 长名称允许收缩省略，箭头保持可见；短选项不再撑满表单列。 */
+.trigger > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trigger:hover:not(:disabled) {
@@ -56,7 +66,9 @@
 
 .content {
   z-index: var(--z-dropdown);
+  box-sizing: border-box;
   width: var(--radix-select-trigger-width);
+  max-width: var(--radix-select-content-available-width);
   max-height: min(18rem, var(--radix-select-content-available-height));
   overflow: hidden;
   border: 1px solid var(--line);
@@ -69,21 +81,29 @@
 
 .viewport {
   width: 100%;
-  padding: 0.35rem;
+  padding: 0.2rem;
 }
 
 .item {
   position: relative;
   display: flex;
-  min-height: 2.75rem;
+  min-height: 2rem;
   align-items: center;
-  padding: 0.45rem 2.25rem 0.45rem 0.65rem;
+  padding: 0.25rem 1.5rem 0.25rem 0.4rem;
   border-radius: calc(var(--radius-control) - 0.125rem);
   color: var(--ink);
   cursor: pointer;
-  font-size: 0.95rem;
+  font-size: inherit;
+  text-align: left;
   outline: none;
   user-select: none;
+  white-space: nowrap;
+}
+
+.item > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .item[data-highlighted] {
@@ -92,12 +112,12 @@
 }
 
 .item[data-state='checked'] {
-  font-weight: 750;
+  font-weight: inherit;
 }
 
 .indicator {
   position: absolute;
-  right: 0.65rem;
+  right: 0.3rem;
   display: inline-grid;
   place-items: center;
   color: var(--primary);

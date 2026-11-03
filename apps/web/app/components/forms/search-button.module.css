@@ -1,0 +1,11 @@
+/* 提高局部优先级，避免页面操作区的通用按钮内边距破坏正方形。 */
+.searchButton.searchButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--filter-action-size, 2.75rem);
+  height: var(--filter-action-size, 2.75rem);
+  min-height: var(--filter-action-size, 2.75rem);
+  padding: 0;
+}
