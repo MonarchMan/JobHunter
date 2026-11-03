@@ -39,6 +39,7 @@ export function SelectField({
   const selectedValue = value ?? uncontrolledValue;
   const [branch, setBranch] = useState<SelectFieldOption | null>(null);
   const [open, setOpen] = useState(false);
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | undefined>();
   const changingLevel = useRef(false);
   const openRef = useRef(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -65,6 +66,8 @@ export function SelectField({
         disabled={disabled}
         open={open}
         onOpenChange={(nextOpen) => {
+          // 原生模态窗口之外的节点会被设为 inert，选项需挂在当前 dialog 内。
+          if (nextOpen) setPortalContainer(trigger.current?.closest('dialog') ?? undefined);
           // 1、父项选中后的自动关闭只属于旧层，不得关闭刚打开的子层。
           if (!nextOpen && changingLevel.current) {
             changingLevel.current = false;
@@ -108,7 +111,7 @@ export function SelectField({
             <Icon name="chevronDown" />
           </SelectPrimitive.Icon>
         </SelectPrimitive.Trigger>
-        <SelectPrimitive.Portal>
+        <SelectPrimitive.Portal container={portalContainer}>
           <SelectPrimitive.Content
             onCloseAutoFocus={(event) => {
               if (!cascading) return;

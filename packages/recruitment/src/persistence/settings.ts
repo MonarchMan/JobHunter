@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { platformRetentionStateSchema } from '../platform/application/platform-retention.js';
 import { PersistenceError } from '@jobhunter/common/persistence/errors';
+import { sourceScheduleOverridesSchema } from '../settings/source-schedule.js';
 
 /** 数据库查询结果对应的行结构。 */
 export interface SettingDefinition<TValue> {
@@ -46,6 +47,7 @@ export class SettingsRegistry {
 
 /** 系统默认设置注册表。 */
 export const defaultSettingsRegistry = new SettingsRegistry([
+  { key: 'sources.scheduleOverrides', schemaVersion: '1', schema: sourceScheduleOverridesSchema },
   { key: 'platform.retention', schemaVersion: '1', schema: platformRetentionStateSchema },
   {
     key: 'ui.jobList',

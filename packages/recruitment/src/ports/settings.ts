@@ -8,6 +8,8 @@ export const JOB_UNDERSTANDING_SETTING_KEY = 'matching.jobUnderstanding' as cons
 export const SOURCE_SYNC_CHANNEL_SETTING_KEY = 'sources.activeChannel' as const;
 /** 自动同步计划的设置键。 */
 export const SOURCE_AUTOMATION_SETTING_KEY = 'sources.automation' as const;
+/** 独立来源同步计划，随全局同步计划变化清空。 */
+export const SOURCE_SCHEDULE_OVERRIDES_KEY = 'sources.scheduleOverrides' as const;
 /** 自动匹配行为的设置键。 */
 export const MATCHING_AUTOMATION_SETTING_KEY = 'matching.automation' as const;
 /** 职位列表默认视图的设置键。 */
@@ -15,6 +17,7 @@ export const JOB_LIST_PREFERENCES_SETTING_KEY = 'ui.jobListPreferences' as const
 
 /** 应用层使用的类型约束。 */
 export type ApplicationSettingKey =
+  | typeof SOURCE_SCHEDULE_OVERRIDES_KEY
   | typeof JOB_UNDERSTANDING_SETTING_KEY
   | typeof SOURCE_SYNC_CHANNEL_SETTING_KEY
   | typeof SOURCE_AUTOMATION_SETTING_KEY

@@ -1,9 +1,4 @@
-import {
-  parseId,
-  type IdGenerator,
-  type JobSourceId,
-  type SourceChannelId,
-} from '@jobhunter/common/domain';
+import { parseId, type JobSourceId, type SourceChannelId } from '@jobhunter/common/domain';
 import {
   webSourceChannelMutationSchema,
   webSourceChannelSchema,
@@ -15,7 +10,7 @@ import {
   type WebSourceMutation,
 } from '@jobhunter/recruitment/contracts/web';
 import { webTaskAcceptedSchema, type WebTaskAccepted } from '@jobhunter/common/web-contracts';
-import type { ScheduleService } from '@jobhunter/common/tasks';
+import type { SourceScheduleOverride } from '../settings/source-schedule.js';
 import type { TaskService } from '@jobhunter/common/tasks';
 import type { SourceManagementService } from '@jobhunter/recruitment/source-management-service';
 
@@ -41,22 +36,19 @@ export class WebSourceService {
   readonly #repository: WebSourceRepository;
   readonly #sources: SourceManagementService;
   readonly #tasks: TaskService;
-  readonly #schedules: ScheduleService;
-  readonly #ids: IdGenerator;
+  readonly #configureSchedule: (id: string, value: SourceScheduleOverride | null) => void;
 
   /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly repository: WebSourceRepository;
     readonly sources: SourceManagementService;
     readonly tasks: TaskService;
-    readonly schedules: ScheduleService;
-    readonly ids: IdGenerator;
+    readonly configureSchedule: (id: string, value: SourceScheduleOverride | null) => void;
   }) {
     this.#repository = input.repository;
     this.#sources = input.sources;
     this.#tasks = input.tasks;
-    this.#schedules = input.schedules;
-    this.#ids = input.ids;
+    this.#configureSchedule = input.configureSchedule;
   }
 
   /** 执行应用组件对外暴露的操作。 */
@@ -128,11 +120,7 @@ export class WebSourceService {
           throw new TypeError('请先在设置中切换同步招聘渠道。');
         }
         if (mutation.enabled) this.#sources.requireSyncReady();
-        this.#schedules.upsert({
-          id: this.#ids.generate(),
-          scheduleKey: `source.sync:${sourceId}`,
-          taskType: 'source.sync',
-          payload: { sourceId, trigger: 'schedule' },
+        this.#configureSchedule(sourceId, {
           cronExpression: mutation.cronExpression,
           timezone: mutation.timezone,
           enabled: mutation.enabled,
@@ -141,6 +129,9 @@ export class WebSourceService {
           kind: 'source',
           source: webSourceSchema.parse(this.#repository.get(sourceId)),
         };
+      case 'schedule-reset':
+        this.#configureSchedule(sourceId, null);
+        return { kind: 'source', source: webSourceSchema.parse(this.#repository.get(sourceId)) };
     }
   }
 

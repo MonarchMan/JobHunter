@@ -517,15 +517,13 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(sourcePanel.locator('header a')).toHaveAttribute('target', '_blank');
     await expect(sourcePanel.locator('header a')).toHaveCSS('text-overflow', 'ellipsis');
     await expect(sourcePanel.locator('header a')).toHaveCSS('white-space', 'nowrap');
-    await expect(sourcePanel.locator('header a')).toHaveCSS('text-align', 'center');
+    await expect(sourcePanel.locator('header a')).toHaveCSS('text-align', 'left');
     await expect(sourcePanel.locator('header a')).toHaveCSS('font-size', '16px');
     await expect(sourcePanel.locator('header a')).toHaveAttribute(
       'title',
       (await sourcePanel.locator('header a').getAttribute('href')) ?? '',
     );
-    await expect(sourcePanel.locator('header a')).toHaveText(
-      (await sourcePanel.locator('header a').getAttribute('href')) ?? '',
-    );
+    await expect(sourcePanel.locator('header a')).toHaveText('腾讯实习招聘');
     await expect(sourcePanel).toHaveCSS('border-top-width', '0px');
     await expect(sourcePanel).toHaveCSS('border-left-width', '0px');
     await expect(sourcePanel).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');

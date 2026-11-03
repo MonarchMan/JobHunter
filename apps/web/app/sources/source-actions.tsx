@@ -1,7 +1,7 @@
 'use client';
 
 import type { WebSource, WebSourceChannel } from '@jobhunter/recruitment/contracts/web';
-import type { ReactElement, SyntheticEvent } from 'react';
+import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Icon } from '../components/ui-icon.js';
 import { mutationHeaders } from '../../src/client/csrf.js';
@@ -123,7 +123,7 @@ export function SourceChannelToggle({
   return (
     <div>
       <button type="button" className="button-muted" disabled={busy} onClick={() => void toggle()}>
-        {channel.enabled ? '停用渠道' : '启用渠道'}
+        {channel.enabled ? '停用' : '启用'}
       </button>
     </div>
   );
@@ -210,119 +210,42 @@ export function SourceSyncAction({
   );
 }
 
-export function SourceActions({
+/** 为当前物理来源提交健康检查，防止重复点击并反馈请求结果。 */
+export function SourceHealthAction({
   source,
-  syncReady,
   contextLabel = source.companyName,
-}: Readonly<{ source: WebSource; syncReady: boolean; contextLabel?: string }>): ReactElement {
+}: Readonly<{ source: WebSource; contextLabel?: string }>): ReactElement {
   const [token] = useState(() => crypto.randomUUID());
-  const [cronExpression, setCronExpression] = useState(
-    source.schedule?.cronExpression ?? '0 9 * * *',
-  );
-  const [scheduleEnabled, setScheduleEnabled] = useState(source.schedule?.enabled ?? true);
-  const { showToast, showToastAfterReload } = useToast();
   const [busy, setBusy] = useState(false);
-
-  const request = async (url: string, method: 'POST' | 'PATCH', body: unknown): Promise<void> => {
+  const { showToast } = useToast();
+  const check = async (): Promise<void> => {
     setBusy(true);
     try {
-      const response = await fetch(url, {
-        method,
+      const response = await fetch(`/api/sources/${source.id}/health`, {
+        method: 'POST',
         headers: await mutationHeaders(),
-        body: JSON.stringify(body),
+        body: JSON.stringify({ idempotencyToken: `health-${token}` }),
       });
       const result = (await response.json()) as ActionResponse;
-      if (!response.ok) throw new Error(result.error?.message ?? '来源操作失败。');
-      const taskId = result.data?.task?.taskId;
-      if (taskId) {
-        showToast('同步任务已创建。');
-      } else {
-        showToastAfterReload('设置已保存。');
-        window.location.reload();
-      }
+      if (!response.ok) throw new Error(result.error?.message ?? '健康检查创建失败。');
+      showToast('健康检查任务已创建。');
     } catch (error) {
-      showToast(error instanceof Error ? error.message : '来源操作失败。', 'error');
+      showToast(error instanceof Error ? error.message : '健康检查创建失败。', 'error');
     } finally {
       setBusy(false);
     }
   };
-
-  const schedule = (event: SyntheticEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    void request(`/api/sources/${source.id}`, 'PATCH', {
-      kind: 'schedule',
-      cronExpression,
-      timezone: 'Asia/Shanghai',
-      enabled: scheduleEnabled,
-    });
-  };
-
   return (
-    <div className={styles.actions} data-source-actions>
-      <details className={styles.advanced} data-source-advanced>
-        <summary>高级设置</summary>
-        <div className="inline-actions">
-          <button
-            type="button"
-            className="button-muted"
-            aria-label={`健康检查 ${contextLabel}`}
-            disabled={busy}
-            onClick={() => {
-              void request(`/api/sources/${source.id}/health`, 'POST', {
-                idempotencyToken: `health-${token}`,
-              });
-            }}
-          >
-            健康检查
-          </button>
-          <button
-            type="button"
-            className="button-muted"
-            aria-label={`${source.enabled ? '停用' : '启用'}来源 ${contextLabel}`}
-            disabled={busy}
-            onClick={() => {
-              void request(`/api/sources/${source.id}`, 'PATCH', {
-                kind: 'enable',
-                enabled: !source.enabled,
-              });
-            }}
-          >
-            {source.enabled ? '停用来源' : '启用来源'}
-          </button>
-        </div>
-        <form className={styles.scheduleForm} data-source-schedule onSubmit={schedule} noValidate>
-          <label>
-            {' '}
-            Cron（Asia/Shanghai）{' '}
-            <input
-              value={cronExpression}
-              onChange={(event) => {
-                setCronExpression(event.target.value);
-              }}
-            />{' '}
-          </label>
-          <label className={styles.checkLabel}>
-            <input
-              type="checkbox"
-              checked={scheduleEnabled}
-              aria-describedby={!syncReady ? 'source-sync-prerequisite' : undefined}
-              onChange={(event) => {
-                setScheduleEnabled(event.target.checked);
-              }}
-            />{' '}
-            启用计划
-          </label>
-          <button
-            type="submit"
-            className="button-muted"
-            disabled={busy || (!syncReady && scheduleEnabled)}
-            aria-describedby={!syncReady ? 'source-sync-prerequisite' : undefined}
-            aria-label={`保存 ${contextLabel} 的同步计划`}
-          >
-            保存计划
-          </button>
-        </form>
-      </details>
-    </div>
+    <button
+      type="button"
+      className="button-muted"
+      aria-label={`健康检查 ${contextLabel}`}
+      disabled={busy}
+      onClick={() => {
+        void check();
+      }}
+    >
+      健康检查
+    </button>
   );
 }

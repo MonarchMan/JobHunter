@@ -495,7 +495,7 @@ describe('Web source management', () => {
             schedule: {
               cronExpression: '0 9 * * *',
               timezone: 'Asia/Shanghai',
-              enabled: true,
+              enabled: false,
             },
           },
         });
@@ -523,4 +523,105 @@ describe('Web source management', () => {
       await root.cleanup();
     }
   });
+});
+
+it('persists individual schedules across reconciliation and restart, then replaces them on global changes', async () => {
+  const root = await createTemporaryDataRoot('source-schedule-overrides-');
+  try {
+    seedSource(root.path);
+    const bootstrap = resolveBootstrapConfig({
+      cli: { dataRoot: root.path },
+      environment: {},
+      cwd: root.path,
+    });
+    const config = resolveAppConfig({ bootstrap, environment: {} });
+    let container = createLocalWebContainer(config);
+    try {
+      container.services.webSources.mutate({
+        kind: 'schedule',
+        sourceId,
+        cronExpression: '15 8 * * 1,3',
+        timezone: 'Asia/Shanghai',
+        enabled: true,
+      });
+      container.services.sourceSchedules.reconcile();
+      expect(
+        container.services.webSources.list().find((source) => source.id === sourceId)?.schedule,
+      ).toMatchObject({ cronExpression: '15 8 * * 1,3', enabled: true });
+      container.close();
+      container = createLocalWebContainer(config);
+      expect(
+        container.services.webSources.list().find((source) => source.id === sourceId)?.schedule
+          ?.cronExpression,
+      ).toBe('15 8 * * 1,3');
+      const current = container.services.settings.get();
+      const mutation = {
+        jobUnderstandingEnabled: current.jobUnderstanding.enabled,
+        sourceSyncChannel: current.sourceSync.channel,
+        sourceAutomationEnabled: current.sourceAutomation.enabled,
+        sourceAutomationFrequency: current.sourceAutomation.frequency,
+        sourceAutomationTime: current.sourceAutomation.time,
+        automaticScoringEnabled: current.matchingAutomation.scoreEnabled,
+        automaticAdviceEnabled: current.matchingAutomation.adviceEnabled,
+        defaultJobSort: current.jobListPreferences.defaultSort,
+        rememberJobFilters: !current.jobListPreferences.rememberFilters,
+      };
+      container.services.settings.update(mutation);
+      container.services.sourceSchedules.reconcile();
+      expect(container.services.settings.sourceScheduleOverrides()[sourceId]?.cronExpression).toBe(
+        '15 8 * * 1,3',
+      );
+      expect(() =>
+        container.services.webSources.mutate({
+          kind: 'schedule',
+          sourceId,
+          cronExpression: 'bad',
+          timezone: 'Asia/Shanghai',
+          enabled: true,
+        }),
+      ).toThrow();
+      expect(container.services.settings.sourceScheduleOverrides()[sourceId]?.cronExpression).toBe(
+        '15 8 * * 1,3',
+      );
+      container.services.settings.update({ ...mutation, sourceAutomationTime: '10:20' });
+      container.services.sourceSchedules.reconcile();
+      expect(container.services.settings.sourceScheduleOverrides()).toEqual({});
+      expect(
+        container.services.webSources.list().find((source) => source.id === sourceId)?.schedule
+          ?.cronExpression,
+      ).toBe('20 10 * * *');
+      const primary = '018f0000-0000-7000-8000-000000000251';
+      const campus = '018f0000-0000-7000-8000-000000000252';
+      container.services.webSources.mutate({
+        kind: 'schedule',
+        sourceId: campus,
+        cronExpression: '0 8 * * *',
+        timezone: 'Asia/Shanghai',
+        enabled: true,
+      });
+      const db = openSqliteDatabase({ dataRoot: root.path });
+      try {
+        const read = (id: string): { payload_json: string; cron_expression: string } =>
+          db.client
+            .prepare('SELECT payload_json, cron_expression FROM schedules WHERE schedule_key = ?')
+            .get(`source.sync:${id}`) as { payload_json: string; cron_expression: string };
+        expect(JSON.parse(read(primary).payload_json)).toEqual({
+          sourceId: primary,
+          trigger: 'schedule',
+        });
+        expect(read(campus).cron_expression).toBe('0 8 * * *');
+        container.services.webSources.mutate({ kind: 'schedule-reset', sourceId: campus });
+        expect(JSON.parse(read(primary).payload_json)).toEqual({
+          sourceIds: [primary, campus],
+          trigger: 'schedule',
+        });
+      } finally {
+        db.close();
+      }
+    } finally {
+      container.close();
+    }
+  } finally {
+    await root.cleanup();
+  }
 });

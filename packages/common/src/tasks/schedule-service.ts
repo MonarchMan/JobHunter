@@ -19,6 +19,15 @@ export interface UpsertScheduleCommand {
   readonly enabled?: boolean;
 }
 
+/** 在持久化业务配置前校验表达式、时区与可达的下一次触发时间。 */
+export function validateScheduleTiming(cronExpression: string, timezone: string): void {
+  try {
+    CronExpressionParser.parse(cronExpression, { tz: timezone }).next();
+  } catch {
+    throw new TypeError('同步时间或时区无效。');
+  }
+}
+
 /** 计算指定时区下当前时间之后的下一次 cron 触发时间。 */
 function nextOccurrence(cronExpression: string, timezone: string, after: number): UtcInstant {
   const expression = CronExpressionParser.parse(cronExpression, {

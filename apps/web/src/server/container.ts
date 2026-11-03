@@ -369,6 +369,7 @@ export function createLocalWebContainer(
       jobIntakePolicy,
       activeChannel: () => settings.get().sourceSync.channel,
       automation: () => settings.get().sourceAutomation,
+      overrides: () => settings.sourceScheduleOverrides(),
     });
     sourceSchedules.reconcile();
     const services: WebApplicationServices = {
@@ -416,8 +417,10 @@ export function createLocalWebContainer(
         repository: new SqliteWebSourceRepository(database.client),
         sources,
         tasks,
-        schedules,
-        ids,
+        configureSchedule: (sourceId, value) => {
+          settings.setSourceSchedule(sourceId, value);
+          sourceSchedules.reconcile();
+        },
       }),
       diagnostics: new WebDiagnosticsService({
         tasks,

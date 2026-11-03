@@ -396,6 +396,7 @@ export function createRecruitmentTasks(
         jobIntakePolicy: input.jobIntakePolicy,
         activeChannel: () => settings.get().sourceSync.channel,
         automation: () => settings.get().sourceAutomation,
+        overrides: () => settings.sourceScheduleOverrides(),
       }).reconcile();
     },
     async close() {

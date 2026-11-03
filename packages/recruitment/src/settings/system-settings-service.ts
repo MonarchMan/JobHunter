@@ -1,10 +1,17 @@
 import type { Clock } from '@jobhunter/common/domain';
 import { z } from 'zod';
+import { validateScheduleTiming } from '@jobhunter/common/tasks';
+import {
+  sourceScheduleSchema,
+  sourceScheduleOverridesSchema,
+  type SourceScheduleOverride,
+} from './source-schedule.js';
 import {
   JOB_UNDERSTANDING_SETTING_KEY,
   JOB_LIST_PREFERENCES_SETTING_KEY,
   MATCHING_AUTOMATION_SETTING_KEY,
   SOURCE_AUTOMATION_SETTING_KEY,
+  SOURCE_SCHEDULE_OVERRIDES_KEY,
   SOURCE_SYNC_CHANNEL_SETTING_KEY,
   type ApplicationSettingsRepository,
   type SourceSyncChannel,
@@ -120,8 +127,43 @@ export class SystemSettingsService {
     return this.get().jobUnderstanding.enabled;
   }
 
+  /** 读取持久覆盖项，缺失记录表示全部沿用全局。 */
+  public sourceScheduleOverrides(): Record<string, SourceScheduleOverride> {
+    return sourceScheduleOverridesSchema.parse(
+      this.#repository.get(SOURCE_SCHEDULE_OVERRIDES_KEY) ?? {},
+    );
+  }
+
+  /** 校验后保存单个覆盖项；null 恢复全局，不触碰运行历史。 */
+  public setSourceSchedule(id: string, value: SourceScheduleOverride | null): void {
+    z.uuid().parse(id);
+    let overrides = this.sourceScheduleOverrides();
+    if (value) {
+      const parsed = sourceScheduleSchema.parse(value);
+      validateScheduleTiming(parsed.cronExpression, parsed.timezone);
+      overrides[id] = parsed;
+    } else {
+      overrides = Object.fromEntries(Object.entries(overrides).filter(([key]) => key !== id));
+    }
+    this.#repository.set(SOURCE_SCHEDULE_OVERRIDES_KEY, overrides, this.#clock.now());
+  }
+
   /** 校验并写入设置变更。 */
   public update(mutation: SystemSettingsMutation): SystemSettings {
+    const previous = this.get().sourceAutomation;
+    const next = sourceAutomationSettingSchema.parse({
+      enabled: mutation.sourceAutomationEnabled,
+      frequency: mutation.sourceAutomationFrequency,
+      time: mutation.sourceAutomationTime,
+    });
+    // 只有同步开关、频率或时间真正变化才覆盖独立计划；其他偏好不影响来源时间。
+    if (
+      previous.enabled !== next.enabled ||
+      previous.frequency !== next.frequency ||
+      previous.time !== next.time
+    ) {
+      this.#repository.set(SOURCE_SCHEDULE_OVERRIDES_KEY, {}, this.#clock.now());
+    }
     // 1、读取现值；2、应用变更；3、写入设置；4、返回规范化结果。
     const value = jobUnderstandingSettingSchema.parse({
       enabled: mutation.jobUnderstandingEnabled,

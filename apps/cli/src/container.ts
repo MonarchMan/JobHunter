@@ -245,6 +245,7 @@ export function createLocalCliContainer(
       jobIntakePolicy,
       activeChannel: () => systemSettings.get().sourceSync.channel,
       automation: () => systemSettings.get().sourceAutomation,
+      overrides: () => systemSettings.sourceScheduleOverrides(),
     }).reconcile();
     const jobRepository = new SqliteJobQueryRepository(
       database.client,

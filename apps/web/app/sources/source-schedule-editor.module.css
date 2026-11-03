@@ -1,0 +1,106 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--primary);
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.dialog {
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 1.5rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  color: var(--ink);
+}
+.dialog::backdrop {
+  background: var(--overlay-backdrop);
+}
+.header,
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.header h2 {
+  margin: 0;
+}
+.fields {
+  display: grid;
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.fields > label {
+  display: grid;
+  gap: 0.4rem;
+}
+.modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.fields .check,
+.modes label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.fields input[type='radio'],
+.fields input[type='checkbox'] {
+  width: 1rem;
+  min-height: 1rem;
+  accent-color: var(--primary);
+}
+.footer {
+  margin-top: 1.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.timeRow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.timeRow > label {
+  display: grid;
+  gap: 0.4rem;
+  flex: 0 1 7.5rem;
+  min-width: 0;
+}
+.timeRow input,
+.timeRow button {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.timeRow button {
+  justify-content: center;
+}
+
+.timeRow > .unitInput {
+  display: flex;
+  align-items: center;
+  flex: 0 1 6rem;
+}
+
+.unitInput span {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}

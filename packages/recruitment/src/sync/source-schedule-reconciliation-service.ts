@@ -2,6 +2,7 @@ import type { SourceManagementRepository } from '@jobhunter/recruitment/ports/so
 import type { SourceSyncChannel } from '../ports/source-management.js';
 import type { ScheduleService } from '@jobhunter/common/tasks';
 import type { JobIntakePolicy } from '../contracts/job-intake.js';
+import type { SourceScheduleOverride } from '../settings/source-schedule.js';
 
 /** 来源同步自动化策略，由入口装配提供设置快照。 */
 export interface SourceAutomationPolicy {
@@ -17,6 +18,7 @@ export class SourceScheduleReconciliationService {
   readonly #jobIntakePolicy: JobIntakePolicy;
   readonly #activeChannel: () => SourceSyncChannel;
   readonly #automation: () => SourceAutomationPolicy;
+  readonly #overrides: () => Readonly<Record<string, SourceScheduleOverride>>;
 
   /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
@@ -25,12 +27,14 @@ export class SourceScheduleReconciliationService {
     readonly jobIntakePolicy: JobIntakePolicy;
     readonly activeChannel: () => SourceSyncChannel;
     readonly automation: () => SourceAutomationPolicy;
+    readonly overrides?: () => Readonly<Record<string, SourceScheduleOverride>>;
   }) {
     this.#sources = input.sources;
     this.#schedules = input.schedules;
     this.#jobIntakePolicy = input.jobIntakePolicy;
     this.#activeChannel = input.activeChannel;
     this.#automation = input.automation;
+    this.#overrides = input.overrides ?? (() => ({}));
   }
 
   /** 创建、更新或停用来源调度，并返回统计。 */
@@ -38,6 +42,7 @@ export class SourceScheduleReconciliationService {
     const ready = this.#jobIntakePolicy.isReady();
     const activeChannel = this.#activeChannel();
     const automation = this.#automation();
+    const overrides = this.#overrides();
     const [hour, minute] = automation.time.split(':').map(Number);
     const cronExpression = `${String(minute)} ${String(hour)} * * ${automation.frequency === 'weekly' ? '1' : '*'}`;
     let enabled = 0;
@@ -46,7 +51,9 @@ export class SourceScheduleReconciliationService {
       ...sources.filter((source) => source.adapterKey === 'kuaishou.intern'),
       ...sources.filter((source) => source.adapterKey === 'kuaishou.intern.campus'),
     ];
-    const hasAggregatePair = kuaishouInternSources.length === 2;
+    const hasAggregatePair =
+      kuaishouInternSources.length === 2 &&
+      kuaishouInternSources.every((source) => !overrides[source.id]);
     const canAggregate =
       hasAggregatePair && kuaishouInternSources.every((source) => source.effectiveEnabled);
     for (const source of sources) {
@@ -67,14 +74,17 @@ export class SourceScheduleReconciliationService {
         continue;
       }
       const scheduleEnabled =
-        automation.enabled && ready && source.channel === activeChannel && source.effectiveEnabled;
+        (overrides[source.id]?.enabled ?? automation.enabled) &&
+        ready &&
+        source.channel === activeChannel &&
+        source.effectiveEnabled;
       this.#schedules.upsert({
         id: source.id,
         scheduleKey: `source.sync:${source.id}`,
         taskType: 'source.sync',
         payload: { sourceId: source.id, trigger: 'schedule' },
-        cronExpression,
-        timezone: 'Asia/Shanghai',
+        cronExpression: overrides[source.id]?.cronExpression ?? cronExpression,
+        timezone: overrides[source.id]?.timezone ?? 'Asia/Shanghai',
         enabled: scheduleEnabled,
       });
       if (scheduleEnabled) enabled += 1;

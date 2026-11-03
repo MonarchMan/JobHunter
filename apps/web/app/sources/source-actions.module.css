@@ -53,63 +53,9 @@
   transform: translateY(0);
 }
 
-.actions {
-  display: grid;
-  gap: 1rem;
-  margin-top: auto;
-  padding-top: 0;
-  border-top: 0;
-}
-
-.advanced {
-  margin-top: 0;
-  padding: 0.75rem 0 1rem;
-  border-top: 1px solid var(--line-soft);
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.advanced summary {
-  cursor: pointer;
-  color: var(--primary-hover);
-  font-weight: 700;
-}
-
-.scheduleForm {
-  display: grid;
-  grid-template-columns: minmax(14rem, 1fr) auto auto;
-  align-items: end;
-  gap: 0.75rem;
-}
-
-.scheduleForm label {
-  display: grid;
-  gap: 0.4rem;
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.scheduleForm .checkLabel {
-  display: flex;
-  align-items: center;
-  min-height: 2.75rem;
-}
-
-.checkLabel input {
-  width: auto;
-  min-height: auto;
-}
-
 @keyframes syncSpin {
   to {
     transform: rotate(1turn);
-  }
-}
-
-@media (max-width: 600px) {
-  .scheduleForm {
-    grid-template-columns: 1fr;
-    align-items: start;
   }
 }
 

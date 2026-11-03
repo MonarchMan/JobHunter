@@ -105,6 +105,7 @@ export const webSourceMutationSchema = z.discriminatedUnion('kind', [
     })
     .strict(),
   z.object({ kind: z.literal('enable'), sourceId: z.uuid(), enabled: z.boolean() }).strict(),
+  z.object({ kind: z.literal('schedule-reset'), sourceId: z.uuid() }).strict(),
   z
     .object({
       kind: z.literal('schedule'),

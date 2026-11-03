@@ -115,6 +115,8 @@ export const coverageLabels = {
 } as const;
 
 export const syncStatLabels = {
+  discovered: '发现',
+  restored: '恢复',
   created: '新增',
   updated: '更新',
   unchanged: '未变化',

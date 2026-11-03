@@ -1,7 +1,10 @@
 'use client';
 
 import type { WebSource, WebSourceChannel } from '@jobhunter/recruitment/contracts/web';
-import { useMemo, useState, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import { Icon } from '../components/ui-icon.js';
+import { SourceScheduleEditor } from './source-schedule-editor.js';
+import { sourceName } from './source-name.js';
 import { CompanyLogo } from '../components/company-logo.js';
 import { SelectField } from '../components/forms/select-field.js';
 import {
@@ -11,7 +14,11 @@ import {
   syncRunStatusLabels,
   syncStatLabels,
 } from '../components/status-labels.js';
-import { SourceActions, SourceChannelSyncAction, SourceChannelToggle } from './source-actions.js';
+import {
+  SourceHealthAction,
+  SourceChannelSyncAction,
+  SourceChannelToggle,
+} from './source-actions.js';
 import styles from './company-source-card.module.css';
 
 function classNames(...names: readonly (string | false | undefined)[]): string {
@@ -55,30 +62,42 @@ function SourcePanel({
   source,
   channel,
   syncReady,
+  channelInfo,
+  detailed = false,
 }: Readonly<{
   source: WebSource;
   channel: RecruitmentChannel;
   syncReady: boolean;
+  channelInfo?: WebSourceChannel;
+  detailed?: boolean;
 }>): ReactElement {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   const label = channelLabels[channel];
+  const officialLink = (
+    <a
+      className={styles['source-official-link']}
+      href={source.officialUrl}
+      title={source.officialUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {sourceName(source, channel)}
+    </a>
+  );
   return (
     <section
       className={classNames(styles['company-source-view'], styles['company-source-panel'])}
-      data-company-source-panel
+      data-company-source-panel={detailed ? undefined : ''}
       aria-label={`${source.companyName} ${label}来源`}
     >
-      <header className={styles['company-source-panel-header']}>
-        <div>
-          <a
-            className={styles['source-official-link']}
-            href={source.officialUrl}
-            title={source.officialUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {source.officialUrl}
-          </a>
-        </div>
+      <header
+        className={classNames(
+          styles['company-source-panel-header'],
+          detailed && styles.detailHeading,
+        )}
+      >
+        <div>{detailed ? <h2>{officialLink}</h2> : officialLink}</div>
         <div className={styles['source-badges']}>
           <span className={classNames('status', styles[`health-${source.healthStatus}`])}>
             {healthLabels[source.healthStatus]}
@@ -90,9 +109,24 @@ function SourcePanel({
       </header>
       <dl className={classNames('facts', styles['source-facts'])} data-source-facts>
         <div>
-          <dt>连续失败</dt>
-          <dd>{source.consecutiveFailures}</dd>
+          <dt>同步计划</dt>
+          <dd>
+            <SourceScheduleEditor source={source} syncReady={syncReady} />
+          </dd>
         </div>
+        {detailed ? (
+          <div>
+            <dt>下次执行</dt>
+            <dd>
+              {source.schedule
+                ? new Intl.DateTimeFormat('zh-CN', {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                  }).format(new Date(source.schedule.nextRunAt))
+                : '—'}
+            </dd>
+          </div>
+        ) : null}
         <div>
           <dt>最近成功</dt>
           <dd>
@@ -101,55 +135,203 @@ function SourcePanel({
               : '暂无'}
           </dd>
         </div>
-        <div>
-          <dt>同步计划</dt>
-          <dd>
-            {source.schedule
-              ? `${source.schedule.cronExpression} · ${source.schedule.enabled ? '启用' : '停用'}`
-              : '未设置'}
-          </dd>
-        </div>
-        <div>
-          <dt>下次执行</dt>
-          <dd>
-            {source.schedule
-              ? new Intl.DateTimeFormat('zh-CN', {
-                  dateStyle: 'short',
-                  timeStyle: 'short',
-                }).format(new Date(source.schedule.nextRunAt))
-              : '—'}
-          </dd>
-        </div>
+        {detailed ? (
+          <div>
+            <dt>连续失败</dt>
+            <dd>{source.consecutiveFailures}</dd>
+          </div>
+        ) : null}
       </dl>
-      {source.latestRun ? (
-        <details className={styles['run-summary']}>
-          <summary>
-            最近运行：{labelStatus(syncRunStatusLabels, source.latestRun.status)} /{' '}
-            {labelStatus(coverageLabels, source.latestRun.coverage)}
-          </summary>
-          <dl className={styles['stats-list']}>
-            {Object.entries(source.latestRun.stats).map(([key, value]) => (
-              <div key={key}>
-                <dt>{labelStatus(syncStatLabels, key)}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-          {source.latestRun.errorSummary ? (
-            <p className="risk">
-              {source.latestRun.errorCategory}: {source.latestRun.errorSummary}
-            </p>
-          ) : null}
-        </details>
+      {detailed ? (
+        <>
+          {source.latestRun ? (
+            <section className={styles['run-summary']} aria-label="最近同步">
+              <h3>
+                最近运行：{labelStatus(syncRunStatusLabels, source.latestRun.status)} /{' '}
+                {labelStatus(coverageLabels, source.latestRun.coverage)}
+              </h3>
+              <dl className={styles['stats-list']}>
+                {Object.entries(source.latestRun.stats).map(([key, value]) => (
+                  <div key={key}>
+                    <dt>{labelStatus(syncStatLabels, key)}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {source.latestRun.errorSummary ? (
+                <p className="risk">
+                  {source.latestRun.errorCategory}: {source.latestRun.errorSummary}
+                </p>
+              ) : null}
+            </section>
+          ) : (
+            <p className="muted">尚无同步运行。</p>
+          )}
+          <footer className={styles.dialogFooter}>
+            <SourceHealthAction source={source} contextLabel={`${source.companyName} ${label}`} />
+            {channelInfo ? <SourceChannelToggle channel={channelInfo} /> : null}
+          </footer>
+        </>
       ) : (
-        <p className="muted">尚无同步运行。</p>
+        <>
+          <button
+            ref={trigger}
+            type="button"
+            className="button-link"
+            onClick={() => {
+              setOpen(true);
+            }}
+          >
+            查看详情
+          </button>
+          {open ? (
+            <SourceDetails
+              onClose={() => {
+                setOpen(false);
+                trigger.current?.focus();
+              }}
+            >
+              <SourcePanel
+                source={source}
+                channel={channel}
+                syncReady={syncReady}
+                {...(channelInfo ? { channelInfo } : {})}
+                detailed
+              />
+            </SourceDetails>
+          ) : null}
+        </>
       )}
-      <SourceActions
-        source={source}
-        syncReady={syncReady}
-        contextLabel={`${source.companyName} ${label}`}
-      />
     </section>
+  );
+}
+
+/** 模态详情隔离低频操作，支持 Escape、关闭按钮及背景点击退出。 */
+function SourceDetails({
+  children,
+  onClose,
+}: Readonly<{ children: React.ReactNode; onClose: () => void }>): ReactElement {
+  const reference = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    reference.current?.showModal();
+  }, []);
+  // 先解除模态焦点限制，再让父级恢复触发按钮焦点并卸载详情。
+  const close = (): void => {
+    reference.current?.close();
+    onClose();
+  };
+  return (
+    <dialog
+      ref={reference}
+      className={styles.sourceDialog}
+      aria-label="官网来源详情"
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+    >
+      <button
+        className={classNames('button-close', styles.dialogClose)}
+        type="button"
+        aria-label="关闭详情"
+        onClick={close}
+      >
+        <Icon name="close" />
+      </button>
+      {children}
+    </dialog>
+  );
+}
+
+/** 单次展示一个物理来源；渠道切换由父级 key 重置，刷新后防止索引越界。 */
+function SourceSwitcher({
+  sources,
+  channel,
+  syncReady,
+  channelInfo,
+}: Readonly<{
+  sources: readonly WebSource[];
+  channel: RecruitmentChannel;
+  syncReady: boolean;
+  channelInfo?: WebSourceChannel;
+}>): ReactElement | null {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const index = Math.max(
+    0,
+    sources.findIndex((source) => source.id === selectedId),
+  );
+  const source = sources[index];
+  if (!source) return null;
+  const previous = sources[index - 1];
+  const next = sources[index + 1];
+  return (
+    <div
+      className={classNames(styles.sourceSwitcher, sources.length > 1 && styles.multipleSources)}
+    >
+      {previous ? (
+        <button
+          type="button"
+          className={classNames(styles.sourceArrow, styles.previousSource)}
+          aria-label="上一个物理来源"
+          onClick={() => {
+            setSelectedId(previous.id);
+          }}
+        >
+          <svg
+            width="14"
+            height="32"
+            viewBox="0 0 14 32"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M10 3 3 16 10 29" />
+          </svg>
+        </button>
+      ) : null}
+      <SourcePanel
+        key={source.id}
+        source={source}
+        channel={channel}
+        syncReady={syncReady}
+        {...(channelInfo ? { channelInfo } : {})}
+      />
+      {sources.length > 1 ? (
+        <span className="sr-only" role="status">
+          物理来源 {index + 1} / {sources.length}
+        </span>
+      ) : null}
+      {next ? (
+        <button
+          type="button"
+          className={classNames(styles.sourceArrow, styles.nextSource)}
+          aria-label="下一个物理来源"
+          onClick={() => {
+            setSelectedId(next.id);
+          }}
+        >
+          <svg
+            width="14"
+            height="32"
+            viewBox="0 0 14 32"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m4 3 7 13-7 13" />
+          </svg>
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -273,7 +455,6 @@ export function CompanySourceCard({
         </div>
         <div className={styles['company-source-controls']} data-company-source-controls>
           <label className={styles['company-channel-selector']} data-company-channel-selector>
-            <span>招聘渠道</span>
             <SelectField
               name={`source-channel-${channels[0]?.id ?? companyName}`}
               label={`${companyName}招聘渠道`}
@@ -302,7 +483,6 @@ export function CompanySourceCard({
               contextLabel={syncContextLabel}
               syncReady={syncReady}
             />
-            {selectedChannel ? <SourceChannelToggle channel={selectedChannel} /> : null}
           </div>
         </div>
       </header>
@@ -320,14 +500,13 @@ export function CompanySourceCard({
             </p>
           </section>
         ) : (
-          visibleSources.map((source) => (
-            <SourcePanel
-              key={source.id}
-              source={source}
-              channel={selectedChannel?.channel ?? 'campus'}
-              syncReady={syncReady}
-            />
-          ))
+          <SourceSwitcher
+            key={selected}
+            sources={visibleSources}
+            {...(selectedChannel ? { channelInfo: selectedChannel } : {})}
+            channel={selectedChannel?.channel ?? 'campus'}
+            syncReady={syncReady}
+          />
         )}
       </div>
     </article>
