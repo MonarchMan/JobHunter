@@ -300,7 +300,12 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
               </section>
             ) : null}
             {task.kind === 'task' ? (
-              <TaskActions taskId={task.id} status={task.status} taskType={task.taskType} />
+              <TaskActions
+                taskId={task.id}
+                status={task.status}
+                taskType={task.taskType}
+                size="regular"
+              />
             ) : null}
           </div>
         </DialogShell>

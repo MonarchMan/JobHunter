@@ -5,14 +5,35 @@
   min-width: 0;
 }
 
-.cell :global(.button-muted) {
+.cell :global(.button-primary),
+.cell .cancel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
   padding: 0;
-  min-width: auto;
-  border-radius: 0.5rem;
+  min-width: 20px;
+  box-sizing: border-box;
+  border-radius: 4px;
   line-height: 1;
+}
+
+.cell .cancel {
+  border: 1px solid var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+
+.cell .cancel:hover:not(:disabled) {
+  background: var(--danger-soft);
+}
+
+.cell.regular button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 8px;
 }

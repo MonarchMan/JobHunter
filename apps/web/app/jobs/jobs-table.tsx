@@ -84,7 +84,6 @@ export function JobsTable({
           jobIds={selectedIds}
           profileVersionId={profileVersionId}
           label={`批量评分（${String(selectedIds.length)}）`}
-          showHint
         />
       </div>
       <div className={styles.tableScroll}>
@@ -140,8 +139,15 @@ export function JobsTable({
                       focusable={false}
                     />
                   </a>
-                  <span>
-                    {job.department ?? job.jobSubfamily ?? null}
+                  <span className={styles.jobMeta}>
+                    {job.department || job.jobSubfamily ? (
+                      <span
+                        className={styles.department}
+                        title={job.department ?? job.jobSubfamily ?? undefined}
+                      >
+                        {job.department ?? job.jobSubfamily}
+                      </span>
+                    ) : null}
                     <JobStatus status={job.status} />
                   </span>
                 </td>

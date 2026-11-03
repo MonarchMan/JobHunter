@@ -16,7 +16,13 @@ export function TaskActions({
   taskId,
   status,
   taskType,
-}: Readonly<{ taskId: string; status: string; taskType?: string }>): ReactElement | null {
+  size = 'compact',
+}: Readonly<{
+  taskId: string;
+  status: string;
+  taskType?: string;
+  size?: 'compact' | 'regular';
+}>): ReactElement | null {
   const router = useRouter();
   const [retryToken] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
@@ -45,30 +51,34 @@ export function TaskActions({
   if (taskType === 'maintenance.sqlite') return <small>系统自动维护</small>;
   if (status !== 'failed' && status !== 'pending' && status !== 'running') return null;
   return (
-    <div className={styles.cell}>
+    <div
+      className={[styles.cell, size === 'regular' ? styles.regular : null]
+        .filter(Boolean)
+        .join(' ')}
+    >
       {status === 'failed' ? (
         <button
           type="button"
-          className="button-muted"
+          className="button-primary"
           aria-label={`重试任务 ${taskId}`}
           disabled={busy}
           onClick={() => {
             void act('retry');
           }}
         >
-          <Icon name="refresh" size={16} />
+          <Icon name="refresh" size={size === 'regular' ? 18 : 14} />
         </button>
       ) : (
         <button
           type="button"
-          className="button-muted"
+          className={styles.cancel}
           aria-label={`取消任务 ${taskId}`}
           disabled={busy}
           onClick={() => {
             void act('cancel');
           }}
         >
-          <Icon name="close" size={16} />
+          {size === 'regular' ? '取消' : <Icon name="close" size={14} />}
         </button>
       )}
     </div>

@@ -219,32 +219,34 @@ export default async function TasksPage({
         </div>
         <div className={styles.cards} aria-label="后台任务卡片列表" data-task-cards>
           {diagnostics.tasks.map((task) => (
-            <article className={styles.card} key={task.id}>
-              <div className={styles.cardHeading}>
+            <article
+              className={[styles.card, styles.taskCard].filter(Boolean).join(' ')}
+              key={task.id}
+            >
+              <div className={styles.taskCardContent}>
                 <strong>
                   <TaskDetailsDialog task={task} />
                 </strong>
+                {taskDuration(task.startedAt, task.finishedAt) !== '—' ? (
+                  <p>耗时 {taskDuration(task.startedAt, task.finishedAt)}</p>
+                ) : null}
+                {task.jobDetailBatch ? (
+                  <p>
+                    总数 {String(task.jobDetailBatch.counts.total)}，成功{' '}
+                    {String(task.jobDetailBatch.counts.succeeded)}，失败{' '}
+                    {String(task.jobDetailBatch.counts.failed)}
+                  </p>
+                ) : null}
+              </div>
+              <div className={styles.taskCardActions}>
                 <span className={`status status-${taskPresentation(task).status}`}>
                   {taskPresentation(task).label}
                 </span>
+                <TaskActions taskId={task.id} status={task.status} taskType={task.taskType} />
               </div>
-              <p className={styles.metaRow}>
-                <span>{taskDuration(task.startedAt, task.finishedAt)}</span>
-                <span
-                  className={styles.errorText}
-                  title={taskPresentation(task).error || undefined}
-                >
-                  {taskPresentation(task).error || '暂无错误'}
-                </span>
-              </p>
-              {task.jobDetailBatch ? (
-                <p>
-                  总数 {String(task.jobDetailBatch.counts.total)}，成功{' '}
-                  {String(task.jobDetailBatch.counts.succeeded)}，失败{' '}
-                  {String(task.jobDetailBatch.counts.failed)}
-                </p>
+              {taskPresentation(task).error ? (
+                <p className={styles.taskCardError}>{taskPresentation(task).error}</p>
               ) : null}
-              <TaskActions taskId={task.id} status={task.status} taskType={task.taskType} />
             </article>
           ))}
         </div>
