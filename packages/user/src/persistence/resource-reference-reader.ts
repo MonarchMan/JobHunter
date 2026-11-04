@@ -15,7 +15,7 @@ export class SqliteUserResourceReferenceReader implements ResourceReferenceReade
     return Boolean(
       this.client
         .prepare(
-          `SELECT EXISTS(SELECT 1 FROM files f,json_tree(f.properties_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)) UNION ALL SELECT 1 FROM file_entity_mappings f,json_tree(f.metadata_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)) UNION ALL SELECT 1 FROM resume_project_snapshots p,json_tree(p.project_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)) UNION ALL SELECT 1 FROM drill_sessions d,json_tree(d.material_bindings_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)))`,
+          `SELECT EXISTS(SELECT 1 FROM files f,json_tree(f.properties_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)) UNION ALL SELECT 1 FROM file_entity_mappings f,json_tree(f.metadata_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)) UNION ALL SELECT 1 FROM project_dossiers p,json_tree(p.project_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)) UNION ALL SELECT 1 FROM drill_sessions d,json_tree(d.material_bindings_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)))`,
         )
         .pluck()
         .get(ids, ids, ids, ids),

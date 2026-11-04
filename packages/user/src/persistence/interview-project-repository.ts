@@ -32,6 +32,7 @@ import {
 } from '@jobhunter/common/domain';
 import {
   drillCoverageDimensionSchema,
+  drillCoverageDimensions,
   drillCoverageStatusSchema,
   drillEvidenceRefSchema,
   drillSessionStatusSchema,
@@ -43,7 +44,8 @@ import { z } from 'zod';
 
 /** 数据库查询结果对应的行结构。 */
 interface SnapshotRow {
-  readonly id: string;
+  readonly snapshot_id: string;
+  readonly snapshot_created_at: number;
   readonly source_profile_id: string;
   readonly source_profile_version_id: string;
   readonly project_index: number;
@@ -53,7 +55,7 @@ interface SnapshotRow {
 }
 
 /** 数据库查询结果对应的行结构。 */
-interface DossierRow {
+interface DossierRow extends SnapshotRow {
   readonly id: string;
   readonly snapshot_id: string;
   readonly latest_notebook_artifact_id: string | null;
@@ -341,13 +343,13 @@ function bindingFromMaterial(material: ProjectMaterialRecord): ProjectMaterialBi
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function snapshotRecord(row: SnapshotRow): ResumeProjectSnapshotRecord {
   return {
-    id: parseId(row.id, 'ResumeProjectSnapshot'),
+    id: parseId(row.snapshot_id, 'ResumeProjectSnapshot'),
     sourceProfileId: parseId(row.source_profile_id, 'CandidateProfile'),
     sourceProfileVersionId: parseId(row.source_profile_version_id, 'ProfileVersion'),
     projectIndex: row.project_index,
     project: parseJson(candidateProjectSchema, row.project_json),
     contentHash: parseContentHash(row.content_hash),
-    createdAt: row.created_at as UtcInstant,
+    createdAt: row.snapshot_created_at as UtcInstant,
   };
 }
 
@@ -468,9 +470,44 @@ function coverageRecord(row: CoverageRow): DrillCoverageRecord {
   };
 }
 
-const snapshotColumns = `id, source_profile_id, source_profile_version_id, project_index,
-                         project_json, content_hash, created_at`;
-const dossierColumns = `id, snapshot_id, notebook_file_id AS latest_notebook_artifact_id, notebook_source_hash,
+/** 校验维度状态的 JSON 边界，保持证据 ID 与更新时间可追溯。 */
+function serializeCoverageEntry(item: DrillCoverageRecord): string {
+  return JSON.stringify({
+    status: drillCoverageStatusSchema.parse(item.status),
+    evidenceItemIds: z.array(z.uuid()).parse(item.evidenceItemIds),
+    updatedAt: z.number().int().nonnegative().parse(item.updatedAt),
+  });
+}
+
+/** 新会话一次写入完整且不重复的十维状态，禁止跨会话混入覆盖记录。 */
+function serializeCoverage(
+  sessionId: DrillSessionId,
+  items: readonly DrillCoverageRecord[],
+): string {
+  // 1、拒绝重复、缺失维度和不属于当前会话的记录。
+  const result: Record<string, unknown> = {};
+  for (const item of items) {
+    const dimension = drillCoverageDimensionSchema.parse(item.dimension);
+    if (item.sessionId !== sessionId || Object.hasOwn(result, dimension))
+      throw new TypeError('Session coverage identity is invalid.');
+    result[dimension] = JSON.parse(serializeCoverageEntry(item)) as unknown;
+  }
+  if (items.length !== drillCoverageDimensions.length)
+    throw new TypeError('Session coverage must contain every dimension.');
+  // 2、保存小型状态快照，后续更新使用 json_set 只修改目标维度。
+  return JSON.stringify(result);
+}
+
+/** 将会话内 JSON 映射为既有覆盖记录契约，不保留旧表或转发视图。 */
+const coverageSource = `SELECT session.id AS session_id, entry.key AS dimension,
+  json_extract(entry.value, '$.status') AS status,
+  json_extract(entry.value, '$.evidenceItemIds') AS evidence_item_ids_json,
+  json_extract(entry.value, '$.updatedAt') AS updated_at
+  FROM drill_sessions session, json_each(session.coverage_json) entry`;
+
+const snapshotColumns = `snapshot_id, source_profile_id, source_profile_version_id, project_index,
+                         project_json, content_hash, snapshot_created_at`;
+const dossierColumns = `id, ${snapshotColumns}, notebook_file_id AS latest_notebook_artifact_id, notebook_source_hash,
                         revision, created_at, updated_at`;
 const sessionColumns = `id, dossier_id, profile_key, profile_version, profile_definition_hash,
                         capability_summary_json, material_bindings_json, status, context_revision,
@@ -515,47 +552,38 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
     return this.#client.transaction(() => {
       const existingSnapshot = this.#client
         .prepare(
-          `SELECT ${snapshotColumns} FROM resume_project_snapshots
+          `SELECT ${dossierColumns} FROM project_dossiers
            WHERE source_profile_version_id = ? AND project_index = ? AND content_hash = ?`,
         )
         .get(
           input.snapshot.sourceProfileVersionId,
           input.snapshot.projectIndex,
           input.snapshot.contentHash,
-        ) as SnapshotRow | undefined;
+        ) as DossierRow | undefined;
       if (existingSnapshot) {
-        const existingDossier = this.#client
-          .prepare(`SELECT ${dossierColumns} FROM project_dossiers WHERE snapshot_id = ?`)
-          .get(existingSnapshot.id) as DossierRow | undefined;
-        if (!existingDossier) throw new TypeError('Project snapshot has no dossier.');
-        return { dossier: dossierRecord(existingDossier), deduplicated: true };
+        return { dossier: dossierRecord(existingSnapshot), deduplicated: true };
       }
       const snapshot = input.snapshot;
+      const dossier = input.dossier;
+      // 合并存储后用边界校验替代旧快照外键，禁止档案引用另一份快照身份。
+      if (dossier.snapshotId !== snapshot.id)
+        throw new TypeError('Project dossier snapshot identity does not match.');
       this.#client
         .prepare(
-          `INSERT INTO resume_project_snapshots
-           (id, source_profile_id, source_profile_version_id, project_index, project_json,
-            content_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO project_dossiers
+           (id, snapshot_id, source_profile_id, source_profile_version_id, project_index, project_json,
+            content_hash, snapshot_created_at, notebook_file_id, notebook_source_hash, revision,
+            created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
-          snapshot.id,
+          dossier.id,
+          dossier.snapshotId,
           snapshot.sourceProfileId,
           snapshot.sourceProfileVersionId,
           snapshot.projectIndex,
           JSON.stringify(snapshot.project),
           snapshot.contentHash,
           snapshot.createdAt,
-        );
-      const dossier = input.dossier;
-      this.#client
-        .prepare(
-          `INSERT INTO project_dossiers
-           (id, snapshot_id, notebook_file_id, notebook_source_hash, revision,
-            created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          dossier.id,
-          dossier.snapshotId,
           dossier.latestNotebookArtifactId,
           dossier.notebookSourceHash,
           dossier.revision,
@@ -572,9 +600,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
       .prepare(`SELECT ${dossierColumns} FROM project_dossiers ORDER BY updated_at DESC, id`)
       .all() as DossierRow[];
     return rows.map((row) => {
-      const snapshot = this.#client
-        .prepare(`SELECT ${snapshotColumns} FROM resume_project_snapshots WHERE id = ?`)
-        .get(row.snapshot_id) as SnapshotRow;
+      const snapshot = row;
       const sessions = Number(
         this.#client
           .prepare('SELECT count(*) FROM drill_sessions WHERE dossier_id = ?')
@@ -608,9 +634,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
       .prepare(`SELECT ${dossierColumns} FROM project_dossiers WHERE id = ?`)
       .get(id) as DossierRow | undefined;
     if (!dossier) return null;
-    const snapshot = this.#client
-      .prepare(`SELECT ${snapshotColumns} FROM resume_project_snapshots WHERE id = ?`)
-      .get(dossier.snapshot_id) as SnapshotRow;
+    const snapshot = dossier;
     const sessions = this.#client
       .prepare(
         `SELECT ${sessionColumns} FROM drill_sessions WHERE dossier_id = ? ORDER BY created_at`,
@@ -639,7 +663,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
       .all(id) as KnowledgeRow[];
     const coverage = this.#client
       .prepare(
-        `SELECT ${coverageColumns} FROM drill_coverage
+        `SELECT ${coverageColumns} FROM (${coverageSource})
          WHERE session_id IN (SELECT id FROM drill_sessions WHERE dossier_id = ?)
          ORDER BY session_id, dimension`,
       )
@@ -900,8 +924,8 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
         .prepare(
           `INSERT INTO drill_sessions
            (id, dossier_id, profile_key, profile_version, profile_definition_hash,
-            capability_summary_json, material_bindings_json, status, context_revision, created_at,
-            updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            capability_summary_json, material_bindings_json, coverage_json, status, context_revision, created_at,
+            updated_at, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           value.id,
@@ -911,26 +935,13 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
           value.profileDefinitionHash,
           JSON.stringify(value.capabilitySummary),
           JSON.stringify(materialBindings),
+          serializeCoverage(value.id, input.coverage),
           value.status,
           value.contextRevision,
           value.createdAt,
           value.updatedAt,
           value.completedAt,
         );
-      const insertCoverage = this.#client.prepare(
-        `INSERT INTO drill_coverage
-         (session_id, dimension, status, evidence_item_ids_json, updated_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      );
-      for (const item of input.coverage) {
-        insertCoverage.run(
-          item.sessionId,
-          item.dimension,
-          item.status,
-          JSON.stringify(item.evidenceItemIds),
-          item.updatedAt,
-        );
-      }
       this.#bumpDossier(value.dossierId, value.createdAt);
       return value;
     })();
@@ -1169,10 +1180,18 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
         .get(input.turnId) as string;
       this.#client
         .prepare(
-          `UPDATE drill_coverage SET status = CASE WHEN status = 'unasked' THEN 'asked' ELSE status END,
-             updated_at = ? WHERE session_id = ? AND dimension = ?`,
+          `UPDATE drill_sessions SET coverage_json = json_set(coverage_json,
+             '$.' || ? || '.status', CASE WHEN json_extract(coverage_json, '$.' || ? || '.status') = 'unasked' THEN 'asked' ELSE json_extract(coverage_json, '$.' || ? || '.status') END,
+             '$.' || ? || '.updatedAt', ?) WHERE id = ?`,
         )
-        .run(input.now, sessionId, input.primaryDimension);
+        .run(
+          input.primaryDimension,
+          input.primaryDimension,
+          input.primaryDimension,
+          input.primaryDimension,
+          input.now,
+          sessionId,
+        );
       const dossierId = this.#client
         .prepare('SELECT dossier_id FROM drill_sessions WHERE id = ?')
         .pluck()
@@ -1371,16 +1390,13 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
         );
       }
       const updateCoverage = this.#client.prepare(
-        `UPDATE drill_coverage SET status = ?, evidence_item_ids_json = ?, updated_at = ?
-         WHERE session_id = ? AND dimension = ?`,
+        `UPDATE drill_sessions SET coverage_json = json_set(coverage_json, '$.' || ?, json(?)) WHERE id = ?`,
       );
       for (const item of input.coverage) {
         updateCoverage.run(
-          item.status,
-          JSON.stringify(item.evidenceItemIds),
-          item.updatedAt,
+          drillCoverageDimensionSchema.parse(item.dimension),
+          serializeCoverageEntry(item),
           item.sessionId,
-          item.dimension,
         );
       }
       this.#client
@@ -1710,9 +1726,7 @@ export class SqliteInterviewProjectRepository implements InterviewProjectReposit
       this.#client
         .prepare('DELETE FROM project_dossiers WHERE id = ?')
         .run(input.expected.dossierId);
-      this.#client
-        .prepare('DELETE FROM resume_project_snapshots WHERE id = ?')
-        .run(input.expected.snapshotId);
+
       if (current.materialFileIds.length > 0) {
         this.#client
           .prepare('DELETE FROM files WHERE id IN (SELECT value FROM json_each(?))')

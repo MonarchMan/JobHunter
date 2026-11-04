@@ -285,22 +285,11 @@ describe('source and task commands', () => {
         });
         database.client
           .prepare(
-            `INSERT INTO resume_project_snapshots
-             (id, source_profile_id, source_profile_version_id, project_index, project_json,
-              content_hash, created_at)
-             VALUES ('018f0000-0000-7000-8000-00000000c306',
-                     '018f0000-0000-7000-8000-00000000c307',
-                     '018f0000-0000-7000-8000-00000000c308', 0, '{}', ?, 1)`,
-          )
-          .run('d'.repeat(64));
-        database.client
-          .prepare(
             `INSERT INTO project_dossiers
-             (id, snapshot_id, notebook_file_id, notebook_source_hash, revision, created_at,
-              updated_at)
-             VALUES (?, '018f0000-0000-7000-8000-00000000c306', NULL, NULL, 0, 1, 1)`,
+          (id, snapshot_id, source_profile_id, source_profile_version_id, project_index, project_json, content_hash, snapshot_created_at, notebook_file_id, notebook_source_hash, revision, created_at, updated_at)
+          VALUES (?, '018f0000-0000-7000-8000-00000000c306', '018f0000-0000-7000-8000-00000000c307', '018f0000-0000-7000-8000-00000000c308', 0, '{}', ?, 1, NULL, NULL, 0, 1, 1)`,
           )
-          .run(dossierId);
+          .run(dossierId, 'd'.repeat(64));
         database.client
           .prepare(
             `INSERT INTO drill_sessions

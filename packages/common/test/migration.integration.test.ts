@@ -76,6 +76,102 @@ async function migrationsBefore(
 }
 
 describe('SQLite migrations and capabilities', () => {
+  it('merges populated interview storage without losing identities, evidence, children or cascade behavior', async () => {
+    const root = await createTemporaryDataRoot('interview-storage-upgrade-');
+    dataRoots.push(root);
+    const folder = await migrationsBefore(root.path, 'before-compact', 49);
+    const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+    // 1、在旧 Schema 建立完整引用链，快照和档案使用不同时间，避免迁移误覆盖。
+    legacy.client.exec(`
+      INSERT INTO resume_project_snapshots VALUES ('snapshot','profile','version',2,'{"name":"合成项目"}','${'a'.repeat(64)}',10);
+      INSERT INTO project_dossiers VALUES ('dossier','snapshot',NULL,NULL,3,20,30);
+      INSERT INTO drill_sessions(id,dossier_id,profile_key,profile_version,profile_definition_hash,capability_summary_json,material_bindings_json,status,context_revision,created_at,updated_at)
+        VALUES ('session','dossier','docs-grounded','v1','${'b'.repeat(64)}','{}','[{"fileId":"018f0000-0000-7000-8000-000000000201","entityId":"018f0000-0000-7000-8000-000000000202","versionNo":1,"fileName":"architecture.md","contentHash":"${'e'.repeat(64)}"}]','active',4,40,50);
+      INSERT INTO drill_turns(id,session_id,turn_no,status,context_hash,evidence_refs_json,created_at,updated_at)
+        VALUES ('turn','session',1,'ready','${'c'.repeat(64)}','[{"kind":"resume_project","id":"snapshot"}]',60,70);
+      INSERT INTO drill_answer_revisions VALUES ('answer','turn',1,'合成回答','${'d'.repeat(64)}','token',80);
+      INSERT INTO project_knowledge_items VALUES ('knowledge','dossier','answer','fact','合成事实','合成',0,2,'active',90);
+      INSERT INTO drill_coverage VALUES ('session','architecture_design','evidence_sufficient','["knowledge"]',100);
+      INSERT INTO drill_coverage VALUES ('session','data_metrics','unasked','[]',101);
+    `);
+    const preservedTables = [
+      'drill_sessions',
+      'drill_turns',
+      'drill_answer_revisions',
+      'project_knowledge_items',
+    ];
+    const before = preservedTables.map((table) =>
+      legacy.client.prepare(`SELECT * FROM ${table}`).all(),
+    );
+    legacy.close();
+    // 2、升级只移动存储位置，快照证据 ID、修订号、材料绑定及子表内容均不变。
+    const upgraded = openSqliteDatabase({ dataRoot: root.path });
+    handles.push(upgraded);
+    expect(
+      upgraded.client
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE name IN ('resume_project_snapshots','drill_coverage')",
+        )
+        .all(),
+    ).toEqual([]);
+    expect(upgraded.client.prepare('SELECT * FROM project_dossiers').get()).toMatchObject({
+      id: 'dossier',
+      snapshot_id: 'snapshot',
+      project_index: 2,
+      project_json: '{"name":"合成项目"}',
+      snapshot_created_at: 10,
+      created_at: 20,
+      updated_at: 30,
+      revision: 3,
+    });
+    const coverage = JSON.parse(
+      upgraded.client.prepare('SELECT coverage_json FROM drill_sessions').pluck().get() as string,
+    ) as unknown;
+    expect(coverage).toEqual({
+      architecture_design: {
+        status: 'evidence_sufficient',
+        evidenceItemIds: ['knowledge'],
+        updatedAt: 100,
+      },
+      data_metrics: { status: 'unasked', evidenceItemIds: [], updatedAt: 101 },
+    });
+    for (const [index, table] of preservedTables.entries()) {
+      const after = upgraded.client.prepare(`SELECT * FROM ${table}`).all() as Record<
+        string,
+        unknown
+      >[];
+      if (table === 'drill_sessions') for (const row of after) delete row.coverage_json;
+      expect(after).toEqual(before[index]);
+    }
+    expect(upgraded.client.pragma('foreign_key_check')).toEqual([]);
+    // 3、再次打开不重复搬运；删除档案仍级联清理全部问答状态。
+    const reopened = openSqliteDatabase({ dataRoot: root.path });
+    handles.push(reopened);
+    expect(reopened.client.prepare('SELECT coverage_json FROM drill_sessions').pluck().get()).toBe(
+      JSON.stringify(coverage),
+    );
+    reopened.client.prepare("DELETE FROM project_dossiers WHERE id='dossier'").run();
+    for (const table of preservedTables)
+      expect(reopened.client.prepare(`SELECT count(*) FROM ${table}`).pluck().get()).toBe(0);
+  });
+
+  it('rolls back interview storage migration instead of discarding an orphan snapshot', async () => {
+    const root = await createTemporaryDataRoot('interview-storage-orphan-');
+    dataRoots.push(root);
+    const folder = await migrationsBefore(root.path, 'before-compact', 49);
+    const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+    legacy.client
+      .prepare('INSERT INTO resume_project_snapshots VALUES (?,?,?,?,?,?,?)')
+      .run('orphan', 'profile', 'version', 0, '{}', 'a'.repeat(64), 1);
+    legacy.close();
+    expect(() => openSqliteDatabase({ dataRoot: root.path })).toThrow();
+    const unchanged = openSqliteDatabase({ dataRoot: root.path, runMigrations: false });
+    handles.push(unchanged);
+    expect(
+      unchanged.client.prepare('SELECT count(*) FROM resume_project_snapshots').pluck().get(),
+    ).toBe(1);
+  });
+
   it('moves request snapshots without repricing and removes the duplicate array (USG-011)', async () => {
     const root = await createTemporaryDataRoot('ledger-upgrade-');
     dataRoots.push(root);
@@ -290,13 +386,11 @@ describe('SQLite migrations and capabilities', () => {
       'schedules',
       'tasks',
       'application_settings',
-      'resume_project_snapshots',
       'project_dossiers',
       'drill_sessions',
       'drill_turns',
       'drill_answer_revisions',
       'project_knowledge_items',
-      'drill_coverage',
       'interview_experiences',
       'interview_question_entries',
       'sync_seen_jobs',
@@ -357,7 +451,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      49,
+      50,
     );
   });
 

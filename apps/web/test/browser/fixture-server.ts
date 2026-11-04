@@ -535,25 +535,18 @@ async function seedFixture(dataRoot: string): Promise<void> {
     database.client.transaction(() => {
       database.client
         .prepare(
-          `INSERT INTO resume_project_snapshots
-           (id, source_profile_id, source_profile_version_id, project_index, project_json,
-            content_hash, created_at)
-           VALUES (?, ?, ?, 1, ?, ?, 3)`,
+          `INSERT INTO project_dossiers
+        (id, snapshot_id, source_profile_id, source_profile_version_id, project_index, project_json, content_hash, snapshot_created_at, notebook_file_id, notebook_source_hash, revision, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, ?, 3, NULL, NULL, 0, 3, 3)`,
         )
         .run(
+          ids.deepDossier,
           ids.deepSnapshot,
           ids.interviewProfile,
           ids.interviewProfileVersion,
           JSON.stringify(deepProject),
           contentHash(deepProject),
         );
-      database.client
-        .prepare(
-          `INSERT INTO project_dossiers
-           (id, snapshot_id, notebook_file_id, notebook_source_hash, revision, created_at, updated_at)
-           VALUES (?, ?, NULL, NULL, 0, 3, 3)`,
-        )
-        .run(ids.deepDossier, ids.deepSnapshot);
       database.client
         .prepare(
           `INSERT INTO files
@@ -626,15 +619,13 @@ async function seedFixture(dataRoot: string): Promise<void> {
           JSON.stringify([{ kind: 'project_material', id: ids.deepMaterialChunk }]),
         );
       const coverage = database.client.prepare(
-        `INSERT INTO drill_coverage
-         (session_id, dimension, status, evidence_item_ids_json, updated_at)
-         VALUES (?, ?, ?, '[]', 4)`,
+        `UPDATE drill_sessions SET coverage_json = json_set(coverage_json, '$.' || ?, json_object('status', ?, 'evidenceItemIds', json('[]'), 'updatedAt', 4)) WHERE id = ?`,
       );
       for (const dimension of drillCoverageDimensions) {
         coverage.run(
-          ids.deepSession,
           dimension,
           dimension === 'architecture_design' ? 'asked' : 'unasked',
+          ids.deepSession,
         );
       }
     })();

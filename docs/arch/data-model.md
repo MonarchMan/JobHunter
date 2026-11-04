@@ -561,34 +561,19 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 **事务边界：**创建项目档案时快照和档案原子提交；资料文件写入和 Markdown 解析在事务外完成，版本登记与档案修订在短事务中提交，深档会话在同一事务重验并冻结精确版本；问题、摘要和研究 Task 的入队与业务引用必须同事务，手工重试同事务把引用从失败 Task 切换到新 Task；创建问题、提交回答、消化知识和更新覆盖状态分别使用带修订号的短事务，最终提交核验当前 Task 为 running 且未取消；个人面经草稿替换必须以文件 `revision` CAS，并在同事务替换经历和问题；研究包先在短事务内以研究请求 `revision` 和当前 Task 状态取得带租约的 import claim，再在事务外完成文件写入，最后在短事务内再次核验 Task 并提升正式版本、原子替换未审核候选，逐条审核同样使用 CAS。外部 Agent 与网络调用不进入数据库事务。
 
-#### 3.6.1 `resume_project_snapshots`
+#### 3.6.1 项目档案与不可变快照：`project_dossiers`
 
-从不可变画像版本提取的单个简历项目快照。
+档案与项目快照共享生命周期，合并存储。snapshot_id 继续作为唯一证据标识；来源画像删除或版本淘汰不删除项目快照。
 
-| 列                          | 类型    | 约束                | 说明               |
-| --------------------------- | ------- | ------------------- | ------------------ |
-| `id`                        | TEXT    | PK                  | 快照 ID            |
-| `source_profile_id`         | TEXT    | NOT NULL            | 来源画像 ID 快照值 |
-| `source_profile_version_id` | TEXT    | NOT NULL            | 来源版本 ID 快照值 |
-| `project_index`             | INTEGER | NOT NULL CHECK >= 0 | 项目顺序           |
-| `project_json`              | TEXT    | NOT NULL            | 项目描述快照       |
-| `content_hash`              | TEXT    | NOT NULL            | 项目哈希           |
-| `created_at`                | INTEGER | NOT NULL            | 创建时间           |
-
-唯一约束：`(source_profile_version_id, project_index, content_hash)`。来源 ID 不设外键，确保删除敏感画像后已创建的面试准备档案仍能按显式删除策略处理；其中不得保存联系方式或完整简历。
-
-#### 3.6.2 `project_dossiers`
-
-项目拷打聚合根。
-
-| 列                         | 类型    | 约束                                         | 说明                 |
-| -------------------------- | ------- | -------------------------------------------- | -------------------- |
-| `id`                       | TEXT    | PK                                           | 档案 ID              |
-| `snapshot_id`              | TEXT    | FK resume_project_snapshots, UNIQUE NOT NULL | 项目快照             |
-| `notebook_file_id`         | TEXT    | FK files, NULL                               | 最新准备文档逻辑文件 |
-| `notebook_source_hash`     | TEXT    | NULL                                         | 生成文档的上下文哈希 |
-| `revision`                 | INTEGER | NOT NULL DEFAULT 0                           | 聚合 CAS 修订号      |
-| `created_at`、`updated_at` | INTEGER | NOT NULL                                     | 生命周期时间         |
+| 字段 | 作用与约束 |
+| --- | --- |
+| id | 档案主键，供会话和知识项引用 |
+| snapshot_id | 唯一快照标识，保留既有问答证据引用 |
+| source_profile_id、source_profile_version_id | 来源身份，允许来源失效后继续准备 |
+| project_index、project_json、content_hash | 冻结项目内容，下标非负、哈希 64 位；来源版本＋下标＋哈希唯一 |
+| snapshot_created_at | 快照创建时间，与档案时间分别保留 |
+| notebook_file_id、notebook_source_hash | 当前准备文档及输入哈希；文件外键限制删除 |
+| revision、created_at、updated_at | 档案 CAS 修订号与生命周期时间 |
 
 #### 3.6.3 `drill_sessions`
 
@@ -601,6 +586,7 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 | `profile_key`、`profile_version`           | TEXT    | NOT NULL CHECK                | `resume-only` 或 `docs-grounded`；首版均为 `v1`        |
 | `profile_definition_hash`                  | TEXT    | NOT NULL                      | 档位定义哈希                                           |
 | `capability_summary_json`                  | TEXT    | NOT NULL                      | 允许的工具和能力摘要                                   |
+| `coverage_json` | TEXT | NOT NULL，合法 JSON 对象 | 十维覆盖状态与证据引用 |
 | `material_bindings_json`                   | TEXT    | NOT NULL DEFAULT `'[]'`       | 深档冻结的 file/version/entity/name/hash；浅档必须为空 |
 | `status`                                   | TEXT    | CHECK                         | `active`、`paused`、`completed`                        |
 | `context_revision`                         | INTEGER | NOT NULL DEFAULT 0            | 问题生成上下文修订号                                   |
@@ -663,19 +649,9 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 索引：`(dossier_id, status, created_at)`。系统不得把推测或代码扫描结果写成用户事实。
 
-#### 3.6.7 `drill_coverage`
+#### 3.6.7 会话内的维度覆盖状态
 
-会话各面试维度的物化覆盖状态。
-
-| 列                       | 类型    | 约束                        | 说明                                                                       |
-| ------------------------ | ------- | --------------------------- | -------------------------------------------------------------------------- |
-| `session_id`             | TEXT    | FK drill_sessions, NOT NULL | 会话                                                                       |
-| `dimension`              | TEXT    | CHECK                       | 背景目标、职责、架构、权衡、指标、事故等固定维度                           |
-| `status`                 | TEXT    | CHECK                       | unasked、asked、evidence_partial、evidence_sufficient、needs_clarification |
-| `evidence_item_ids_json` | TEXT    | NOT NULL DEFAULT `'[]'`     | 支撑状态的知识项 ID                                                        |
-| `updated_at`             | INTEGER | NOT NULL                    | 更新时间                                                                   |
-
-复合主键：`(session_id, dimension)`。该表是问题选择的热路径物化状态，因此保留；它可以由回合和知识项重建，但重建成本和一致性复杂度高于一张小型状态表。
+`drill_sessions.coverage_json` 以十个固定维度为键，每项包含 status、evidenceItemIds 和 updatedAt。状态使用 unasked、asked、evidence_partial、evidence_sufficient、needs_clarification。创建会话时校验维度完整且不重复；问题提交和回答摘要在原事务中用 json_set 更新目标维度，保留其他维度和证据。该状态是持久化的小型快照，不在每次选题时重放历史。
 
 #### 3.6.8 `interview_experiences`
 
@@ -991,7 +967,7 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 | 候选人画像     | `candidate_profiles`、`profile_versions`                                                                                                                                                                                                      |
 | Agent 与匹配   | `agent_runs`、`job_enrichments`、`match_rulesets`、`match_results`、`match_advices`                                                                                                                                                           |
 | 任务与设置     | `tasks`、`schedules`、`application_settings`                                                                                                                                                                                                  |
-| 面试准备       | `resume_project_snapshots`、`project_dossiers`、`drill_sessions`、`drill_turns`、`drill_answer_revisions`、`project_knowledge_items`、`drill_coverage`、`experience_research_requests`、`interview_experiences`、`interview_question_entries` |
+| 面试准备       | `project_dossiers`、`drill_sessions`、`drill_turns`、`drill_answer_revisions`、`project_knowledge_items`、`experience_research_requests`、`interview_experiences`、`interview_question_entries` |
 | 招聘进展       | `mail_message_refs`、`job_applications`、`application_events`                                                                                                                                                                                 |
 | 通用基础设施   | `files`、`entities`、`file_entity_mappings`、`events`                                                                                                                                                                                         |
 
@@ -1015,7 +991,7 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 - `source_job_details` 有实际缓存读路径，能避免列表未变化时重复抓详情；它可过期、可重建，不是原始档案。
 - `sync_seen_jobs` 是内存有界同步所需的临时工作集，不进入长期业务查询。
 - `job_observations` 是“某次完整同步确实看到职位”的长期证据，不能只依赖 `last_seen_at`。
-- `drill_coverage` 是问题选择热路径的小型物化状态，保留比每次重放全部回合和知识项更简单。
+- 十维覆盖状态内置于 drill_sessions.coverage_json，保留物化状态以避免反复重放回答历史。
 - `experience_research_requests` 保存长期研究意图和人工审核生命周期；一次外部执行仍复用 `tasks`，两者职责不重复。
 - `interview_experiences` 和 `interview_question_entries` 是受约束的领域实体，不应退化为文件 JSON。
 - `application_events` 需要申请外键、流内顺序、稳定邮件来源约束和高频时间线查询，不能退化为通用 `events` 的多态 JSON。

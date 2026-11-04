@@ -24,13 +24,11 @@ const requiredTables = [
   'files',
   'entities',
   'file_entity_mappings',
-  'resume_project_snapshots',
   'project_dossiers',
   'drill_sessions',
   'drill_turns',
   'drill_answer_revisions',
   'project_knowledge_items',
-  'drill_coverage',
   'interview_experiences',
   'interview_question_entries',
 ] as const;

@@ -558,9 +558,8 @@ apps/* → application → domain
 | `files`                        | 所有逻辑文件的 kind、名称、状态和业务属性；项目资料与研究文件均复用            |
 | `file_entity_mappings`         | 每个逻辑文件最多 5 个版本；保存实体引用、解析状态、规范化文本和分块元数据      |
 | `entities`                     | 按 SHA-256 去重的不可变物理文件、媒体类型、字节数和相对路径                    |
-| `project_dossiers`             | 长期 ID、简历项目快照和当前 Markdown 准备文档引用                              |
-| `resume_project_snapshots`     | profile version、项目定位、规范内容和哈希；不可变                              |
-| `drill_sessions`               | dossier、Profile key/version、定义哈希、能力摘要和冻结资料绑定                 |
+| `project_dossiers`             | 长期 ID、内置不可变项目快照及其证据 ID、来源信息和当前 Markdown 准备文档引用                              |
+| `drill_sessions`               | dossier、Profile key/version、定义哈希、能力摘要、冻结资料绑定与 coverage_json                 |
 | `drill_turns`                  | session、序号、问题、证据、问题/摘要 Task 和 AgentRun 引用                     |
 | `drill_answer_revisions`       | 原回答、修订号、提交时间；追加写                                               |
 | `project_knowledge_items`      | 来源回答修订、知识类型、原文范围、状态和提取版本                               |

@@ -53,7 +53,7 @@ describe('four-module data ownership', () => {
     await assertNoSql(
       'recruitment',
       'FROM|JOIN|UPDATE|INTO|DELETE FROM',
-      'candidate_profiles|profile_versions|files|file_entity_mappings|resume_project_snapshots|drill_sessions|match_results|match_advices|job_enrichments',
+      'candidate_profiles|profile_versions|files|file_entity_mappings|project_dossiers|drill_sessions|match_results|match_advices|job_enrichments',
     );
   });
 });

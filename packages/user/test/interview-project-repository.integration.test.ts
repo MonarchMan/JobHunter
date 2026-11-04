@@ -157,6 +157,13 @@ describe('SQLite interview project repository', () => {
       createdAt: now,
       updatedAt: now,
     };
+    expect(() =>
+      repository.createDossier({
+        dossier: { ...dossier, snapshotId: parseId(ids.turn, 'ResumeProjectSnapshot') },
+        snapshot,
+      }),
+    ).toThrow('snapshot identity');
+    expect(repository.getDossier(dossier.id)).toBeNull();
     expect(repository.createDossier({ dossier, snapshot }).deduplicated).toBe(false);
     expect(
       repository.createDossier({
@@ -195,6 +202,15 @@ describe('SQLite interview project repository', () => {
       evidenceItemIds: [],
       updatedAt: now,
     }));
+    // 不完整或重复维度必须回滚会话插入，不能留下无法继续问答的半成品。
+    expect(() => repository.createSession({ session, coverage: coverage.slice(1) })).toThrow();
+    expect(() =>
+      repository.createSession({
+        session,
+        coverage: [...coverage.slice(1), ...coverage.slice(1, 2)],
+      }),
+    ).toThrow();
+    expect(repository.getSession(session.id)).toBeNull();
     repository.createSession({ session, coverage });
 
     const contextHash = contentHash({ session: session.id, revision: 0 });

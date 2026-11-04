@@ -83,7 +83,7 @@ describe('init and doctor commands', () => {
         data: {
           dataRoot,
           companies: 20,
-          sources: 62,
+          sources: 64,
           bootstrap: {
             defaultResumeTaskId: null,
             schedules: 1,
@@ -107,7 +107,7 @@ describe('init and doctor commands', () => {
         }),
       ).toBe(0);
       expect(JSON.parse(secondOutput.stdout.join(''))).toMatchObject({
-        data: { companies: 20, sources: 62 },
+        data: { companies: 20, sources: 64 },
       });
       await expect(stat(configPath)).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(readFile(envPath, 'utf8')).resolves.toBe('LOG_LEVEL=error\n');

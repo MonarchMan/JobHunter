@@ -344,6 +344,13 @@
       "when": 1793836800001,
       "tag": "0048_model_request_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1793836800002,
+      "tag": "0049_compact_interview_storage",
+      "breakpoints": true
     }
   ]
 }
