@@ -43,6 +43,7 @@ import {
   createJobUnderstandingTaskHandler,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
+  createBatchJobScoreTaskHandler,
   MatchWorkflowService,
 } from '@jobhunter/matching/application';
 import {
@@ -256,15 +257,15 @@ export function createLocalWebContainer(
     registry.register(understandingHandler);
     registry.register(adviceHandler);
     registry.register(matchingHandler);
-    registry.register(
-      createManualJobScoreTaskHandler({
-        understanding: understandingHandler,
-        matching: matchingHandler,
-        advice: adviceHandler,
-        // Web 进程不执行模型任务，开关读取结果不影响实际执行，保持与 Worker 同一装配签名。
-        adviceEnabled: () => false,
-      }),
-    );
+    const singleScoring = createManualJobScoreTaskHandler({
+      understanding: understandingHandler,
+      matching: matchingHandler,
+      advice: adviceHandler,
+      // Web 进程不执行模型任务，开关读取结果不影响实际执行，保持与 Worker 同一装配签名。
+      adviceEnabled: () => false,
+    });
+    registry.register(singleScoring);
+    registry.register(createBatchJobScoreTaskHandler(singleScoring));
 
     const queue = new SqliteTaskRepository(database.client);
     const tasks = new TaskService(

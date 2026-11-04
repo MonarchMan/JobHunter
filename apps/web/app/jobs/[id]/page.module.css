@@ -71,38 +71,63 @@
   color: var(--text-secondary);
 }
 
-.scoreGrid,
-.adviceGrid {
+.scoreGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
-  margin: 1.5rem 0;
+  margin: 1.25rem 0;
+  align-items: start;
 }
-
-.scoreGrid section,
-.adviceGrid > div {
-  padding: 1rem;
+.scoreCard {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--line);
   border-radius: 0.75rem;
   background: var(--canvas);
 }
-
-.scoreGrid h3,
-.adviceGrid h4 {
-  margin-top: 0;
+.scoreCard h3 {
+  margin: 0 0 0.75rem;
 }
-
-.scoreGrid p,
-.adviceGrid p,
+.scoreValue {
+  font-size: 1.75rem;
+}
+.scoreValue small {
+  font-size: 0.85rem;
+  color: var(--muted-ink);
+  font-weight: 400;
+}
+.scoreRows {
+  margin: 1rem 0;
+}
+.scoreRows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.scoreRows dd {
+  margin: 0;
+  white-space: nowrap;
+}
+.gaps {
+  margin: 1rem 0;
+}
+.gaps h4 {
+  margin: 0 0 0.4rem;
+}
+.gaps p {
+  margin: 0.35rem 0;
+  line-height: 1.65;
+}
 .evidenceList {
+  padding-left: 1.25rem;
   font-size: 0.88rem;
-  line-height: 1.55;
+  line-height: 1.65;
 }
-
-.uncertain {
-  background: var(--warning-soft);
-  color: var(--warning);
+.scoreCard details {
+  margin-top: 0.75rem;
 }
-
 .adviceBlock {
   padding-top: 1rem;
 }
@@ -110,11 +135,6 @@
 @media (max-width: 900px) {
   .grid {
     grid-template-columns: 1fr;
-  }
-
-  .scoreGrid,
-  .adviceGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -127,17 +147,34 @@
     justify-content: start;
   }
 
-  .scoreGrid,
-  .adviceGrid {
+  .scoreGrid {
     grid-template-columns: 1fr;
   }
 }
 
-
-.adviceList { display: flex; flex-direction: column; gap: 1rem; margin: 1.5rem 0; }
-.adviceList > div { padding: 1rem; border-radius: 0.75rem; background: var(--canvas); }
-.adviceList h4 { margin-top: 0; }
-.adviceList p { font-size: 0.88rem; line-height: 1.55; }
-.adviceList ul { margin: 0.5rem 0 0; padding-left: 1.25rem; font-size: 0.88rem; line-height: 1.55; }
-.adviceList li { margin-bottom: 0.25rem; }
-
+.adviceList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.adviceList > div {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--line-soft);
+}
+.adviceList h4 {
+  margin-top: 0;
+}
+.adviceList p {
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+.adviceList ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+.adviceList li {
+  margin-bottom: 0.25rem;
+}

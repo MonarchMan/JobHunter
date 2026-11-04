@@ -15,8 +15,13 @@ import {
   createJobAdviceTaskHandler,
   createJobUnderstandingTaskHandler,
   createMatchRevisionTaskHandler,
+  createBatchJobScoreTaskHandler,
+  createManualJobScoreTaskHandler,
+  MatchWorkflowService,
 } from '@jobhunter/matching/application';
 import type { TaskHandlerContext, TaskLogger } from '@jobhunter/common/tasks';
+import { HandlerRegistry, TaskService } from '@jobhunter/common/tasks';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import {
   canonicalJson,
   parseId,
@@ -140,12 +145,19 @@ function understandingOutput(request: ModelRequest): unknown {
     description: normalizedJob.description,
     experienceText: normalizedJob.experienceText,
     educationText: normalizedJob.educationText,
+    recruitmentCategory: 'unknown',
     profile: {
       targetRoles: ['Agent 开发'],
       domains: ['大模型应用'],
       yearsOfExperience: 5,
-      skills: ['TypeScript', 'RAG'],
+      skills: profile.skills,
       professionalSkills: null,
+      workExperience: profile.workExperience,
+      projects: profile.projects,
+      works: [],
+      competitions: [],
+      certificates: [],
+      languages: [],
     },
   });
   return {
@@ -297,6 +309,49 @@ async function setup(): Promise<{
 }
 
 describe('matching persistence pipeline', () => {
+  it('enqueues one batch atomically and keeps the same task on idempotent submission', async () => {
+    const fixture = await setup();
+    const registry = new HandlerRegistry();
+    registry.register(
+      createBatchJobScoreTaskHandler(
+        createManualJobScoreTaskHandler({
+          understanding: createJobUnderstandingTaskHandler({ unavailable: true }),
+          matching: createMatchRevisionTaskHandler(null),
+          advice: createJobAdviceTaskHandler({ unavailable: true }),
+          adviceEnabled: () => false,
+        }),
+      ),
+    );
+    const tasks = new TaskService(
+      {
+        queue: new SqliteTaskRepository(fixture.handle.client),
+        clock: fixture.clock,
+        ids: fixture.ids,
+      },
+      registry,
+    );
+    const workflow = new MatchWorkflowService({ ...fixture, tasks });
+    expect(() =>
+      workflow.runForJobs({
+        jobIds: [jobId, '018f0000-0000-7000-8000-000000009999'],
+        mode: 'rules',
+      }),
+    ).toThrow();
+    expect(tasks.count()).toBe(0);
+    const batch = {
+      jobIds: [jobId, jobId],
+      mode: 'rules' as const,
+      idempotencyToken: 'batch-click',
+    };
+    const result = workflow.runForJobs(batch);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.task).toMatchObject({
+      taskType: 'match.score-batch',
+      payload: { jobRevisionIds: [revisionId], profileVersionId },
+    });
+    expect(workflow.runForJobs(batch)[0]?.task.id).toBe(result[0]?.task.id);
+    expect(tasks.count()).toBe(1);
+  });
   it('activates v3 without overwriting v1/v2 results and replays immutable versions', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
@@ -342,6 +397,14 @@ describe('matching persistence pipeline', () => {
     expect(service.compute(input)).toEqual({ match: graduationFixed, created: false });
     expect(service.compute({ ...input, rulesetId: v31Id }).match).toEqual(fixed);
     expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('evidence-v3.2');
+    const v4Id = parseId('018f0000-0000-7000-8000-00000000d012', 'MatchRuleset');
+    service.ensureRulesetV4({ id: v4Id });
+    const objective = service.compute(input).match;
+    expect(objective.components.map((item) => item.dimension)).toEqual(['qualification']);
+    expect(objective.id).not.toBe(graduationFixed.id);
+    expect(service.compute(input)).toEqual({ match: objective, created: false });
+    expect(service.compute({ ...input, rulesetId: v32Id }).match).toEqual(graduationFixed);
+    expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('objective-v4');
   });
 
   it('pre-filters job revisions by target roles and excluded terms before calculation', async () => {
@@ -497,12 +560,9 @@ describe('matching persistence pipeline', () => {
       highlights: [
         {
           text: 'TypeScript 与 Agent 岗位要求匹配。',
-          references: [{ kind: 'evidence', value: evidence.summary }],
         },
       ],
       gaps: [],
-      uncertainties: [],
-      resumeEmphasis: ['突出简历中已有的 TypeScript Agent 项目。'],
       preparation: ['准备 Agent 架构设计案例。'],
     } as const;
     const adviceModel = new FakeModelClient([
@@ -511,7 +571,7 @@ describe('matching persistence pipeline', () => {
         kind: 'output',
         output: {
           ...adviceOutput,
-          highlights: [{ ...adviceOutput.highlights[0], references: ['ref-1'] }],
+          highlights: adviceOutput.highlights,
         },
         usage: { inputTokens: 80, outputTokens: 40, estimatedCostMicros: 20 },
       },

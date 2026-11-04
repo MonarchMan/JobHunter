@@ -82,6 +82,8 @@ export class AgentRunner {
     readonly definition: AgentDefinition<TInput, TOutput>;
     readonly value: unknown;
     readonly signal: AbortSignal;
+    /** 任务身份作为重试作用域；不同职位仍由输入哈希区分。 */
+    readonly retryKey?: string;
   }): Promise<AgentRunnerResult<TOutput>> {
     // 1、校验输入并计算包含模型配置的缓存键；命中成功缓存时不重复调用模型。
     const definition = input.definition;
@@ -103,6 +105,7 @@ export class AgentRunner {
         definition.outputSchemaVersion,
         modelConfigHash,
         inputHash,
+        ...(input.retryKey ? [input.retryKey] : []),
       ].join('|'),
     );
     const resultPolicy = definition.resultPolicy ?? { cache: 'enabled', persistOutput: true };
@@ -123,33 +126,38 @@ export class AgentRunner {
 
     // 2、先登记 running 记录，再在事务外执行模型调用。
     const startedAt = this.#now();
-    const runId = this.#createId();
+    const previous =
+      resultPolicy.cache === 'enabled' || input.retryKey
+        ? this.#store.restartFailed(reusableCacheKey, startedAt)
+        : null;
+    const runId = previous?.id ?? this.#createId();
     // 禁用缓存的敏感任务使用单次运行键，避免成功唯一索引把并发运行误判为缓存竞争。
     const cacheKey =
-      resultPolicy.cache === 'enabled'
+      resultPolicy.cache === 'enabled' || input.retryKey
         ? reusableCacheKey
         : sha256(`${reusableCacheKey}|uncached|${runId}`);
-    this.#store.createRunning({
-      id: runId,
-      agentKey: definition.key,
-      agentVersion: definition.version,
-      promptVersion: definition.promptVersion,
-      modelConfigHash,
-      inputHash,
-      cacheKey,
-      status: 'running',
-      output: null,
-      outputHash: null,
-      errorCategory: null,
-      errorSummary: null,
-      inputTokens: null,
-      outputTokens: null,
-      estimatedCostMicros: null,
-      costCurrency: this.#model.metadata.costCurrency,
-      pricingVersion: this.#model.metadata.pricingVersion,
-      startedAt,
-      finishedAt: null,
-    });
+    if (!previous)
+      this.#store.createRunning({
+        id: runId,
+        agentKey: definition.key,
+        agentVersion: definition.version,
+        promptVersion: definition.promptVersion,
+        modelConfigHash,
+        inputHash,
+        cacheKey,
+        status: 'running',
+        output: null,
+        outputHash: null,
+        errorCategory: null,
+        errorSummary: null,
+        inputTokens: null,
+        outputTokens: null,
+        estimatedCostMicros: null,
+        costCurrency: this.#model.metadata.costCurrency,
+        pricingVersion: this.#model.metadata.pricingVersion,
+        startedAt,
+        finishedAt: null,
+      });
 
     const timeout = AbortSignal.timeout(definition.limits.timeoutMs);
     const signal = AbortSignal.any([input.signal, timeout]);
@@ -165,10 +173,12 @@ export class AgentRunner {
       const outputHash = sha256(canonicalJson(output));
       const completion = this.#store.completeSucceeded({
         id: runId,
-        cacheKey,
+        // 禁用缓存的成功运行退出重试键，后续独立执行不能与其争夺成功唯一键。
+        cacheKey:
+          resultPolicy.cache === 'enabled' ? cacheKey : sha256(`${cacheKey}|completed|${runId}`),
         output: resultPolicy.persistOutput ? output : null,
         outputHash,
-        usage: this.#usage(totals),
+        usage: this.#usage(totals, previous),
         finishedAt: this.#now(),
       });
       if (!resultPolicy.persistOutput) {
@@ -196,7 +206,7 @@ export class AgentRunner {
           status,
           category: classified.category,
           summary: sanitizeAgentErrorSummary(classified.message) || 'Agent run failed.',
-          usage: this.#usage(totals),
+          usage: this.#usage(totals, previous),
           finishedAt: this.#now(),
         });
       throw classified;
@@ -214,6 +224,7 @@ export class AgentRunner {
     const tools = new ToolRegistry(definition.tools);
     const outputJsonSchema = z.toJSONSchema(definition.outputSchema, { unrepresentable: 'any' });
     const toolResults: ModelToolResult[] = [];
+    const sequenceStart = this.#store.nextToolSequence(runId);
     let steps = 0;
     let response: ModelResponse;
     for (;;) {
@@ -249,7 +260,7 @@ export class AgentRunner {
         if (!tool) throw new AgentRuntimeError('tool_error', `Unregistered tool: ${call.toolKey}.`);
         const toolInput = tool.inputSchema.parse(call.input);
         const toolStarted = this.#now();
-        const sequenceNo = toolResults.length;
+        const sequenceNo = sequenceStart + toolResults.length;
         try {
           const output = tool.outputSchema.parse(await tool.execute(toolInput, { signal }));
           this.#store.saveToolCall({
@@ -350,12 +361,21 @@ export class AgentRunner {
   }
 
   /** 处理模块类内部的辅助逻辑。 */
-  #usage(totals: Totals): AgentRunUsage {
+  #usage(totals: Totals, previous: AgentRunRecord | null): AgentRunUsage {
+    const billingCalls = [...(previous?.billingCalls ?? []), ...totals.billingCalls];
     return {
       ...totals,
+      billingCalls,
+      inputTokens: (previous?.inputTokens ?? 0) + totals.inputTokens,
+      outputTokens: (previous?.outputTokens ?? 0) + totals.outputTokens,
+      estimatedCostMicros:
+        totals.estimatedCostMicros === null ||
+        (previous !== null && previous.estimatedCostMicros === null)
+          ? null
+          : (previous?.estimatedCostMicros ?? 0) + totals.estimatedCostMicros,
       costCurrency: this.#model.metadata.costCurrency,
-      pricingVersion: totals.billingCalls.length
-        ? [...new Set(totals.billingCalls.map((call) => call.pricingVersion))].join(',')
+      pricingVersion: billingCalls.length
+        ? [...new Set(billingCalls.map((call) => call.pricingVersion))].join(',')
         : this.#model.metadata.pricingVersion,
     };
   }

@@ -54,7 +54,7 @@ export function JobScoreAction({
       const body = (await response.json()) as { readonly error?: { readonly message?: string } };
       if (!response.ok) throw new Error(body.error?.message ?? '评分任务创建失败。');
       showToast(
-        `已为 ${String(jobIds.length)} 个职位创建${mode === 'llm' ? ' LLM 深度' : '规则'}评分任务。`,
+        `已创建${jobIds.length > 1 ? '一个批量' : ''}${mode === 'llm' ? ' LLM 深度' : '规则'}评分任务，共 ${String(jobIds.length)} 个职位。`,
       );
     } catch (error) {
       showToast(error instanceof Error ? error.message : '评分任务创建失败。', 'error');

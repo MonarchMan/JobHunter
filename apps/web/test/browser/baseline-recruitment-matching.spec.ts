@@ -89,14 +89,27 @@ for (const width of [1280, 390]) {
   });
 }
 
-test('recruitment detail explains provisional score and inapplicable dimensions', async ({
+test('recruitment detail separates objective conditions from model assessment', async ({
   page,
 }) => {
   await page.goto('/jobs/018f0000-0000-7000-8000-000000000402');
   await expect(page.getByText(/招聘类别：实习/)).toBeVisible();
   await expect(page.getByText(/证据完整度.*暂定分/)).toBeVisible();
-  await expect(page.getByRole('heading', { name: '项目 / 实践' })).toBeVisible();
-  await expect(page.getByText('不适用', { exact: true })).toHaveCount(2);
+  await expect(page.getByText('客观条件', { exact: true })).toBeVisible();
+  await expect(page.getByText('项目 / 实践', { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText('尚未评估技能及项目 / 工作能力，当前分数仅反映客观条件。'),
+  ).toBeVisible();
+  const rules = page.getByRole('region', { name: '规则评分', exact: true });
+  const model = page.getByRole('region', { name: '模型评分', exact: true });
+  await expect(rules).toBeVisible();
+  await expect(model).toBeVisible();
+  const ruleBox = await rules.boundingBox();
+  const modelBox = await model.boundingBox();
+  expect(Math.abs((ruleBox?.y ?? 0) - (modelBox?.y ?? 999))).toBeLessThanOrEqual(1);
+  await expect(page.getByRole('heading', { name: '简历重点', exact: true })).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.screenshot({ path: '../../var/recruitment-detail.png', fullPage: true });
 });

@@ -122,6 +122,7 @@ export function createResumeProfileTaskHandler(
       }
       try {
         const result = await input.runner.run({
+          ...(context.taskId ? { retryKey: context.taskId } : {}),
           definition: resumeProfileAgentDefinition,
           value: { extractedText: document.extractedText },
           signal: context.signal,

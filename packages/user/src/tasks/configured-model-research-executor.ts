@@ -123,6 +123,7 @@ export class ConfiguredModelResearchExecutor implements ExternalResearchExecutor
       : await collectBrowserResearchEvidence(input, signal);
     try {
       const result = await this.#runner.run({
+        retryKey: input.requestId,
         definition: configuredResearchAgentDefinition,
         value: { evidencePrompt: evidence.prompt },
         signal,

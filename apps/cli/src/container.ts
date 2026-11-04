@@ -21,6 +21,7 @@ import {
 import {
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
+  createBatchJobScoreTaskHandler,
   createJobUnderstandingTaskHandler,
   createJobAdviceTaskHandler,
   MatchWorkflowService,
@@ -210,14 +211,14 @@ export function createLocalCliContainer(
     registry.register(matchingHandler);
     registry.register(understandingHandler);
     registry.register(adviceHandler);
-    registry.register(
-      createManualJobScoreTaskHandler({
-        understanding: understandingHandler,
-        matching: matchingHandler,
-        advice: adviceHandler,
-        adviceEnabled: () => systemSettings.get().matchingAutomation.adviceEnabled,
-      }),
-    );
+    const singleScoring = createManualJobScoreTaskHandler({
+      understanding: understandingHandler,
+      matching: matchingHandler,
+      advice: adviceHandler,
+      adviceEnabled: () => systemSettings.get().matchingAutomation.adviceEnabled,
+    });
+    registry.register(singleScoring);
+    registry.register(createBatchJobScoreTaskHandler(singleScoring));
     const tasks = new TaskService(
       { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
       registry,

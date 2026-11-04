@@ -1,5 +1,5 @@
 import { JobNotFoundError } from '@jobhunter/recruitment/jobs/job-query-service';
-import { matchEvidenceCoverage } from '@jobhunter/matching';
+import { MatchAnalysis } from './match-analysis.js';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
@@ -17,16 +17,6 @@ interface JobDetailPageProperties {
   readonly params: Promise<{ readonly id: string }>;
   readonly searchParams: Promise<SearchParameterSource>;
 }
-
-const dimensionLabels: Readonly<Record<string, string>> = {
-  skills: '技能',
-  experience: '经验',
-  projects: '项目 / 实践',
-  role: '岗位方向',
-  industry: '行业',
-  location: '地点',
-  model: '模型评分',
-};
 
 const adviceStatusLabels = {
   not_requested: '尚未生成',
@@ -133,68 +123,26 @@ export default async function JobDetailPage({
             <article className={styles.matchCard} key={match.id}>
               <header>
                 <div>
+                  <span>
+                    {match.components.some((item) => item.dimension === 'qualification') &&
+                    !match.components.some((item) => item.dimension === 'model')
+                      ? '条件评分'
+                      : '综合评分'}
+                  </span>
                   <strong>{match.totalScore.toFixed(1)} 分</strong>
                   <span>
-                    {match.filterStatus} · 规则集 {match.rulesetVersion}
+                    {
+                      { eligible: '符合资格', excluded: '不符合资格', uncertain: '资格待确认' }[
+                        match.filterStatus
+                      ]
+                    }
                   </span>
                 </div>
-                <small>个人资料版本 {match.profileVersionId}</small>
               </header>
-              {matchEvidenceCoverage(match.components) !== null && (
-                <p>
-                  招聘类别：
-                  {
-                    { social: '社招', campus: '校招', internship: '实习', unknown: '待确认' }[
-                      match.components[0]?.recruitmentCategory ?? 'unknown'
-                    ]
-                  }
-                  {' · '}证据完整度 {matchEvidenceCoverage(match.components)}%
-                  {(matchEvidenceCoverage(match.components) ?? 100) < 100 ||
-                  match.filterStatus === 'uncertain'
-                    ? ' · 暂定分，补充事实后可重新评分'
-                    : ''}
-                </p>
-              )}
-              <div className={styles.scoreGrid}>
-                {match.components.map((component) => (
-                  <section key={component.dimension}>
-                    <h3>{dimensionLabels[component.dimension] ?? component.dimension}</h3>
-                    <strong>
-                      {component.evidenceStatus === 'not_applicable'
-                        ? '不适用'
-                        : component.evidenceStatus === 'unknown'
-                          ? `待确认 / ${component.maximumScore.toFixed(1)}`
-                          : `${component.score.toFixed(1)} / ${component.maximumScore.toFixed(1)}`}
-                    </strong>
-                    {component.matchedEvidence.map((evidence) => (
-                      <p key={`${evidence.path}:${evidence.summary}`}>✓ {evidence.summary}</p>
-                    ))}
-                    {component.missingEvidence.map((missing) => (
-                      <p className="risk" key={missing}>
-                        缺口：{missing}
-                      </p>
-                    ))}
-                    {component.uncertainties.map((uncertain) => (
-                      <p className={styles.uncertain} key={uncertain}>
-                        待确认：{uncertain}
-                      </p>
-                    ))}
-                  </section>
-                ))}
-              </div>
-              <details>
-                <summary>查看资格规则证据</summary>
-                <ul className={styles.evidenceList}>
-                  {match.ruleOutcomes.map((outcome, index) => (
-                    <li key={`${outcome.ruleId}:${String(index)}`}>
-                      <strong>{outcome.status}</strong> {outcome.explanation}
-                    </li>
-                  ))}
-                </ul>
-              </details>
+              <MatchAnalysis match={match} />
               <section className={styles.adviceBlock}>
-                <h3>Agent建议</h3>
-                {match.advice.status === "available" ? (
+                <h3>Agent 建议</h3>
+                {match.advice.status === 'available' ? (
                   <div className={styles.adviceList}>
                     {match.advice.content.highlights.length > 0 && (
                       <div>
@@ -206,16 +154,6 @@ export default async function JobDetailPage({
                       <div>
                         <h4>缺口</h4>
                         <p>{match.advice.content.gaps[0]?.text}</p>
-                      </div>
-                    )}
-                    {match.advice.content.resumeEmphasis.length > 0 && (
-                      <div>
-                        <h4>简历重点</h4>
-                        <ul>
-                          {match.advice.content.resumeEmphasis.map((item, index) => (
-                            <li key={index}>{item}</li>
-                          ))}
-                        </ul>
                       </div>
                     )}
                     {match.advice.content.preparation.length > 0 && (
@@ -232,7 +170,8 @@ export default async function JobDetailPage({
                 ) : (
                   <p className="muted">{adviceStatusLabels[match.advice.status]}</p>
                 )}
-              </section></article>
+              </section>
+            </article>
           ))
         )}
       </section>

@@ -19,7 +19,7 @@ import {
   type JobId,
 } from '@jobhunter/common/domain';
 import { parseDeterministicMatchOutput } from '../model.js';
-import { jobAdviceSchema } from '../contracts/job-advice.js';
+import { parseStoredJobAdvice } from '../contracts/job-advice.js';
 import { parseJobUnderstanding } from '../job-understanding.js';
 import { parseMatchRuleset } from '../rulesets.js';
 import type Database from 'better-sqlite3';
@@ -173,7 +173,7 @@ function advice(row: AdviceRow): MatchAdviceRecord {
     agentRunId: row.agent_run_id,
     schemaVersion: row.schema_version,
     contentHash: parseContentHash(row.content_hash),
-    result: jobAdviceSchema.parse(JSON.parse(row.result_json) as unknown),
+    result: parseStoredJobAdvice(JSON.parse(row.result_json) as unknown),
     createdAt: utcInstant(row.created_at),
   };
 }

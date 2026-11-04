@@ -32,6 +32,7 @@ export const matchingGoldenCaseSchema: z.ZodType<MatchingGoldenCase> = z
           .object({
             externalJobId: z.string().trim().min(1),
             output: jobAdviceSchema,
+            factConsistent: z.boolean(),
           })
           .strict(),
       )
@@ -53,7 +54,11 @@ export interface MatchingGoldenCase {
     readonly relevant: boolean;
     readonly mustNotExclude: boolean;
   }[];
-  readonly adviceSamples: { readonly externalJobId: string; readonly output: JobAdvice }[];
+  readonly adviceSamples: {
+    readonly externalJobId: string;
+    readonly output: JobAdvice;
+    readonly factConsistent: boolean;
+  }[];
 }
 
 /** 模块数据结构或契约。 */
@@ -97,12 +102,9 @@ export function evaluateMatchingGoldenCase(
     const target = evaluated.find(({ item }) => item.job.externalJobId === sample.externalJobId);
     if (!target) throw new TypeError(`Advice sample job does not exist: ${sample.externalJobId}.`);
     try {
-      parseJobAdviceAgentOutput(sample.output, {
-        profile: evaluationCase.profile,
-        job: target.item.job,
-        match: target.match,
-      });
-      factConsistentAdvice += 1;
+      parseJobAdviceAgentOutput(sample.output);
+      // 无引用建议无法仅凭 Schema 判断事实，必须使用独立人工标注。
+      if (sample.factConsistent) factConsistentAdvice += 1;
     } catch {
       // Invalid samples remain in the denominator so the report exposes factual regressions.
     }

@@ -166,6 +166,7 @@ export function evaluateEvidenceEligibility(
   input: DeterministicMatchInput,
   recoverBoundary = false,
   graduationPolicy = false,
+  requiredOnly = false,
 ): RuleOutcome[] {
   // 1. 保留地点/类型等偏好，不使用旧版最低年限规则。
   const results = evaluateEligibility(input).filter(
@@ -181,6 +182,8 @@ export function evaluateEvidenceEligibility(
   // 2. 同原文同路径去重，保存稳定序号方便详情与建议引用。
   const seen = new Set<string>();
   for (const node of requirementStatements(input.job, recoverBoundary)) {
+    // v4 不将优先条件和明确豁免计为得分项，旧版重放维持原样。
+    if (requiredOnly && node.kind === 'atom' && node.mode !== 'required') continue;
     const key = `${node.path}:${node.text}`;
     if (seen.has(key)) continue;
     seen.add(key);

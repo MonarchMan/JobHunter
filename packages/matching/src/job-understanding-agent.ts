@@ -1,12 +1,12 @@
 import { defineAgent, type AgentDefinition } from '@jobhunter/common/agent';
 import { z } from 'zod';
-import type { CandidateProfileData } from '@jobhunter/user/contracts';
+import { candidateProfileSchema, type CandidateProfileData } from '@jobhunter/user/contracts';
 import {
   jobUnderstandingSchema,
   jobUnderstandingAgentOutputSchema,
   type JobUnderstanding,
 } from './job-understanding.js';
-import { jobUnderstandingPromptV2 } from './prompts/job-understanding/v2.js';
+import { jobUnderstandingPromptV3 } from './prompts/job-understanding/v3.js';
 
 const nullableText = z.string().trim().min(1).nullable();
 
@@ -16,8 +16,18 @@ export const profileSnapshotSchema = z
     targetRoles: z.array(z.string().trim().min(1)),
     domains: z.array(z.string().trim().min(1)),
     yearsOfExperience: z.number().nonnegative().nullable(),
-    skills: z.array(z.string().trim().min(1)),
+    skills: candidateProfileSchema.unwrap().shape.skills,
     professionalSkills: nullableText,
+    ...candidateProfileSchema
+      .unwrap()
+      .pick({
+        workExperience: true,
+        projects: true,
+        works: true,
+        competitions: true,
+        certificates: true,
+        languages: true,
+      }).shape,
   })
   .strict();
 
@@ -30,8 +40,14 @@ export function buildProfileSnapshot(profile: CandidateProfileData): ProfileSnap
     targetRoles: [...profile.targetRoles],
     domains: [...profile.domains],
     yearsOfExperience: profile.yearsOfExperience,
-    skills: profile.skills.map((skill) => skill.name),
+    skills: profile.skills,
     professionalSkills: profile.professionalSkills,
+    workExperience: profile.workExperience,
+    projects: profile.projects,
+    works: profile.works,
+    competitions: profile.competitions,
+    certificates: profile.certificates,
+    languages: profile.languages,
   };
 }
 
@@ -42,6 +58,7 @@ export const jobUnderstandingInputSchema = z
     description: z.string().trim().min(1),
     experienceText: nullableText,
     educationText: nullableText,
+    recruitmentCategory: z.enum(['social', 'campus', 'internship', 'unknown']),
     profile: profileSnapshotSchema,
   })
   .strict();
@@ -52,16 +69,16 @@ export type JobUnderstandingInput = z.infer<typeof jobUnderstandingInputSchema>;
 /** 职位理解 Agent 定义。 */
 export const jobUnderstandingAgentDefinition: AgentDefinition<
   JobUnderstandingInput,
-  JobUnderstanding
+  z.infer<typeof jobUnderstandingAgentOutputSchema>
 > = defineAgent({
-  key: jobUnderstandingPromptV2.agentKey,
-  version: '2.0.0',
-  promptVersion: jobUnderstandingPromptV2.promptVersion,
-  outputSchemaVersion: jobUnderstandingPromptV2.outputSchemaVersion,
+  key: jobUnderstandingPromptV3.agentKey,
+  version: '3.0.0',
+  promptVersion: jobUnderstandingPromptV3.promptVersion,
+  outputSchemaVersion: jobUnderstandingPromptV3.outputSchemaVersion,
   outputSchemaName: 'JobUnderstandingOutput',
-  systemPrompt: jobUnderstandingPromptV2.text,
+  systemPrompt: jobUnderstandingPromptV3.text,
   inputSchema: jobUnderstandingInputSchema,
-  outputSchema: jobUnderstandingSchema,
+  outputSchema: jobUnderstandingAgentOutputSchema,
   tools: [],
   limits: {
     // 证据引文密集的职位理解输出实测可达约 7k Token

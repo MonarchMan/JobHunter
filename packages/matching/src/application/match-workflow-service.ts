@@ -112,14 +112,25 @@ export class MatchWorkflowService {
     }
     const uniqueJobIds = [...new Set(input.jobIds)];
     const batchToken = nonEmptyToken(input.idempotencyToken) ?? this.#ids.generate();
-    return uniqueJobIds.map((jobId) =>
-      this.runForJob({
-        jobId,
-        mode: input.mode,
-        ...(input.profileVersionId ? { profileVersionId: input.profileVersionId } : {}),
-        idempotencyToken: `${batchToken}:${jobId}`,
+    const profile = input.profileVersionId
+      ? this.#profiles.getVersion(parseId(input.profileVersionId, 'ProfileVersion'))
+      : this.#currentProfileVersion();
+    if (!profile) throw new MatchProfileNotFoundError(input.profileVersionId ?? 'current');
+    // 全部校验成功后才入队，避免部分职位无效时仍创建半批任务。
+    const jobRevisionIds = uniqueJobIds.map((jobId) => {
+      const revision = this.#matching.getLatestRevisionForJob(parseId(jobId, 'Job'));
+      if (!revision) throw new MatchResultNotFoundError(jobId);
+      if (revision.jobStatus === 'closed') throw new TypeError('已关闭职位不能创建新的匹配任务。');
+      return revision.id;
+    });
+    return [
+      this.#tasks.enqueue({
+        taskType: 'match.score-batch',
+        priority: 100,
+        payload: { jobRevisionIds, profileVersionId: profile.id, mode: input.mode },
+        idempotencyKey: `match.score-batch:${input.mode}:${profile.id}:${batchToken}`,
       }),
-    );
+    ];
   }
 
   /** 分页列出匹配结果。 */

@@ -162,6 +162,20 @@ export class WorkerEngine implements TaskCancellationNotifier {
         {
           taskId: task.id,
           attempt: task.attemptCount,
+          checkpoint: (result: unknown): void => {
+            if (
+              !this.#queue.checkpoint(
+                task.id,
+                this.#options.workerId,
+                task.attemptCount,
+                this.#clock.now(),
+                result,
+              )
+            ) {
+              controller.abort('lease_lost' satisfies AbortReason);
+              throw new TaskExecutionError('cancelled', 'Task no longer owns its execution lease.');
+            }
+          },
           signal: controller.signal,
           clock: this.#clock,
           logger: this.#logger,

@@ -1,5 +1,7 @@
 # 008 轻量 Agent 运行时任务
 
+- [x] 实现 Agent 原记录重试、累计成本和工具序号续接，验证失败到成功与输入隔离。
+
 - [x] **AGT-T015** 实现客户端级结构化输出协商记忆，消除逐请求 400 试探重复调用；网络类临时失败摘要附带脱敏原因代码。（AGT-017, AGT-018, AGT-Q02）
 
 2026-11-04 验证：LiteLLM 网关对 `json_schema` 返回 400，原实现每次请求都先探测 `json_schema` 再回退 `json_object`，导致每个 Agent 运行出现两次 API 请求。OpenAI 兼容与 Anthropic 客户端现在按实例记忆协商成功的格式；连接失败摘要从 `Model provider request failed.` 增强为带 `ECONNREFUSED` 等原因代码，仍通过既有脱敏截断。新增 3 项单元测试（协商复用 ×2、网络原因代码）。

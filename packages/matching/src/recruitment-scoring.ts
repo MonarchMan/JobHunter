@@ -238,9 +238,14 @@ export function matchEvidenceCoverage(components: readonly ScoreComponent[]): nu
   return total === 0
     ? 0
     : Math.round(
-        (applicable
-          .filter((item) => item.evidenceStatus === 'known')
-          .reduce((sum, item) => sum + item.maximumScore, 0) /
+        (applicable.reduce(
+          (sum, item) =>
+            sum +
+            (item.maximumScore *
+              (item.evidenceCoverage ?? (item.evidenceStatus === 'known' ? 100 : 0))) /
+              100,
+          0,
+        ) /
           total) *
           100,
       );

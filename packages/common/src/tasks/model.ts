@@ -42,6 +42,8 @@ export interface TaskLogger {
 
 /** 应用层数据结构或端口契约。 */
 export interface TaskHandlerContext {
+  /** 原子保存已提交的阶段进度；失去租约后必须拒绝写入。 */
+  readonly checkpoint?: (result: unknown) => void;
   readonly taskId?: TaskId;
   /** 当前是第几次尝试；缺失表示执行环境未提供（如测试替身）。 */
   readonly attempt?: number;
@@ -204,6 +206,14 @@ export interface PersistedScheduleInput {
 
 /** 应用层数据结构或端口契约。 */
 export interface TaskQueue {
+  /** 仅当前租约与尝试能保存进度，进度在取消及租约恢复时保留。 */
+  checkpoint(
+    taskId: TaskId,
+    workerId: string,
+    attempt: number,
+    now: UtcInstant,
+    result: unknown,
+  ): boolean;
   enqueue(input: PersistedTaskInput): EnqueueTaskResult;
   /** 原子归档失败摘要并以同一身份重新入队，input.idempotencyKey 为本次操作令牌。 */
   retry(input: PersistedTaskInput): EnqueueTaskResult;

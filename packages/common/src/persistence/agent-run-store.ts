@@ -168,6 +168,36 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
   }
 
   /** 执行数据库组件对外暴露的操作。 */
+  public restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null {
+    return this.#client
+      .transaction(() => {
+        const row = this.#client
+          .prepare(
+            `SELECT ${columns} FROM agent_runs WHERE cache_key = ? AND status IN ('failed', 'cancelled') ORDER BY started_at DESC LIMIT 1`,
+          )
+          .get(cacheKey) as AgentRunRow | undefined;
+        if (!row) return null;
+        this.#client
+          .prepare(
+            `UPDATE agent_runs SET status = 'running', started_at = ?, finished_at = NULL, error_category = NULL, error_summary = NULL, output_json = NULL, output_hash = NULL WHERE id = ? AND status IN ('failed', 'cancelled')`,
+          )
+          .run(startedAt, row.id);
+        return toRecord(row);
+      })
+      .immediate();
+  }
+
+  /** 使用全历史工具序号，避免重试与旧调用唯一键冲突。 */
+  public nextToolSequence(agentRunId: string): number {
+    return this.#client
+      .prepare(
+        "SELECT COALESCE(MAX(sequence_no), 0) FROM events WHERE stream_type = 'agent_run' AND stream_id = ?",
+      )
+      .pluck()
+      .get(agentRunId) as number;
+  }
+
+  /** 登记首次运行；重试由 restartFailed 保留原身份。 */
   public createRunning(record: AgentRunRecord): void {
     if (record.status !== 'running') throw new TypeError('New agent run must be running.');
     this.#client
@@ -199,11 +229,12 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
       const changed = this.#client
         .prepare(
           `UPDATE agent_runs
-           SET model_usage_json = ?, status = 'succeeded', output_json = ?, output_hash = ?, input_tokens = ?, output_tokens = ?,
+           SET cache_key = ?, model_usage_json = ?, status = 'succeeded', output_json = ?, output_hash = ?, input_tokens = ?, output_tokens = ?,
                estimated_cost_micros = ?, cost_currency = ?, pricing_version = ?, finished_at = ?
            WHERE id = ? AND status = 'running'`,
         )
         .run(
+          input.cacheKey,
           input.usage.billingCalls
             ? JSON.stringify(modelBillingSchema.array().parse(input.usage.billingCalls))
             : null,

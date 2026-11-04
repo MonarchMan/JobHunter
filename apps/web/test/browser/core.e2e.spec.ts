@@ -339,7 +339,7 @@ test.describe('校招实习管理台核心流程', () => {
     if (triggerBox && panelBox) expect(Math.abs(panelBox.y - triggerBox.y)).toBeLessThan(12);
     await scorePanel.getByRole('button', { name: /^规则评分/ }).click();
     const toast = page.getByRole('region', { name: '通知', exact: true }).getByRole('status');
-    await expect(toast).toContainText('已为 1 个职位创建规则评分任务');
+    await expect(toast).toContainText('已创建规则评分任务，共 1 个职位');
     await expect(toast).toHaveCSS('position', 'static');
     await expect(page.getByRole('region', { name: '通知', exact: true })).toHaveCSS(
       'position',
@@ -349,6 +349,28 @@ test.describe('校招实习管理台核心流程', () => {
       Math.abs(((await scoreTrigger.boundingBox())?.y ?? 0) - (triggerBox?.y ?? 0)),
     ).toBeLessThan(1);
     await expect(toast).toBeHidden({ timeout: 4_500 });
+  });
+
+  test('queues two selected jobs as one batch task', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 900 });
+    await page.goto('/jobs');
+    const choices = page.getByRole('checkbox', { name: /^选择职位：/ });
+    await choices.nth(0).check();
+    await choices.nth(1).check();
+    await page.getByRole('button', { name: '批量评分（2）' }).click();
+    const accepted = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/jobs/match') && response.request().method() === 'POST',
+    );
+    await page
+      .getByRole('dialog', { name: '选择评分方式' })
+      .getByRole('button', { name: /^规则评分/ })
+      .click();
+    const response = await accepted;
+    expect(response.status()).toBe(202);
+    const body = (await response.json()) as { data: unknown[] };
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({ task: { taskType: 'match.score-batch' } });
   });
 
   test('restores a reload toast exactly once', async ({ page }) => {

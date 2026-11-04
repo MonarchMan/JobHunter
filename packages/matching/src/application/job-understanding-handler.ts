@@ -6,6 +6,7 @@ import {
   parseJobUnderstandingAgentOutput,
 } from '../job-understanding-agent.js';
 import { z } from 'zod';
+import { recruitmentCategory } from '../recruitment-requirements.js';
 import { mapAgentRuntimeError } from '@jobhunter/common/tasks';
 import type { MatchingRepository } from '../ports/matching.js';
 import type { CandidateProfileReader } from '@jobhunter/user/contracts';
@@ -91,10 +92,12 @@ export function createJobUnderstandingTaskHandler(
         description: revision.normalized.description,
         experienceText: revision.normalized.experienceText,
         educationText: revision.normalized.educationText,
+        recruitmentCategory: recruitmentCategory(revision.normalized),
         profile: buildProfileSnapshot(profile.effective),
       };
       try {
         const result = await input.runner.run({
+          ...(context.taskId ? { retryKey: context.taskId } : {}),
           definition: jobUnderstandingAgentDefinition,
           value: agentInput,
           signal: context.signal,

@@ -38,7 +38,7 @@ export function TaskActions({
       });
       const result = (await response.json()) as ActionResponse;
       if (!response.ok) throw new Error(result.error?.message ?? '任务操作失败。');
-      showToast(action === 'retry' ? '重试任务已创建。' : '取消请求已提交。');
+      showToast(action === 'retry' ? '任务已重新入队。' : '取消请求已提交。');
       router.refresh();
     } catch (error) {
       showToast(error instanceof Error ? error.message : '任务操作失败。', 'error');

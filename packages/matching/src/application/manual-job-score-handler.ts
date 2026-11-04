@@ -14,6 +14,8 @@ export const manualJobScoreTaskPayloadSchema = z
     profileVersionId: z.string().trim().min(1),
     mode: z.enum(['rules', 'llm']),
     resumeMatchResultId: z.uuidv7().optional(),
+    /** 批量任务必须保留模型失败，不能将降级结果视为已完成。 */
+    requireModelScore: z.boolean().optional(),
   })
   .strict();
 
@@ -88,6 +90,12 @@ export function createManualJobScoreTaskHandler(input: {
         jobEnrichmentId = enrichment.jobEnrichmentId;
         modelScore = enrichment.fitScore;
         modelReasons = enrichment.fitReasons;
+        if (payload.requireModelScore && modelScore === null) {
+          throw new TaskExecutionError(
+            'permanent',
+            '模型评分未完成，请检查模型配置或运行错误后重试。',
+          );
+        }
       }
       // 2、评分阶段：规则引擎与模型分加权合成；模型阶段降级时退回规则口径。
       const matched =

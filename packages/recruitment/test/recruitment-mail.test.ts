@@ -16,6 +16,26 @@ import { prepareRecruitmentMail } from '../src/mail/application/mail-content.js'
 
 /** 保存测试 Agent 运行记录，模拟生产数据库端口。 */
 class MemoryAgentRunStore implements AgentRunStore {
+  public restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null {
+    const previous = [...this.runs.values()].find(
+      (run) => run.cacheKey === cacheKey && (run.status === 'failed' || run.status === 'cancelled'),
+    );
+    if (!previous) return null;
+    this.runs.set(previous.id, {
+      ...previous,
+      status: 'running',
+      startedAt,
+      finishedAt: null,
+      output: null,
+      outputHash: null,
+      errorCategory: null,
+      errorSummary: null,
+    });
+    return previous;
+  }
+  public nextToolSequence(id: string): number {
+    return this.toolCalls.filter((call) => call.agentRunId === id).length;
+  }
   public readonly runs = new Map<string, AgentRunRecord>();
   public readonly toolCalls: ToolCallRecord[] = [];
 
@@ -46,6 +66,7 @@ class MemoryAgentRunStore implements AgentRunStore {
     const record: AgentRunRecord = {
       ...this.required(input.id),
       status: 'succeeded',
+      cacheKey: input.cacheKey,
       output: input.output,
       outputHash: input.outputHash,
       errorCategory: null,

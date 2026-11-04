@@ -58,6 +58,10 @@ export interface AgentRunStore {
   /** 将校验失败的成功缓存失效，保留输出和用量作为审计。 */
   invalidateSucceeded(id: string): void;
   createRunning(record: AgentRunRecord): void;
+  /** 恢复相同执行键的失败记录；返回原用量供累计，禁止接管仍在运行的记录。 */
+  restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null;
+  /** 重试保留历史工具调用，序号继续递增。 */
+  nextToolSequence(agentRunId: string): number;
   completeSucceeded(input: {
     readonly id: string;
     readonly cacheKey: string;

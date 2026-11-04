@@ -537,6 +537,23 @@ export class SqliteTaskRepository implements TaskQueue {
   }
 
   /** 执行数据库组件对外暴露的操作。 */
+  public checkpoint(
+    taskId: TaskId,
+    workerId: string,
+    attempt: number,
+    now: UtcInstant,
+    result: unknown,
+  ): boolean {
+    return (
+      this.#client
+        .prepare(
+          `UPDATE tasks SET result_json = ? WHERE id = ? AND status = 'running' AND lease_owner = ? AND attempt_count = ? AND lease_expires_at > ? AND cancel_requested_at IS NULL`,
+        )
+        .run(JSON.stringify(result), taskId, workerId, attempt, now).changes === 1
+    );
+  }
+
+  /** 完成任务时替换进度摘要。 */
   public complete(
     taskId: TaskId,
     workerId: string,

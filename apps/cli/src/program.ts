@@ -837,8 +837,6 @@ export function createProgram(input: {
             ? [
                 ...advice.highlights.map((item) => `亮点：${item.text}`),
                 ...advice.gaps.map((item) => `缺口：${item.text}`),
-                ...advice.uncertainties.map((item) => `不确定：${item.text}`),
-                ...advice.resumeEmphasis.map((item) => `简历强调：${item}`),
                 ...advice.preparation.map((item) => `准备：${item}`),
               ]
             : ['暂无当前模型配置对应的建议。']),

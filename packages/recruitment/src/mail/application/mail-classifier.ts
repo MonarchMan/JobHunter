@@ -172,6 +172,7 @@ export class RecruitmentMailClassifier {
 
     try {
       const result = await this.#runner.run({
+        retryKey: 'mail-classification',
         definition: recruitmentMailAgentDefinition,
         value: {
           mail,

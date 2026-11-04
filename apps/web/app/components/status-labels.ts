@@ -38,6 +38,7 @@ export const taskTypeLabels: Readonly<Record<string, string>> = {
   'job.enrich': '职位理解',
   'match.compute-revision': '职位匹配',
   'match.score-job': '手动职位评分',
+  'match.score-batch': '批量职位评分',
   'match.advise': '匹配建议',
   'interview.project-question': '项目面试问题生成',
   'interview.project-answer-digest': '项目回答分析',

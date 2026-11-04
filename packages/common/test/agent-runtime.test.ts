@@ -23,6 +23,26 @@ import {
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 class MemoryStore implements AgentRunStore {
+  public restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null {
+    const previous = [...this.runs.values()].find(
+      (run) => run.cacheKey === cacheKey && (run.status === 'failed' || run.status === 'cancelled'),
+    );
+    if (!previous) return null;
+    this.runs.set(previous.id, {
+      ...previous,
+      status: 'running',
+      startedAt,
+      finishedAt: null,
+      output: null,
+      outputHash: null,
+      errorCategory: null,
+      errorSummary: null,
+    });
+    return previous;
+  }
+  public nextToolSequence(id: string): number {
+    return this.toolCalls.filter((call) => call.agentRunId === id).length;
+  }
   /** 测试替身保留失败缓存审计。 */
   public invalidateSucceeded(id: string): void {
     const record = this.required(id);
@@ -59,6 +79,7 @@ class MemoryStore implements AgentRunStore {
     const record: AgentRunRecord = {
       ...current,
       status: 'succeeded',
+      cacheKey: input.cacheKey,
       output: input.output,
       outputHash: input.outputHash,
       ...input.usage,
@@ -179,6 +200,44 @@ function runner(store: MemoryStore, model: ModelClient): AgentRunner {
 }
 
 describe('agent runtime', () => {
+  it('reuses the failed ID and accumulates billable failed attempts', async () => {
+    const store = new MemoryStore();
+    const runtime = runner(store, new QueueModel([output(42), output(42), output('ok')]));
+    const request = {
+      definition: definition(),
+      value: { text: 'retry-priced' },
+      signal: new AbortController().signal,
+      retryKey: 'task-1',
+    };
+    await expect(runtime.run(request)).rejects.toMatchObject({ category: 'invalid_output' });
+    const failed = [...store.runs.values()][0];
+    const succeeded = await runtime.run(request);
+    expect(succeeded.run.id).toBe(failed?.id);
+    expect(store.runs.size).toBe(1);
+    expect(succeeded.run.inputTokens).toBe(9);
+    expect(succeeded.run.estimatedCostMicros).toBe(12);
+    expect(succeeded.run.errorSummary).toBeNull();
+  });
+
+  it('keeps task scopes separate and retries sensitive runs without caching success', async () => {
+    const store = new MemoryStore();
+    const runtime = runner(
+      store,
+      new QueueModel([output(42), output(42), output('ok'), output('new'), output('other')]),
+    );
+    const request = {
+      definition: definition({ resultPolicy: { cache: 'disabled', persistOutput: false } }),
+      value: { text: 'private' },
+      signal: new AbortController().signal,
+      retryKey: 'task-1',
+    };
+    await expect(runtime.run(request)).rejects.toThrow();
+    const failedId = [...store.runs.keys()][0];
+    expect((await runtime.run(request)).run.id).toBe(failedId);
+    expect((await runtime.run(request)).output.answer).toBe('new');
+    expect((await runtime.run({ ...request, retryKey: 'task-2' })).output.answer).toBe('other');
+    expect(store.runs.size).toBe(3);
+  });
   it('sums independently priced calls across a repair without losing unknown cache counts', async () => {
     const store = new MemoryStore();
     const base = {
@@ -262,7 +321,8 @@ describe('agent runtime', () => {
     // 1、模拟历史坏缓存，确认失效保留审计并重新生成。
     store.runs.set(first.run.id, { ...first.run, output: { answer: 'bad' } });
     expect((await runtime.run(request)).cacheHit).toBe(false);
-    expect(store.get(first.run.id)?.status).toBe('failed');
+    expect(store.get(first.run.id)?.status).toBe('succeeded');
+    expect(store.runs.size).toBe(1);
     expect(model.requests).toHaveLength(3);
   });
 
@@ -371,10 +431,7 @@ describe('agent runtime', () => {
       signal: new AbortController().signal,
     });
     expect(success.output.answer).toBe('ok');
-    expect([...store.runs.values()].map((run) => run.status).sort()).toEqual([
-      'failed',
-      'succeeded',
-    ]);
+    expect([...store.runs.values()].map((run) => run.status)).toEqual(['succeeded']);
   });
 
   it('repairs invalid structured output exactly once without tools', async () => {

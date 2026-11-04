@@ -31,6 +31,7 @@ export const scoreDimensionSchema = z.enum([
   'location',
   'projects',
   'model',
+  'qualification',
 ]);
 
 /** 单个评分维度的分数和证据。 */
@@ -43,6 +44,8 @@ export const scoreComponentSchema = z
     missingEvidence: z.array(z.string()),
     uncertainties: z.array(z.string()),
     evidenceStatus: z.enum(['known', 'unknown', 'not_applicable']).optional(),
+    /** 客观条件已确认比例；未知条件仍进入分母，不等于明确失败。 */
+    evidenceCoverage: z.number().min(0).max(100).optional(),
     recruitmentCategory: z.enum(['social', 'campus', 'internship', 'unknown']).optional(),
     /** 仅 model 维度：模型阶段原始 0-100 分，便于展示与审计加权口径。 */
     modelScore: z.number().min(0).max(100).optional(),

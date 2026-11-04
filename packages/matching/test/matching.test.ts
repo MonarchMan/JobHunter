@@ -8,11 +8,11 @@ import {
   evaluateMatchingGoldenCase,
   filterCurrentRecommendations,
   jobAdviceAgentDefinition,
-  jobAdvicePromptV2,
-  buildJobAdviceReferenceCatalog,
-  resolveJobAdviceAgentOutput,
+  jobAdvicePromptV4,
+  parseStoredJobAdvice,
   jobUnderstandingAgentDefinition,
-  jobUnderstandingPromptV2,
+  jobUnderstandingPromptV3,
+  buildProfileSnapshot,
   matchRulesetV1,
   parseJobUnderstanding,
   parseJobUnderstandingAgentOutput,
@@ -87,20 +87,15 @@ function input(overrides: Partial<DeterministicMatchInput> = {}): DeterministicM
 describe('eligibility and deterministic scoring', () => {
   it('keeps JobUnderstanding prompt versions aligned and rejects fabricated evidence', () => {
     expect(() => {
-      assertPromptMatchesDefinition(jobUnderstandingPromptV2, jobUnderstandingAgentDefinition);
+      assertPromptMatchesDefinition(jobUnderstandingPromptV3, jobUnderstandingAgentDefinition);
     }).not.toThrow();
     const agentInput = {
       title: job.title,
       description: job.description,
       experienceText: job.experienceText,
       educationText: job.educationText,
-      profile: {
-        targetRoles: profile.targetRoles,
-        domains: profile.domains,
-        yearsOfExperience: profile.yearsOfExperience,
-        skills: profile.skills.map((skill) => skill.name),
-        professionalSkills: profile.professionalSkills,
-      },
+      recruitmentCategory: 'social' as const,
+      profile: buildProfileSnapshot(profile),
     };
     expect(() =>
       parseJobUnderstandingAgentOutput(
@@ -234,88 +229,51 @@ describe('current recommendation filtering and stable sorting', () => {
 });
 
 describe('job advice Agent', () => {
-  it('resolves system IDs and rejects fabricated IDs and literal references', () => {
-    const agentInput = { profile, job, match: calculateDeterministicMatch(input()) };
-    const catalog = buildJobAdviceReferenceCatalog(agentInput);
-    const first = catalog[0];
-    if (!first) throw new Error('Expected evidence.');
-    const output = {
-      highlights: [{ text: '匹配', references: [first.id] }],
-      gaps: [],
-      uncertainties: [],
-      resumeEmphasis: [],
-      preparation: [],
-    };
-    expect(resolveJobAdviceAgentOutput(output, agentInput).highlights[0]?.references).toEqual([
-      { kind: first.kind, value: first.value },
-    ]);
-    expect(() =>
-      resolveJobAdviceAgentOutput(
-        { ...output, highlights: [{ text: '未知', references: ['ref-99999'] }] },
-        agentInput,
-      ),
-    ).toThrow(/Unknown reference ID/);
-    expect(() =>
-      resolveJobAdviceAgentOutput(
-        {
-          ...output,
-          highlights: [{ text: '原文', references: [{ kind: first.kind, value: first.value }] }],
-        },
-        agentInput,
-      ),
-    ).toThrow();
-    expect(buildJobAdviceReferenceCatalog(agentInput)).toEqual(catalog);
-  });
-  it('keeps prompt metadata aligned and accepts references from deterministic evidence', () => {
-    expect(() => {
-      assertPromptMatchesDefinition(jobAdvicePromptV2, jobAdviceAgentDefinition);
-    }).not.toThrow();
-    const match = calculateDeterministicMatch(input());
-    const evidence = match.components.flatMap((component) => component.matchedEvidence)[0];
-    if (!evidence) throw new Error('Expected deterministic evidence.');
+  it('merges historical confirmation items into preparation without losing or duplicating text', () => {
     expect(
-      parseJobAdviceAgentOutput(
-        {
-          highlights: [
-            {
-              text: '技能与岗位匹配。',
-              references: [{ kind: 'evidence', value: evidence.summary }],
-            },
-          ],
-          gaps: [],
-          uncertainties: [],
-          resumeEmphasis: ['突出已有项目。'],
-          preparation: ['准备架构案例。'],
-        },
-        { profile, job, match },
-      ),
-    ).toMatchObject({ highlights: [{ text: '技能与岗位匹配。' }] });
-  });
-
-  it('rejects advice references that are absent from deterministic evidence', () => {
-    const match = calculateDeterministicMatch(input());
+      parseStoredJobAdvice({
+        highlights: [],
+        gaps: [],
+        preparation: ['确认到岗日期'],
+        uncertainties: [{ text: '确认到岗日期' }, { text: '补充项目成果' }],
+      }),
+    ).toEqual({ highlights: [], gaps: [], preparation: ['确认到岗日期', '补充项目成果'] });
     expect(() =>
-      parseJobAdviceAgentOutput(
-        {
-          highlights: [
-            {
-              text: '虚构事实。',
-              references: [{ kind: 'evidence', value: '不存在的经历' }],
-            },
-          ],
-          gaps: [],
-          uncertainties: [],
-          resumeEmphasis: [],
-          preparation: [],
-        },
-        { profile, job, match },
-      ),
-    ).toThrow(/absent from the match evidence/);
+      parseJobAdviceAgentOutput({
+        highlights: [],
+        gaps: [],
+        preparation: Array.from({ length: 6 }, () => '准备案例'),
+      }),
+    ).toThrow();
+  });
+  const output = {
+    highlights: [{ text: '技能与岗位匹配。' }],
+    gaps: [],
+    preparation: ['准备架构案例。'],
+  };
+  it('uses the versioned reference-free schema', () => {
+    expect(() => {
+      assertPromptMatchesDefinition(jobAdvicePromptV4, jobAdviceAgentDefinition);
+    }).not.toThrow();
+    expect(parseJobAdviceAgentOutput(output)).toEqual(output);
+  });
+  it('rejects stored references, resume emphasis and inline reference IDs', () => {
+    expect(() => parseJobAdviceAgentOutput({ ...output, uncertainties: [] })).toThrow();
+    expect(() => parseJobAdviceAgentOutput({ ...output, resumeEmphasis: [] })).toThrow();
+    expect(() =>
+      parseJobAdviceAgentOutput({
+        ...output,
+        highlights: [{ text: '匹配', references: ['ref-1'] }],
+      }),
+    ).toThrow();
+    expect(() =>
+      parseJobAdviceAgentOutput({ ...output, gaps: [{ text: '待补充（ref-1）' }] }),
+    ).toThrow();
   });
 });
 
 /** 按匹配评测契约即时构造最小样本，避免测试依赖私有或过期评测文件。 */
-function matchingGoldenCase(adviceReference: string): unknown {
+function matchingGoldenCase(factConsistent: boolean): unknown {
   return {
     id: 'unit-case',
     profile,
@@ -331,16 +289,14 @@ function matchingGoldenCase(adviceReference: string): unknown {
     adviceSamples: [
       {
         externalJobId: job.externalJobId,
+        factConsistent,
         output: {
           highlights: [
             {
               text: '证据支持的建议。',
-              references: [{ kind: 'evidence', value: adviceReference }],
             },
           ],
           gaps: [],
-          uncertainties: [],
-          resumeEmphasis: [],
           preparation: [],
         },
       },
@@ -353,7 +309,7 @@ describe('matching golden-case evaluation', () => {
     const match = calculateDeterministicMatch(input());
     const evidence = match.components.flatMap((component) => component.matchedEvidence)[0];
     if (!evidence) throw new Error('Expected deterministic evidence.');
-    expect(evaluateMatchingGoldenCase(matchingGoldenCase(evidence.summary), { topK: 1 })).toEqual({
+    expect(evaluateMatchingGoldenCase(matchingGoldenCase(true), { topK: 1 })).toEqual({
       topK: 1,
       topKRelevant: 1,
       topKRelevantRate: 1,
@@ -364,9 +320,7 @@ describe('matching golden-case evaluation', () => {
     });
   });
 
-  it('counts fabricated advice references as factual failures', () => {
-    expect(
-      evaluateMatchingGoldenCase(matchingGoldenCase('不存在的经历')).adviceFactConsistencyRate,
-    ).toBe(0);
+  it('uses independent factual annotations instead of assuming valid JSON is factual', () => {
+    expect(evaluateMatchingGoldenCase(matchingGoldenCase(false)).adviceFactConsistencyRate).toBe(0);
   });
 });

@@ -79,6 +79,7 @@ export function createResumePolishTaskHandler(
       } as const;
       try {
         const result = await input.runner.run({
+          ...(context.taskId ? { retryKey: context.taskId } : {}),
           definition: resumePolishAgentDefinition,
           value: agentInput,
           signal: context.signal,

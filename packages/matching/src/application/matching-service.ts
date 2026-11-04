@@ -17,6 +17,7 @@ import {
   matchRulesetV3,
   matchRulesetV31,
   matchRulesetV32,
+  matchRulesetV4,
 } from '../rulesets.js';
 import type { MatchingRepository, MatchResultRecord } from '../ports/matching.js';
 import type { CandidateProfileReader } from '@jobhunter/user/contracts';
@@ -119,6 +120,21 @@ export class DeterministicMatchingService {
       version: matchRulesetV32.version,
       definition: matchRulesetV32,
       definitionHash: contentHash(matchRulesetV32),
+      active: input.activate ?? true,
+      createdAt: this.#clock.now(),
+    });
+  }
+
+  /** 登记客观条件规则的新身份，不覆盖历史规则或自动重算结果。 */
+  public ensureRulesetV4(input: {
+    readonly id: MatchRulesetId;
+    readonly activate?: boolean;
+  }): ReturnType<MatchingRepository['upsertRuleset']> {
+    return this.#matching.upsertRuleset({
+      id: input.id,
+      version: matchRulesetV4.version,
+      definition: matchRulesetV4,
+      definitionHash: contentHash(matchRulesetV4),
       active: input.activate ?? true,
       createdAt: this.#clock.now(),
     });

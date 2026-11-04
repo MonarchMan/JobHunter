@@ -65,6 +65,47 @@ const usage: AgentRunUsage = {
 };
 
 describe('SQLite agent run store', () => {
+  it('restarts the original row and appends tool events after previous attempts', async () => {
+    const { store, handle } = await setup();
+    store.createRunning(running('retry'));
+    store.saveToolCall({
+      id: 'tool-1',
+      agentRunId: 'retry',
+      sequenceNo: 0,
+      toolKey: 'test',
+      inputSummary: {},
+      outputSummary: null,
+      status: 'failed',
+      durationMs: 1,
+      errorSummary: 'failed',
+    });
+    store.completeFailed({
+      id: 'retry',
+      status: 'failed',
+      category: 'temporary',
+      summary: 'temporary',
+      usage,
+      finishedAt: 2,
+    });
+    expect(store.restartFailed('cache-key', 3)?.id).toBe('retry');
+    expect(store.restartFailed('cache-key', 4)).toBeNull();
+    expect(store.nextToolSequence('retry')).toBe(1);
+    expect(store.get('retry')).toMatchObject({
+      status: 'running',
+      startedAt: 3,
+      finishedAt: null,
+      errorSummary: null,
+    });
+    store.completeSucceeded({
+      id: 'retry',
+      cacheKey: 'cache-key',
+      output: { ok: true },
+      outputHash: 'c'.repeat(64),
+      usage,
+      finishedAt: 5,
+    });
+    expect(handle.client.prepare('SELECT COUNT(*) FROM agent_runs').pluck().get()).toBe(1);
+  });
   it('persists nullable per-request cache details and leaves legacy rows without invented data', async () => {
     const { store, handle } = await setup();
     store.createRunning(running('billing'));

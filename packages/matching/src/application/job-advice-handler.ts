@@ -1,10 +1,6 @@
 import { AgentRuntimeError, type AgentRunner } from '@jobhunter/common/agent';
 import { contentHash, parseId, type Clock, type IdGenerator } from '@jobhunter/common/domain';
-import {
-  jobAdviceAgentDefinition,
-  resolveJobAdviceAgentOutput,
-  buildJobAdviceReferenceCatalog,
-} from '../job-advice-agent.js';
+import { jobAdviceAgentDefinition, parseJobAdviceAgentOutput } from '../job-advice-agent.js';
 import { z } from 'zod';
 import { mapAgentRuntimeError } from '@jobhunter/common/tasks';
 import type { MatchingRepository } from '../ports/matching.js';
@@ -93,11 +89,12 @@ export function createJobAdviceTaskHandler(
       };
       try {
         const result = await input.runner.run({
+          ...(context.taskId ? { retryKey: context.taskId } : {}),
           definition: jobAdviceAgentDefinition,
-          value: { ...agentInput, referenceCatalog: buildJobAdviceReferenceCatalog(agentInput) },
+          value: agentInput,
           signal: context.signal,
         });
-        const output = resolveJobAdviceAgentOutput(result.output, agentInput);
+        const output = parseJobAdviceAgentOutput(result.output);
         const stored = input.matching.saveAdvice({
           id: parseId(input.ids.generate(), 'MatchAdvice'),
           matchResultId: match.id,
@@ -113,7 +110,7 @@ export function createJobAdviceTaskHandler(
           if (error.category === 'invalid_output')
             throw new TaskExecutionError(
               'validation_failed',
-              '建议生成失败：输出结构或证据引用校验未通过（已纠正一次）。',
+              '建议生成失败：输出结构校验未通过（已纠正一次）。',
               { cause: error },
             );
           throw mapAgentRuntimeError(error, 'Job advice Agent');

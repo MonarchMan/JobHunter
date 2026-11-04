@@ -151,6 +151,25 @@ function engine(
 }
 
 describe('persistent task queue', () => {
+  it('persists checkpoints through lease recovery and rejects stale writers', async () => {
+    const input = await setup();
+    const { tasks } = services(input, registryWith({ execute: () => undefined }));
+    const task = enqueueSync(tasks, 'checkpoint').task;
+    const claimed = input.queue.claim({
+      taskType: 'source.sync',
+      workerId: 'first',
+      now: input.clock.now(),
+      leaseDurationMsFor: () => 1000,
+    });
+    expect(claimed).not.toBeNull();
+    const progress = { items: [{ id: 'job-1', status: 'succeeded' }] };
+    expect(input.queue.checkpoint(task.id, 'first', 1, input.clock.now(), progress)).toBe(true);
+    expect(input.queue.checkpoint(task.id, 'wrong', 1, input.clock.now(), {})).toBe(false);
+    input.clock.advance(1001);
+    input.queue.recoverExpired(input.clock.now());
+    expect(input.queue.get(task.id)?.result).toEqual(progress);
+    expect(input.queue.checkpoint(task.id, 'first', 1, input.clock.now(), {})).toBe(false);
+  });
   it('orders recent terminal activity by finish time without changing default creation order', async () => {
     const input = await setup();
     const { tasks } = services(input, registryWith({ execute: () => undefined }));

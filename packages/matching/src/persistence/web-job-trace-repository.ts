@@ -3,7 +3,7 @@ import type { CandidateProfileReader } from '@jobhunter/user/contracts';
 import type { TaskRelationStatusReader } from '@jobhunter/common/tasks';
 import type { WebJobDetail } from '@jobhunter/matching/contracts/web';
 import type { WebJobTrace, WebJobTraceRepository } from '../application/web-job-detail-service.js';
-import { jobAdviceSchema } from '../job-advice-agent.js';
+import { parseStoredJobAdvice } from '../job-advice-agent.js';
 import { ruleOutcomeSchema, scoreComponentSchema } from '../model.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
@@ -27,7 +27,7 @@ function advice(row: MatchRow): WebJobDetail['matches'][number]['advice'] {
   if (row.advice_json) {
     return {
       status: 'available',
-      content: jobAdviceSchema.parse(JSON.parse(row.advice_json) as unknown),
+      content: parseStoredJobAdvice(JSON.parse(row.advice_json) as unknown),
     };
   }
   if (row.advice_task_status === 'pending' || row.advice_task_status === 'running')

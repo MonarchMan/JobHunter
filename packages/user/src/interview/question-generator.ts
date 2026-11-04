@@ -87,6 +87,7 @@ export class ProjectQuestionGenerator {
     try {
       input.onStage?.('generating_question');
       const result = await this.#runner.run({
+        retryKey: `interview-question:${source.turn.id}`,
         definition:
           source.session.profileKey === 'docs-grounded'
             ? docsGroundedProjectQuestionAgentDefinition

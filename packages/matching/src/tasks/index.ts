@@ -11,6 +11,7 @@ import {
   createJobUnderstandingTaskHandler,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
+  createBatchJobScoreTaskHandler,
   DeterministicMatchingService,
   MatchingBatchService,
 } from '@jobhunter/matching/application';
@@ -48,7 +49,7 @@ export function createMatchingTasks(
     clock,
     ids,
   });
-  deterministicMatching.ensureRulesetV32({ id: defaultMatchRulesetId });
+  deterministicMatching.ensureRulesetV4({ id: defaultMatchRulesetId });
   const batches = new MatchingBatchService({
     calculator: deterministicMatching,
   });
@@ -67,13 +68,13 @@ export function createMatchingTasks(
   );
   registry.register(understandingHandler);
   registry.register(adviceHandler);
-  registry.register(
-    createManualJobScoreTaskHandler({
-      understanding: understandingHandler,
-      matching: matchingHandler,
-      advice: adviceHandler,
-      adviceEnabled: input.adviceEnabled,
-    }),
-  );
+  const singleScoring = createManualJobScoreTaskHandler({
+    understanding: understandingHandler,
+    matching: matchingHandler,
+    advice: adviceHandler,
+    adviceEnabled: input.adviceEnabled,
+  });
+  registry.register(singleScoring);
+  registry.register(createBatchJobScoreTaskHandler(singleScoring));
   return { matchingRepository, close: () => Promise.resolve() };
 }

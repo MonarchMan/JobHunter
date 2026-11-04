@@ -12,7 +12,7 @@ import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteRecruitmentMailRepository } from '@jobhunter/recruitment/persistence/sqlite-recruitment-mail-repository';
 import { seedPlatformJobs } from '../fixtures/platform-jobs.js';
 import { browserFixtureAddress } from '../../src/server/browser-test-isolation.js';
-import { calculateDeterministicMatch, matchRulesetV2 } from '@jobhunter/matching';
+import { calculateDeterministicMatch, matchRulesetV4 } from '@jobhunter/matching';
 import { contentHash, utcInstant } from '@jobhunter/common/domain';
 import { parseNormalizedJob, type NormalizedJob } from '@jobhunter/recruitment/domain';
 import type { CandidateProfileData } from '@jobhunter/user/domain';
@@ -696,16 +696,16 @@ async function seedFixture(dataRoot: string): Promise<void> {
         company: { sizeCategory: 'large', industry: null },
         understanding: null,
       },
-      matchRulesetV2,
+      matchRulesetV4,
     );
     database.client
       .prepare(
-        `INSERT INTO match_rulesets (id, version, definition_json, definition_hash, active, created_at) VALUES (?, 'v2-fixture', ?, ?, 0, 1)`,
+        `INSERT INTO match_rulesets (id, version, definition_json, definition_hash, active, created_at) VALUES (?, 'v4-fixture', ?, ?, 0, 1)`,
       )
       .run(
         '018f0000-0000-7000-8000-000000000631',
-        JSON.stringify({ ...matchRulesetV2, version: 'v2-fixture' }),
-        contentHash({ ...matchRulesetV2, version: 'v2-fixture' }),
+        JSON.stringify({ ...matchRulesetV4, version: 'v4-fixture' }),
+        contentHash({ ...matchRulesetV4, version: 'v4-fixture' }),
       );
     database.client
       .prepare(

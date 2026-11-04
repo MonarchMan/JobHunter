@@ -1040,3 +1040,5 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 15. 加密凭据文件、邮箱配置、运行状态与数据库备份恢复测试证明秘密不进入 SQLite 或普通备份；恢复后凭据引用不可用的邮箱为 `auth_required`，既有申请时间线仍可查询。
 
 本文是目标设计，当前代码与迁移在完成实现和全部验证前不得标记为 Accepted。
+
+JobAdvice v3 的 MatchAdvice 与对应 AgentRun 输出仅包含亮点、缺口、待确认项和准备建议，不再保存引用编号、引用明细或简历重点。0047 数据迁移清理旧结构并重算内容哈希，保留原记录和运行身份；新 Agent 版本隔离旧格式缓存。

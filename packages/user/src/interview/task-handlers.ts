@@ -179,6 +179,7 @@ export function createProjectAnswerDigestTaskHandler(
       };
       try {
         const result = await input.runner.run({
+          ...(context.taskId ? { retryKey: context.taskId } : {}),
           definition: projectAnswerDigestAgentDefinition,
           value: agentInput,
           signal: context.signal,

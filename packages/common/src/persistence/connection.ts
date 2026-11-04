@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import { contentHash } from '@jobhunter/common/domain';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { PersistenceError } from '@jobhunter/common/persistence/errors';
@@ -104,6 +105,15 @@ export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabase
     const changesBefore = changes.get()?.total;
     const schemaBefore = client.pragma('schema_version', { simple: true });
     if (resolved.runMigrations) {
+      // 数据迁移可重建 JSON 内容哈希及清理文本，不把业务领域依赖引入连接层。
+      client.function('migration_json_hash', (value: string) =>
+        contentHash(JSON.parse(value) as unknown),
+      );
+      client.function(
+        'migration_regexp_replace',
+        (value: string, pattern: string, replacement: string) =>
+          value.replace(new RegExp(pattern, 'gi'), replacement).trim(),
+      );
       client.pragma('foreign_keys = OFF');
       migrate(db, { migrationsFolder: resolved.migrationsFolder });
     }

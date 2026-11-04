@@ -3,12 +3,20 @@ import { parseId, type MatchRulesetId } from '@jobhunter/common/domain';
 
 /** 系统默认匹配规则集身份，初始化与 Worker 必须使用同一个稳定值。 */
 export const defaultMatchRulesetId: MatchRulesetId = parseId(
-  '018f0000-0000-7000-8000-000000000305',
+  '018f0000-0000-7000-8000-000000000306',
   'MatchRuleset',
 );
 import type { ScoreDimension } from './model.js';
 
-const dimensions = ['skills', 'experience', 'role', 'industry', 'location', 'projects'] as const;
+const dimensions = [
+  'skills',
+  'experience',
+  'role',
+  'industry',
+  'location',
+  'projects',
+  'qualification',
+] as const;
 
 /** 旧权重不补写 projects 字段，保持历史定义哈希不变。 */
 const weightsSchema = z
@@ -19,6 +27,7 @@ const weightsSchema = z
     industry: z.number().int().nonnegative(),
     location: z.number().int().nonnegative(),
     projects: z.number().int().nonnegative().optional(),
+    qualification: z.number().int().nonnegative().optional(),
   })
   .strict()
   .refine(
@@ -31,7 +40,7 @@ export const matchRulesetSchema = z
   .object({
     version: z.string().trim().min(1),
     weights: weightsSchema,
-    engine: z.enum(['evidence-v3', 'evidence-v3.1', 'evidence-v3.2']).optional(),
+    engine: z.enum(['evidence-v3', 'evidence-v3.1', 'evidence-v3.2', 'objective-v4']).optional(),
     recruitmentWeights: z
       .object({ social: weightsSchema, campus: weightsSchema, internship: weightsSchema })
       .strict()
@@ -82,6 +91,21 @@ export const matchRulesetV32: MatchRuleset = parseMatchRuleset({
   ...matchRulesetV31,
   version: 'v3.2',
   engine: 'evidence-v3.2',
+});
+
+/** v4 仅对客观条件评分，语义能力交给模型；旧定义保持不变。 */
+export const matchRulesetV4: MatchRuleset = parseMatchRuleset({
+  version: 'v4',
+  engine: 'objective-v4',
+  weights: {
+    skills: 0,
+    experience: 0,
+    role: 0,
+    industry: 0,
+    location: 0,
+    projects: 0,
+    qualification: 100,
+  },
 });
 
 /** 校验并解析匹配规则集。 */
