@@ -2,6 +2,10 @@
 
 > 状态：Implemented
 
+页面筛选调整：移除“全部 / JobHunter”切换及页面 application 参数传递，保留右侧供应商、模型、时间控件；不改变请求的应用快照字段。
+
+账本改造采用 [ADR-0059](../../docs/adr/0059-model-request-ledger.md)：model_requests 保存独立请求、用量和价格快照，通过可空 agent_run_id 单向关联运行；请求 ID 在发送前生成，传输观测回调通过 AgentRunStore 端口即时落库。模型适配器只依赖回调契约，不依赖 SQLite。运行的 billingCalls/requestIds 是查询结果，不是重复存储。运行汇总列保留供列表与无明细历史兼容。清理运行使用 ON DELETE SET NULL 保留账本。0048 迁移搬运已知快照后删除旧 JSON 列；下述原 JSON 方案仅作为历史说明。
+
 新增模型传输观测器：每次 dispatch 独立记录状态和时刻，将 OpenAI/Anthropic SSE 聚合成原客户端可校验的 JSON。仅有效文本/工具参数首次出现时记录首字，使用输出 Tokens / 首字到结束秒数计算速度；丢失终止事件、流错误或超限显式失败。ModelUsage 可携带多次 HTTP 账单，ModelClientError 携带失败调用用量，由 Runner 持久化一次。协议仍由 common models 所有，依赖及数据所有权不变，不新增 ADR。
 
 页面复用 SelectField，顶部应用、供应商、模型和时间筛选更新 URL，供应商变化清空模型；设置管理币种、趋势样式与日志列，主区域依据本机 CC Switch 完整界面对齐。更多指标为第二排四卡；汇总显示成功率、加权速度与首字中位数。显示偏好写入 URL 并随分页/切换保留。价格表展示筛选窗口内的实际快照（包括定价版本），不修改既有价格。供应商以请求主机聚合，未知历史数据单列“—”。旧 JSON 可选字段读取兼容，不执行数据迁移或回填。

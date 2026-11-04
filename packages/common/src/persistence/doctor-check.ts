@@ -18,6 +18,7 @@ const requiredTables = [
   'profile_versions',
   'tasks',
   'agent_runs',
+  'model_requests',
   'match_results',
   'events',
   'files',

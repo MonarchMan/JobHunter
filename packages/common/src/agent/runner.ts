@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { canonicalJson, hashCanonical, sha256 } from './canonical.js';
 import type { AgentDefinition } from './definition.js';
 import {
@@ -7,7 +8,13 @@ import {
   classifyAgentError,
   sanitizeAgentErrorSummary,
 } from './errors.js';
-import type { ModelClient, ModelResponse, ModelToolResult, ModelUsage } from './model-client.js';
+import type {
+  ModelClient,
+  ModelRequest,
+  ModelResponse,
+  ModelToolResult,
+  ModelUsage,
+} from './model-client.js';
 import type { AgentRunRecord, AgentRunStore, AgentRunUsage } from './store.js';
 import { ToolRegistry } from './tools.js';
 
@@ -241,7 +248,7 @@ export class AgentRunner {
         throw new AgentRuntimeError('budget_exceeded', 'Agent exceeded maximum steps.');
       }
       // 1、a 每轮模型调用都累计用量并立即执行预算检查。
-      response = await this.#model.complete(
+      response = await this.#complete(
         {
           systemPrompt: definition.systemPrompt,
           input: parsedInput,
@@ -254,6 +261,7 @@ export class AgentRunner {
           toolResults,
         },
         signal,
+        runId,
       );
       addUsage(totals, response.usage);
       this.#checkUsage(definition, totals);
@@ -320,7 +328,7 @@ export class AgentRunner {
     if (steps > definition.limits.maxSteps) {
       throw new AgentRuntimeError('budget_exceeded', 'No step budget remains for output repair.');
     }
-    const repaired = await this.#model.complete(
+    const repaired = await this.#complete(
       {
         systemPrompt: definition.systemPrompt,
         input: parsedInput,
@@ -337,6 +345,7 @@ export class AgentRunner {
         },
       },
       signal,
+      runId,
     );
     addUsage(totals, repaired.usage);
     this.#checkUsage(definition, totals);
@@ -352,6 +361,35 @@ export class AgentRunner {
         'invalid_output',
         `Model output remains invalid: ${outputIssue(error)}`,
       );
+    }
+  }
+
+  /** 传输逐次通知即时落库；未实现观测的客户端仍在每轮返回/失败时保存明细。 */
+  async #complete(
+    request: ModelRequest,
+    signal: AbortSignal,
+    runId: string,
+  ): Promise<ModelResponse> {
+    const recordUsage = (usage: ModelUsage): ModelUsage => {
+      const calls = (usage.billingCalls ?? (usage.billing ? [usage.billing] : [])).map((call) => ({
+        ...call,
+        requestId: call.requestId ?? randomUUID(),
+      }));
+      for (const billing of calls)
+        this.#store.saveModelRequest(runId, { id: billing.requestId, state: 'completed', billing });
+      const last = calls.at(-1);
+      return { ...usage, billingCalls: calls, ...(last ? { billing: last } : {}) };
+    };
+    try {
+      const response = await this.#model.complete(request, signal, {
+        save: (record) => {
+          this.#store.saveModelRequest(runId, record);
+        },
+      });
+      return { ...response, usage: recordUsage(response.usage) };
+    } catch (error) {
+      if (error instanceof ModelClientError && error.usage) error.usage = recordUsage(error.usage);
+      throw error;
     }
   }
 

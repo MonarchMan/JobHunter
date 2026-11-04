@@ -287,6 +287,7 @@ export const webAgentRunSummarySchema = z
     costCurrency: z.string().nullable(),
     pricingVersion: z.string().nullable(),
     billingCalls: z.array(modelBillingSchema).nullable().optional(),
+    requestIds: z.array(z.string()).optional(),
     startedAt: z.iso.datetime(),
     finishedAt: z.iso.datetime().nullable(),
   })

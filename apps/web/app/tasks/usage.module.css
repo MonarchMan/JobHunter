@@ -31,11 +31,8 @@
 .filters {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 1rem;
-}
-.filters .segment {
-  margin-left: 0;
 }
 .filterFields {
   display: flex;

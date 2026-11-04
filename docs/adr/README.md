@@ -41,3 +41,4 @@ ADR 一经 Accepted 通常不直接改写历史结论；后续决策变更通过
 - [ADR-0057：运行参数统一使用工作区 .env](./0057-workspace-dotenv-runtime-config.md)
 
 - [ADR-0058：以最低版本声明 Node 支持范围](./0058-node-minimum-version.md)
+- [ADR-0059：模型请求账本独立于 Agent 运行](./0059-model-request-ledger.md)

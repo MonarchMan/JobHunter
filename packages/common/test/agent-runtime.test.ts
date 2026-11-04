@@ -23,6 +23,9 @@ import {
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 class MemoryStore implements AgentRunStore {
+  public saveModelRequest(): void {
+    /* 请求落库语义由 SQLite 集成测试覆盖。 */
+  }
   public restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null {
     const previous = [...this.runs.values()].find(
       (run) => run.cacheKey === cacheKey && (run.status === 'failed' || run.status === 'cancelled'),
@@ -285,7 +288,7 @@ describe('agent runtime', () => {
       signal: new AbortController().signal,
     });
     expect(result.run.estimatedCostMicros).toBe(5);
-    expect(result.run.billingCalls).toEqual([base, second]);
+    expect(result.run.billingCalls).toMatchObject([base, second]);
     expect(result.run.pricingVersion).toBe('peak,off-peak');
   });
   it('requires three-part semantic agent versions', () => {

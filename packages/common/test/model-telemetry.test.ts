@@ -59,6 +59,24 @@ function openAiFrames(): unknown[] {
 }
 
 describe('model request telemetry (USG-006)', () => {
+  it('does not dispatch or retry when the request-start ledger write fails (USG-009)', async () => {
+    let sent = 0;
+    const client = new OpenAiCompatibleModelClient({
+      ...config,
+      fetchImplementation: () => {
+        sent++;
+        return Promise.resolve(stream(openAiFrames()));
+      },
+    });
+    await expect(
+      client.complete(request, new AbortController().signal, {
+        save() {
+          throw new Error('synthetic database failure');
+        },
+      }),
+    ).rejects.toMatchObject({ category: 'configuration', retryable: false });
+    expect(sent).toBe(0);
+  });
   it('measures effective first content, generation speed and host without leaking credentials', async () => {
     const clock = { value: 1000 };
     const client = new OpenAiCompatibleModelClient({

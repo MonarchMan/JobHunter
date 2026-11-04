@@ -16,6 +16,9 @@ import { prepareRecruitmentMail } from '../src/mail/application/mail-content.js'
 
 /** 保存测试 Agent 运行记录，模拟生产数据库端口。 */
 class MemoryAgentRunStore implements AgentRunStore {
+  public saveModelRequest(): void {
+    /* 邮件单元测试只关注运行和隐私契约。 */
+  }
   public restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null {
     const previous = [...this.runs.values()].find(
       (run) => run.cacheKey === cacheKey && (run.status === 'failed' || run.status === 'cancelled'),

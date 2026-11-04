@@ -87,7 +87,6 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
     `/tasks?${new URLSearchParams({
       tab: 'usage',
       range: filters.range,
-      application: filters.application,
       model: filters.model,
       provider: filters.provider,
       currency: filters.currency,
@@ -104,7 +103,6 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
         [key]: value,
         usagePage: '1',
         ...(key === 'provider' ? { model: '' } : {}),
-        ...(key === 'application' ? { provider: '', model: '' } : {}),
       }),
       { scroll: false },
     );
@@ -170,20 +168,6 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
   return (
     <div className={styles.dashboard}>
       <div className={styles.filters}>
-        <div className={styles.segment} aria-label="按应用筛选">
-          {['', ...report.applications].map((application) => (
-            <button
-              key={application}
-              type="button"
-              aria-pressed={filters.application === application}
-              onClick={() => {
-                select('application', application);
-              }}
-            >
-              {application || '全部'}
-            </button>
-          ))}
-        </div>
         <div className={styles.filterFields}>
           <SelectField
             name="provider"

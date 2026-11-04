@@ -98,7 +98,6 @@ export default async function TasksPage({
   if (firstSearchParameter(parameters, 'tab') === 'usage') {
     const report = container.services.usage.query({
       range: firstSearchParameter(parameters, 'range'),
-      application: firstSearchParameter(parameters, 'application'),
       model: firstSearchParameter(parameters, 'model'),
       status: firstSearchParameter(parameters, 'usageStatus'),
       provider: firstSearchParameter(parameters, 'provider'),

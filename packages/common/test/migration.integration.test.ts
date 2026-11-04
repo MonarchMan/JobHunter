@@ -4,6 +4,8 @@ import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import Database from 'better-sqlite3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as health from '@jobhunter/common/persistence/health';
+import { SqliteModelRequestRepository } from '../src/persistence/model-request-repository.js';
+import { modelBillingSchema } from '../src/contracts/model-usage.js';
 import {
   openSqliteDatabase,
   type SqliteDatabaseHandle,
@@ -74,6 +76,79 @@ async function migrationsBefore(
 }
 
 describe('SQLite migrations and capabilities', () => {
+  it('moves request snapshots without repricing and removes the duplicate array (USG-011)', async () => {
+    const root = await createTemporaryDataRoot('ledger-upgrade-');
+    dataRoots.push(root);
+    const folder = await migrationsBefore(root.path, 'before-ledger', 48);
+    const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+    const billing = modelBillingSchema.parse({
+      model: 'synthetic',
+      requestedAt: 10,
+      inputTokens: 100,
+      outputTokens: 20,
+      uncachedInputTokens: 10,
+      cacheReadTokens: 80,
+      cacheWriteTokens: 10,
+      inputCostMicros: 1,
+      outputCostMicros: 2,
+      cacheReadCostMicros: 3,
+      cacheWriteCostMicros: 4,
+      totalCostMicros: 10,
+      currency: 'CNY',
+      pricingVersion: 'historic',
+      period: 'off-peak',
+      precision: 'reported',
+      rates: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
+      outputTokensPerSecond: 12.5,
+      durationMs: 1700,
+      firstTokenMs: 100,
+    });
+    legacy.client
+      .prepare(
+        `INSERT INTO agent_runs (id,agent_key,agent_version,prompt_version,model_config_hash,input_hash,cache_key,status,started_at,model_usage_json,input_tokens,estimated_cost_micros) VALUES ('old','test','1','1','m','i','c','failed',1,?,100,10)`,
+      )
+      .run(JSON.stringify([billing, { ...billing, totalCostMicros: null, rates: null }]));
+    const before = legacy.client
+      .prepare('SELECT input_tokens, estimated_cost_micros FROM agent_runs')
+      .get();
+    legacy.close();
+    const upgraded = openSqliteDatabase({ dataRoot: root.path });
+    expect(
+      upgraded.client.prepare('SELECT input_tokens, estimated_cost_micros FROM agent_runs').get(),
+    ).toEqual(before);
+    expect(
+      upgraded.client
+        .prepare("SELECT name FROM pragma_table_info('agent_runs') WHERE name = 'model_usage_json'")
+        .get(),
+    ).toBeUndefined();
+    const calls = new SqliteModelRequestRepository(upgraded.client).listForRun('old');
+    expect(calls).toMatchObject([billing, { ...billing, totalCostMicros: null, rates: null }]);
+    expect(calls.map((call) => call.requestId)).toEqual(['legacy:old:0', 'legacy:old:1']);
+    expect(calls[0]?.statusCode).toBeNull();
+    upgraded.close();
+    const reopened = openSqliteDatabase({ dataRoot: root.path });
+    handles.push(reopened);
+    expect(reopened.client.prepare('SELECT count(*) FROM model_requests').pluck().get()).toBe(2);
+  });
+  it('rolls back the ledger migration when an old snapshot is invalid (USG-011)', async () => {
+    const root = await createTemporaryDataRoot('ledger-rollback-');
+    dataRoots.push(root);
+    const folder = await migrationsBefore(root.path, 'before-ledger', 48);
+    const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+    legacy.client.exec(
+      `INSERT INTO agent_runs (id,agent_key,agent_version,prompt_version,model_config_hash,input_hash,cache_key,status,started_at,model_usage_json) VALUES ('bad','test','1','1','m','i','c','failed',1,'[{}]')`,
+    );
+    legacy.close();
+    expect(() => openSqliteDatabase({ dataRoot: root.path })).toThrow();
+    const unchanged = openSqliteDatabase({ dataRoot: root.path, runMigrations: false });
+    handles.push(unchanged);
+    expect(unchanged.client.prepare('SELECT model_usage_json FROM agent_runs').pluck().get()).toBe(
+      '[{}]',
+    );
+    expect(
+      unchanged.client.prepare("SELECT name FROM sqlite_master WHERE name='model_requests'").get(),
+    ).toBeUndefined();
+  });
   it('adds nullable billing details without changing historical run amounts or output', async () => {
     const root = await createTemporaryDataRoot('billing-upgrade-');
     dataRoots.push(root);
@@ -86,10 +161,9 @@ describe('SQLite migrations and capabilities', () => {
     legacy.close();
     const upgraded = openSqliteDatabase({ dataRoot: root.path });
     handles.push(upgraded);
-    expect(upgraded.client.prepare('SELECT * FROM agent_runs WHERE id=?').get('old')).toEqual({
-      ...(before as object),
-      model_usage_json: null,
-    });
+    expect(upgraded.client.prepare('SELECT * FROM agent_runs WHERE id=?').get('old')).toEqual(
+      before,
+    );
   });
   it('resets legacy application events and rejects the removed activity type', async () => {
     const root = await createTemporaryDataRoot('jobhunter-calendar-activity-upgrade-');
@@ -283,7 +357,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      48,
+      49,
     );
   });
 

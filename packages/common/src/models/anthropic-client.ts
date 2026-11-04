@@ -5,6 +5,8 @@ import {
   ModelClientError,
   type ModelClient,
   type ModelRequest,
+  type ModelRequestObserver,
+  ModelRequestPersistenceError,
   type ModelResponse,
   type ModelUsage,
 } from '@jobhunter/common/agent';
@@ -171,8 +173,12 @@ export class AnthropicModelClient implements ModelClient {
   }
 
   /** 发送一次 Anthropic 模型请求并返回统一响应。 */
-  public async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
-    const trace = new ModelRequestTrace(this.#config);
+  public async complete(
+    request: ModelRequest,
+    signal: AbortSignal,
+    observer?: ModelRequestObserver,
+  ): Promise<ModelResponse> {
+    const trace = new ModelRequestTrace(this.#config, Date.now, observer);
     try {
       return await this.#complete(request, signal, trace);
     } catch (error) {
@@ -306,6 +312,7 @@ export class AnthropicModelClient implements ModelClient {
       return { kind: 'output', output, usage: responseUsage };
     } catch (error) {
       if (error instanceof ModelClientError) throw error;
+      if (error instanceof ModelRequestPersistenceError) throw error;
       if (combined.aborted) {
         if (signal.aborted) throw new ModelClientError('cancelled', 'Model request was cancelled.');
         throw new ModelClientError('timeout', 'Model request timed out.', true);

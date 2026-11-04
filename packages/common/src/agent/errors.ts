@@ -42,6 +42,14 @@ export class ModelClientError extends AgentRuntimeError {
   }
 }
 
+/** 账本写入失败属于本地运行故障，不可误判为网络故障而重复消费。 */
+export class ModelRequestPersistenceError extends AgentRuntimeError {
+  public constructor() {
+    super('configuration', 'Unable to persist model request ledger.');
+    this.name = 'ModelRequestPersistenceError';
+  }
+}
+
 /** 脱敏并截断错误摘要，避免日志泄露凭据或过长响应。 */
 export function sanitizeAgentErrorSummary(summary: string): string {
   return summary

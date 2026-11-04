@@ -4,6 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./persistence/model-request-repository": {
+      "development": "./src/persistence/model-request-repository.ts",
+      "types": "./dist/persistence/model-request-repository.d.ts",
+      "import": "./dist/persistence/model-request-repository.js"
+    },
     "./task-host": {
       "development": "./src/tasks/configured-host.ts",
       "types": "./dist/tasks/configured-host.d.ts",

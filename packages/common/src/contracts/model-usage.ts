@@ -3,6 +3,7 @@ import { z } from 'zod';
 const count = z.number().int().nonnegative().nullable();
 /** 单次请求的用量和价格快照；null 表示未上报或无法定价，不能解释为零。 */
 export const modelBillingSchema = z.object({
+  requestId: z.string().min(1).optional(),
   application: z.string().optional(),
   provider: z.string().optional(),
   statusCode: z.number().int().min(100).max(599).nullable().optional(),
@@ -45,3 +46,11 @@ export const modelBillingSchema = z.object({
 });
 /** 微单位报价与用量快照，供持久化及只读页面共享。 */
 export type ModelBilling = z.infer<typeof modelBillingSchema>;
+
+/** 请求生命周期快照；开始记录的用量未知，结束后按同一 ID 幂等更新。 */
+export const modelRequestRecordSchema = z.object({
+  id: z.string().min(1),
+  state: z.enum(['running', 'completed']),
+  billing: modelBillingSchema,
+});
+export type ModelRequestRecord = z.infer<typeof modelRequestRecordSchema>;

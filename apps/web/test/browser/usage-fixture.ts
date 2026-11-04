@@ -1,4 +1,5 @@
 import type { SqliteDatabaseHandle } from '@jobhunter/common/persistence/connection';
+import { SqliteModelRequestRepository } from '@jobhunter/common/persistence/model-request-repository';
 /** 只给隔离浏览器夹具填入合成账单，原运行级汇总保持不变。 */
 export function seedUsageFixture(client: SqliteDatabaseHandle['client'], runId: string): void {
   const now = Date.now();
@@ -22,13 +23,14 @@ export function seedUsageFixture(client: SqliteDatabaseHandle['client'], runId: 
     cacheReadCostMicros: 1000,
     cacheWriteCostMicros: 0,
     totalCostMicros: 3000,
-    currency: 'USD',
+    currency: 'USD' as const,
     pricingVersion: 'fixture',
-    precision: 'reported',
-    period: 'fixed',
+    precision: 'reported' as const,
+    period: 'fixed' as const,
     rates: { input: 5000000, output: 5000000, cacheRead: 1250000, cacheWrite: null },
   }));
-  client
-    .prepare('UPDATE agent_runs SET model_usage_json = ? WHERE id = ?')
-    .run(JSON.stringify(calls), runId);
+  const ledger = new SqliteModelRequestRepository(client);
+  calls.forEach((billing, index) => {
+    ledger.save(runId, { id: `fixture:${String(index)}`, state: 'completed', billing });
+  });
 }

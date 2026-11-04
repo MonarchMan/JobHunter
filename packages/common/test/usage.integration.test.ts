@@ -1,8 +1,10 @@
 import Database from 'better-sqlite3';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { UsageService } from '../src/usage/service.js';
 import { SqliteUsageRepository } from '../src/persistence/usage-repository.js';
 import { modelBillingSchema } from '../src/contracts/model-usage.js';
+import { SqliteModelRequestRepository } from '../src/persistence/model-request-repository.js';
 
 const now = Date.parse('2026-11-04T12:00:00Z');
 /** 合成请求包含缓存输入，避免使用真实用户账单数据。 */
@@ -36,19 +38,33 @@ function fixture(): {
 } {
   const db = new Database(':memory:');
   db.exec(
-    'CREATE TABLE agent_runs(id TEXT, agent_key TEXT, status TEXT, model_usage_json TEXT, started_at INTEGER, input_tokens INTEGER, output_tokens INTEGER)',
+    'CREATE TABLE agent_runs(id TEXT PRIMARY KEY, agent_key TEXT, status TEXT, model_usage_json TEXT, started_at INTEGER, input_tokens INTEGER, output_tokens INTEGER)',
   );
+  db.exec(
+    readFileSync(
+      new URL('../migrations/legacy/0048_model_request_ledger.sql', import.meta.url),
+      'utf8',
+    ),
+  );
+  const ledger = new SqliteModelRequestRepository(db);
   return {
     db,
     service: new UsageService(new SqliteUsageRepository(db)),
     insert: (id, calls, status = 'succeeded') => {
-      db.prepare('INSERT INTO agent_runs VALUES (?, ?, ?, ?, ?, 100, 20)').run(
+      db.prepare('INSERT INTO agent_runs VALUES (?, ?, ?, ?, 100, 20)').run(
         id,
         'fixture-agent',
         status,
-        calls === null ? null : JSON.stringify(calls),
         now - 40 * 86400000,
       );
+      if (Array.isArray(calls))
+        calls.forEach((call: unknown, index: number) => {
+          ledger.save(id, {
+            id: `${id}:${String(index)}`,
+            state: 'completed',
+            billing: modelBillingSchema.parse(call),
+          });
+        });
     },
   };
 }

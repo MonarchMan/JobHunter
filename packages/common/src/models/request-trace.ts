@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { ModelClientError } from '../agent/errors.js';
-import type { ModelUsage } from '../agent/model-client.js';
+import { randomUUID } from 'node:crypto';
+import { ModelClientError, ModelRequestPersistenceError } from '../agent/errors.js';
+import type { ModelUsage, ModelRequestObserver } from '../agent/model-client.js';
 import type { ModelBilling } from '../contracts/model-usage.js';
 
 /** SSE 事件只接受对象；供应商字段仍由各自客户端完成最终边界校验。 */
@@ -180,6 +181,8 @@ async function readStream(
 
 /** 单次实际 HTTP 请求快照；不保留完整 URL、Headers 或响应正文。 */
 interface Attempt {
+  id: string;
+  completed: boolean;
   at: number;
   ended: number;
   first: number | null;
@@ -194,6 +197,7 @@ export class ModelRequestTrace {
   public constructor(
     private readonly config: { baseUrl: string; model: string; costCurrency: 'USD' | 'CNY' },
     private readonly now: () => number = Date.now,
+    private readonly observer?: ModelRequestObserver,
   ) {}
   public get requestedAt(): number {
     return this.#attempts.at(-1)?.at ?? this.now();
@@ -209,6 +213,8 @@ export class ModelRequestTrace {
     const body = object.parse(JSON.parse(z.string().parse(init.body)));
     const send = async (stream: boolean): Promise<Response> => {
       const attempt: Attempt = {
+        id: randomUUID(),
+        completed: false,
         at: this.now(),
         ended: this.now(),
         first: null,
@@ -216,6 +222,7 @@ export class ModelRequestTrace {
         error: null,
       };
       this.#attempts.push(attempt);
+      this.#publish(attempt);
       try {
         const response = await fetcher(url, {
           ...init,
@@ -232,6 +239,8 @@ export class ModelRequestTrace {
         attempt.status = response.status;
         if (!response.ok) {
           attempt.ended = this.now();
+          attempt.completed = true;
+          this.#publish(attempt);
           return response;
         }
         const streaming = response.headers.get('content-type')?.includes('text/event-stream');
@@ -241,6 +250,7 @@ export class ModelRequestTrace {
             })
           : await response.json();
         attempt.ended = this.now();
+        attempt.completed = true;
         return new Response(JSON.stringify(payload), {
           status: response.status,
           headers: {
@@ -253,7 +263,9 @@ export class ModelRequestTrace {
           },
         });
       } catch (error) {
+        if (error instanceof ModelRequestPersistenceError) throw error;
         attempt.ended = this.now();
+        attempt.completed = true;
         attempt.error = init.signal?.aborted
           ? 'cancelled'
           : error instanceof ModelClientError ||
@@ -306,11 +318,12 @@ export class ModelRequestTrace {
       const generationMs = attempt.first === null ? 0 : attempt.ended - attempt.first;
       return {
         ...base,
+        requestId: attempt.id,
         requestedAt: attempt.at,
         application: 'JobHunter',
         provider: new URL(this.config.baseUrl).host,
         statusCode: attempt.status,
-        durationMs: Math.max(0, attempt.ended - attempt.at),
+        durationMs: attempt.completed ? Math.max(0, attempt.ended - attempt.at) : null,
         firstTokenMs: attempt.first === null ? null : Math.max(0, attempt.first - attempt.at),
         outputTokensPerSecond:
           generationMs > 0 && base.outputTokens !== null
@@ -320,6 +333,7 @@ export class ModelRequestTrace {
       };
     });
     const latest = calls.at(-1);
+    if (billing && last) this.#publish(last, latest);
     return {
       billingCalls: calls,
       ...(latest ? { billing: latest } : {}),
@@ -338,7 +352,26 @@ export class ModelRequestTrace {
         last.error = error.category;
       if (last && error.category === 'invalid_output') last.error = 'invalid_output';
       error.usage = this.usage();
+      if (last) this.#publish(last, error.usage.billing);
     }
     throw error;
+  }
+
+  /** 开始、协商失败、成功解析及异常结束共享同一请求身份。 */
+  #publish(attempt: Attempt, billing?: ModelBilling): void {
+    if (!this.observer) return;
+    const snapshot =
+      billing ?? this.usage().billingCalls?.find((call) => call.requestId === attempt.id);
+    if (snapshot) {
+      try {
+        this.observer.save({
+          id: attempt.id,
+          state: attempt.completed ? 'completed' : 'running',
+          billing: snapshot,
+        });
+      } catch {
+        throw new ModelRequestPersistenceError();
+      }
+    }
   }
 }

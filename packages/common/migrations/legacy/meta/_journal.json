@@ -337,6 +337,13 @@
       "when": 1793836800000,
       "tag": "0047_remove_advice_references",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793836800001,
+      "tag": "0048_model_request_ledger",
+      "breakpoints": true
     }
   ]
 }

@@ -128,15 +128,16 @@ describe('SQLite agent run store', () => {
       finishedAt: 10,
       usage: { ...usage, estimatedCostMicros: billing.totalCostMicros, billingCalls: [billing] },
     });
-    expect(store.get('billing')?.billingCalls).toEqual([billing]);
+    expect(store.get('billing')?.billingCalls).toMatchObject([billing]);
+    expect(store.get('billing')?.requestIds).toEqual(['run:billing:0']);
     store.createRunning(running('legacy', 'legacy-cache'));
     expect(
       handle.client
-        .prepare('SELECT model_usage_json FROM agent_runs WHERE id = ?')
+        .prepare('SELECT count(*) FROM model_requests WHERE agent_run_id = ?')
         .pluck()
         .get('legacy'),
-    ).toBeNull();
-    expect(store.get('legacy')?.billingCalls ?? null).toBeNull();
+    ).toBe(0);
+    expect(store.get('legacy')?.billingCalls).toEqual([]);
   });
   it('backfills only matching completed unpriced costs and preserves the run facts', async () => {
     const { store } = await setup();

@@ -6,6 +6,7 @@ export interface UsageCall extends ModelBilling {
   id: string;
   agent: string;
   status: string;
+  requestState?: 'running' | 'completed';
 }
 /** 只读仓储端口，时间范围左闭右开，不读取模型输入输出。 */
 export interface UsageRepository {
@@ -83,7 +84,7 @@ function empty(): Accumulator {
 /** 输入包含缓存读写；金额只累加已有快照，不重新定价。 */
 function add(total: Accumulator, call: UsageCall): void {
   total.requests++;
-  if (call.statusCode != null || call.transportError) {
+  if (call.requestState !== 'running' && (call.statusCode != null || call.transportError)) {
     total.knownStatus++;
     if (
       call.statusCode != null &&

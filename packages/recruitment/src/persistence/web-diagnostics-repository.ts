@@ -13,10 +13,10 @@ import type {
   WebTaskListEntry,
 } from '../diagnostics/web-diagnostics-service.js';
 import type Database from 'better-sqlite3';
+import { SqliteModelRequestRepository } from '@jobhunter/common/persistence/model-request-repository';
 
 /** 数据库查询结果对应的行结构。 */
 interface AgentRunRow {
-  readonly model_usage_json: string | null;
   readonly id: string;
   readonly agent_key: string;
   readonly agent_version: string;
@@ -45,7 +45,7 @@ interface ToolCallRow {
 
 const columns = `id, agent_key, agent_version, prompt_version, model_config_hash, status,
   error_category, error_summary, input_tokens, output_tokens, estimated_cost_micros,
-  cost_currency, pricing_version, started_at, finished_at, model_usage_json`;
+  cost_currency, pricing_version, started_at, finished_at`;
 
 /** 数据库查询结果对应的行结构。 */
 interface TaskEntryRow {
@@ -136,7 +136,10 @@ const taskEntriesCte = `
   )`;
 
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
-function summary(row: AgentRunRow): WebAgentRunSummary {
+function summary(
+  row: AgentRunRow,
+  billingCalls?: NonNullable<WebAgentRunSummary['billingCalls']>,
+): WebAgentRunSummary {
   return webAgentRunSummarySchema.parse({
     id: row.id,
     agentKey: row.agent_key,
@@ -151,7 +154,10 @@ function summary(row: AgentRunRow): WebAgentRunSummary {
     estimatedCostMicros: row.estimated_cost_micros,
     costCurrency: row.cost_currency,
     pricingVersion: row.pricing_version,
-    billingCalls: row.model_usage_json ? (JSON.parse(row.model_usage_json) as unknown) : null,
+    billingCalls: billingCalls ?? null,
+    ...(billingCalls
+      ? { requestIds: billingCalls.flatMap((call) => (call.requestId ? [call.requestId] : [])) }
+      : {}),
     startedAt: new Date(row.started_at).toISOString(),
     finishedAt: row.finished_at === null ? null : new Date(row.finished_at).toISOString(),
   });
@@ -346,7 +352,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
         `SELECT ${columns} FROM agent_runs ORDER BY started_at DESC, id ASC LIMIT ? OFFSET ?`,
       )
       .all(input.limit, offset) as AgentRunRow[];
-    return { items: rows.map(summary), total: count.total };
+    return { items: rows.map((row) => summary(row)), total: count.total };
   }
 
   /** 执行数据库组件对外暴露的操作。 */
@@ -368,7 +374,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       )
       .all(id) as ToolCallRow[];
     return webAgentRunDetailSchema.parse({
-      ...summary(row),
+      ...summary(row, new SqliteModelRequestRepository(this.#client).listForRun(id)),
       toolCalls: calls.map((call) => ({
         sequenceNumber: call.sequence_no,
         toolKey: call.tool_key,

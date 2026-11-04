@@ -1,4 +1,4 @@
-import type { ModelBilling } from '../contracts/model-usage.js';
+import type { ModelBilling, ModelRequestRecord } from '../contracts/model-usage.js';
 import type { AgentErrorCategory } from './errors.js';
 
 /** 模块使用的类型约束。 */
@@ -6,6 +6,8 @@ export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /** 模块数据结构或契约。 */
 export interface AgentRunRecord {
+  /** 从请求外键反查，不在运行表重复保存数组。 */
+  readonly requestIds?: readonly string[];
   readonly billingCalls?: readonly ModelBilling[] | null;
   readonly id: string;
   readonly agentKey: string;
@@ -53,6 +55,8 @@ export interface ToolCallRecord {
 
 /** 模块数据结构或契约。 */
 export interface AgentRunStore {
+  /** 单个请求开始/结束即时写入独立账本，不等待运行结束。 */
+  saveModelRequest(agentRunId: string, record: ModelRequestRecord): void;
   get(id: string): AgentRunRecord | null;
   findSucceeded(cacheKey: string): AgentRunRecord | null;
   /** 将校验失败的成功缓存失效，保留输出和用量作为审计。 */

@@ -1,4 +1,5 @@
-import { modelBillingSchema } from '../contracts/model-usage.js';
+import type { ModelRequestRecord } from '../contracts/model-usage.js';
+import { SqliteModelRequestRepository } from './model-request-repository.js';
 import {
   agentErrorCategories,
   type AgentErrorCategory,
@@ -11,7 +12,6 @@ import type Database from 'better-sqlite3';
 
 /** 数据库查询结果对应的行结构。 */
 interface AgentRunRow {
-  readonly model_usage_json: string | null;
   readonly id: string;
   readonly agent_key: string;
   readonly agent_version: string;
@@ -36,7 +36,7 @@ interface AgentRunRow {
 const columns = `id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
                  cache_key, status, output_json, output_hash, error_category, error_summary, input_tokens,
                  output_tokens, estimated_cost_micros, cost_currency, pricing_version,
-                 started_at, finished_at, model_usage_json`;
+                 started_at, finished_at`;
 
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function isStatus(value: string): value is AgentRunRecord['status'] {
@@ -62,9 +62,6 @@ function toRecord(row: AgentRunRow): AgentRunRecord {
     throw new TypeError(`Invalid stored agent error category: ${row.error_category}.`);
   }
   return {
-    ...(row.model_usage_json === null
-      ? {}
-      : { billingCalls: modelBillingSchema.array().parse(JSON.parse(row.model_usage_json)) }),
     id: row.id,
     agentKey: row.agent_key,
     agentVersion: row.agent_version,
@@ -100,9 +97,37 @@ function isUniqueConstraint(error: unknown): boolean {
 /** 保存 Agent 运行状态、缓存键和输出摘要。 */
 export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectionStore {
   readonly #client: Database.Database;
+  readonly #requests: SqliteModelRequestRepository;
 
   public constructor(client: Database.Database) {
     this.#client = client;
+    this.#requests = new SqliteModelRequestRepository(client);
+  }
+
+  /** 运行只承担关联入口；请求事实由独立仓储保存。 */
+  public saveModelRequest(agentRunId: string, record: ModelRequestRecord): void {
+    this.#requests.save(agentRunId, record);
+  }
+
+  /** 兼容未实现流式观测的调用方；稳定身份使完成通知不会重复记账。 */
+  #saveUsage(id: string, usage: Parameters<AgentRunStore['completeFailed']>[0]['usage']): void {
+    for (const [index, billing] of (usage.billingCalls ?? []).entries()) {
+      this.#requests.save(id, {
+        id: billing.requestId ?? `run:${id}:${String(index)}`,
+        state: 'completed',
+        billing,
+      });
+    }
+  }
+
+  /** 明细与 ID 数组来自关联查询，运行表没有请求数组列。 */
+  #toRecord(row: AgentRunRow): AgentRunRecord {
+    const billingCalls = this.#requests.listForRun(row.id);
+    return {
+      ...toRecord(row),
+      billingCalls,
+      requestIds: billingCalls.flatMap((call) => (call.requestId ? [call.requestId] : [])),
+    };
   }
 
   /** 仅回填已完成的未定价记录，不覆盖已有金额或修改运行输出。 */
@@ -147,14 +172,14 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
     const row = this.#client
       .prepare(`SELECT ${columns} FROM agent_runs WHERE cache_key = ? AND status = 'succeeded'`)
       .get(cacheKey) as AgentRunRow | undefined;
-    return row ? toRecord(row) : null;
+    return row ? this.#toRecord(row) : null;
   }
 
   /** 执行数据库组件对外暴露的操作。 */
   public get(id: string): AgentRunRecord | null {
     const row = this.#client.prepare(`SELECT ${columns} FROM agent_runs WHERE id = ?`).get(id) as
       AgentRunRow | undefined;
-    return row ? toRecord(row) : null;
+    return row ? this.#toRecord(row) : null;
   }
 
   /** 1、仅失效仍为成功的记录，保留原始输出、时间与用量，不覆盖并发失败状态。 */
@@ -182,7 +207,7 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
             `UPDATE agent_runs SET status = 'running', started_at = ?, finished_at = NULL, error_category = NULL, error_summary = NULL, output_json = NULL, output_hash = NULL WHERE id = ? AND status IN ('failed', 'cancelled')`,
           )
           .run(startedAt, row.id);
-        return toRecord(row);
+        return this.#toRecord(row);
       })
       .immediate();
   }
@@ -225,19 +250,17 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
   public completeSucceeded(
     input: Parameters<AgentRunStore['completeSucceeded']>[0],
   ): ReturnType<AgentRunStore['completeSucceeded']> {
+    this.#saveUsage(input.id, input.usage);
     try {
       const changed = this.#client
         .prepare(
           `UPDATE agent_runs
-           SET cache_key = ?, model_usage_json = ?, status = 'succeeded', output_json = ?, output_hash = ?, input_tokens = ?, output_tokens = ?,
+           SET cache_key = ?, status = 'succeeded', output_json = ?, output_hash = ?, input_tokens = ?, output_tokens = ?,
                estimated_cost_micros = ?, cost_currency = ?, pricing_version = ?, finished_at = ?
            WHERE id = ? AND status = 'running'`,
         )
         .run(
           input.cacheKey,
-          input.usage.billingCalls
-            ? JSON.stringify(modelBillingSchema.array().parse(input.usage.billingCalls))
-            : null,
           input.output === null ? null : JSON.stringify(input.output),
           input.outputHash,
           input.usage.inputTokens,
@@ -258,16 +281,13 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
         this.#client
           .prepare(
             `UPDATE agent_runs
-             SET model_usage_json = ?, status = 'failed', error_category = 'cache_race_resolved',
+             SET status = 'failed', error_category = 'cache_race_resolved',
                  error_summary = 'Equivalent successful run won cache race.',
                  input_tokens = ?, output_tokens = ?, estimated_cost_micros = ?,
                  cost_currency = ?, pricing_version = ?, finished_at = ?
              WHERE id = ? AND status = 'running'`,
           )
           .run(
-            input.usage.billingCalls
-              ? JSON.stringify(modelBillingSchema.array().parse(input.usage.billingCalls))
-              : null,
             input.usage.inputTokens,
             input.usage.outputTokens,
             input.usage.estimatedCostMicros,
@@ -283,18 +303,16 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
 
   /** 执行数据库组件对外暴露的操作。 */
   public completeFailed(input: Parameters<AgentRunStore['completeFailed']>[0]): AgentRunRecord {
+    this.#saveUsage(input.id, input.usage);
     const changed = this.#client
       .prepare(
         `UPDATE agent_runs
-         SET model_usage_json = ?, status = ?, error_category = ?, error_summary = ?, input_tokens = ?,
+         SET status = ?, error_category = ?, error_summary = ?, input_tokens = ?,
              output_tokens = ?, estimated_cost_micros = ?, cost_currency = ?,
              pricing_version = ?, finished_at = ?
          WHERE id = ? AND status = 'running'`,
       )
       .run(
-        input.usage.billingCalls
-          ? JSON.stringify(modelBillingSchema.array().parse(input.usage.billingCalls))
-          : null,
         input.status,
         input.category,
         input.summary,
@@ -340,6 +358,6 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
     const row = this.#client.prepare(`SELECT ${columns} FROM agent_runs WHERE id = ?`).get(id) as
       AgentRunRow | undefined;
     if (!row) throw new TypeError(`Agent run not found: ${id}.`);
-    return toRecord(row);
+    return this.#toRecord(row);
   }
 }

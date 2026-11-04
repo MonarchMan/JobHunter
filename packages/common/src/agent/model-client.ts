@@ -1,4 +1,8 @@
-import type { ModelBilling } from '../contracts/model-usage.js';
+import type { ModelBilling, ModelRequestRecord } from '../contracts/model-usage.js';
+/** 传输层生命周期通知；调用方同步持久化，禁止吞掉账本写入失败。 */
+export interface ModelRequestObserver {
+  save(record: ModelRequestRecord): void;
+}
 /** 模块数据结构或契约。 */
 export interface ModelUsage {
   /** 一次 complete 可能包含格式协商的多次 HTTP；有此数组时不重复累加 billing。 */
@@ -77,5 +81,9 @@ export interface ModelClient {
     readonly pricingVersion: string;
   };
 
-  complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse>;
+  complete(
+    request: ModelRequest,
+    signal: AbortSignal,
+    observer?: ModelRequestObserver,
+  ): Promise<ModelResponse>;
 }
