@@ -193,33 +193,46 @@ export default async function JobDetailPage({
                 </ul>
               </details>
               <section className={styles.adviceBlock}>
-                <h3>Agent 建议</h3>
-                {match.advice.status === 'available' ? (
-                  <div className={styles.adviceGrid}>
-                    <div>
-                      <h4>亮点</h4>
-                      {match.advice.content.highlights.map((point) => (
-                        <p key={point.text}>{point.text}</p>
-                      ))}
-                    </div>
-                    <div>
-                      <h4>缺口</h4>
-                      {match.advice.content.gaps.map((point) => (
-                        <p key={point.text}>{point.text}</p>
-                      ))}
-                    </div>
-                    <div>
-                      <h4>准备建议</h4>
-                      {match.advice.content.preparation.map((point) => (
-                        <p key={point}>{point}</p>
-                      ))}
-                    </div>
+                <h3>Agent建议</h3>
+                {match.advice.status === "available" ? (
+                  <div className={styles.adviceList}>
+                    {match.advice.content.highlights.length > 0 && (
+                      <div>
+                        <h4>亮点</h4>
+                        <p>{match.advice.content.highlights[0]?.text}</p>
+                      </div>
+                    )}
+                    {match.advice.content.gaps.length > 0 && (
+                      <div>
+                        <h4>缺口</h4>
+                        <p>{match.advice.content.gaps[0]?.text}</p>
+                      </div>
+                    )}
+                    {match.advice.content.resumeEmphasis.length > 0 && (
+                      <div>
+                        <h4>简历重点</h4>
+                        <ul>
+                          {match.advice.content.resumeEmphasis.map((item, index) => (
+                            <li key={index}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {match.advice.content.preparation.length > 0 && (
+                      <div>
+                        <h4>准备建议</h4>
+                        <ul>
+                          {match.advice.content.preparation.map((item, index) => (
+                            <li key={index}>{item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <p className="muted">{adviceStatusLabels[match.advice.status]}</p>
                 )}
-              </section>
-            </article>
+              </section></article>
           ))
         )}
       </section>

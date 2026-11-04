@@ -106,7 +106,7 @@ export const jobAdviceAgentDefinition: AgentDefinition<
   z.infer<typeof jobAdviceModelOutputSchema>
 > = defineAgent({
   key: jobAdvicePromptV2.agentKey,
-  version: '2.1.0',
+  version: '2.2.0',
   promptVersion: jobAdvicePromptV2.promptVersion,
   outputSchemaVersion: jobAdvicePromptV2.outputSchemaVersion,
   outputSchemaName: 'JobAdviceOutput',
@@ -161,3 +161,4 @@ export function parseJobAdviceAgentOutput(output: unknown, input: JobAdviceInput
   }
   return parsed;
 }
+
