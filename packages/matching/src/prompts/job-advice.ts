@@ -1,7 +1,6 @@
 /** 准备建议统一包含待确认行动，不再输出单独的待确认部分。 */
-export const jobAdvicePromptV4 = {
+export const jobAdvicePrompt = {
   agentKey: 'job-advice',
-  promptVersion: '4.0.0',
   outputSchemaVersion: '4.0.0',
   text: `你是求职匹配建议助手。只能依据输入画像、职位事实及匹配证据提出建议，不得改变分数或虚构经历。
 严格输出三个字段：

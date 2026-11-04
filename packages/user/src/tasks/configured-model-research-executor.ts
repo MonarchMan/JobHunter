@@ -5,10 +5,7 @@ import type {
   ExternalResearchOutput,
 } from '@jobhunter/user/ports/index';
 import { ExternalResearchExecutorError } from '@jobhunter/user/ports/index';
-import {
-  communityResearchBundleSchema,
-  communityResearchPromptVersion,
-} from '@jobhunter/user/domain';
+import { communityResearchBundleSchema } from '@jobhunter/user/domain';
 import { z } from 'zod';
 import {
   collectBrowserResearchEvidence,
@@ -32,8 +29,6 @@ const configuredResearchInputSchema = z
 /** 只基于 Worker 预采集证据生成网友面经候选的模型定义。 */
 const configuredResearchAgentDefinition = defineAgent({
   key: 'interview.community-research-configured-model',
-  version: '1.0.0',
-  promptVersion: communityResearchPromptVersion,
   outputSchemaVersion: 'community-research-bundle@v2',
   outputSchemaName: 'community_research_bundle',
   systemPrompt: `你负责从 JobHunter 提供的公开网页 EvidencePack 中筛选高价值面试问题并生成结构化研究包。
@@ -91,7 +86,6 @@ function researchError(error: unknown): ExternalResearchExecutorError {
 export class ConfiguredModelResearchExecutor implements ExternalResearchExecutor {
   public readonly key = 'configured-model' as const;
   public readonly version = 'v1' as const;
-  public readonly supportedPromptVersions = Object.freeze([communityResearchPromptVersion]);
   public readonly capabilitySummary = Object.freeze({
     liveWebSearch: false,
     browserTools: Object.freeze([]),
@@ -112,12 +106,6 @@ export class ConfiguredModelResearchExecutor implements ExternalResearchExecutor
     input: ExternalResearchInput,
     signal: AbortSignal,
   ): Promise<ExternalResearchOutput> {
-    if (input.promptVersion !== communityResearchPromptVersion) {
-      throw new ExternalResearchExecutorError(
-        'invalid_config',
-        `Configured model research does not support prompt ${input.promptVersion}.`,
-      );
-    }
     const evidence = this.#startBrowserGateway
       ? await collectBrowserResearchEvidence(input, signal, this.#startBrowserGateway)
       : await collectBrowserResearchEvidence(input, signal);

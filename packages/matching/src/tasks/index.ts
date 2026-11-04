@@ -5,7 +5,6 @@ import type {
   MatchingProfileIdentityReader,
   CandidateProfileReader,
 } from '@jobhunter/user/contracts';
-import { defaultMatchRulesetId } from '@jobhunter/matching';
 import {
   createJobAdviceTaskHandler,
   createJobUnderstandingTaskHandler,
@@ -49,7 +48,7 @@ export function createMatchingTasks(
     clock,
     ids,
   });
-  deterministicMatching.ensureRulesetV5({ id: defaultMatchRulesetId });
+  deterministicMatching.ensureRuleset();
   const batches = new MatchingBatchService({
     calculator: deterministicMatching,
   });

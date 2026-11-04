@@ -2,8 +2,6 @@ import { z } from 'zod';
 import { contentHash, type ContentHash } from '@jobhunter/common/domain';
 import { DomainError } from '@jobhunter/common/domain';
 
-/** 网友面经研究 Prompt 版本，参与研究请求指纹计算。 */
-export const communityResearchPromptVersion = 'community-research-prompt@v4' as const;
 /** 网友面经研究 Bundle 的持久化 Schema 版本。 */
 export const communityResearchSchemaVersion = 'community-research-bundle@v2' as const;
 
@@ -178,7 +176,6 @@ export function researchRequestFingerprint(brief: ExperienceResearchBrief): Cont
         allowedDomains: fingerprintSet(normalized.allowedDomains, true),
         blockedDomains: fingerprintSet(normalized.blockedDomains, true),
       },
-      promptVersion: communityResearchPromptVersion,
       schemaVersion: communityResearchSchemaVersion,
     },
     [

@@ -1,7 +1,7 @@
 import { defineAgent } from '@jobhunter/common/agent';
 import { z } from 'zod';
 import { resumeProfileAgentOutputSchema } from './profile-schema/index.js';
-import { resumeProfilePromptV3 } from './prompts/resume-profile/v3.js';
+import { resumeProfilePrompt } from './prompts/resume-profile.js';
 
 /** 简历画像 Agent 的输入约束，只允许传入已提取的简历文本。 */
 export const resumeProfileAgentInputSchema = z
@@ -13,12 +13,10 @@ export type ResumeProfileAgentInput = z.infer<typeof resumeProfileAgentInputSche
 
 /** 画像提取 Agent 定义；该 Agent 无工具，只能依据简历文本返回结构化事实。 */
 export const resumeProfileAgentDefinition = defineAgent({
-  key: resumeProfilePromptV3.agentKey,
-  version: '2.0.0',
-  promptVersion: resumeProfilePromptV3.promptVersion,
-  outputSchemaVersion: resumeProfilePromptV3.outputSchemaVersion,
+  key: resumeProfilePrompt.agentKey,
+  outputSchemaVersion: resumeProfilePrompt.outputSchemaVersion,
   outputSchemaName: 'ResumeProfileOutput',
-  systemPrompt: resumeProfilePromptV3.text,
+  systemPrompt: resumeProfilePrompt.text,
   inputSchema: resumeProfileAgentInputSchema,
   outputSchema: resumeProfileAgentOutputSchema,
   tools: [],

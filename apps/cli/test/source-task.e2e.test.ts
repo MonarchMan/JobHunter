@@ -2,7 +2,6 @@ import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { parseId, utcInstant } from '@jobhunter/common/domain';
-import { communityResearchPromptVersion } from '@jobhunter/user/domain';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
@@ -182,7 +181,7 @@ describe('source and task commands', () => {
         database.client
           .prepare(
             `INSERT INTO experience_research_requests
-             (id, brief_json, request_fingerprint, prompt_version, schema_version,
+             (id, brief_json, request_fingerprint, prompt_hash, schema_version,
               prompt_file_id, prompt_file_version_no, schema_file_id, schema_file_version_no,
               bundle_file_id, bundle_file_version_no, current_task_id, state, revision,
               created_at, updated_at)
@@ -193,7 +192,7 @@ describe('source and task commands', () => {
           .run(
             requestId,
             'b'.repeat(64),
-            communityResearchPromptVersion,
+            'c'.repeat(64),
             '018f0000-0000-7000-8000-00000000c203',
             '018f0000-0000-7000-8000-00000000c204',
             taskId,

@@ -1,6 +1,5 @@
 import {
   communityResearchBundleSchema,
-  communityResearchPromptVersion,
   communityResearchSchemaVersion,
   experienceResearchBriefSchema,
   type ExperienceResearchBrief,
@@ -45,7 +44,6 @@ export function renderCommunityResearchPrompt(
 - 允许域名：${list(brief.allowedDomains, '公开网页均可')}
 - 禁止域名：${list(brief.blockedDomains, '无额外禁止项')}
 - 请求指纹：${requestFingerprint}
-- Prompt 版本：${communityResearchPromptVersion}
 - 输出 Schema 版本：${communityResearchSchemaVersion}
 
 ## 研究规则

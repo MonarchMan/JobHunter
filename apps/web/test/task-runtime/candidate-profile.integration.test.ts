@@ -113,11 +113,11 @@ async function setup(): Promise<{
   handle.client
     .prepare(
       `INSERT INTO agent_runs
-       (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+       (id, agent_key, definition_hash, model_config_hash, input_hash,
         cache_key, status, output_json, error_category, error_summary, input_tokens,
         output_tokens, estimated_cost_micros, cost_currency, pricing_version,
         started_at, finished_at)
-       VALUES ('018f0000-0000-7000-8000-000000009003', 'resume-profile', '1', '1',
+       VALUES ('018f0000-0000-7000-8000-000000009003', 'resume-profile', 'definition',
                ?, ?, 'profile-fixture', 'succeeded', '{}', NULL, NULL, 1, 1, 0, 'USD',
                'test', 1, 2)`,
     )
@@ -214,8 +214,7 @@ describe('candidate profile versioning', () => {
       },
       extractionAgent: {
         key: 'resume-profile',
-        version: '1',
-        promptVersion: '1',
+        definitionHash: 'definition',
       },
     });
   });

@@ -476,10 +476,10 @@ describe('JobSyncService', () => {
       INSERT INTO candidate_profiles (id, name, created_at, updated_at) VALUES ('p', 'Fixture', 1, 1);
       INSERT INTO profile_versions (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json, content_hash, is_current, created_at)
         VALUES ('pv', 'p', 1, '{}', '{}', '[]', 'profile-hash', 1, 1);
-      INSERT INTO match_rulesets (id, version, definition_json, definition_hash, active, created_at)
-        VALUES ('rules', 'fixture', '{}', 'rules-hash', 1, 1);
-      INSERT INTO agent_runs (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash, cache_key, status, output_json, started_at)
-        VALUES ('agent', 'fixture', '1', '1', 'config', 'input', 'cache', 'succeeded', '{}', 1);
+      INSERT INTO match_rulesets (id, definition_json, definition_hash, active, created_at)
+        VALUES ('rules', '{}', 'rules-hash', 1, 1);
+      INSERT INTO agent_runs (id, agent_key, definition_hash, model_config_hash, input_hash, cache_key, status, output_json, started_at)
+        VALUES ('agent', 'fixture', 'definition', 'config', 'input', 'cache', 'succeeded', '{}', 1);
     `);
       db.prepare(
         `INSERT INTO job_enrichments (id, job_revision_id, agent_run_id, schema_version, content_hash, result_json, created_at)

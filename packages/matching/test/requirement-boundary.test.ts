@@ -3,7 +3,7 @@ import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { requirementStatements } from '../src/requirement-language.js';
 
 /** 最小职位原文夹具，不读取真实数据或参考标签。 */
-function extract(description: string, recover = true): string[] {
+function extract(description: string): string[] {
   const job = parseNormalizedJob({
     companyId: '018f0000-0000-7000-8000-000000000001',
     sourceId: '018f0000-0000-7000-8000-000000000002',
@@ -20,7 +20,7 @@ function extract(description: string, recover = true): string[] {
     applyUrl: 'https://example.com/job',
     publishedAt: null,
   });
-  return requirementStatements(job, recover).map((node) => node.text);
+  return requirementStatements(job).map((node) => node.text);
 }
 
 describe('v3.1 introduction boundary', () => {
@@ -34,9 +34,6 @@ describe('v3.1 introduction boundary', () => {
       line,
       '2、熟悉SQL',
     ]);
-  });
-  it('keeps legacy v3 behavior', () => {
-    expect(extract('团队介绍：使用Rust\n\n1、参与Java开发', false)).toEqual([]);
   });
   it('does not resume for blank lines or numbered benefits/introductions', () => {
     expect(extract('福利待遇\n\n1、提供住房补贴\n2、团队使用Java\n\n还有Python技术分享')).toEqual(

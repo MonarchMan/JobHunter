@@ -11,7 +11,6 @@ import { TaskExecutionError, type TaskHandler } from '@jobhunter/common/tasks';
 export const jobAdviceTaskPayloadSchema = z
   .object({
     matchResultId: z.string().trim().min(1),
-    adviceVersion: z.string().trim().min(1),
     jobRevisionId: z.string().optional(),
     profileVersionId: z.string().optional(),
   })
@@ -47,17 +46,11 @@ export function createJobAdviceTaskHandler(
     outputSchema: jobAdviceTaskOutputSchema,
     defaultMaxAttempts: 3,
     leaseDurationMs: 300_000,
-    concurrencyKey: (payload) => `match-advice:${payload.matchResultId}:${payload.adviceVersion}`,
+    concurrencyKey: (payload) => `match-advice:${payload.matchResultId}`,
     /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {
       if ('unavailable' in input) {
         throw new TaskExecutionError('invalid_config', 'Job advice model is not configured.');
-      }
-      if (payload.adviceVersion !== jobAdviceAgentDefinition.version) {
-        throw new TaskExecutionError(
-          'invalid_config',
-          'Queued job advice version is no longer active.',
-        );
       }
       const match = input.matching.getMatch(parseId(payload.matchResultId, 'MatchResult'));
       if (!match) throw new TaskExecutionError('validation_failed', 'Match result does not exist.');

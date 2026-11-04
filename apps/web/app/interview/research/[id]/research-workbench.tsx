@@ -48,11 +48,10 @@ const taskStateLabels = {
 } as const;
 
 const maximumBundleBytes = 2 * 1024 * 1024;
-const browserPromptVersion = 'community-research-prompt@v4';
 type ResearchExecutorKey = 'configured-model' | 'codex-local' | 'claude-local';
 
-function defaultExecutor(promptVersion: string): ResearchExecutorKey {
-  return promptVersion === browserPromptVersion ? 'configured-model' : 'codex-local';
+function defaultExecutor(): ResearchExecutorKey {
+  return 'configured-model';
 }
 
 function taskFailure(task: ResearchTaskView | null): string | null {
@@ -84,9 +83,7 @@ export function ResearchWorkbench({
   const fileInput = useRef<HTMLInputElement>(null);
   const [current, setCurrent] = useState(detail);
   const [currentTask, setCurrentTask] = useState(task);
-  const [executorKey, setExecutorKey] = useState<ResearchExecutorKey>(() =>
-    defaultExecutor(detail.request.promptVersion),
-  );
+  const [executorKey, setExecutorKey] = useState<ResearchExecutorKey>(() => defaultExecutor());
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -95,7 +92,7 @@ export function ResearchWorkbench({
   useEffect(() => {
     setCurrent(detail);
     setCurrentTask(task);
-    setExecutorKey(defaultExecutor(detail.request.promptVersion));
+    setExecutorKey(defaultExecutor());
   }, [detail, task]);
 
   const taskPending = currentTask?.status === 'pending' || currentTask?.status === 'running';
@@ -304,14 +301,11 @@ export function ResearchWorkbench({
     current.request.state === 'ready' ||
     (current.request.state === 'completed' && allCandidatesRejected && !replacementBlocked);
   const failure = taskFailure(currentTask);
-  const browserCompatible = current.request.promptVersion === browserPromptVersion;
-  const executorOptions = browserCompatible
-    ? [
-        { value: 'configured-model', label: '配置模型（推荐）' },
-        { value: 'codex-local', label: 'Codex CLI' },
-        { value: 'claude-local', label: 'Claude Code' },
-      ]
-    : [{ value: 'codex-local', label: 'Codex CLI（兼容）' }];
+  const executorOptions = [
+    { value: 'configured-model', label: '配置模型（推荐）' },
+    { value: 'codex-local', label: 'Codex CLI' },
+    { value: 'claude-local', label: 'Claude Code' },
+  ];
 
   return (
     <div className={styles.root} aria-busy={busy !== null || taskPending}>
@@ -353,9 +347,7 @@ export function ResearchWorkbench({
           </div>
           <div>
             <dt>版本</dt>
-            <dd>
-              {current.request.promptVersion} · {current.request.schemaVersion}
-            </dd>
+            <dd>{current.request.schemaVersion}</dd>
           </div>
         </dl>
       </section>
@@ -376,7 +368,6 @@ export function ResearchWorkbench({
             <div>
               <div>
                 <strong>Research Prompt</strong>
-                <small>{current.request.promptVersion}</small>
               </div>
               <div className={styles.inlineActions}>
                 <button
@@ -428,9 +419,7 @@ export function ResearchWorkbench({
                     ? 'Worker 统一采集公开正文，再由已配置模型筛选并归并问题。'
                     : executorKey === 'claude-local'
                       ? 'Claude Code 使用受限网页工具自行联网研究，不读取本地业务数据。'
-                      : browserCompatible
-                        ? 'Codex CLI 使用原生网页搜索自行联网研究。'
-                        : '该请求使用旧版 Prompt，只能使用 Codex 原生网页搜索或手工导包。'}
+                      : 'Codex CLI 使用原生网页搜索自行联网研究。'}
                 </p>
               </div>
               <div className={styles.executorSelector}>

@@ -8,9 +8,9 @@ import {
   parseResumePolishAgentOutput,
   parseResumeText,
   resumeProfileAgentDefinition,
-  resumeProfilePromptV3,
+  resumeProfilePrompt,
   resumePolishAgentDefinition,
-  resumePolishPromptV1,
+  resumePolishPrompt,
   toCandidateProfile,
 } from '../src/resume/index.js';
 
@@ -136,7 +136,7 @@ describe('rule-first resume profile extraction', () => {
 describe('resume profile Agent boundary schema', () => {
   it('keeps prompt, Agent and output schema versions consistent', () => {
     expect(() => {
-      assertPromptMatchesDefinition(resumeProfilePromptV3, resumeProfileAgentDefinition);
+      assertPromptMatchesDefinition(resumeProfilePrompt, resumeProfileAgentDefinition);
     }).not.toThrow();
   });
 
@@ -318,7 +318,7 @@ describe('resume polish Agent boundary schema', () => {
 
   it('keeps prompt and Agent versions aligned and accepts selected section suggestions', () => {
     expect(() => {
-      assertPromptMatchesDefinition(resumePolishPromptV1, resumePolishAgentDefinition);
+      assertPromptMatchesDefinition(resumePolishPrompt, resumePolishAgentDefinition);
     }).not.toThrow();
     expect(
       parseResumePolishAgentOutput(

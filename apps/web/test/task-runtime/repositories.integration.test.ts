@@ -432,9 +432,9 @@ describe('SqliteJobQueryRepository', () => {
         ('018f0000-0000-7000-8000-000000000054',
          '018f0000-0000-7000-8000-000000000053', 1, '{}', '{}', '[]', 'profile-hash', 1, 1);
       INSERT INTO match_rulesets
-        (id, version, definition_json, definition_hash, active, created_at)
+        (id, definition_json, definition_hash, active, created_at)
       VALUES
-        ('018f0000-0000-7000-8000-000000000055', '1', '{}', 'rules-hash', 1, 1);
+        ('018f0000-0000-7000-8000-000000000055', '{}', 'rules-hash', 1, 1);
       INSERT INTO match_results
         (id, profile_version_id, job_revision_id, ruleset_id, filter_status, total_score,
          components_json, risks_json, input_hash, created_at)

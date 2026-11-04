@@ -1,5 +1,4 @@
 import {
-  communityResearchPromptVersion,
   communityResearchSchemaVersion,
   researchRequestFingerprint,
   type CommunityResearchBundle,
@@ -75,7 +74,7 @@ describe('community research prompt and normalization', () => {
     const schema = communityResearchJsonSchema();
 
     expect(prompt).toContain(fingerprint);
-    expect(prompt).toContain(communityResearchPromptVersion);
+    expect(prompt).not.toContain('Prompt 版本');
     expect(prompt).toContain('不得补写标准答案');
     expect(prompt).toContain('JobHunter 预采集证据包');
     expect(prompt).toContain('不得调用 MCP、Shell、终端、本地文件、通用浏览器');

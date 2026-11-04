@@ -113,7 +113,6 @@ export const webJobMatchSchema = z
     totalScore: z.number().min(0).max(100),
     components: z.array(scoreComponentSchema),
     ruleOutcomes: z.array(ruleOutcomeSchema),
-    rulesetVersion: z.string(),
     createdAt: z.iso.datetime(),
     advice: z.discriminatedUnion('status', [
       z.object({ status: z.literal('available'), content: jobAdviceSchema }).strict(),

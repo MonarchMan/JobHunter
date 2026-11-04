@@ -1,6 +1,4 @@
 import { z } from 'zod';
-import { jobAdviceAgentDefinition } from '../job-advice-agent.js';
-import { jobUnderstandingAgentDefinition } from '../job-understanding-agent.js';
 import type { TaskHandler, TaskHandlerContext } from '@jobhunter/common/tasks';
 import type { createJobAdviceTaskHandler } from './job-advice-handler.js';
 import type { createJobUnderstandingTaskHandler } from './job-understanding-handler.js';
@@ -85,7 +83,6 @@ export function createManualJobScoreTaskHandler(input: {
         const enrichment = await input.understanding.execute(context, {
           jobRevisionId: payload.jobRevisionId,
           profileVersionId: payload.profileVersionId,
-          enrichmentVersion: jobUnderstandingAgentDefinition.version,
         });
         jobEnrichmentId = enrichment.jobEnrichmentId;
         modelScore = enrichment.fitScore;
@@ -116,7 +113,6 @@ export function createManualJobScoreTaskHandler(input: {
       try {
         const advice = await input.advice.execute(context, {
           matchResultId: matched.matchResultId,
-          adviceVersion: jobAdviceAgentDefinition.version,
           jobRevisionId: payload.jobRevisionId,
           profileVersionId: payload.profileVersionId,
         });

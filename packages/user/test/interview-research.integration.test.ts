@@ -3,6 +3,7 @@ import {
   ExperienceResearchBundleError,
   ExperienceResearchConflictError,
   ExperienceResearchService,
+  renderCommunityResearchPrompt,
 } from '@jobhunter/user/interview';
 import { HandlerRegistry, TaskService } from '@jobhunter/common/tasks';
 import type { ArtifactStore, ExternalResearchExecutor } from '@jobhunter/user/ports/index';
@@ -164,7 +165,10 @@ function researchBundle(generatedAt = '2026-08-30T08:00:00.000Z'): CommunityRese
   const question = '如何定位一次线上慢查询？';
   return {
     schemaVersion: communityResearchSchemaVersion,
-    requestFingerprint: researchRequestFingerprint(brief),
+    requestFingerprint: contentHash({
+      brief: researchRequestFingerprint(brief),
+      promptHash: contentHash(renderCommunityResearchPrompt(brief, 'content-identity')),
+    }),
     generatedAt,
     sources: [
       {
@@ -967,7 +971,6 @@ describe('community interview research persistence', () => {
       const executor: ExternalResearchExecutor = {
         key: executorKey,
         version: 'fixture-v1',
-        supportedPromptVersions: [created.detail.request.promptVersion],
         capabilitySummary: {
           liveWebSearch: executorKey !== 'configured-model',
           browserTools: [],
@@ -979,7 +982,7 @@ describe('community interview research persistence', () => {
         execute(input) {
           receivedPrompt = input.prompt;
           expect(input.requestId).toBe(created.detail.request.id);
-          expect(input.promptVersion).toBe(created.detail.request.promptVersion);
+          expect(input).not.toHaveProperty('promptVersion');
           expect(input.maximumOutputBytes).toBe(2 * 1024 * 1024);
           expect(input.outputSchema).toMatchObject({ type: 'object' });
           expect(input.collectionPlan).toEqual({

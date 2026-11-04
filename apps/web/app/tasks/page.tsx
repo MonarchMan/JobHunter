@@ -307,7 +307,6 @@ export default async function TasksPage({
               <tr>
                 <th scope="col">Agent</th>
                 <th scope="col">状态</th>
-                <th scope="col">版本</th>
                 <th scope="col">Token</th>
                 <th scope="col">估算成本</th>
                 <th scope="col">时间</th>
@@ -316,7 +315,7 @@ export default async function TasksPage({
             <tbody>
               {diagnostics.agentRuns.length === 0 ? (
                 <tr key="empty-agent-runs">
-                  <td className={dataTableStyles.empty} colSpan={6}>
+                  <td className={dataTableStyles.empty} colSpan={5}>
                     <strong>暂无 Agent 运行记录</strong>
                     <span>简历提取、匹配或建议生成后，运行记录会显示在这里。</span>
                   </td>
@@ -331,10 +330,6 @@ export default async function TasksPage({
                       <span className={`status status-${run.status}`}>
                         {labelStatus(agentRunStatusLabels, run.status)}
                       </span>
-                    </td>
-                    <td>
-                      Agent {run.agentVersion}
-                      <small>Prompt {run.promptVersion}</small>
                     </td>
                     <td>
                       {run.inputTokens ?? '—'} / {run.outputTokens ?? '—'}
@@ -362,9 +357,7 @@ export default async function TasksPage({
                   {labelStatus(agentRunStatusLabels, run.status)}
                 </span>
               </div>
-              <p>
-                版本 Agent {run.agentVersion} · {time(run.startedAt)}
-              </p>
+              <p>{time(run.startedAt)}</p>
             </article>
           ))}
         </div>

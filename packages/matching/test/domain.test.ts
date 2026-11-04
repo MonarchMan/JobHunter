@@ -16,7 +16,8 @@ describe('match identity', () => {
     profileVersionId: parseId(ids.profileVersion, 'ProfileVersion'),
     jobRevisionId: parseId(ids.revision, 'JobRevision'),
     rulesetId: parseId(ids.ruleset, 'MatchRuleset'),
-    rulesetVersion: 'v1',
+    rulesetHash: contentHash({ conditionWeight: 'equal' }),
+    modelUsed: false,
   };
 
   it('distinguishes base and enrichment-aware matches', () => {
@@ -37,8 +38,7 @@ describe('match identity', () => {
     const advice = buildMatchAdviceIdentity({
       matchResultId: parseId(ids.match, 'MatchResult'),
       agentRunId: parseId(ids.agentRun, 'AgentRun'),
-      agentVersion: '1',
-      promptVersion: '1',
+      definitionHash: contentHash({ prompt: 'test' }),
       modelConfigHash: contentHash({ model: 'fake' }),
     });
     expect(advice).toHaveLength(64);

@@ -93,17 +93,27 @@ test('recruitment detail separates objective conditions from model assessment', 
   page,
 }) => {
   await page.goto('/jobs/018f0000-0000-7000-8000-000000000402');
-  await expect(page.getByText(/招聘类别：实习/)).toBeVisible();
-  await expect(page.getByText(/证据完整度.*暂定分/)).toBeVisible();
-  await expect(page.getByText('客观条件', { exact: true })).toBeVisible();
+  await expect(page.getByText(/招聘类别：/)).toHaveCount(0);
+  await expect(page.getByText(/证据完整度/)).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('font-size', '30px');
+  await expect(page.getByRole('heading', { name: '职位描述', exact: true })).toHaveCSS(
+    'font-size',
+    '14px',
+  );
+  await expect(page.getByText('客观条件', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('地点', { exact: true })).toBeVisible();
   await expect(page.getByText('项目 / 实践', { exact: true })).toHaveCount(0);
-  await expect(
-    page.getByText('尚未评估技能及项目 / 工作能力，当前分数仅反映客观条件。'),
-  ).toBeVisible();
+  await expect(page.getByText('暂无模型评分', { exact: true })).toBeVisible();
+  await expect(page.locator('summary').filter({ hasText: /待确认|查看匹配依据/ })).toHaveCount(0);
   const rules = page.getByRole('region', { name: '规则评分', exact: true });
   const model = page.getByRole('region', { name: '模型评分', exact: true });
   await expect(rules).toBeVisible();
   await expect(model).toBeVisible();
+  const ruleHeading = rules.getByRole('heading', { name: '规则评分', exact: true });
+  await expect(ruleHeading.locator('..')).toHaveCSS('display', 'flex');
+  expect((await rules.locator('strong').first().boundingBox())?.x).toBeGreaterThan(
+    (await ruleHeading.boundingBox())?.x ?? 0,
+  );
   const ruleBox = await rules.boundingBox();
   const modelBox = await model.boundingBox();
   expect(Math.abs((ruleBox?.y ?? 0) - (modelBox?.y ?? 999))).toBeLessThanOrEqual(1);

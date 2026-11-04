@@ -16,7 +16,6 @@ interface MatchRow {
   readonly total_score: number;
   readonly components_json: string;
   readonly risks_json: string;
-  readonly ruleset_version: string;
   readonly created_at: number;
   readonly advice_json: string | null;
   readonly advice_task_status: string | null;
@@ -25,10 +24,16 @@ interface MatchRow {
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function advice(row: MatchRow): WebJobDetail['matches'][number]['advice'] {
   if (row.advice_json) {
-    return {
-      status: 'available',
-      content: parseStoredJobAdvice(JSON.parse(row.advice_json) as unknown),
-    };
+    try {
+      return {
+        status: 'available',
+        content: parseStoredJobAdvice(JSON.parse(row.advice_json) as unknown),
+      };
+    } catch (error) {
+      // 历史建议解析失败仅影响建议模块，职位正文与评分继续可用。
+      if (error instanceof z.ZodError || error instanceof SyntaxError) return { status: 'failed' };
+      throw error;
+    }
   }
   if (row.advice_task_status === 'pending' || row.advice_task_status === 'running')
     return { status: 'pending' };
@@ -61,13 +66,13 @@ export class SqliteWebJobTraceRepository implements WebJobTraceRepository {
     const matches = this.#client
       .prepare(
         `WITH candidates AS (
-         SELECT mr.*, rs.version AS ruleset_version,
+         SELECT mr.*,
                 ROW_NUMBER() OVER (PARTITION BY mr.profile_version_id ORDER BY mr.created_at DESC, mr.id DESC) AS preference
-         FROM match_results mr JOIN match_rulesets rs ON rs.id = mr.ruleset_id
+         FROM match_results mr
          WHERE mr.job_revision_id = ? AND mr.profile_version_id IN (SELECT value FROM json_each(?))
        )
        SELECT c.id, c.profile_version_id, c.filter_status, c.total_score, c.components_json,
-              c.risks_json, c.ruleset_version, c.created_at,
+              c.risks_json, c.created_at,
               (SELECT ma.result_json FROM match_advices ma WHERE ma.match_result_id = c.id ORDER BY ma.created_at DESC, ma.id DESC LIMIT 1) AS advice_json
        FROM candidates c WHERE c.preference = 1 ORDER BY c.total_score DESC, c.created_at DESC`,
       )
@@ -85,7 +90,6 @@ export class SqliteWebJobTraceRepository implements WebJobTraceRepository {
         totalScore: row.total_score,
         components: z.array(scoreComponentSchema).parse(JSON.parse(row.components_json) as unknown),
         ruleOutcomes: z.array(ruleOutcomeSchema).parse(JSON.parse(row.risks_json) as unknown),
-        rulesetVersion: row.ruleset_version,
         createdAt: new Date(row.created_at).toISOString(),
         advice: advice({
           ...row,

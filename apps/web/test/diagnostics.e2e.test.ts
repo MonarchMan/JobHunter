@@ -55,10 +55,10 @@ function seedDiagnostics(dataRoot: string): void {
     database.client
       .prepare(
         `INSERT INTO agent_runs
-         (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+         (id, agent_key, definition_hash, model_config_hash, input_hash,
           cache_key, status, output_json, input_tokens, output_tokens, estimated_cost_micros,
           cost_currency, pricing_version, started_at, finished_at)
-         VALUES (?, 'resume-profile', '1.2.0', 'prompt-v3', 'model-fingerprint',
+         VALUES (?, 'resume-profile', 'definition-fingerprint', 'model-fingerprint',
           'private-input-hash', 'cache-key', 'succeeded', '{"private":"output"}',
           120, 45, 1234, 'USD', '2026-08', 1, 2)`,
       )
@@ -105,8 +105,7 @@ describe('Web diagnostics', () => {
           {
             id: agentRunId,
             agentKey: 'resume-profile',
-            agentVersion: '1.2.0',
-            promptVersion: 'prompt-v3',
+            definitionHash: 'definition-fingerprint',
             inputTokens: 120,
             outputTokens: 45,
             estimatedCostMicros: 1234,

@@ -38,11 +38,6 @@ import {
   type TaskService,
 } from '@jobhunter/common/tasks';
 import { latestTurn, questionContextHash } from './context.js';
-import {
-  docsGroundedProjectQuestionAgentDefinition,
-  projectAnswerDigestAgentDefinition,
-  projectQuestionAgentDefinition,
-} from './agents.js';
 import { ProjectMaterialService } from './material.js';
 import { drillProfile, drillProfileDefinitionHash, type DrillProfileKey } from './profile.js';
 import type {
@@ -814,10 +809,3 @@ export class InterviewProjectService {
     };
   }
 }
-
-/** 应用服务使用的稳定配置或常量。 */
-export const interviewAgentVersions = {
-  question: projectQuestionAgentDefinition.version,
-  docsQuestion: docsGroundedProjectQuestionAgentDefinition.version,
-  answerDigest: projectAnswerDigestAgentDefinition.version,
-} as const;

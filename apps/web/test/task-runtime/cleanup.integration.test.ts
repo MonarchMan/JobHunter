@@ -23,22 +23,22 @@ describe('cleanup infrastructure', () => {
       handle.client
         .prepare(
           `INSERT INTO agent_runs
-           (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+           (id, agent_key, definition_hash, model_config_hash, input_hash,
             cache_key, status, output_json, error_category, error_summary, input_tokens,
             output_tokens, estimated_cost_micros, cost_currency, pricing_version,
             started_at, finished_at)
-           VALUES (?, 'fixture', '1', '1', ?, ?, ?, ?, NULL, NULL, NULL,
+           VALUES (?, 'fixture', 'definition', ?, ?, ?, ?, NULL, NULL, NULL,
                    NULL, NULL, NULL, NULL, NULL, ?, ?)`,
         )
         .run('old-failed', 'a'.repeat(64), 'b'.repeat(64), 'c'.repeat(64), 'failed', 1, 2);
       handle.client
         .prepare(
           `INSERT INTO agent_runs
-           (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+           (id, agent_key, definition_hash, model_config_hash, input_hash,
             cache_key, status, output_json, error_category, error_summary, input_tokens,
             output_tokens, estimated_cost_micros, cost_currency, pricing_version,
             started_at, finished_at)
-           VALUES (?, 'fixture', '1', '1', ?, ?, ?, 'failed', NULL, NULL, NULL,
+           VALUES (?, 'fixture', 'definition', ?, ?, ?, 'failed', NULL, NULL, NULL,
                    NULL, NULL, NULL, NULL, NULL, ?, ?)`,
         )
         .run('young-failed', 'd'.repeat(64), 'e'.repeat(64), 'f'.repeat(64), now, now);

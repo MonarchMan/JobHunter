@@ -19,8 +19,7 @@ import { SqliteModelRequestRepository } from '@jobhunter/common/persistence/mode
 interface AgentRunRow {
   readonly id: string;
   readonly agent_key: string;
-  readonly agent_version: string;
-  readonly prompt_version: string;
+  readonly definition_hash: string;
   readonly model_config_hash: string;
   readonly status: WebAgentRunSummary['status'];
   readonly error_category: string | null;
@@ -43,7 +42,7 @@ interface ToolCallRow {
   readonly error_summary: string | null;
 }
 
-const columns = `id, agent_key, agent_version, prompt_version, model_config_hash, status,
+const columns = `id, agent_key, definition_hash, model_config_hash, status,
   error_category, error_summary, input_tokens, output_tokens, estimated_cost_micros,
   cost_currency, pricing_version, started_at, finished_at`;
 
@@ -143,8 +142,7 @@ function summary(
   return webAgentRunSummarySchema.parse({
     id: row.id,
     agentKey: row.agent_key,
-    agentVersion: row.agent_version,
-    promptVersion: row.prompt_version,
+    definitionHash: row.definition_hash,
     modelConfigHash: row.model_config_hash,
     status: row.status,
     errorCategory: row.error_category,

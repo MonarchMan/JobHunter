@@ -16,7 +16,7 @@
 .heading h1 {
   max-width: 52rem;
   margin: 0.4rem 0 1rem;
-  font-size: clamp(2rem, 5vw, 3.6rem);
+  font-size: 30px;
 }
 
 .actions {
@@ -37,6 +37,10 @@
   margin: 1.5rem 0;
   line-height: 1.8;
   white-space: pre-wrap;
+}
+
+.descriptionHeading {
+  font-size: 14px;
 }
 
 .matchCard {
@@ -86,7 +90,15 @@
   background: var(--canvas);
 }
 .scoreCard h3 {
-  margin: 0 0 0.75rem;
+  margin: 0;
+}
+.scoreHeading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.scoreHeading > * {
+  white-space: nowrap;
 }
 .scoreValue {
   font-size: 1.75rem;

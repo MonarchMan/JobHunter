@@ -24,7 +24,7 @@ interface RequestRow {
   readonly id: string;
   readonly brief_json: string;
   readonly request_fingerprint: string;
-  readonly prompt_version: string;
+  readonly prompt_hash: string;
   readonly schema_version: string;
   readonly prompt_file_id: string;
   readonly prompt_file_version_no: number;
@@ -70,7 +70,7 @@ interface CommunityQuestionRow {
   readonly question_fingerprint: string;
 }
 
-const requestColumns = `id, brief_json, request_fingerprint, prompt_version, schema_version,
+const requestColumns = `id, brief_json, request_fingerprint, prompt_hash, schema_version,
   prompt_file_id, prompt_file_version_no, schema_file_id, schema_file_version_no, bundle_file_id,
   bundle_file_version_no, current_task_id, state, revision, created_at, updated_at`;
 const experienceColumns = `id, file_id, sequence_no, research_request_id, review_status, company,
@@ -96,7 +96,7 @@ function requestRecord(row: RequestRow): ExperienceResearchRequestRecord {
     id: parseId(row.id, 'ExperienceResearchRequest'),
     brief: json(row.brief_json, experienceResearchBriefSchema),
     requestFingerprint: parseContentHash(row.request_fingerprint),
-    promptVersion: row.prompt_version,
+    promptHash: row.prompt_hash,
     schemaVersion: row.schema_version,
     promptFileId: row.prompt_file_id,
     promptFileVersionNo: row.prompt_file_version_no,
@@ -187,7 +187,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
             request.id,
             JSON.stringify(request.brief),
             request.requestFingerprint,
-            request.promptVersion,
+            request.promptHash,
             request.schemaVersion,
             request.promptFileId,
             request.promptFileVersionNo,

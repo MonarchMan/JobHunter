@@ -1,9 +1,8 @@
 import type { PromptDescriptor } from '@jobhunter/common/agent';
 
 /** 模块使用的稳定配置或常量。 */
-export const resumePolishPromptV1: PromptDescriptor = {
+export const resumePolishPrompt: PromptDescriptor = {
   agentKey: 'resume-polish',
-  promptVersion: '2026-08-27.v1',
   outputSchemaVersion: '2026-08-27.v1',
   text: `你是中文求职简历编辑。请按输入中的目标岗位，只润色被选择的项目经历或工作/实习经历描述，并严格返回给定 JSON Schema。
 

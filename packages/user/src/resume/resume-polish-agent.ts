@@ -7,16 +7,14 @@ import {
 } from '../contracts/resume-polish.js';
 export * from '../contracts/resume-polish.js';
 import { defineAgent } from '@jobhunter/common/agent';
-import { resumePolishPromptV1 } from './prompts/resume-polish/v1.js';
+import { resumePolishPrompt } from './prompts/resume-polish.js';
 
 /** 简历润色 Agent 定义；无工具且不得新增输入中不存在的事实。 */
 export const resumePolishAgentDefinition = defineAgent({
-  key: resumePolishPromptV1.agentKey,
-  version: '1.0.0',
-  promptVersion: resumePolishPromptV1.promptVersion,
-  outputSchemaVersion: resumePolishPromptV1.outputSchemaVersion,
+  key: resumePolishPrompt.agentKey,
+  outputSchemaVersion: resumePolishPrompt.outputSchemaVersion,
   outputSchemaName: 'ResumePolishOutput',
-  systemPrompt: resumePolishPromptV1.text,
+  systemPrompt: resumePolishPrompt.text,
   inputSchema: resumePolishAgentInputSchema,
   outputSchema: resumePolishAgentOutputSchema,
   tools: [],

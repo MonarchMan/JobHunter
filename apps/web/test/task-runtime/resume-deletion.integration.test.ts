@@ -203,9 +203,9 @@ async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promi
   handle.client
     .prepare(
       `INSERT INTO agent_runs
-       (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+       (id, agent_key, definition_hash, model_config_hash, input_hash,
         cache_key, status, output_json, cost_currency, pricing_version, started_at, finished_at)
-       VALUES ('shared-agent-run', 'resume-profile', '1', '1', ?, ?, 'shared-cache',
+       VALUES ('shared-agent-run', 'resume-profile', 'definition', ?, ?, 'shared-cache',
                'succeeded', '{"redacted":true}', 'USD', 'test', 1, 2)`,
     )
     .run('a'.repeat(64), 'b'.repeat(64));

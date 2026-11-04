@@ -1,5 +1,7 @@
 # 008 轻量 Agent 运行时设计
 
+删除 AgentDefinition 的 version/promptVersion，以 definitionHash 替代运行记录及业务结果选择中的版本组合；哈希包含 Prompt、输入输出 Schema、工具定义、业务校验和运行限制。Prompt 注册按功能 key 唯一，只保留当前文件。迁移删除版本列，旧运行保留不可复用的历史内容身份。
+
 重试使用 AgentRunStore.restartFailed 事务恢复失败或取消记录，Runner 继续使用原 ID，旧用量与本次用量在结束时合并，预算仍针对本次尝试。任务作用域进入缓存键，禁用成功缓存的任务仍可通过该作用域恢复失败记录。工具序号从历史最大值之后开始；版本、模型或输入改变时新建独立运行。
 
 ## 国内供应商价格目录
@@ -45,7 +47,7 @@ AgentDefinition.validateOutput 在 Schema 校验后执行，业务拒绝使用 i
 
 简历画像提取使用 `resume-profile` Prompt v3，按通用规则、教育经历、工作经历、项目经历、技能与领域、证据与输出检查分块组织要求。日期由模型直接补全为 `YYYY-MM-DD`：只有年月时起始补为月初、终止补为月末；只有年份时起始补为 `09-01`、终止补为 `06-30`；季节按固定季节边界补全。应用层不通过脚本改写模型日期。
 
-Agent 行为版本统一使用三段式 SemVer（例如 `1.0.0`、`2.1.0`）。`defineAgent` 在组合根装配前拒绝 `v1`、`1` 或其他非三段式值。版本号是缓存键和运行审计的一部分，任何变更都必须先取得产品负责人明确同意；实现变更不得自行递增版本。历史数据采用破坏性迁移直接归一化为对应三段式值。
+Agent 不维护行为或 Prompt 版本。`agentDefinitionHash` 计算当前提示词、输入输出契约、业务校验、工具及预算的内容哈希，参与缓存和建议选择；迁移删除运行表的两个版本列，历史运行赋予不可复用的历史身份，保留原有用量与输出快照。
 
 ## 包
 
@@ -83,7 +85,7 @@ AgentRunStore 允许同一 cacheKey 存在多个失败/取消运行，只对 suc
 
 ## Prompt Registry
 
-Prompt 以 `packages/*/prompts/<agent>/<version>.ts` 存储，导出文本与输出 Schema version。启动测试验证 key/version 唯一。
+Prompt 以模块内 `prompts/<agent>.ts` 存储，每个功能仅保留当前文本和输出契约；注册表验证功能 key 唯一，不接受版本选择。
 
 ## 评测
 

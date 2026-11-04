@@ -130,52 +130,8 @@ function employmentType(input: DeterministicMatchInput): RuleOutcome {
   };
 }
 
-function experience(input: DeterministicMatchInput): RuleOutcome {
-  const minimum = input.understanding?.minimumYearsExperience;
-  if (!minimum) {
-    return {
-      ruleId: 'qualification.minimum-experience',
-      status: 'unknown',
-      evidence: [evidence('job', '/experienceText', '未取得明确最低年限。')],
-      explanation: '职位经验年限不明确，不作硬排除。',
-    };
-  }
-  if (input.profile.yearsOfExperience === null) {
-    return {
-      ruleId: 'qualification.minimum-experience',
-      status: 'unknown',
-      evidence: [evidence('profile', '/yearsOfExperience', '候选人年限未知。')],
-      explanation: '候选人经验年限未知，不作硬排除。',
-    };
-  }
-  const matches = input.profile.yearsOfExperience >= minimum.value;
-  return {
-    ruleId: 'qualification.minimum-experience',
-    status: matches ? 'pass' : 'fail',
-    evidence: [
-      evidence(
-        'profile',
-        '/yearsOfExperience',
-        `候选人经验：${String(input.profile.yearsOfExperience)} 年`,
-      ),
-      evidence(
-        'enrichment',
-        '/minimumYearsExperience',
-        `职位最低经验：${String(minimum.value)} 年`,
-      ),
-    ],
-    explanation: matches ? '经验年限满足要求。' : '明确经验年限不足。',
-  };
-}
-
 /** 按规则集顺序评估职位是否满足硬性资格条件。 */
 export function evaluateEligibility(input: DeterministicMatchInput): readonly RuleOutcome[] {
-  // 1、评估排除词；2、评估地点/公司/雇佣类型；3、评估经验；4、返回稳定规则结果。
-  return [
-    excludedTerms(input),
-    location(input),
-    companySize(input),
-    employmentType(input),
-    experience(input),
-  ];
+  // 1、评估排除词；2、评估地点/公司/用工类型；资格由正文条件解析负责。
+  return [excludedTerms(input), location(input), companySize(input), employmentType(input)];
 }

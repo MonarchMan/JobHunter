@@ -351,6 +351,27 @@
       "when": 1793836800002,
       "tag": "0049_compact_interview_storage",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1793836800003,
+      "tag": "0050_remove_business_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1793836800004,
+      "tag": "0051_research_prompt_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1793836800005,
+      "tag": "0052_remove_score_version",
+      "breakpoints": true
     }
   ]
 }

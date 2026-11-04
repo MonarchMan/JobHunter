@@ -81,11 +81,11 @@ function seedFirstProfileVersion(input: {
     database.client
       .prepare(
         `INSERT INTO agent_runs
-          (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+          (id, agent_key, definition_hash, model_config_hash, input_hash,
            cache_key, status, output_json, error_category, error_summary, input_tokens,
            output_tokens, estimated_cost_micros, cost_currency, pricing_version,
            started_at, finished_at)
-         VALUES (?, 'resume-profile', '1', '1', ?, ?, ?, 'succeeded', '{}', NULL, NULL,
+         VALUES (?, 'resume-profile', 'definition', ?, ?, ?, 'succeeded', '{}', NULL, NULL,
                  10, 10, 0, 'USD', 'fixture', 1, 2)`,
       )
       .run(agentRunId, 'a'.repeat(64), 'b'.repeat(64), `fixture:${input.profileId}`);

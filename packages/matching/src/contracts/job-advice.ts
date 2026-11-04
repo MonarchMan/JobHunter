@@ -9,7 +9,7 @@ const adviceText = z
   .refine((text) => !/ref-\d+/i.test(text), 'Advice must not contain reference IDs.');
 const advicePointSchema = z.object({ text: adviceText }).strict();
 
-/** v4 建议仅保留亮点、缺口和准备行动；八项上限容纳旧建议合并后的展示。 */
+/** v4 建议仅保留亮点、缺口和准备行动。 */
 export const jobAdviceSchema = z
   .object({
     highlights: z.array(advicePointSchema).max(1),
@@ -21,22 +21,7 @@ export const jobAdviceSchema = z
 /** 经边界校验的职位准备建议。 */
 export type JobAdvice = z.infer<typeof jobAdviceSchema>;
 
-/** 仅存储读取边界接受旧待确认字段，合并后返回新结构，不回写历史数据。 */
+/** 存储读取与新输出使用同一契约，不兼容或转换旧字段。 */
 export function parseStoredJobAdvice(value: unknown): JobAdvice {
-  if (typeof value !== 'object' || value === null || !('uncertainties' in value)) {
-    return jobAdviceSchema.parse(value);
-  }
-  const legacy = jobAdviceSchema
-    .extend({
-      uncertainties: z.array(advicePointSchema).max(3),
-      preparation: z.array(adviceText).max(5),
-    })
-    .parse(value);
-  return jobAdviceSchema.parse({
-    highlights: legacy.highlights,
-    gaps: legacy.gaps,
-    preparation: [
-      ...new Set([...legacy.preparation, ...legacy.uncertainties.map((item) => item.text)]),
-    ],
-  });
+  return jobAdviceSchema.parse(value);
 }

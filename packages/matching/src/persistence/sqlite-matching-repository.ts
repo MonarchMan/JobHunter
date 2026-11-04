@@ -39,7 +39,6 @@ interface EnrichmentRow {
 /** 数据库查询结果对应的行结构。 */
 interface RulesetRow {
   readonly id: string;
-  readonly version: string;
   readonly definition_json: string;
   readonly definition_hash: string;
   readonly active: number;
@@ -56,7 +55,6 @@ interface MatchRow {
   readonly filter_status: 'eligible' | 'excluded' | 'uncertain';
   readonly total_score: number;
   readonly model_score: number | null;
-  readonly scoring_version: string;
   readonly components_json: string;
   readonly risks_json: string;
   readonly input_hash: string;
@@ -81,7 +79,6 @@ interface CurrentMatchRow extends MatchRow {
   readonly job_status: 'active' | 'stale' | 'closed';
   readonly published_at: number | null;
   readonly last_seen_at: number;
-  readonly ruleset_version: string;
   readonly recency: number;
 }
 
@@ -125,7 +122,6 @@ function enrichment(row: EnrichmentRow): JobEnrichmentRecord {
 function ruleset(row: RulesetRow): MatchRulesetRecord {
   return {
     id: parseId(row.id, 'MatchRuleset'),
-    version: row.version,
     definition: parseMatchRuleset(JSON.parse(row.definition_json) as unknown),
     definitionHash: parseContentHash(row.definition_hash),
     active: row.active === 1,
@@ -150,7 +146,6 @@ function match(row: MatchRow): MatchResultRecord {
     rulesetId: parseId(row.ruleset_id, 'MatchRuleset'),
     ...output,
     modelScore: row.model_score,
-    scoringVersion: row.scoring_version,
     inputHash: parseContentHash(row.input_hash),
     createdAt: utcInstant(row.created_at),
   };
@@ -158,9 +153,9 @@ function match(row: MatchRow): MatchResultRecord {
 
 const enrichmentColumns =
   'id, job_revision_id, agent_run_id, schema_version, content_hash, result_json, created_at';
-const rulesetColumns = 'id, version, definition_json, definition_hash, active, created_at';
+const rulesetColumns = 'id, definition_json, definition_hash, active, created_at';
 const matchColumns = `id, profile_version_id, job_revision_id, job_enrichment_id, ruleset_id,
-                      filter_status, total_score, model_score, scoring_version,
+                      filter_status, total_score, model_score,
                       components_json, risks_json, input_hash, created_at`;
 const adviceColumns =
   'id, match_result_id, agent_run_id, schema_version, content_hash, result_json, created_at';
@@ -258,14 +253,6 @@ export class SqliteMatchingRepository implements MatchingRepository {
   }
 
   /** 执行数据库组件对外暴露的操作。 */
-  public getRuleset(id: MatchRulesetRecord['id']): MatchRulesetRecord | null {
-    const row = this.#client
-      .prepare(`SELECT ${rulesetColumns} FROM match_rulesets WHERE id = ?`)
-      .get(id) as RulesetRow | undefined;
-    return row ? ruleset(row) : null;
-  }
-
-  /** 执行数据库组件对外暴露的操作。 */
   public getActiveRuleset(): MatchRulesetRecord | null {
     const row = this.#client
       .prepare(`SELECT ${rulesetColumns} FROM match_rulesets WHERE active = 1`)
@@ -280,25 +267,22 @@ export class SqliteMatchingRepository implements MatchingRepository {
       this.#client
         .prepare(
           `INSERT INTO match_rulesets
-           (id, version, definition_json, definition_hash, active, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(version) DO UPDATE SET active = excluded.active`,
+           (id, definition_json, definition_hash, active, created_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET definition_json = excluded.definition_json,
+             definition_hash = excluded.definition_hash, active = excluded.active`,
         )
         .run(
           record.id,
-          record.version,
           canonicalJson(record.definition),
           record.definitionHash,
           record.active ? 1 : 0,
           record.createdAt,
         );
       const row = this.#client
-        .prepare(`SELECT ${rulesetColumns} FROM match_rulesets WHERE version = ?`)
-        .get(record.version) as RulesetRow | undefined;
+        .prepare(`SELECT ${rulesetColumns} FROM match_rulesets WHERE id = ?`)
+        .get(record.id) as RulesetRow | undefined;
       if (!row) throw new Error('Match ruleset persistence did not produce a row.');
-      if (row.definition_hash !== record.definitionHash) {
-        throw new TypeError(`Match ruleset version ${record.version} is immutable.`);
-      }
       return ruleset(row);
     })();
   }
@@ -309,9 +293,9 @@ export class SqliteMatchingRepository implements MatchingRepository {
       .prepare(
         `INSERT INTO match_results
          (id, profile_version_id, job_revision_id, job_enrichment_id, ruleset_id,
-          filter_status, total_score, model_score, scoring_version,
+          filter_status, total_score, model_score,
           components_json, risks_json, input_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(input_hash) DO NOTHING`,
       )
       .run(
@@ -323,7 +307,6 @@ export class SqliteMatchingRepository implements MatchingRepository {
         record.filterStatus,
         record.totalScore,
         record.modelScore,
-        record.scoringVersion,
         canonicalJson(record.components),
         canonicalJson(record.ruleOutcomes),
         record.inputHash,
@@ -396,8 +379,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
       if (
         run?.status === 'succeeded' &&
         run.agentKey === selector.agentKey &&
-        run.agentVersion === selector.agentVersion &&
-        run.promptVersion === selector.promptVersion &&
+        run.definitionHash === selector.definitionHash &&
         run.modelConfigHash === selector.modelConfigHash
       )
         return advice(row);
@@ -459,7 +441,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
                   mr.ruleset_id, mr.filter_status, mr.total_score, mr.components_json,
                   mr.risks_json, mr.input_hash, mr.created_at,
                   j.id AS job_id, j.title, j.status AS job_status,
-                  j.published_at, j.last_seen_at, rs.version AS ruleset_version,
+                  j.published_at, j.last_seen_at,
                   COALESCE(j.published_at, j.last_seen_at) AS recency,
                   ROW_NUMBER() OVER (
                     PARTITION BY j.id
@@ -499,7 +481,6 @@ export class SqliteMatchingRepository implements MatchingRepository {
       jobStatus: row.job_status,
       publishedAt: row.published_at === null ? null : utcInstant(row.published_at),
       lastSeenAt: utcInstant(row.last_seen_at),
-      rulesetVersion: row.ruleset_version,
     }));
     const last = pageRows.at(-1);
     return {

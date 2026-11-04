@@ -3,6 +3,7 @@ import { SqliteMatchingJobReader } from '@jobhunter/recruitment/persistence/matc
 import { SqliteProfileIdentityReader } from '@jobhunter/user/persistence/profile-identity-reader';
 import {
   AgentRunner,
+  agentDefinitionHash,
   hashCanonical,
   ModelClientError,
   type ModelRequest,
@@ -33,7 +34,7 @@ import {
 import { normalizedJobContentHash, parseNormalizedJob } from '@jobhunter/recruitment/domain';
 import { parseCandidateProfile } from '@jobhunter/user/domain';
 import { FakeModelClient } from '@jobhunter/common/models';
-import { jobAdviceAgentDefinition, jobUnderstandingAgentDefinition } from '@jobhunter/matching';
+import { jobAdviceAgentDefinition } from '@jobhunter/matching';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -98,7 +99,6 @@ const revisionId = parseId('018f0000-0000-7000-8000-00000000d003', 'JobRevision'
 const jobId = parseId('018f0000-0000-7000-8000-00000000d006', 'Job');
 const profileId = parseId('018f0000-0000-7000-8000-00000000d007', 'CandidateProfile');
 const profileVersionId = parseId('018f0000-0000-7000-8000-00000000d004', 'ProfileVersion');
-const rulesetId = parseId('018f0000-0000-7000-8000-00000000d005', 'MatchRuleset');
 
 const normalizedJob = parseNormalizedJob({
   companyId,
@@ -357,66 +357,16 @@ describe('matching persistence pipeline', () => {
     expect(workflow.runForJobs(batch)[0]?.task.id).toBe(result[0]?.task.id);
     expect(tasks.count()).toBe(1);
   });
-  it('activates v3 without overwriting v1/v2 results and replays immutable versions', async () => {
+  it('runs only current rules and reuses identical result snapshots', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
-    service.ensureRulesetV1({ id: rulesetId });
+    service.ensureRuleset();
     const input = { profileVersionId, jobRevisionId: revisionId, jobEnrichmentId: null };
-    const legacy = service.compute(input).match;
-    const nextId = parseId('018f0000-0000-7000-8000-00000000d008', 'MatchRuleset');
-    service.ensureRulesetV2({ id: nextId });
-    const next = service.compute(input).match;
-    expect(next.id).not.toBe(legacy.id);
-    expect(next.rulesetId).toBe(nextId);
-    expect(next.components[0]).toMatchObject({
-      recruitmentCategory: 'unknown',
-      evidenceStatus: 'unknown',
-    });
-    expect(service.compute(input)).toEqual({ match: next, created: false });
-    expect(service.compute({ ...input, rulesetId }).match).toEqual(legacy);
-    expect(fixture.matching.getActiveRuleset()?.id).toBe(nextId);
-    // 条件语义升级独立保存 v3；旧版本指定规则 ID 后仍逐字重放。
-    const v3Id = parseId('018f0000-0000-7000-8000-00000000d009', 'MatchRuleset');
-    service.ensureRulesetV3({ id: v3Id });
-    const v3 = service.compute(input).match;
-    expect(v3.rulesetId).toBe(v3Id);
-    expect(v3.id).not.toBe(next.id);
-    expect(service.compute(input)).toEqual({ match: v3, created: false });
-    expect(service.compute({ ...input, rulesetId: nextId }).match).toEqual(next);
-    expect(service.compute({ ...input, rulesetId }).match).toEqual(legacy);
-    expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('evidence-v3');
-    // v3.1 边界修复采用独立版本，旧评分不被复用或覆盖。
-    const v31Id = parseId('018f0000-0000-7000-8000-00000000d010', 'MatchRuleset');
-    service.ensureRulesetV31({ id: v31Id });
-    const fixed = service.compute(input).match;
-    expect(fixed.rulesetId).toBe(v31Id);
-    expect(fixed.id).not.toBe(v3.id);
-    expect(service.compute(input)).toEqual({ match: fixed, created: false });
-    expect(service.compute({ ...input, rulesetId: v3Id }).match).toEqual(v3);
-    // v3.2 毕业资格独立登记，重复运行幂等且旧版仍可重放。
-    const v32Id = parseId('018f0000-0000-7000-8000-00000000d011', 'MatchRuleset');
-    service.ensureRulesetV32({ id: v32Id });
-    const graduationFixed = service.compute(input).match;
-    expect(graduationFixed.rulesetId).toBe(v32Id);
-    expect(graduationFixed.id).not.toBe(fixed.id);
-    expect(service.compute(input)).toEqual({ match: graduationFixed, created: false });
-    expect(service.compute({ ...input, rulesetId: v31Id }).match).toEqual(fixed);
-    expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('evidence-v3.2');
-    const v4Id = parseId('018f0000-0000-7000-8000-00000000d012', 'MatchRuleset');
-    service.ensureRulesetV4({ id: v4Id });
-    const objective = service.compute(input).match;
-    expect(objective.components.map((item) => item.dimension)).toEqual(['qualification']);
-    expect(objective.id).not.toBe(graduationFixed.id);
-    expect(service.compute(input)).toEqual({ match: objective, created: false });
-    expect(service.compute({ ...input, rulesetId: v32Id }).match).toEqual(graduationFixed);
-    expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('objective-v4');
-    const v5Id = parseId('018f0000-0000-7000-8000-00000000d013', 'MatchRuleset');
-    service.ensureRulesetV5({ id: v5Id });
-    const overlap = service.compute(input).match;
-    expect(overlap.rulesetId).toBe(v5Id);
-    expect(overlap.id).not.toBe(objective.id);
-    expect(service.compute(input)).toEqual({ match: overlap, created: false });
-    expect(service.compute({ ...input, rulesetId: v4Id }).match).toEqual(objective);
+    const result = service.compute(input).match;
+    expect(service.compute(input)).toEqual({ match: result, created: false });
+    expect(fixture.matching.getMatch(result.id)).toEqual(result);
+    expect(fixture.matching.getActiveRuleset()?.definition).not.toHaveProperty('version');
+    expect(fixture.matching.getActiveRuleset()?.definition).not.toHaveProperty('engine');
   });
 
   it('pre-filters job revisions by target roles and excluded terms before calculation', async () => {
@@ -451,7 +401,7 @@ describe('matching persistence pipeline', () => {
   it('runs the complete deterministic path without constructing a model client', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
-    service.ensureRulesetV1({ id: rulesetId });
+    service.ensureRuleset();
     const handler = createMatchRevisionTaskHandler(
       new MatchingBatchService({ matching: fixture.matching, calculator: service, pageSize: 1 }),
     );
@@ -475,7 +425,7 @@ describe('matching persistence pipeline', () => {
   it('keeps deterministic base results available without any model configuration', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
-    service.ensureRulesetV1({ id: rulesetId });
+    service.ensureRuleset();
     const first = service.compute({
       profileVersionId,
       jobRevisionId: revisionId,
@@ -494,10 +444,64 @@ describe('matching persistence pipeline', () => {
     );
   });
 
+  it('regenerates model scores and advice for identical inputs without reusing successful runs', async () => {
+    const fixture = await setup();
+    const model = new FakeModelClient([
+      ...[90, 70].map((fitScore) => (request: ModelRequest) => ({
+        kind: 'output' as const,
+        output: { ...(understandingOutput(request) as Record<string, unknown>), fitScore },
+        usage: { inputTokens: 50, outputTokens: 30, estimatedCostMicros: 10 },
+      })),
+      ...['准备第一个案例', '准备新的案例'].map((action) => ({
+        kind: 'output' as const,
+        output: { highlights: [], gaps: [], preparation: [action] },
+        usage: { inputTokens: 20, outputTokens: 10, estimatedCostMicros: 5 },
+      })),
+    ]);
+    const runner = new AgentRunner({
+      store: new SqliteAgentRunStore(fixture.handle.client),
+      model,
+      createId: () => fixture.ids.generate(),
+      now: () => fixture.clock.now(),
+    });
+    const understanding = createJobUnderstandingTaskHandler({ ...fixture, runner });
+    const service = new DeterministicMatchingService(fixture);
+    const payload = { jobRevisionId: revisionId, profileVersionId };
+    // 同一任务作用域也不能将已成功运行当作新执行的缓存。
+    const context = { ...fixture.context, taskId: 'regenerate-task' };
+    const first = await understanding.execute(context, payload);
+    const second = await understanding.execute(context, payload);
+    expect(first.cacheHit).toBe(false);
+    expect(second.cacheHit).toBe(false);
+    expect(second.agentRunId).not.toBe(first.agentRunId);
+    expect(second.jobEnrichmentId).not.toBe(first.jobEnrichmentId);
+    const firstMatch = service.compute({
+      ...payload,
+      jobEnrichmentId: parseId(first.jobEnrichmentId, 'JobEnrichment'),
+      modelScore: first.fitScore,
+    }).match;
+    const secondMatch = service.compute({
+      ...payload,
+      jobEnrichmentId: parseId(second.jobEnrichmentId, 'JobEnrichment'),
+      modelScore: second.fitScore,
+    }).match;
+    expect(secondMatch.id).not.toBe(firstMatch.id);
+    expect(firstMatch.modelScore).toBe(90);
+    expect(secondMatch.modelScore).toBe(70);
+    const advice = createJobAdviceTaskHandler({ ...fixture, runner });
+    const firstAdvice = await advice.execute(context, { matchResultId: secondMatch.id });
+    const secondAdvice = await advice.execute(context, { matchResultId: secondMatch.id });
+    expect(secondAdvice.cacheHit).toBe(false);
+    expect(secondAdvice.agentRunId).not.toBe(firstAdvice.agentRunId);
+    expect(secondAdvice.matchAdviceId).not.toBe(firstAdvice.matchAdviceId);
+    expect(model.requests).toHaveLength(4);
+    expect(fixture.handle.client.prepare('SELECT count(*) FROM agent_runs').pluck().get()).toBe(4);
+  });
+
   it('persists evidence-validated understanding and retains base and enriched matches', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
-    service.ensureRulesetV1({ id: rulesetId });
+    service.ensureRuleset();
     const base = service.compute({
       profileVersionId,
       jobRevisionId: revisionId,
@@ -529,7 +533,6 @@ describe('matching persistence pipeline', () => {
     const enrichmentResult = await handler.execute(fixture.context, {
       jobRevisionId: revisionId,
       profileVersionId,
-      enrichmentVersion: jobUnderstandingAgentDefinition.version,
     });
     // 2. 理解阶段返回拟合分与理由，事实按职位存储且不含判断字段。
     expect(enrichmentResult.fitScore).toBe(90);
@@ -547,11 +550,11 @@ describe('matching persistence pipeline', () => {
     expect(storedEnrichments).toEqual([enrichmentResult.jobEnrichmentId]);
     expect(enriched.match.id).not.toBe(base.match.id);
     expect(enriched.match.inputHash).not.toBe(base.match.inputHash);
-    expect(enriched.match.totalScore).toBe(100);
+    expect(enriched.match.totalScore).toBe(base.match.totalScore);
     // 3. 未传模型分时按规则口径降级，模型分与评分版本随结果持久化。
     expect(enriched.match.modelScore).toBeNull();
-    expect(enriched.match.scoringVersion).toBe('rules-v1');
-    expect(base.match.scoringVersion).toBe('rules-v1');
+    expect(enriched.match).not.toHaveProperty('scoringVersion');
+    expect(base.match).not.toHaveProperty('scoringVersion');
     expect(fixture.handle.client.prepare('SELECT count(*) FROM match_results').pluck().get()).toBe(
       2,
     );
@@ -562,7 +565,6 @@ describe('matching persistence pipeline', () => {
       {
         match: { id: enriched.match.id, jobEnrichmentId: enrichmentResult.jobEnrichmentId },
         jobStatus: 'active',
-        rulesetVersion: 'v1',
       },
     ]);
 
@@ -602,7 +604,6 @@ describe('matching persistence pipeline', () => {
     });
     const advicePayload = {
       matchResultId: enriched.match.id,
-      adviceVersion: jobAdviceAgentDefinition.version,
     };
     await expect(adviceHandler.execute(fixture.context, advicePayload)).rejects.toMatchObject({
       category: 'network_temporary',
@@ -617,8 +618,7 @@ describe('matching persistence pipeline', () => {
       matching: fixture.matching,
       selector: {
         agentKey: jobAdviceAgentDefinition.key,
-        agentVersion: jobAdviceAgentDefinition.version,
-        promptVersion: jobAdviceAgentDefinition.promptVersion,
+        definitionHash: agentDefinitionHash(jobAdviceAgentDefinition),
         modelConfigHash: hashCanonical(adviceModel.metadata),
       },
     });
@@ -631,8 +631,7 @@ describe('matching persistence pipeline', () => {
         matching: fixture.matching,
         selector: {
           agentKey: jobAdviceAgentDefinition.key,
-          agentVersion: jobAdviceAgentDefinition.version,
-          promptVersion: 'obsolete',
+          definitionHash: 'obsolete',
           modelConfigHash: hashCanonical(adviceModel.metadata),
         },
       }).current(enriched.match.id),
@@ -649,7 +648,7 @@ describe('matching persistence pipeline', () => {
   it('scores only the explicitly selected profile and job revision', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
-    service.ensureRulesetV1({ id: rulesetId });
+    service.ensureRuleset();
     const batches = new MatchingBatchService({
       calculator: service,
     });

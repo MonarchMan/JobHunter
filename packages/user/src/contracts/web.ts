@@ -51,8 +51,7 @@ export const webProfileVersionSchema = z
     extractionAgent: z
       .object({
         key: z.string(),
-        version: z.string(),
-        promptVersion: z.string(),
+        definitionHash: z.string(),
         modelConfigHash: z.string(),
       })
       .strict()

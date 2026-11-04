@@ -6,7 +6,7 @@ import {
   jobUnderstandingAgentOutputSchema,
   type JobUnderstanding,
 } from './job-understanding.js';
-import { jobUnderstandingPromptV4 } from './prompts/job-understanding/v4.js';
+import { jobUnderstandingPrompt } from './prompts/job-understanding.js';
 
 const nullableText = z.string().trim().min(1).nullable();
 
@@ -84,14 +84,14 @@ export const jobUnderstandingAgentDefinition: AgentDefinition<
   JobUnderstandingInput,
   z.infer<typeof jobUnderstandingAgentOutputSchema>
 > = defineAgent({
-  key: jobUnderstandingPromptV4.agentKey,
-  version: '4.0.0',
-  promptVersion: jobUnderstandingPromptV4.promptVersion,
-  outputSchemaVersion: jobUnderstandingPromptV4.outputSchemaVersion,
+  key: jobUnderstandingPrompt.agentKey,
+  outputSchemaVersion: jobUnderstandingPrompt.outputSchemaVersion,
   outputSchemaName: 'JobUnderstandingOutput',
-  systemPrompt: jobUnderstandingPromptV4.text,
+  systemPrompt: jobUnderstandingPrompt.text,
   inputSchema: jobUnderstandingInputSchema,
   outputSchema: jobUnderstandingAgentOutputSchema,
+  // 用户重新评分必须重新生成，成功输出只保留为运行快照。
+  resultPolicy: { cache: 'disabled', persistOutput: true },
   tools: [],
   limits: {
     // 证据引文密集的职位理解输出实测可达约 7k Token

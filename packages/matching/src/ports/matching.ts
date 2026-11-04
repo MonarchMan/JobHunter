@@ -41,7 +41,6 @@ export interface JobEnrichmentRecord {
 /** 应用层数据结构或端口契约。 */
 export interface MatchRulesetRecord {
   readonly id: MatchRulesetId;
-  readonly version: string;
   readonly definition: MatchRuleset;
   readonly definitionHash: ContentHash;
   readonly active: boolean;
@@ -59,8 +58,6 @@ export interface MatchResultRecord {
   readonly totalScore: number;
   /** 模型阶段拟合分；未配置模型或阶段降级时为 null，总分退回规则口径。 */
   readonly modelScore: number | null;
-  /** 总分合成口径；随匹配身份参与去重，历史行固定为仅规则口径。 */
-  readonly scoringVersion: string;
   readonly components: DeterministicMatchOutput['components'];
   readonly ruleOutcomes: DeterministicMatchOutput['ruleOutcomes'];
   readonly inputHash: ContentHash;
@@ -81,8 +78,7 @@ export interface MatchAdviceRecord {
 /** 应用层数据结构或端口契约。 */
 export interface MatchAdviceSelector {
   readonly agentKey: string;
-  readonly agentVersion: string;
-  readonly promptVersion: string;
+  readonly definitionHash: string;
   readonly modelConfigHash: string;
 }
 
@@ -94,7 +90,6 @@ export interface CurrentMatchListItem {
   readonly jobStatus: JobStatus;
   readonly publishedAt: UtcInstant | null;
   readonly lastSeenAt: UtcInstant;
-  readonly rulesetVersion: string;
 }
 
 /** 应用层数据结构或端口契约。 */
@@ -121,7 +116,6 @@ export interface MatchingRepository {
   getEnrichment(id: JobEnrichmentId): JobEnrichmentRecord | null;
   getLatestEnrichmentForRevision(jobRevisionId: JobRevisionId): JobEnrichmentRecord | null;
   saveEnrichment(record: JobEnrichmentRecord): JobEnrichmentRecord;
-  getRuleset(id: MatchRulesetId): MatchRulesetRecord | null;
   getActiveRuleset(): MatchRulesetRecord | null;
   upsertRuleset(record: MatchRulesetRecord): MatchRulesetRecord;
   createOrGetMatch(record: MatchResultRecord): MatchResultRecord;

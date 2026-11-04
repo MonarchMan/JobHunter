@@ -8,12 +8,12 @@ import {
   evaluateMatchingGoldenCase,
   filterCurrentRecommendations,
   jobAdviceAgentDefinition,
-  jobAdvicePromptV4,
+  jobAdvicePrompt,
   parseStoredJobAdvice,
   jobUnderstandingAgentDefinition,
-  jobUnderstandingPromptV4,
+  jobUnderstandingPrompt,
   buildProfileSnapshot,
-  matchRulesetV1,
+  currentMatchRuleset,
   parseJobUnderstanding,
   parseJobUnderstandingAgentOutput,
   parseJobAdviceAgentOutput,
@@ -87,7 +87,7 @@ function input(overrides: Partial<DeterministicMatchInput> = {}): DeterministicM
 describe('eligibility and deterministic scoring', () => {
   it('keeps JobUnderstanding prompt versions aligned and rejects fabricated evidence', () => {
     expect(() => {
-      assertPromptMatchesDefinition(jobUnderstandingPromptV4, jobUnderstandingAgentDefinition);
+      assertPromptMatchesDefinition(jobUnderstandingPrompt, jobUnderstandingAgentDefinition);
     }).not.toThrow();
     const agentInput = {
       title: job.title,
@@ -128,21 +128,13 @@ describe('eligibility and deterministic scoring', () => {
     ).toThrow();
   });
 
-  it('produces five evidence-backed full-score components with the v1 weights', () => {
+  it('uses only current deterministic conditions and no keyword ability score', () => {
     const result = calculateDeterministicMatch(input());
-    expect(matchRulesetV1.weights).toEqual({
-      skills: 35,
-      experience: 25,
-      role: 15,
-      industry: 10,
-      location: 15,
-    });
-    expect(result.filterStatus).toBe('eligible');
-    expect(result.components.map((component) => component.maximumScore)).toEqual([
-      35, 25, 15, 10, 15,
-    ]);
-    expect(result.totalScore).toBe(100);
-    expect(result.components.every((component) => component.matchedEvidence.length > 0)).toBe(true);
+    expect(result.filterStatus).toBe('uncertain');
+    expect(result.components.reduce((sum, component) => sum + component.maximumScore, 0)).toBe(100);
+    expect(result.components.some((component) => component.dimension === 'skills')).toBe(false);
+    expect(result.totalScore).toBe(66.67);
+    expect(result.ruleOutcomes.some((outcome) => outcome.status === 'unknown')).toBe(true);
   });
 
   it('only excludes on explicit location conflict and reports both evidence sides', () => {
@@ -154,25 +146,24 @@ describe('eligibility and deterministic scoring', () => {
     expect(rule?.evidence.map((item) => item.source)).toEqual(['preference', 'job']);
   });
 
-  it('treats missing experience evidence as unknown and still computes a base score', () => {
+  it('does not infer a minimum experience requirement from missing model output', () => {
     const result = calculateDeterministicMatch(input({ understanding: null }));
     expect(
       result.ruleOutcomes.find((outcome) => outcome.ruleId === 'qualification.minimum-experience'),
-    ).toMatchObject({ status: 'unknown' });
+    ).toBeUndefined();
     expect(result.filterStatus).toBe('uncertain');
     expect(result.totalScore).toBeGreaterThan(0);
-    expect(result.components.find((component) => component.dimension === 'skills')).toMatchObject({
-      uncertainties: ['未使用语义增强，技能分数来自职位文本关键词。'],
-    });
+    expect(result.components.find((component) => component.dimension === 'skills')).toBeUndefined();
   });
 
-  it('rejects rulesets whose weights do not sum to 100', () => {
+  it('rejects historical rule selectors', () => {
+    expect(parseMatchRuleset(currentMatchRuleset)).toEqual(currentMatchRuleset);
     expect(() =>
       parseMatchRuleset({
         version: 'invalid',
         weights: { skills: 30, experience: 25, role: 15, industry: 10, location: 15 },
       }),
-    ).toThrow(/sum to 100/);
+    ).toThrow();
   });
 });
 
@@ -229,15 +220,15 @@ describe('current recommendation filtering and stable sorting', () => {
 });
 
 describe('job advice Agent', () => {
-  it('merges historical confirmation items into preparation without losing or duplicating text', () => {
-    expect(
+  it('rejects removed confirmation fields instead of converting historical advice', () => {
+    expect(() =>
       parseStoredJobAdvice({
         highlights: [],
         gaps: [],
         preparation: ['确认到岗日期'],
         uncertainties: [{ text: '确认到岗日期' }, { text: '补充项目成果' }],
       }),
-    ).toEqual({ highlights: [], gaps: [], preparation: ['确认到岗日期', '补充项目成果'] });
+    ).toThrow();
     expect(() =>
       parseJobAdviceAgentOutput({
         highlights: [],
@@ -253,7 +244,7 @@ describe('job advice Agent', () => {
   };
   it('uses the versioned reference-free schema', () => {
     expect(() => {
-      assertPromptMatchesDefinition(jobAdvicePromptV4, jobAdviceAgentDefinition);
+      assertPromptMatchesDefinition(jobAdvicePrompt, jobAdviceAgentDefinition);
     }).not.toThrow();
     expect(parseJobAdviceAgentOutput(output)).toEqual(output);
   });

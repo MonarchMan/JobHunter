@@ -114,11 +114,7 @@ export default async function ProfilePage({
             </div>
             <div>
               <dt>提取 Agent</dt>
-              <dd>
-                {detail.current.extractionAgent
-                  ? `${detail.current.extractionAgent.key} ${detail.current.extractionAgent.version}`
-                  : '无'}
-              </dd>
+              <dd>{detail.current.extractionAgent ? detail.current.extractionAgent.key : '无'}</dd>
             </div>
             <div>
               <dt>创建时间</dt>

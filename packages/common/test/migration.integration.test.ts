@@ -253,13 +253,19 @@ describe('SQLite migrations and capabilities', () => {
     legacy.client.exec(`INSERT INTO agent_runs
       (id,agent_key,agent_version,prompt_version,model_config_hash,input_hash,cache_key,status,output_json,input_tokens,output_tokens,estimated_cost_micros,cost_currency,pricing_version,started_at,finished_at)
       VALUES ('old','test','1.0.0','v1','model','input','cache','succeeded','{"ok":true}',4842,13908,9071,'USD','cache-miss-assumed',1,2)`);
-    const before = legacy.client.prepare('SELECT * FROM agent_runs WHERE id=?').get('old');
+    const before = legacy.client
+      .prepare('SELECT * FROM agent_runs WHERE id=?')
+      .get('old') as Record<string, unknown>;
     legacy.close();
     const upgraded = openSqliteDatabase({ dataRoot: root.path });
     handles.push(upgraded);
-    expect(upgraded.client.prepare('SELECT * FROM agent_runs WHERE id=?').get('old')).toEqual(
-      before,
+    const facts = Object.fromEntries(
+      Object.entries(before).filter(([key]) => !['agent_version', 'prompt_version'].includes(key)),
     );
+    expect(upgraded.client.prepare('SELECT * FROM agent_runs WHERE id=?').get('old')).toEqual({
+      ...facts,
+      definition_hash: 'historical:old',
+    });
   });
   it('resets legacy application events and rejects the removed activity type', async () => {
     const root = await createTemporaryDataRoot('jobhunter-calendar-activity-upgrade-');
@@ -451,7 +457,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      50,
+      53,
     );
   });
 

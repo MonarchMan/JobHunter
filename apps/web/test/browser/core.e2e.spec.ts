@@ -436,9 +436,13 @@ test.describe('校招实习管理台核心流程', () => {
     expect(applyBox?.y).toBe(scoreBox?.y);
 
     const location = row.locator('.location-truncate');
-    await expect(location).toHaveAttribute('title', /中关村软件园/);
+    await expect(location).not.toHaveAttribute('title', /.*/);
+    await expect(location).toHaveAttribute('aria-label', /中关村软件园/);
     await location.hover();
-    await expect(location.getByRole('tooltip')).toBeVisible();
+    await expect(location.getByRole('tooltip')).toHaveCSS('opacity', '1');
+    await page.mouse.move(0, 0);
+    await location.focus();
+    await expect(location.getByRole('tooltip')).toHaveCSS('opacity', '1');
   });
 
   test('queues an idempotent source sync without waiting for collection', async ({

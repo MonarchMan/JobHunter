@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受
+已被 [ADR-0060](./0060-content-based-execution-identity.md) 取代。以下保留为历史决策记录，不再约束当前实现。
 
 ## 决策
 

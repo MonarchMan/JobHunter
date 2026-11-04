@@ -36,8 +36,7 @@ function running(id: string, cacheKey = 'cache-key'): AgentRunRecord {
   return {
     id,
     agentKey: 'resume-profile',
-    agentVersion: '1.0.0',
-    promptVersion: 'prompt-v1',
+    definitionHash: 'a'.repeat(64),
     modelConfigHash: 'a'.repeat(64),
     inputHash: 'b'.repeat(64),
     cacheKey,

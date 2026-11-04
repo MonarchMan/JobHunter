@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { canonicalJson, hashCanonical, sha256 } from './canonical.js';
-import type { AgentDefinition } from './definition.js';
+import { agentDefinitionHash, type AgentDefinition } from './definition.js';
 import {
   AgentRuntimeError,
   ModelClientError,
@@ -71,7 +71,7 @@ function outputIssue(error: unknown): string {
   throw error;
 }
 
-/** 执行版本化 Agent，负责校验、缓存、工具循环、用量限制和结果持久化。 */
+/** 执行当前 Agent，负责内容缓存、校验、工具循环、用量限制和结果持久化。 */
 export class AgentRunner {
   readonly #store: AgentRunStore;
   readonly #model: ModelClient;
@@ -110,11 +110,11 @@ export class AgentRunner {
     }
     const inputHash = sha256(canonicalInput);
     const modelConfigHash = hashCanonical(this.#model.metadata);
+    const definitionHash = agentDefinitionHash(definition);
     const reusableCacheKey = sha256(
       [
         definition.key,
-        definition.version,
-        definition.promptVersion,
+        definitionHash,
         definition.outputSchemaVersion,
         modelConfigHash,
         inputHash,
@@ -153,8 +153,7 @@ export class AgentRunner {
       this.#store.createRunning({
         id: runId,
         agentKey: definition.key,
-        agentVersion: definition.version,
-        promptVersion: definition.promptVersion,
+        definitionHash,
         modelConfigHash,
         inputHash,
         cacheKey,

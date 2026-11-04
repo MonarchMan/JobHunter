@@ -824,7 +824,6 @@ export function createProgram(input: {
         data: detail,
         human: [
           `${detail.job.title}：${String(detail.match.totalScore)} 分（${detail.match.filterStatus}）`,
-          `规则集：${detail.rulesetVersion}`,
           '',
           '分项：',
           ...componentLines,

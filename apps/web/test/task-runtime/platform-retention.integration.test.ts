@@ -70,7 +70,7 @@ it('matches a formally saved platform job and protects its matching history from
       ids,
       clock: { now: () => utcInstant(now) },
     });
-    service.ensureRulesetV1({ id: parseId(ids.generate(), 'MatchRuleset') });
+    service.ensureRuleset();
     const input = {
       profileVersionId,
       jobRevisionId: parseId(revisionId, 'JobRevision'),
@@ -123,7 +123,7 @@ it('protects file and revision references, analysis results and official jobs', 
     const agentId = randomUUID();
     db.client
       .prepare(
-        "INSERT INTO agent_runs(id,agent_key,agent_version,prompt_version,model_config_hash,input_hash,cache_key,status,started_at) VALUES (?,'fixture','1','1',?,?,?,'succeeded',1)",
+        "INSERT INTO agent_runs(id,agent_key,definition_hash,model_config_hash,input_hash,cache_key,status,started_at) VALUES (?,'fixture','definition',?,?,?,'succeeded',1)",
       )
       .run(agentId, 'a'.repeat(64), 'b'.repeat(64), agentId);
     db.client

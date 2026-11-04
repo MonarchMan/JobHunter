@@ -11,8 +11,7 @@ export interface AgentRunRecord {
   readonly billingCalls?: readonly ModelBilling[] | null;
   readonly id: string;
   readonly agentKey: string;
-  readonly agentVersion: string;
-  readonly promptVersion: string;
+  readonly definitionHash: string;
   readonly modelConfigHash: string;
   readonly inputHash: string;
   readonly cacheKey: string;

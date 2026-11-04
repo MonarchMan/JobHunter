@@ -83,7 +83,7 @@ export default async function JobDetailPage({
       </header>
       <section className={styles.grid}>
         <article className="panel-block">
-          <h2>职位描述</h2>
+          <h2 className={styles.descriptionHeading}>职位描述</h2>
           <div className={styles.description}>{job.description}</div>
           <dl className="facts">
             <div>
@@ -123,13 +123,15 @@ export default async function JobDetailPage({
             <article className={styles.matchCard} key={match.id}>
               <header>
                 <div>
-                  <span>
-                    {match.components.some((item) => item.dimension === 'qualification') &&
-                    !match.components.some((item) => item.dimension === 'model')
-                      ? '条件评分'
-                      : '综合评分'}
-                  </span>
-                  <strong>{match.totalScore.toFixed(1)} 分</strong>
+                  <div className={styles.scoreHeading}>
+                    <span>
+                      {match.components.some((item) => item.dimension === 'qualification') &&
+                      !match.components.some((item) => item.dimension === 'model')
+                        ? '条件评分'
+                        : '综合评分'}
+                    </span>
+                    <strong>{match.totalScore.toFixed(1)} 分</strong>
+                  </div>
                   <span>
                     {
                       { eligible: '符合资格', excluded: '不符合资格', uncertain: '资格待确认' }[

@@ -40,14 +40,6 @@ export default async function AgentRunPage({
             </dd>
           </div>
           <div>
-            <dt>Agent 版本</dt>
-            <dd>{run.agentVersion}</dd>
-          </div>
-          <div>
-            <dt>Prompt 版本</dt>
-            <dd>{run.promptVersion}</dd>
-          </div>
-          <div>
             <dt>模型配置指纹</dt>
             <dd>
               <code>{run.modelConfigHash}</code>

@@ -1,9 +1,4 @@
-import type {
-  JobEnrichmentId,
-  JobRevisionId,
-  MatchRulesetId,
-  ProfileVersionId,
-} from '@jobhunter/common/domain';
+import type { JobEnrichmentId, JobRevisionId, ProfileVersionId } from '@jobhunter/common/domain';
 import type { DeterministicMatchingService } from './matching-service.js';
 import type { MatchResultRecord } from '../ports/matching.js';
 
@@ -35,7 +30,6 @@ export class MatchingBatchService {
     readonly profileVersionId: ProfileVersionId;
     readonly modelScore?: number | null;
     readonly modelReasons?: readonly string[];
-    readonly rulesetId?: MatchRulesetId;
     readonly signal: AbortSignal;
   }): Promise<MatchBatchResult> {
     if (input.signal.aborted) {
@@ -47,7 +41,6 @@ export class MatchingBatchService {
       jobEnrichmentId: input.jobEnrichmentId,
       ...(input.modelScore !== undefined ? { modelScore: input.modelScore } : {}),
       ...(input.modelReasons ? { modelReasons: input.modelReasons } : {}),
-      ...(input.rulesetId ? { rulesetId: input.rulesetId } : {}),
     });
     this.#onMatch?.(result.match);
     return Promise.resolve({

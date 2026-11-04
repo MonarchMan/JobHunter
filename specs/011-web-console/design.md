@@ -4,6 +4,8 @@
 
 > 状态：Implemented
 
+职位详情在 matching 的建议读取边界直接使用当前严格契约，不转换旧引用或合并旧字段。建议 JSON 或结构无效时不展示内容，仅返回建议失败状态，不阻断职位正文。
+
 Agent 中文名称集中登记在 Web 状态标签模块。回归扫描 `apps/` 和 `packages/` 生产源码中的 Agent 定义及提示词 `agentKey`，逐项校验中文名称登记，防止新增类型静默使用通用占位。
 
 职位日期列及移动卡片统一读取 DTO 的 `publishedAt`，复用同一日期展示函数，采用 zh-CN／Asia/Shanghai 与原生 `time` 语义；空值显示“未提供”，不输出无效 time 元素。保持现有 `published_desc` 数据库排序、分页与默认排序设置，不用 `updatedAt` 兜底，也不覆盖用户已保存的排序偏好。

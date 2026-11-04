@@ -25,7 +25,6 @@ export interface ExternalResearchCollectionPlan {
 /** 应用层数据结构或端口契约。 */
 export interface ExternalResearchInput {
   readonly requestId: string;
-  readonly promptVersion: string;
   readonly prompt: string;
   readonly outputSchema: Readonly<Record<string, unknown>>;
   readonly collectionPlan: ExternalResearchCollectionPlan;
@@ -45,7 +44,6 @@ export interface ExternalResearchOutput {
 export interface ExternalResearchExecutor {
   readonly key: ExternalResearchExecutorKey;
   readonly version: string;
-  readonly supportedPromptVersions: readonly string[];
   readonly capabilitySummary: Readonly<{
     liveWebSearch: boolean;
     browserTools: readonly ('search' | 'open' | 'readPage')[];

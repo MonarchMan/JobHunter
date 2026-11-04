@@ -7,10 +7,8 @@ import {
   calculateDeterministicMatch,
   jobUnderstandingInputSchema,
   matchEvidenceCoverage,
-  matchRulesetV4,
-  matchRulesetV5,
   jobUnderstandingAgentDefinition,
-  jobUnderstandingPromptV4,
+  jobUnderstandingPrompt,
   parseDeterministicMatchOutput,
 } from '../src/index.js';
 
@@ -39,15 +37,12 @@ describe('v5 overlapping rule and model dimensions', () => {
     overrides: Partial<typeof job> = {},
   ): ReturnType<typeof calculateDeterministicMatch> {
     return parseDeterministicMatchOutput(
-      calculateDeterministicMatch(
-        {
-          profile: { ...profile, targetRoles },
-          job: { ...job, ...overrides },
-          company: { sizeCategory: null, industry: null },
-          understanding: null,
-        },
-        matchRulesetV5,
-      ),
+      calculateDeterministicMatch({
+        profile: { ...profile, targetRoles },
+        job: { ...job, ...overrides },
+        company: { sizeCategory: null, industry: null },
+        understanding: null,
+      }),
     );
   }
   it('shows role and location separately and gives each applicable condition equal weight', () => {
@@ -92,12 +87,10 @@ describe('v5 overlapping rule and model dimensions', () => {
     expect(snapshot.preferences).toEqual(profile.preferences);
     expect(snapshot.education).toEqual(profile.education);
     expect(snapshot).not.toHaveProperty('basicInfo');
-    expect(jobUnderstandingAgentDefinition.promptVersion).toBe(
-      jobUnderstandingPromptV4.promptVersion,
-    );
-    expect(jobUnderstandingAgentDefinition.version).toBe('4.0.0');
-    expect(jobUnderstandingPromptV4.text).toContain('综合岗位方向、工作地点');
-    expect(jobUnderstandingPromptV4.text).not.toContain('不得在 fitScore 重复扣分');
+    expect(jobUnderstandingAgentDefinition.systemPrompt).toBe(jobUnderstandingPrompt.text);
+    expect(jobUnderstandingAgentDefinition).not.toHaveProperty('version');
+    expect(jobUnderstandingPrompt.text).toContain('综合岗位方向、工作地点');
+    expect(jobUnderstandingPrompt.text).not.toContain('不得在 fitScore 重复扣分');
     const input = {
       title: job.title,
       description: job.description,
@@ -147,15 +140,12 @@ function score(
   locations = job.locations,
 ): ReturnType<typeof calculateDeterministicMatch> {
   return parseDeterministicMatchOutput(
-    calculateDeterministicMatch(
-      {
-        profile,
-        job: { ...job, description, locations },
-        company: { sizeCategory: null, industry: null },
-        understanding: null,
-      },
-      matchRulesetV4,
-    ),
+    calculateDeterministicMatch({
+      profile,
+      job: { ...job, description, locations },
+      company: { sizeCategory: null, industry: null },
+      understanding: null,
+    }),
   );
 }
 
@@ -163,7 +153,7 @@ describe('v4 objective scoring', () => {
   it('does not score skill or practice keywords and excludes unset preferences', () => {
     const result = score();
     expect(result.totalScore).toBe(100);
-    expect(result.components.map((item) => item.dimension)).toEqual(['qualification']);
+    expect(result.components.map((item) => item.dimension)).toEqual(['location']);
     expect(result.components[0]?.missingEvidence).toEqual([]);
     expect(score('要求 Java、Rust 和分布式系统实践').totalScore).toBe(result.totalScore);
     expect(result.ruleOutcomes.some((item) => item.ruleId === 'preference.company-size')).toBe(
@@ -177,7 +167,7 @@ describe('v4 objective scoring', () => {
     expect(result.totalScore).toBe(50);
     expect(matchEvidenceCoverage(result.components)).toBe(50);
     expect(result.components[0]?.missingEvidence).toEqual([]);
-    expect(result.components[0]?.uncertainties.length).toBeGreaterThan(0);
+    expect(result.components.flatMap((item) => item.uncertainties).length).toBeGreaterThan(0);
   });
 
   it('excludes only explicit conflicts and does not add preferred criteria', () => {

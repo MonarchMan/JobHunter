@@ -99,7 +99,7 @@ describe('SQLite dashboard read model', () => {
       handle.client.exec(`INSERT INTO candidate_profiles VALUES('profile-1','test',1,1);
         INSERT INTO profile_versions(id,profile_id,version_no,extracted_json,effective_json,content_hash,is_current,created_at)
         VALUES('profile-version-1','profile-1',1,'{}','{}','profile-hash',1,1);
-        INSERT INTO match_rulesets VALUES('rules-1','v1','{}','rules-hash',1,1);
+        INSERT INTO match_rulesets VALUES('rules-1','{}','rules-hash',1,1);
         INSERT INTO match_results(id,profile_version_id,job_revision_id,ruleset_id,filter_status,total_score,components_json,risks_json,input_hash,created_at)
         VALUES('match-2','profile-version-1','revision-2','rules-1','eligible',40,'[]','[]','match-hash-2',2)`);
       expect(createDashboardReadModel(handle.client).snapshot().highlightJobs[0]?.score).toBe(40);

@@ -8,7 +8,6 @@ import {
 } from '@jobhunter/common/domain';
 import {
   communityQuestionFingerprint,
-  communityResearchPromptVersion,
   communityResearchSchemaVersion,
   experienceResearchBriefSchema,
   researchRequestFingerprint,
@@ -161,10 +160,15 @@ export class ExperienceResearchService {
     readonly deduplicated: boolean;
   }> {
     const brief = experienceResearchBriefSchema.parse(briefValue);
-    const baseFingerprint = researchRequestFingerprint(brief);
+    const promptHash = contentHash(renderCommunityResearchPrompt(brief, 'content-identity'));
+    const baseFingerprint = contentHash({ brief: researchRequestFingerprint(brief), promptHash });
     const related = this.#repository
       .listRequests()
-      .filter((request) => researchRequestFingerprint(request.brief) === baseFingerprint);
+      .filter(
+        (request) =>
+          request.promptHash === promptHash &&
+          researchRequestFingerprint(request.brief) === researchRequestFingerprint(brief),
+      );
     for (const request of related) {
       if ((request.bundleFileVersionNo ?? 0) >= 5) continue;
       const detail = this.#repository.getRequest(request.id);
@@ -209,7 +213,7 @@ export class ExperienceResearchService {
       id: requestId,
       brief,
       requestFingerprint: fingerprint,
-      promptVersion: communityResearchPromptVersion,
+      promptHash,
       schemaVersion: communityResearchSchemaVersion,
       promptFileId: promptFile.id,
       promptFileVersionNo: promptFile.versionNo,

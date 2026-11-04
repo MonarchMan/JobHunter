@@ -9,18 +9,17 @@ import {
   type MatchRulesetId,
   type ProfileVersionId,
 } from '@jobhunter/common/domain';
-import { rulesOnlyScoringVersion } from '../score-composition.js';
 
 /** 模块数据结构或契约。 */
 export interface MatchIdentityInput {
   readonly profileVersionId: ProfileVersionId;
   readonly jobRevisionId: JobRevisionId;
   readonly rulesetId: MatchRulesetId;
-  readonly rulesetVersion: string;
+  readonly rulesetHash: string;
   readonly usesEnrichment: boolean;
   readonly jobEnrichmentId?: JobEnrichmentId | null;
-  /** 总分合成口径参与身份；缺失按历史仅规则口径处理。模型分本身非确定，不入身份以免重复行。 */
-  readonly scoringVersion?: string;
+  /** 是否实际使用模型分，区别规则降级和加权结果。 */
+  readonly modelUsed: boolean;
 }
 
 /** 模块数据结构或契约。 */
@@ -29,8 +28,8 @@ export interface MatchIdentity {
   readonly jobRevisionId: JobRevisionId;
   readonly jobEnrichmentId: JobEnrichmentId | null;
   readonly rulesetId: MatchRulesetId;
-  readonly rulesetVersion: string;
-  readonly scoringVersion: string;
+  readonly rulesetHash: string;
+  readonly modelUsed: boolean;
   readonly inputHash: ContentHash;
 }
 
@@ -43,25 +42,24 @@ export function buildMatchIdentity(input: MatchIdentityInput): MatchIdentity {
       'Match enrichment usage and enrichment ID must agree.',
     );
   }
-  if (!input.rulesetVersion.trim()) {
-    throw new DomainError('MATCH_IDENTITY_INCOMPLETE', 'Ruleset version is required.');
+  if (!input.rulesetHash.trim()) {
+    throw new DomainError('MATCH_IDENTITY_INCOMPLETE', 'Ruleset content hash is required.');
   }
-  const scoringVersion = input.scoringVersion ?? rulesOnlyScoringVersion;
 
   return {
     profileVersionId: input.profileVersionId,
     jobRevisionId: input.jobRevisionId,
     jobEnrichmentId: enrichment,
     rulesetId: input.rulesetId,
-    rulesetVersion: input.rulesetVersion,
-    scoringVersion,
+    rulesetHash: input.rulesetHash,
+    modelUsed: input.modelUsed,
     inputHash: contentHash({
       profileVersionId: input.profileVersionId,
       jobRevisionId: input.jobRevisionId,
       jobEnrichmentId: enrichment ?? 'none',
       rulesetId: input.rulesetId,
-      rulesetVersion: input.rulesetVersion,
-      scoringVersion,
+      rulesetHash: input.rulesetHash,
+      modelUsed: input.modelUsed,
     }),
   };
 }
@@ -70,8 +68,7 @@ export function buildMatchIdentity(input: MatchIdentityInput): MatchIdentity {
 export interface MatchAdviceIdentityInput {
   readonly matchResultId: MatchResultId;
   readonly agentRunId: AgentRunId;
-  readonly agentVersion: string;
-  readonly promptVersion: string;
+  readonly definitionHash: string;
   readonly modelConfigHash: ContentHash;
 }
 

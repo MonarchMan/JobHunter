@@ -17,7 +17,6 @@ export const jobUnderstandingTaskPayloadSchema = z
   .object({
     jobRevisionId: z.string().trim().min(1),
     profileVersionId: z.string().trim().min(1),
-    enrichmentVersion: z.string().trim().min(1),
   })
   .strict();
 
@@ -71,12 +70,6 @@ export function createJobUnderstandingTaskHandler(
       // 1、模型未配置直接降级；失败先按任务机制重试，最后一次尝试仍失败也降级。
       if ('unavailable' in input) return degraded;
       const finalAttempt = context.attempt !== undefined && context.attempt >= defaultMaxAttempts;
-      if (payload.enrichmentVersion !== jobUnderstandingAgentDefinition.version) {
-        throw new TaskExecutionError(
-          'invalid_config',
-          'Queued job enrichment version is no longer active.',
-        );
-      }
       const revision = input.matching.getRevision(parseId(payload.jobRevisionId, 'JobRevision'));
       if (!revision) {
         throw new TaskExecutionError('validation_failed', 'Job revision does not exist.');

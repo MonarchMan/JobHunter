@@ -22,8 +22,7 @@ export const evaluationCaseSchema = z
 export const evaluationReportSchema = z
   .object({
     agentKey: z.string().trim().min(1),
-    agentVersion: z.string().trim().min(1),
-    promptVersion: z.string().trim().min(1),
+    definitionHash: z.string().trim().min(1),
     modelConfigHash: z.string().length(64),
     startedAt: z.number().int().nonnegative(),
     finishedAt: z.number().int().nonnegative(),
@@ -94,8 +93,7 @@ export function evaluateAssertions(
 /** 顺序执行评测用例并将提供方、Schema 和质量失败分类汇总。 */
 export async function runEvaluation<TInput>(input: {
   readonly agentKey: string;
-  readonly agentVersion: string;
-  readonly promptVersion: string;
+  readonly definitionHash: string;
   readonly modelConfigHash: string;
   readonly cases: readonly EvaluationCase[];
   readonly loadInput: (inputRef: string) => Promise<TInput>;
@@ -129,8 +127,7 @@ export async function runEvaluation<TInput>(input: {
   // 2、汇总所有结果并通过报告 Schema 校验计数一致性。
   const report: EvaluationReport = {
     agentKey: input.agentKey,
-    agentVersion: input.agentVersion,
-    promptVersion: input.promptVersion,
+    definitionHash: input.definitionHash,
     modelConfigHash: input.modelConfigHash,
     startedAt,
     finishedAt: now(),

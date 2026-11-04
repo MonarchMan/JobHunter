@@ -9,11 +9,7 @@ import type {
   ExternalResearchOutput,
 } from '@jobhunter/user/ports/index';
 import { ExternalResearchExecutorError } from '@jobhunter/user/ports/index';
-import {
-  communityResearchBundleSchema,
-  communityResearchPromptVersion,
-  normalizePublicResearchUrl,
-} from '@jobhunter/user/domain';
+import { communityResearchBundleSchema, normalizePublicResearchUrl } from '@jobhunter/user/domain';
 import type { Readable, Writable } from 'node:stream';
 import {
   startResearchBrowserGateway,
@@ -765,7 +761,6 @@ function waitForProcess(input: {
 abstract class BaseCodexResearchExecutor implements ExternalResearchExecutor {
   public abstract readonly key: ExternalResearchExecutor['key'];
   public abstract readonly version: string;
-  public abstract readonly supportedPromptVersions: readonly string[];
   public abstract readonly capabilitySummary: ExternalResearchExecutor['capabilitySummary'];
 
   readonly #command: string;
@@ -821,12 +816,6 @@ abstract class BaseCodexResearchExecutor implements ExternalResearchExecutor {
     validatePositiveInteger(input.timeoutMs, maximumConfiguredTimeoutMs, 'Codex timeout');
     if (!input.prompt.trim()) {
       throw new ExternalResearchExecutorError('invalid_config', 'Codex research prompt is empty.');
-    }
-    if (!this.supportedPromptVersions.some((version) => version === input.promptVersion)) {
-      throw new ExternalResearchExecutorError(
-        'invalid_config',
-        `Codex research executor ${this.key} does not support prompt ${input.promptVersion}.`,
-      );
     }
     assertNotCancelled(signal);
 
@@ -1064,7 +1053,6 @@ abstract class BaseCodexResearchExecutor implements ExternalResearchExecutor {
 export class CodexLocalResearchExecutor extends BaseCodexResearchExecutor {
   public readonly key = 'codex-local' as const;
   public readonly version = 'v1' as const;
-  public readonly supportedPromptVersions = Object.freeze([communityResearchPromptVersion]);
   public readonly capabilitySummary = Object.freeze({
     liveWebSearch: true,
     browserTools: Object.freeze([]),
@@ -1129,7 +1117,6 @@ function classifyClaudeFailure(stderr: string): ExternalResearchExecutorError {
 export class ClaudeCodeResearchExecutor implements ExternalResearchExecutor {
   public readonly key = 'claude-local' as const;
   public readonly version = 'v1' as const;
-  public readonly supportedPromptVersions = Object.freeze([communityResearchPromptVersion]);
   public readonly capabilitySummary = Object.freeze({
     liveWebSearch: true,
     browserTools: Object.freeze([]),
@@ -1174,12 +1161,6 @@ export class ClaudeCodeResearchExecutor implements ExternalResearchExecutor {
       'Claude result size limit',
     );
     validatePositiveInteger(input.timeoutMs, maximumConfiguredTimeoutMs, 'Claude timeout');
-    if (input.promptVersion !== communityResearchPromptVersion) {
-      throw new ExternalResearchExecutorError(
-        'invalid_config',
-        `Claude Code research does not support prompt ${input.promptVersion}.`,
-      );
-    }
     assertNotCancelled(signal);
     const release = await codexExecutionGate.acquire(signal);
     let directory: string | null = null;

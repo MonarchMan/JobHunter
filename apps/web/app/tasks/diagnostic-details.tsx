@@ -385,12 +385,6 @@ export function AgentRunDetailsDialog({
                 </dd>
               </div>
               <div>
-                <dt>版本</dt>
-                <dd>
-                  Agent {run.agentVersion} / Prompt {run.promptVersion}
-                </dd>
-              </div>
-              <div>
                 <dt>时间</dt>
                 <dd>
                   {time(run.startedAt)} / {time(run.finishedAt)}

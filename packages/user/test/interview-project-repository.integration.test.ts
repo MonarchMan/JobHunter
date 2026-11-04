@@ -128,9 +128,9 @@ function insertAgentRun(handle: SqliteDatabaseHandle, id: string): void {
   handle.client
     .prepare(
       `INSERT INTO agent_runs
-       (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash, cache_key,
+       (id, agent_key, definition_hash, model_config_hash, input_hash, cache_key,
         status, output_json, started_at, finished_at)
-       VALUES (?, 'fixture', 'v1', 'v1', ?, ?, ?, 'succeeded', '{}', 1, 2)`,
+       VALUES (?, 'fixture', 'definition', ?, ?, ?, 'succeeded', '{}', 1, 2)`,
     )
     .run(id, 'a'.repeat(64), 'b'.repeat(64), id);
 }

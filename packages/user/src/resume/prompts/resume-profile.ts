@@ -1,9 +1,8 @@
 import type { PromptDescriptor } from '@jobhunter/common/agent';
 
 /** 简历画像提取 Prompt；按信息块提取基础信息与经历事实，并要求模型直接补全日期。 */
-export const resumeProfilePromptV3: PromptDescriptor = {
+export const resumeProfilePrompt: PromptDescriptor = {
   agentKey: 'resume-profile',
-  promptVersion: '2026-10-30.v3.1',
   outputSchemaVersion: '2026-10-30.v3.1',
   text: `你是简历事实抽取器。只根据输入的简历文本提取事实，不虚构信息，并严格返回给定 JSON Schema。不得输出解释文字、Markdown 或 Schema 之外的字段。
 

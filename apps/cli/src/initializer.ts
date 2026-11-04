@@ -6,7 +6,7 @@ import type {
   SystemInitializer,
 } from '@jobhunter/common/operations/initialization-service';
 import { contentHash, utcInstant } from '@jobhunter/common/domain';
-import { matchRulesetV5, defaultMatchRulesetId } from '@jobhunter/matching';
+import { currentMatchRuleset, defaultMatchRulesetId } from '@jobhunter/matching';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
@@ -42,9 +42,8 @@ export class SqliteSystemInitializer implements SystemInitializer {
         new SqliteAgentRunStore(database.client),
       ).upsertRuleset({
         id: defaultMatchRulesetId,
-        version: matchRulesetV5.version,
-        definition: matchRulesetV5,
-        definitionHash: contentHash(matchRulesetV5),
+        definition: currentMatchRuleset,
+        definitionHash: contentHash(currentMatchRuleset),
         active: true,
         createdAt: utcInstant(Date.now()),
       });

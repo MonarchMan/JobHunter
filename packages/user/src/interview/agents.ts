@@ -94,8 +94,6 @@ export const projectQuestionAgentDefinition: AgentDefinition<
   z.infer<typeof generatedProjectQuestionSchema>
 > = defineAgent({
   key: 'interview.project-question',
-  version: '1.0.0',
-  promptVersion: 'v1',
   outputSchemaVersion: 'v1',
   outputSchemaName: 'project_interview_question',
   systemPrompt: `你是严格但克制的技术面试官，只负责提出一个项目追问和回答结构提示。
@@ -115,8 +113,6 @@ export const docsGroundedProjectQuestionAgentDefinition: AgentDefinition<
   z.infer<typeof generatedProjectQuestionSchema>
 > = defineAgent({
   key: 'interview.project-question-docs',
-  version: '1.0.0',
-  promptVersion: 'v1',
   outputSchemaVersion: 'v1',
   outputSchemaName: 'docs_grounded_project_interview_question',
   systemPrompt: `你是严格但克制的技术面试官，只负责提出一个基于项目资料的深层追问和回答结构提示。
@@ -138,8 +134,6 @@ export const projectAnswerDigestAgentDefinition: AgentDefinition<
   z.infer<typeof answerDigestOutputSchema>
 > = defineAgent({
   key: 'interview.project-answer-digest',
-  version: '1.0.0',
-  promptVersion: 'v1',
   outputSchemaVersion: 'v1',
   outputSchemaName: 'project_answer_digest',
   systemPrompt: `你只从用户回答原文中抽取项目知识项、歧义、冲突和覆盖变化。

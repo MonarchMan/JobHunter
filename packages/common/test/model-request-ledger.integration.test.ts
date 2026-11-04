@@ -51,8 +51,6 @@ it('persists each negotiation attempt before the next HTTP and retains the ledge
     const runner = new AgentRunner({ store, model, createId: randomUUID, now: () => now });
     const definition = defineAgent({
       key: 'ledger-fixture',
-      version: '1.0.0',
-      promptVersion: '1',
       outputSchemaVersion: '1',
       outputSchemaName: 'Result',
       systemPrompt: 'Synthetic',
@@ -108,7 +106,7 @@ it('retains an interrupted request start without inventing final usage (USG-009)
   let db = openSqliteDatabase({ dataRoot: root.path });
   try {
     db.client.exec(
-      `INSERT INTO agent_runs (id,agent_key,agent_version,prompt_version,model_config_hash,input_hash,cache_key,status,started_at) VALUES ('run','fixture','1','1','m','i','c','running',1)`,
+      `INSERT INTO agent_runs (id,agent_key,definition_hash,model_config_hash,input_hash,cache_key,status,started_at) VALUES ('run','fixture','definition','m','i','c','running',1)`,
     );
     const ledger = new SqliteModelRequestRepository(db.client);
     const billing = {

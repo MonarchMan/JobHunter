@@ -3,8 +3,6 @@ import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { describe, expect, it } from 'vitest';
 import {
   calculateDeterministicMatch,
-  matchRulesetV31,
-  matchRulesetV32,
   parseDeterministicMatchOutput,
   type DeterministicMatchInput,
 } from '../src/index.js';
@@ -66,10 +64,10 @@ describe('MCH-023 graduation eligibility', () => {
   it('recognizes a structured education field without inventing a residual qualification', () => {
     const sample = input('负责开发', ['2027-07']);
     expect(
-      calculateDeterministicMatch(
-        { ...sample, job: { ...sample.job, educationText: '仅限2027届毕业生' } },
-        matchRulesetV32,
-      ).filterStatus,
+      calculateDeterministicMatch({
+        ...sample,
+        job: { ...sample.job, educationText: '仅限2027届毕业生' },
+      }).filterStatus,
     ).toBe('eligible');
   });
   it.each([
@@ -100,26 +98,21 @@ describe('MCH-023 graduation eligibility', () => {
     ['2027届在读', ['2027-07'], 'uncertain'],
   ] as const)('%s / %j → %s', (text, dates, expected) => {
     const result = parseDeterministicMatchOutput(
-      calculateDeterministicMatch(input(text, [...dates]), matchRulesetV32),
+      calculateDeterministicMatch(input(text, [...dates])),
     );
     expect(result.filterStatus).toBe(expected);
   });
-  it('applies to campus too and preserves scores, evidence and historical version replay', () => {
+  it('applies current graduation rules to campus and preserves evidence', () => {
     const sample = input(
       '面向2027届毕业生（2026年9月-2027年8月期间毕业）',
       ['2025-07', '2028-07'],
       'campus',
     );
-    const previous = calculateDeterministicMatch(sample, matchRulesetV31);
-    const current = calculateDeterministicMatch(sample, matchRulesetV32);
-    expect(previous.filterStatus).toBe('uncertain');
+    const current = calculateDeterministicMatch(sample);
     expect(current.filterStatus).toBe('excluded');
-    expect(current.components).toEqual(previous.components);
-    expect(current.totalScore).toBe(previous.totalScore);
     expect(
       current.ruleOutcomes.flatMap((item) => item.evidence).map((item) => item.path),
     ).toContain('/education/1/endDate');
-    expect(calculateDeterministicMatch(sample, matchRulesetV31)).toEqual(previous);
-    expect(calculateDeterministicMatch(sample, matchRulesetV32)).toEqual(current);
+    expect(calculateDeterministicMatch(sample)).toEqual(current);
   });
 });

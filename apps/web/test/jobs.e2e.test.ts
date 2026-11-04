@@ -131,9 +131,9 @@ function seedJobs(dataRoot: string): void {
     database.client
       .prepare(
         `INSERT INTO match_rulesets
-         (id, version, definition_json, definition_hash, active, created_at)
-         VALUES ('018f0000-0000-7000-8000-000000000603', 'web-v1',
-          '{"version":"web-v1","weights":{"skills":35,"experience":25,"role":15,"industry":10,"location":15}}',
+         (id, definition_json, definition_hash, active, created_at)
+         VALUES ('018f0000-0000-7000-8000-000000000603',
+          '{}',
           'ruleset-hash', 1, 1)`,
       )
       .run();

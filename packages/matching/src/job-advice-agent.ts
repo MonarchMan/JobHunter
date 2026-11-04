@@ -5,7 +5,7 @@ import { candidateProfileSchema, type CandidateProfileData } from '@jobhunter/us
 import { normalizedJobSchema, type NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { z } from 'zod';
 import { deterministicMatchOutputSchema, type DeterministicMatchOutput } from './model.js';
-import { jobAdvicePromptV4 } from './prompts/job-advice/v4.js';
+import { jobAdvicePrompt } from './prompts/job-advice.js';
 
 /** 职位建议 Agent 输入 Schema。 */
 export const jobAdviceInputSchema: z.ZodObject<{
@@ -39,14 +39,14 @@ export function parseJobAdviceAgentOutput(output: unknown): JobAdvice {
 
 /** 职位准备建议不再构造或保存引用目录。 */
 export const jobAdviceAgentDefinition: AgentDefinition<JobAdviceInput, JobAdvice> = defineAgent({
-  key: jobAdvicePromptV4.agentKey,
-  version: '4.0.0',
-  promptVersion: jobAdvicePromptV4.promptVersion,
-  outputSchemaVersion: jobAdvicePromptV4.outputSchemaVersion,
+  key: jobAdvicePrompt.agentKey,
+  outputSchemaVersion: jobAdvicePrompt.outputSchemaVersion,
   outputSchemaName: 'JobAdviceOutput',
-  systemPrompt: jobAdvicePromptV4.text,
+  systemPrompt: jobAdvicePrompt.text,
   inputSchema: jobAdviceInputSchema,
   outputSchema: jobAdviceModelOutputSchema,
+  // 主动重新生成建议不复用成功输出，失败重试由任务作用域恢复。
+  resultPolicy: { cache: 'disabled', persistOutput: true },
   tools: [],
   limits: {
     timeoutMs: 240_000,

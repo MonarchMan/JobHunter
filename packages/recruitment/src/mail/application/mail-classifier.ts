@@ -1,5 +1,6 @@
 import {
   AgentRuntimeError,
+  agentDefinitionHash,
   defineAgent,
   type AgentDefinition,
   type AgentRunner,
@@ -80,8 +81,6 @@ export const recruitmentMailAgentDefinition: AgentDefinition<
   RecruitmentMailAgentOutput
 > = defineAgent({
   key: 'recruitment-mail.classify',
-  version: '3.0.0',
-  promptVersion: 'v5-written-exam',
   outputSchemaVersion: 'v3',
   outputSchemaName: 'recruitment_mail_classification',
   systemPrompt: `你只负责理解一封已经由程序规则筛出的招聘流程候选邮件，并输出符合 outputContract.jsonSchema 的单个 JSON 对象，不输出说明或代码围栏。
@@ -262,7 +261,7 @@ function toDomainClassification(output: RecruitmentMailAgentOutput): Recruitment
     effectiveAt: parseInstant(output.effectiveAt),
     schedule: toDomainSchedule(output.schedule),
     classifierKind: 'agent',
-    classifierVersion: recruitmentMailAgentDefinition.version,
+    classifierVersion: agentDefinitionHash(recruitmentMailAgentDefinition),
   });
 }
 

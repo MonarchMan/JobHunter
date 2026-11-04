@@ -85,12 +85,6 @@ export function createExperienceResearchTaskHandler(
           `Research executor ${payload.executorKey} is unavailable.`,
         );
       }
-      if (!executor.supportedPromptVersions.includes(detail.request.promptVersion)) {
-        throw new TaskExecutionError(
-          'invalid_config',
-          `Research executor ${executor.key} does not support frozen prompt ${detail.request.promptVersion}.`,
-        );
-      }
       try {
         const [prompt, outputSchema] = await Promise.all([
           input.service.prompt(requestId, context.signal),
@@ -114,7 +108,6 @@ export function createExperienceResearchTaskHandler(
         const result = await executor.execute(
           {
             requestId,
-            promptVersion: detail.request.promptVersion,
             prompt,
             outputSchema,
             collectionPlan: createCommunityResearchCollectionPlan(

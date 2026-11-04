@@ -123,7 +123,6 @@ describe('ConfiguredModelResearchExecutor', () => {
       const result = await executor.execute(
         {
           requestId: '018f0000-0000-7000-8000-000000000024',
-          promptVersion: 'community-research-prompt@v4',
           prompt: '研究公开面经并输出 JSON。',
           outputSchema: { type: 'object' },
           collectionPlan: {

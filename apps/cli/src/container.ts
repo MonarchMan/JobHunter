@@ -1,4 +1,5 @@
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
+import { agentDefinitionHash } from '@jobhunter/common/agent';
 import { SqliteMatchingJobReader } from '@jobhunter/recruitment/persistence/matching-job-reader';
 import { SqliteProfileIdentityReader } from '@jobhunter/user/persistence/profile-identity-reader';
 import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
@@ -333,8 +334,7 @@ export function createLocalCliContainer(
           ? {
               adviceSelector: {
                 agentKey: jobAdviceAgentDefinition.key,
-                agentVersion: jobAdviceAgentDefinition.version,
-                promptVersion: jobAdviceAgentDefinition.promptVersion,
+                definitionHash: agentDefinitionHash(jobAdviceAgentDefinition),
                 modelConfigHash: hashCanonical(modelMetadata),
               },
             }

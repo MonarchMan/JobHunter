@@ -7,8 +7,7 @@ export interface ProfileVersionInspection {
   readonly version: ProfileVersionRecord;
   readonly extractionAgent: {
     readonly key: string;
-    readonly version: string;
-    readonly promptVersion: string;
+    readonly definitionHash: string;
     readonly modelConfigHash: string;
   } | null;
 }
@@ -45,8 +44,7 @@ export class ProfileInspectionService {
       extractionAgent: run
         ? {
             key: run.agentKey,
-            version: run.agentVersion,
-            promptVersion: run.promptVersion,
+            definitionHash: run.definitionHash,
             modelConfigHash: run.modelConfigHash,
           }
         : null,

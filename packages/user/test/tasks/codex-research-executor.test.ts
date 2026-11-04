@@ -66,7 +66,6 @@ function input(
 ): Parameters<CodexLocalResearchExecutor['execute']>[0] {
   return {
     requestId: '018f0000-0000-7000-8000-000000000024',
-    promptVersion: 'community-research-prompt@v4',
     prompt: 'Research public interview experiences and return JSON.',
     outputSchema: { type: 'object', additionalProperties: false },
     collectionPlan: {
@@ -235,7 +234,7 @@ describe('CodexLocalResearchExecutor', () => {
     const resultPath = argumentAfter(launched.args, '--output-last-message');
 
     expect(launched.command).toBe('/fixture/codex');
-    expect(executor.supportedPromptVersions).toContain(input().promptVersion);
+    expect(executor).not.toHaveProperty('supportedPromptVersions');
     expect(executor.capabilitySummary).toMatchObject({
       liveWebSearch: true,
       browserTools: [],

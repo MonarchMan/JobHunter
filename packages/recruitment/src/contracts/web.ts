@@ -275,8 +275,7 @@ export const webAgentRunSummarySchema = z
   .object({
     id: z.uuid(),
     agentKey: z.string(),
-    agentVersion: z.string(),
-    promptVersion: z.string(),
+    definitionHash: z.string(),
     modelConfigHash: z.string(),
     status: z.enum(['running', 'succeeded', 'failed', 'cancelled']),
     errorCategory: z.string().nullable(),

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   AgentRunner,
+  agentDefinitionHash,
   AgentRuntimeError,
   ModelClientError,
   PromptRegistry,
@@ -170,8 +171,6 @@ function definition(
 ): AgentDefinition<{ text: string }, { answer: string }> {
   return defineAgent({
     key: 'test-agent',
-    version: '1.0.0',
-    promptVersion: 'prompt-v1',
     outputSchemaVersion: 'schema-v1',
     outputSchemaName: 'TestOutput',
     systemPrompt: 'Return a structured answer using only the supplied input.',
@@ -291,14 +290,9 @@ describe('agent runtime', () => {
     expect(result.run.billingCalls).toMatchObject([base, second]);
     expect(result.run.pricingVersion).toBe('peak,off-peak');
   });
-  it('requires three-part semantic agent versions', () => {
-    expect(() => definition({ version: 'v1' })).toThrow(
-      'Agent version must use MAJOR.MINOR.PATCH format.',
-    );
-    expect(() => definition({ version: '1.0' })).toThrow(
-      'Agent version must use MAJOR.MINOR.PATCH format.',
-    );
-    expect(() => definition({ version: '1.0.0' })).not.toThrow();
+  it('defines agents without manually maintained versions', () => {
+    expect(definition()).not.toHaveProperty('version');
+    expect(definition()).not.toHaveProperty('promptVersion');
   });
 
   it('repairs business validation before caching and rejects bad cached output', async () => {
@@ -400,19 +394,37 @@ describe('agent runtime', () => {
     }
   });
 
-  it('changes the cache key when prompt version changes', async () => {
+  it('changes the cache key when prompt content changes', async () => {
     const store = new MemoryStore();
     const model = new QueueModel([output('one'), output('two')]);
     const runtime = runner(store, model);
     const signal = new AbortController().signal;
     const first = await runtime.run({ definition: definition(), value: { text: 'same' }, signal });
     const second = await runtime.run({
-      definition: definition({ promptVersion: 'prompt-v2' }),
+      definition: definition({ systemPrompt: 'Changed prompt content.' }),
       value: { text: 'same' },
       signal,
     });
     expect(second.run.cacheKey).not.toBe(first.run.cacheKey);
     expect(model.requests).toHaveLength(2);
+  });
+
+  it('isolates schemas and execution limits by content without a version bump', () => {
+    const original = agentDefinitionHash(definition());
+    expect(agentDefinitionHash(definition())).toBe(original);
+    expect(
+      agentDefinitionHash(
+        definition({ outputSchema: z.object({ answer: z.string().min(5) }).strict() }),
+      ),
+    ).not.toBe(original);
+    expect(
+      agentDefinitionHash(
+        definition({ inputSchema: z.object({ text: z.string().min(5) }).strict() }),
+      ),
+    ).not.toBe(original);
+    expect(
+      agentDefinitionHash(definition({ limits: { ...definition().limits, maxSteps: 4 } })),
+    ).not.toBe(original);
   });
 
   it('retains a failed run and permits the same cache key to succeed later', async () => {
@@ -647,7 +659,6 @@ describe('registries and evaluation primitives', () => {
     const registry = new PromptRegistry();
     const prompt = {
       agentKey: 'resume-profile',
-      promptVersion: 'v1',
       outputSchemaVersion: 'v1',
       text: 'Extract facts.',
     };
@@ -681,8 +692,7 @@ describe('registries and evaluation primitives', () => {
     let current = 0;
     const report = await runEvaluation({
       agentKey: 'test-agent',
-      agentVersion: '1',
-      promptVersion: '1',
+      definitionHash: 'b'.repeat(64),
       modelConfigHash: 'a'.repeat(64),
       cases: [
         {

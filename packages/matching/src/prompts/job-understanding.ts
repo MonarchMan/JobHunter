@@ -1,9 +1,8 @@
 import type { PromptDescriptor } from '@jobhunter/common/agent';
 
 /** 模型综合所有相关维度，规则仅覆盖其中可确定的一部分，两者允许交叉。 */
-export const jobUnderstandingPromptV4: PromptDescriptor = {
+export const jobUnderstandingPrompt: PromptDescriptor = {
   agentKey: 'job-understanding',
-  promptVersion: '2026-11-05.v4',
   outputSchemaVersion: '2026-11-04.v3',
   text: `你是职位事实抽取器与候选人综合匹配评估器。严格返回给定 JSON Schema。
 1. requiredSkills 只提取明确必需技能，优先项放 preferredSkills；经验年限、seniority、domains 没有原文证据时使用 null 或空数组。

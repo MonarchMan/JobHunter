@@ -13,7 +13,7 @@ import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteRecruitmentMailRepository } from '@jobhunter/recruitment/persistence/sqlite-recruitment-mail-repository';
 import { seedPlatformJobs } from '../fixtures/platform-jobs.js';
 import { browserFixtureAddress } from '../../src/server/browser-test-isolation.js';
-import { calculateDeterministicMatch, matchRulesetV4 } from '@jobhunter/matching';
+import { calculateDeterministicMatch, currentMatchRuleset } from '@jobhunter/matching';
 import { contentHash, utcInstant } from '@jobhunter/common/domain';
 import { parseNormalizedJob, type NormalizedJob } from '@jobhunter/recruitment/domain';
 import type { CandidateProfileData } from '@jobhunter/user/domain';
@@ -632,8 +632,8 @@ async function seedFixture(dataRoot: string): Promise<void> {
     database.client
       .prepare(
         `INSERT INTO match_rulesets
-         (id, version, definition_json, definition_hash, active, created_at)
-         VALUES (?, 'campus-v1', '{"version":"campus-v1"}', ?, 1, 1)`,
+         (id, definition_json, definition_hash, active, created_at)
+         VALUES (?, '{}', ?, 1, 1)`,
       )
       .run(ids.ruleset, 'e'.repeat(64));
     database.client
@@ -681,23 +681,20 @@ async function seedFixture(dataRoot: string): Promise<void> {
         'f'.repeat(64),
       );
     // 分型详情夹具使用真实纯规则引擎，不改变活动列表的旧评分基线。
-    const recruitmentMatch = calculateDeterministicMatch(
-      {
-        profile: interviewProfile,
-        job: campusJobs[1],
-        company: { sizeCategory: 'large', industry: null },
-        understanding: null,
-      },
-      matchRulesetV4,
-    );
+    const recruitmentMatch = calculateDeterministicMatch({
+      profile: interviewProfile,
+      job: campusJobs[1],
+      company: { sizeCategory: 'large', industry: null },
+      understanding: null,
+    });
     database.client
       .prepare(
-        `INSERT INTO match_rulesets (id, version, definition_json, definition_hash, active, created_at) VALUES (?, 'v4-fixture', ?, ?, 0, 1)`,
+        `INSERT INTO match_rulesets (id, definition_json, definition_hash, active, created_at) VALUES (?, ?, ?, 0, 1)`,
       )
       .run(
         '018f0000-0000-7000-8000-000000000631',
-        JSON.stringify({ ...matchRulesetV4, version: 'v4-fixture' }),
-        contentHash({ ...matchRulesetV4, version: 'v4-fixture' }),
+        JSON.stringify(currentMatchRuleset),
+        contentHash(currentMatchRuleset),
       );
     database.client
       .prepare(
@@ -731,20 +728,20 @@ async function seedFixture(dataRoot: string): Promise<void> {
     database.client
       .prepare(
         `INSERT INTO agent_runs
-         (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+         (id, agent_key, definition_hash, model_config_hash, input_hash,
           cache_key, status, output_json, input_tokens, output_tokens, estimated_cost_micros,
           cost_currency, pricing_version, started_at, finished_at)
-         VALUES (?, 'job-understanding', 'fake-v1', 'campus-prompt-v1', 'fake-config',
+         VALUES (?, 'job-understanding', 'fake-definition', 'fake-config',
           'fake-input', 'fake-cache', 'succeeded', '{"summary":"脱敏校招实习职位理解"}',
           120, 80, 1000, 'USD', 'fake-price-v1', 2, 3)`,
       )
       .run(ids.agentRun);
     seedUsageFixture(database.client, ids.agentRun);
     database.client.exec(`INSERT INTO agent_runs
-      (id,agent_key,agent_version,prompt_version,model_config_hash,input_hash,cache_key,
+      (id,agent_key,definition_hash,model_config_hash,input_hash,cache_key,
        status,error_category,error_summary,started_at,finished_at)
       VALUES('018f0000-0000-7000-8000-000000000708','recruitment-mail.classify',
-       'fake-v1','mail-prompt-v1','fake-config','fake-input-2','fake-cache-2',
+       'fake-definition','fake-config','fake-input-2','fake-cache-2',
        'failed','unknown',NULL,4,5)`);
     database.client
       .prepare(

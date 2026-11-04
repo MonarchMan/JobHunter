@@ -36,7 +36,6 @@ export interface MatchDetail {
     readonly detailUrl: string;
     readonly applyUrl: string;
   };
-  readonly rulesetVersion: string;
   readonly advice: MatchAdviceRecord | null;
 }
 
@@ -162,8 +161,7 @@ export class MatchWorkflowService {
     const match = this.#matching.getMatch(matchId);
     if (!match) throw new MatchResultNotFoundError(id);
     const revision = this.#matching.getRevision(match.jobRevisionId);
-    const ruleset = this.#matching.getRuleset(match.rulesetId);
-    if (!revision || !ruleset) throw new MatchResultNotFoundError(id);
+    if (!revision) throw new MatchResultNotFoundError(id);
     return {
       match,
       job: {
@@ -174,7 +172,6 @@ export class MatchWorkflowService {
         detailUrl: revision.normalized.detailUrl,
         applyUrl: revision.normalized.applyUrl,
       },
-      rulesetVersion: ruleset.version,
       advice: this.#adviceSelector
         ? this.#matching.getCurrentAdvice(matchId, this.#adviceSelector)
         : null,

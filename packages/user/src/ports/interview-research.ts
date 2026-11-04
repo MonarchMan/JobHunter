@@ -17,7 +17,7 @@ export interface ExperienceResearchRequestRecord {
   readonly id: ExperienceResearchRequestId;
   readonly brief: ExperienceResearchBrief;
   readonly requestFingerprint: ContentHash;
-  readonly promptVersion: string;
+  readonly promptHash: string;
   readonly schemaVersion: string;
   readonly promptFileId: string;
   readonly promptFileVersionNo: number;

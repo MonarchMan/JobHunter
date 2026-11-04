@@ -14,8 +14,7 @@ import type Database from 'better-sqlite3';
 interface AgentRunRow {
   readonly id: string;
   readonly agent_key: string;
-  readonly agent_version: string;
-  readonly prompt_version: string;
+  readonly definition_hash: string;
   readonly model_config_hash: string;
   readonly input_hash: string;
   readonly cache_key: string;
@@ -33,7 +32,7 @@ interface AgentRunRow {
   readonly finished_at: number | null;
 }
 
-const columns = `id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+const columns = `id, agent_key, definition_hash, model_config_hash, input_hash,
                  cache_key, status, output_json, output_hash, error_category, error_summary, input_tokens,
                  output_tokens, estimated_cost_micros, cost_currency, pricing_version,
                  started_at, finished_at`;
@@ -64,8 +63,7 @@ function toRecord(row: AgentRunRow): AgentRunRecord {
   return {
     id: row.id,
     agentKey: row.agent_key,
-    agentVersion: row.agent_version,
-    promptVersion: row.prompt_version,
+    definitionHash: row.definition_hash,
     modelConfigHash: row.model_config_hash,
     inputHash: row.input_hash,
     cacheKey: row.cache_key,
@@ -228,15 +226,14 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
     this.#client
       .prepare(
         `INSERT INTO agent_runs
-           (id, agent_key, agent_version, prompt_version, model_config_hash, input_hash,
+           (id, agent_key, definition_hash, model_config_hash, input_hash,
             cache_key, status, cost_currency, pricing_version, started_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)`,
       )
       .run(
         record.id,
         record.agentKey,
-        record.agentVersion,
-        record.promptVersion,
+        record.definitionHash,
         record.modelConfigHash,
         record.inputHash,
         record.cacheKey,

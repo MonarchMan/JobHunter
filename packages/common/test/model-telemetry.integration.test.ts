@@ -36,8 +36,6 @@ it('persists failed HTTP attempts, retries once and filters HTTP status independ
     const runner = new AgentRunner({ store, model: client, now: () => now, createId: randomUUID });
     const definition = defineAgent({
       key: 'usage-fixture',
-      version: '1.0.0',
-      promptVersion: '1',
       outputSchemaVersion: '1',
       outputSchemaName: 'Result',
       systemPrompt: 'Synthetic only',

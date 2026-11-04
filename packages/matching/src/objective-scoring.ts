@@ -2,7 +2,7 @@ import type { DeterministicMatchInput, DeterministicMatchOutput } from './model.
 import { evaluateEvidenceEligibility } from './evidence-eligibility.js';
 import { recruitmentCategory } from './recruitment-requirements.js';
 
-/** v4 只比较明确条件；能力、实践和语义相关性完全交给模型。 */
+/** 比较明确资格和偏好，供当前评分统一汇总。 */
 export function calculateObjectiveMatch(input: DeterministicMatchInput): DeterministicMatchOutput {
   // 1、解析客观资格，未设置的偏好不增加分母，招聘类别只用于资格路由。
   const preferences = input.profile.preferences;
@@ -12,7 +12,7 @@ export function calculateObjectiveMatch(input: DeterministicMatchInput): Determi
     'preference.employment-type': preferences.employmentTypes.length > 0,
     'preference.excluded-terms': preferences.excludedTerms.length > 0,
   };
-  const outcomes = evaluateEvidenceEligibility(input, true, true, true).filter(
+  const outcomes = evaluateEvidenceEligibility(input).filter(
     (item) => enabled[item.ruleId] !== false,
   );
   const conditions = outcomes.filter(

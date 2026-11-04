@@ -22,7 +22,7 @@ function evaluateNode(
   node: RequirementNode,
   input: DeterministicMatchInput,
   experienceContext = false,
-  graduationPolicy = false,
+  graduationPolicy = true,
 ): RuleOutcome | null {
   const category = recruitmentCategory(input.job);
   // 1.a. 新版先解释明确毕业片段；剩余资格仍须成立，不能以毕业命中覆盖学历/在读要求。
@@ -35,7 +35,7 @@ function evaluateNode(
             graduation.remainder,
           );
         const remaining = hasRemainingQualification
-          ? evaluateNode({ ...node, text: graduation.remainder }, input, experienceContext)
+          ? evaluateNode({ ...node, text: graduation.remainder }, input, experienceContext, false)
           : null;
         return remaining
           ? {
@@ -154,24 +154,17 @@ function evaluateNode(
     }
   }
   return {
-    ruleId: 'qualification.condition-v3',
+    ruleId: 'qualification.condition',
     status,
     explanation: reason.slice(0, 500),
     evidence: [{ source: 'job', path: node.path, summary: node.text.slice(0, 300) }],
   };
 }
 
-/** v3 用条件树替换资格检查，用户明确偏好继续使用既有独立规则。 */
-export function evaluateEvidenceEligibility(
-  input: DeterministicMatchInput,
-  recoverBoundary = false,
-  graduationPolicy = false,
-  requiredOnly = false,
-): RuleOutcome[] {
-  // 1. 保留地点/类型等偏好，不使用旧版最低年限规则。
-  const results = evaluateEligibility(input).filter(
-    (item) => item.ruleId !== 'qualification.minimum-experience',
-  );
+/** 当前条件树统一检查资格和偏好，不提供历史解析模式。 */
+export function evaluateEvidenceEligibility(input: DeterministicMatchInput): RuleOutcome[] {
+  // 1、先检查明确偏好，再按职位招聘类型解释正文资格。
+  const results = [...evaluateEligibility(input)];
   const category = recruitmentCategory(input.job);
   results.push({
     ruleId: 'qualification.recruitment-category',
@@ -181,13 +174,13 @@ export function evaluateEvidenceEligibility(
   });
   // 2. 同原文同路径去重，保存稳定序号方便详情与建议引用。
   const seen = new Set<string>();
-  for (const node of requirementStatements(input.job, recoverBoundary)) {
-    // v4 不将优先条件和明确豁免计为得分项，旧版重放维持原样。
-    if (requiredOnly && node.kind === 'atom' && node.mode !== 'required') continue;
+  for (const node of requirementStatements(input.job)) {
+    // 优先条件和明确豁免不计为得分项。
+    if (node.kind === 'atom' && node.mode !== 'required') continue;
     const key = `${node.path}:${node.text}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const outcome = evaluateNode(node, input, false, graduationPolicy);
+    const outcome = evaluateNode(node, input);
     if (outcome)
       results.push({ ...outcome, ruleId: `${outcome.ruleId}.${String(results.length)}` });
   }
