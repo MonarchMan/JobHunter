@@ -55,6 +55,7 @@ R1 是首个可运行闭环，R2 不改变领域和持久化边界。自动投�
 | `030-recruitment-calendar`          | 招聘笔试、测评与面试日程                           | C1     | 011, 029                                    |
 | `031-recruitment-progress`          | 公司分组、岗位流程与多轮面试时间线                 | C1     | 011, 029, 030                               |
 | `032-business-module-consolidation` | recruitment、user、matching、foundation 四模块聚合 | 架构   | 000, 001, 002, 003                          |
+| `033-model-usage` | 任务页模型请求用量、成本、缓存和趋势统计 | C1 | 008, 011 |
 
 `007` 在实现顺序上依赖 `008`，但两者设计可以并行评审。
 

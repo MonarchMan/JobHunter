@@ -3,6 +3,16 @@ import { z } from 'zod';
 const count = z.number().int().nonnegative().nullable();
 /** 单次请求的用量和价格快照；null 表示未上报或无法定价，不能解释为零。 */
 export const modelBillingSchema = z.object({
+  application: z.string().optional(),
+  provider: z.string().optional(),
+  statusCode: z.number().int().min(100).max(599).nullable().optional(),
+  durationMs: count.optional(),
+  firstTokenMs: count.optional(),
+  outputTokensPerSecond: z.number().nonnegative().nullable().optional(),
+  transportError: z
+    .enum(['network', 'cancelled', 'timeout', 'invalid_output'])
+    .nullable()
+    .optional(),
   model: z.string(),
   requestedAt: z.number().int().nonnegative(),
   inputTokens: count,

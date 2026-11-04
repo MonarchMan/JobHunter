@@ -1,3 +1,4 @@
+import { seedUsageFixture } from './usage-fixture.js';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -747,6 +748,7 @@ async function seedFixture(dataRoot: string): Promise<void> {
           120, 80, 1000, 'USD', 'fake-price-v1', 2, 3)`,
       )
       .run(ids.agentRun);
+    seedUsageFixture(database.client, ids.agentRun);
     database.client.exec(`INSERT INTO agent_runs
       (id,agent_key,agent_version,prompt_version,model_config_hash,input_hash,cache_key,
        status,error_category,error_summary,started_at,finished_at)

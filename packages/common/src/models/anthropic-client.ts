@@ -1,4 +1,5 @@
 import { calculateBilling } from './billing.js';
+import { ModelRequestTrace } from './request-trace.js';
 import { cacheCreationSchema, cacheWriteTotal, optionalTokenCount } from './cache-usage.js';
 import {
   ModelClientError,
@@ -171,7 +172,20 @@ export class AnthropicModelClient implements ModelClient {
 
   /** 发送一次 Anthropic 模型请求并返回统一响应。 */
   public async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
-    const requestedAt = Date.now();
+    const trace = new ModelRequestTrace(this.#config);
+    try {
+      return await this.#complete(request, signal, trace);
+    } catch (error) {
+      return trace.failure(error);
+    }
+  }
+
+  /** 保留 Messages 业务解析，统一观测流式内容与失败协商。 */
+  async #complete(
+    request: ModelRequest,
+    signal: AbortSignal,
+    trace: ModelRequestTrace,
+  ): Promise<ModelResponse> {
     const timeout = AbortSignal.timeout(this.#config.timeoutMs);
     const combined = AbortSignal.any([signal, timeout]);
     const baseBody = {
@@ -205,25 +219,30 @@ export class AnthropicModelClient implements ModelClient {
           }),
     };
     const dispatch = (structured: boolean): Promise<Response> =>
-      this.#fetch(endpoint(this.#config.baseUrl), {
-        method: 'POST',
-        headers: {
-          'anthropic-version': '2023-06-01',
-          'content-type': 'application/json',
-          'x-api-key': this.#config.apiKey,
+      trace.fetch(
+        this.#fetch,
+        endpoint(this.#config.baseUrl),
+        {
+          method: 'POST',
+          headers: {
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'x-api-key': this.#config.apiKey,
+          },
+          body: JSON.stringify({
+            ...baseBody,
+            ...(structured
+              ? {
+                  output_config: {
+                    format: { type: 'json_schema', schema: request.outputJsonSchema },
+                  },
+                }
+              : {}),
+          }),
+          signal: combined,
         },
-        body: JSON.stringify({
-          ...baseBody,
-          ...(structured
-            ? {
-                output_config: {
-                  format: { type: 'json_schema', schema: request.outputJsonSchema },
-                },
-              }
-            : {}),
-        }),
-        signal: combined,
-      });
+        'anthropic',
+      );
 
     try {
       // 1、协商成功的模式直接复用；仅在未协商时先尝试结构化输出并在 400 时回退纯提示。
@@ -237,8 +256,6 @@ export class AnthropicModelClient implements ModelClient {
         this.#negotiatedStructured = structured;
       if (!response.ok) throw await responseError(response);
       const parsed = responseSchema.parse(await response.json());
-      if (parsed.stop_reason === 'refusal')
-        throw new ModelClientError('content_rejected', 'Model provider rejected the content.');
 
       const calls = parsed.content.flatMap((block) => {
         const call = toolUseBlockSchema.safeParse(block);
@@ -252,7 +269,7 @@ export class AnthropicModelClient implements ModelClient {
       const billing = calculateBilling({
         model: this.#config.model,
         baseUrl: this.#config.baseUrl,
-        requestedAt,
+        requestedAt: trace.requestedAt,
         currency: this.#config.costCurrency,
         inputTokens: raw?.input_tokens === undefined ? null : totals.inputTokens,
         outputTokens: raw?.output_tokens ?? null,
@@ -269,7 +286,9 @@ export class AnthropicModelClient implements ModelClient {
         cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
         autoModelPricing: this.#config.autoModelPricing,
       });
-      const responseUsage = { ...totals, billing, estimatedCostMicros: billing.totalCostMicros };
+      const responseUsage = trace.usage(billing);
+      if (parsed.stop_reason === 'refusal')
+        throw new ModelClientError('content_rejected', 'Model provider rejected the content.');
       if (calls.length > 0) return { kind: 'tool_calls', calls, usage: responseUsage };
 
       const content = parsed.content.flatMap((block) => {

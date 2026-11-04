@@ -1,4 +1,5 @@
 import { calculateBilling } from './billing.js';
+import { ModelRequestTrace } from './request-trace.js';
 import {
   cacheCreationSchema,
   cacheWriteTotal,
@@ -254,7 +255,20 @@ export class OpenAiCompatibleModelClient implements ModelClient {
 
   /** 发送一次模型请求并映射文本、工具调用和用量。 */
   public async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelResponse> {
-    const requestedAt = this.#now();
+    const trace = new ModelRequestTrace(this.#config, this.#now);
+    try {
+      return await this.#complete(request, signal, trace);
+    } catch (error) {
+      return trace.failure(error);
+    }
+  }
+
+  /** 保持原响应校验与格式协商，HTTP 传输交给逐请求观测器。 */
+  async #complete(
+    request: ModelRequest,
+    signal: AbortSignal,
+    trace: ModelRequestTrace,
+  ): Promise<ModelResponse> {
     const timeout = AbortSignal.timeout(this.#config.timeoutMs);
     const combined = AbortSignal.any([signal, timeout]);
     const messages = [
@@ -294,18 +308,23 @@ export class OpenAiCompatibleModelClient implements ModelClient {
             }),
       };
       const dispatch = (responseFormat?: unknown): Promise<Response> =>
-        this.#fetch(endpoint(this.#config.baseUrl), {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${this.#config.apiKey}`,
-            'content-type': 'application/json',
+        trace.fetch(
+          this.#fetch,
+          endpoint(this.#config.baseUrl),
+          {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${this.#config.apiKey}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              ...baseBody,
+              ...(responseFormat === undefined ? {} : { response_format: responseFormat }),
+            }),
+            signal: combined,
           },
-          body: JSON.stringify({
-            ...baseBody,
-            ...(responseFormat === undefined ? {} : { response_format: responseFormat }),
-          }),
-          signal: combined,
-        });
+          'openai',
+        );
       const deepSeek = isDeepSeekApi(this.#config.baseUrl);
       // 1、协商成功的格式直接复用；未协商时 DeepSeek 直接 json_object，其余网关优先 json_schema。
       let format: StructuredFormat = deepSeek
@@ -368,7 +387,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       const billing = calculateBilling({
         model: this.#config.model,
         baseUrl: this.#config.baseUrl,
-        requestedAt,
+        requestedAt: trace.requestedAt,
         currency: this.#config.costCurrency,
         inputTokens,
         outputTokens: raw?.completion_tokens ?? null,
@@ -391,8 +410,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       });
       const responseUsage = {
         ...usage(raw),
-        estimatedCostMicros: billing.totalCostMicros,
-        billing,
+        ...trace.usage(billing),
       };
       const choice = parsed.choices[0];
       if (!choice) throw new ModelClientError('invalid_output', 'Model response had no choice.');

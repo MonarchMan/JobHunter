@@ -1,3 +1,4 @@
+import type { ModelUsage } from './model-client.js';
 /** Agent 运行错误的稳定分类，用于重试策略和用户提示。 */
 export const agentErrorCategories = [
   'rate_limited',
@@ -33,6 +34,8 @@ export class AgentRuntimeError extends Error {
 
 /** 模型客户端调用失败时使用的 Agent 错误子类。 */
 export class ModelClientError extends AgentRuntimeError {
+  /** 已发出的真实请求，即使调用失败也应保留在运行账本中。 */
+  public usage?: ModelUsage;
   public constructor(category: AgentErrorCategory, message: string, retryable = false) {
     super(category, message, retryable);
     this.name = 'ModelClientError';

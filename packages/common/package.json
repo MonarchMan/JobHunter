@@ -153,6 +153,16 @@
       "development": "./src/browser/executable.ts",
       "types": "./dist/browser/executable.d.ts",
       "import": "./dist/browser/executable.js"
+    },
+    "./usage": {
+      "development": "./src/usage/service.ts",
+      "types": "./dist/usage/service.d.ts",
+      "import": "./dist/usage/service.js"
+    },
+    "./persistence/usage-repository": {
+      "development": "./src/persistence/usage-repository.ts",
+      "types": "./dist/persistence/usage-repository.d.ts",
+      "import": "./dist/persistence/usage-repository.js"
     }
   },
   "files": [

@@ -1,6 +1,8 @@
 import type { ModelBilling } from '../contracts/model-usage.js';
 /** 模块数据结构或契约。 */
 export interface ModelUsage {
+  /** 一次 complete 可能包含格式协商的多次 HTTP；有此数组时不重复累加 billing。 */
+  readonly billingCalls?: readonly ModelBilling[];
   readonly billing?: ModelBilling;
   readonly inputTokens: number;
   readonly outputTokens: number;

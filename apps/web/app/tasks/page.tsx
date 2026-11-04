@@ -1,3 +1,5 @@
+import { TaskTabs } from './task-tabs.js';
+import { UsagePanel } from './usage-panel.js';
 import { SearchButton } from '../components/forms/search-button.js';
 import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
@@ -93,6 +95,27 @@ export default async function TasksPage({
     {} as Record<'USD' | 'CNY', string>,
   );
   const container = await getWebContainer();
+  if (firstSearchParameter(parameters, 'tab') === 'usage') {
+    const report = container.services.usage.query({
+      range: firstSearchParameter(parameters, 'range'),
+      application: firstSearchParameter(parameters, 'application'),
+      model: firstSearchParameter(parameters, 'model'),
+      status: firstSearchParameter(parameters, 'usageStatus'),
+      provider: firstSearchParameter(parameters, 'provider'),
+      statusCode: firstSearchParameter(parameters, 'statusCode'),
+      currency: requestedCurrency,
+      page: firstSearchParameter(parameters, 'usagePage'),
+    });
+    return (
+      <main id="main-content" tabIndex={-1}>
+        <PageHeader title="任务与 Agent 运行">
+          <TaskAutoRefresh />
+        </PageHeader>
+        <TaskTabs usage />
+        <UsagePanel report={report} view={firstSearchParameter(parameters, 'view') ?? 'logs'} />
+      </main>
+    );
+  }
   const diagnostics = container.services.diagnostics.list({
     ...(status && ['pending', 'running', 'failed', 'succeeded', 'cancelled'].includes(status)
       ? { status: status as 'pending' | 'running' | 'failed' | 'succeeded' | 'cancelled' }
@@ -111,6 +134,7 @@ export default async function TasksPage({
         </div>
       </PageHeader>
 
+      <TaskTabs />
       <form
         className={styles.filters}
         action="/tasks"

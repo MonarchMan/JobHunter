@@ -1,0 +1,475 @@
+.tabs {
+  display: flex;
+  gap: 1.6rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+.tabs a {
+  padding: 0.85rem 0.15rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+  font-weight: 600;
+}
+.tabs a[aria-current] {
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+.dashboard {
+  display: grid;
+  gap: 1.2rem;
+  min-width: 0;
+}
+.metricRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem 1.6rem;
+  align-items: flex-start;
+}
+.filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.filters .segment {
+  margin-left: 0;
+}
+.filterFields {
+  display: flex;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.filterFields :global([data-authored-select-trigger]) {
+  min-width: 0;
+  max-width: 200px;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+.metrics article {
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  padding: 1.2rem;
+  background: var(--surface);
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.metrics article > span {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.metrics strong {
+  font-size: clamp(1.65rem, 3vw, 2.45rem);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.info {
+  display: inline-flex;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  width: 1em;
+  height: 1em;
+  font-size: 0.75em;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  margin-left: 0.25em;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.more {
+  border: 0;
+  background: transparent;
+  padding: 0.8rem 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.extraMetrics {
+  grid-column: 1;
+}
+.extraMetrics article {
+  background: #efeff2;
+  border-color: transparent;
+  padding: 0.9rem 1.2rem;
+}
+.extraMetrics strong {
+  font-size: 1.5rem;
+}
+.chart {
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  min-width: 0;
+}
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin-bottom: 1rem;
+}
+.heading h2 {
+  font-size: 1rem;
+  margin: 0;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+.legend i {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  background: #0891b2;
+  border-radius: 3px;
+}
+.segment {
+  display: flex;
+  margin-left: auto;
+  padding: 4px;
+  background: #efeff2;
+  border-radius: 0.65rem;
+}
+.segment button {
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+.segment button[aria-pressed='true'] {
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: 0 1px 4px #0001;
+}
+.chartBody {
+  display: flex;
+  gap: 0.8rem;
+}
+.yAxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 55px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.plot {
+  position: relative;
+  height: 180px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(to bottom, transparent 49.5%, var(--line) 50%, transparent 50.5%);
+}
+.barSlot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  padding: 0 1px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.lineChart {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.linePoint {
+  position: absolute;
+  width: 6px;
+  height: 6px !important;
+  border-radius: 50%;
+  background: #0891b2;
+  transform: translateY(50%);
+}
+.barSlot:hover,
+.barSlot:focus-visible {
+  background: #efeff2;
+}
+.bar {
+  width: 85%;
+  max-width: 45px;
+  display: block;
+  background: #0891b2;
+  border-radius: 4px 4px 0 0;
+}
+.tooltip {
+  position: absolute;
+  z-index: 2;
+  top: 15px;
+  padding: 0.9rem 1rem;
+  min-width: 175px;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  box-shadow: 0 4px 12px #0002;
+  background: var(--surface);
+  pointer-events: none;
+  font-size: 0.9rem;
+  max-width: 95%;
+}
+.tooltip > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 0.6rem;
+}
+.axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.7rem 0 0 68px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+.logHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  gap: 1rem;
+}
+.logHeading .tabs {
+  margin: 0;
+  border: 0;
+}
+.statusSelect {
+  width: 160px;
+  flex-shrink: 0;
+}
+.statusSelect :global([data-authored-select-trigger]) {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 2rem;
+  padding: 0.3rem 0.4rem;
+  font-size: 0.95rem;
+}
+.tableScroll {
+  overflow-x: auto;
+}
+.logs {
+  min-width: 0;
+  margin-top: 0.65rem;
+}
+.logs table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.logs th,
+.logs td {
+  padding: 0.85rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.logs th {
+  color: var(--text-secondary);
+  font-weight: 600;
+  background: transparent;
+}
+.logs td small {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.model {
+  font-family: ui-monospace, monospace;
+}
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+.pagination span {
+  color: var(--text-secondary);
+}
+.pagination a {
+  text-decoration: none;
+}
+.recordCount {
+  margin-right: auto;
+}
+.sortLabel {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
+}
+.settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 2rem;
+  padding: 1.2rem;
+  background: #efeff2;
+  border-radius: 0.8rem;
+}
+.settings label {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.8fr) minmax(0, 1.5fr);
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+.settings :global([data-authored-select-trigger]) {
+  width: 100%;
+}
+.settingsHeading {
+  font-size: 1rem;
+  margin: 1.4rem 0 0.8rem;
+}
+.pricingHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.8rem;
+}
+.pricingHeading h3 {
+  font-size: 1rem;
+}
+.pricingHeading > span {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+@media (max-width: 900px) {
+  .metricRow {
+    gap: 0.7rem;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .filters {
+    flex-wrap: wrap;
+  }
+  .metrics {
+    flex-basis: 100%;
+  }
+  .more {
+    margin-left: auto;
+    padding: 0;
+    grid-row: 2;
+  }
+  .axis span:nth-child(even) {
+    display: none;
+  }
+  .logs table {
+    font-size: 0.85rem;
+  }
+}
+@media (max-width: 600px) {
+  .filterFields {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .filterFields :global([data-authored-select-trigger]) {
+    max-width: 100%;
+  }
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+  .metrics article {
+    padding: 1rem;
+  }
+  .metrics article > span {
+    font-size: 0.85rem;
+  }
+  .chart {
+    padding: 1rem 0.7rem;
+  }
+  .heading {
+    flex-wrap: wrap;
+    gap: 0.65rem;
+  }
+  .heading h2 {
+    font-size: 0.9rem;
+  }
+  .heading > .legend {
+    font-size: 0.8rem;
+  }
+  .segment {
+    margin-left: 0;
+  }
+  .segment button {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.8rem;
+  }
+  .plot {
+    gap: 2px;
+    height: 150px;
+  }
+  .yAxis {
+    width: 40px;
+  }
+  .axis {
+    margin-left: 52px;
+    font-size: 0.65rem;
+  }
+  .axis span:not(:first-child):not(:last-child) {
+    display: none;
+  }
+  .tooltip {
+    left: 0 !important;
+    min-width: 145px;
+    font-size: 0.8rem;
+  }
+  .logHeading {
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+  .logHeading .tabs {
+    gap: 1.3rem;
+  }
+  .statusSelect {
+    margin-left: auto;
+    width: 145px;
+  }
+  .settings {
+    grid-template-columns: 1fr;
+  }
+  .pagination {
+    justify-content: center;
+    font-size: 0.75rem;
+  }
+}

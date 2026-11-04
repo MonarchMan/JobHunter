@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { canonicalJson, hashCanonical, sha256 } from './canonical.js';
 import type { AgentDefinition } from './definition.js';
-import { AgentRuntimeError, classifyAgentError, sanitizeAgentErrorSummary } from './errors.js';
+import {
+  AgentRuntimeError,
+  ModelClientError,
+  classifyAgentError,
+  sanitizeAgentErrorSummary,
+} from './errors.js';
 import type { ModelClient, ModelResponse, ModelToolResult, ModelUsage } from './model-client.js';
 import type { AgentRunRecord, AgentRunStore, AgentRunUsage } from './store.js';
 import { ToolRegistry } from './tools.js';
@@ -23,7 +28,8 @@ interface Totals {
 
 /** 将单次模型响应的用量累加到运行总量。 */
 function addUsage(totals: Totals, usage: ModelUsage): void {
-  if (usage.billing) totals.billingCalls.push(usage.billing);
+  if (usage.billingCalls) totals.billingCalls.push(...usage.billingCalls);
+  else if (usage.billing) totals.billingCalls.push(usage.billing);
   totals.inputTokens += usage.inputTokens;
   totals.outputTokens += usage.outputTokens;
   if (usage.estimatedCostMicros === null) totals.estimatedCostMicros = null;
@@ -195,6 +201,7 @@ export class AgentRunner {
       return { run: completion.record, output: winnerOutput, cacheHit: completion.kind === 'race' };
     } catch (error) {
       // 4、将异常分类、脱敏并持久化，再把稳定错误交给上层重试策略。
+      if (error instanceof ModelClientError && error.usage) addUsage(totals, error.usage);
       let classified = classifyAgentError(error);
       if (timeout.aborted && !input.signal.aborted) {
         classified = new AgentRuntimeError('timeout', 'Agent run exceeded its timeout.', true);

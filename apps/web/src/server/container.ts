@@ -1,3 +1,5 @@
+import { UsageService } from '@jobhunter/common/usage';
+import { SqliteUsageRepository } from '@jobhunter/common/persistence/usage-repository';
 import { ProfilePlatformSearchProvider } from '@jobhunter/matching/profile-platform-search';
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
 import { SqliteAgentRunCleanup } from '@jobhunter/common/persistence/agent-run-cleanup';
@@ -128,6 +130,7 @@ export interface WebApplicationServices {
   readonly webProfiles: WebProfileService;
   readonly webSources: WebSourceService;
   readonly diagnostics: WebDiagnosticsService;
+  readonly usage: UsageService;
   readonly resumeDeletion: WebResumeDeletionService;
   readonly resumes: ResumeProfileWorkflow;
   readonly resumePolish: ResumePolishService;
@@ -425,6 +428,7 @@ export function createLocalWebContainer(
           sourceSchedules.reconcile();
         },
       }),
+      usage: new UsageService(new SqliteUsageRepository(database.client)),
       diagnostics: new WebDiagnosticsService({
         tasks,
         repository: new SqliteWebDiagnosticsRepository(database.client),
