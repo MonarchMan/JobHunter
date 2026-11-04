@@ -6,7 +6,7 @@ import {
   jobUnderstandingAgentOutputSchema,
   type JobUnderstanding,
 } from './job-understanding.js';
-import { jobUnderstandingPromptV3 } from './prompts/job-understanding/v3.js';
+import { jobUnderstandingPromptV4 } from './prompts/job-understanding/v4.js';
 
 const nullableText = z.string().trim().min(1).nullable();
 
@@ -18,16 +18,17 @@ export const profileSnapshotSchema = z
     yearsOfExperience: z.number().nonnegative().nullable(),
     skills: candidateProfileSchema.unwrap().shape.skills,
     professionalSkills: nullableText,
-    ...candidateProfileSchema
-      .unwrap()
-      .pick({
-        workExperience: true,
-        projects: true,
-        works: true,
-        competitions: true,
-        certificates: true,
-        languages: true,
-      }).shape,
+    education: candidateProfileSchema.unwrap().shape.education.optional(),
+    preferences: candidateProfileSchema.unwrap().shape.preferences.optional(),
+    matchingConstraints: candidateProfileSchema.unwrap().shape.matchingConstraints,
+    ...candidateProfileSchema.unwrap().pick({
+      workExperience: true,
+      projects: true,
+      works: true,
+      competitions: true,
+      certificates: true,
+      languages: true,
+    }).shape,
   })
   .strict();
 
@@ -42,6 +43,9 @@ export function buildProfileSnapshot(profile: CandidateProfileData): ProfileSnap
     yearsOfExperience: profile.yearsOfExperience,
     skills: profile.skills,
     professionalSkills: profile.professionalSkills,
+    education: profile.education,
+    preferences: profile.preferences,
+    ...(profile.matchingConstraints ? { matchingConstraints: profile.matchingConstraints } : {}),
     workExperience: profile.workExperience,
     projects: profile.projects,
     works: profile.works,
@@ -59,6 +63,15 @@ export const jobUnderstandingInputSchema = z
     experienceText: nullableText,
     educationText: nullableText,
     recruitmentCategory: z.enum(['social', 'campus', 'internship', 'unknown']),
+    locations: z.array(z.string()).optional(),
+    employmentType: nullableText.optional(),
+    company: z
+      .object({
+        sizeCategory: z.enum(['large', 'medium', 'other']).nullable(),
+        industry: nullableText,
+      })
+      .strict()
+      .optional(),
     profile: profileSnapshotSchema,
   })
   .strict();
@@ -71,12 +84,12 @@ export const jobUnderstandingAgentDefinition: AgentDefinition<
   JobUnderstandingInput,
   z.infer<typeof jobUnderstandingAgentOutputSchema>
 > = defineAgent({
-  key: jobUnderstandingPromptV3.agentKey,
-  version: '3.0.0',
-  promptVersion: jobUnderstandingPromptV3.promptVersion,
-  outputSchemaVersion: jobUnderstandingPromptV3.outputSchemaVersion,
+  key: jobUnderstandingPromptV4.agentKey,
+  version: '4.0.0',
+  promptVersion: jobUnderstandingPromptV4.promptVersion,
+  outputSchemaVersion: jobUnderstandingPromptV4.outputSchemaVersion,
   outputSchemaName: 'JobUnderstandingOutput',
-  systemPrompt: jobUnderstandingPromptV3.text,
+  systemPrompt: jobUnderstandingPromptV4.text,
   inputSchema: jobUnderstandingInputSchema,
   outputSchema: jobUnderstandingAgentOutputSchema,
   tools: [],
@@ -122,7 +135,7 @@ export function parseJobUnderstandingAgentOutput(
   const parsed = jobUnderstandingAgentOutputSchema.parse(output);
   for (const reference of allEvidence(parsed)) {
     const source = input[reference.field];
-    if (!source?.includes(reference.quote)) {
+    if (typeof source !== 'string' || !source.includes(reference.quote)) {
       throw new TypeError(`Job understanding evidence is not present in ${reference.field}.`);
     }
   }

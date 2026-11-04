@@ -11,7 +11,7 @@ import {
   jobAdvicePromptV4,
   parseStoredJobAdvice,
   jobUnderstandingAgentDefinition,
-  jobUnderstandingPromptV3,
+  jobUnderstandingPromptV4,
   buildProfileSnapshot,
   matchRulesetV1,
   parseJobUnderstanding,
@@ -87,7 +87,7 @@ function input(overrides: Partial<DeterministicMatchInput> = {}): DeterministicM
 describe('eligibility and deterministic scoring', () => {
   it('keeps JobUnderstanding prompt versions aligned and rejects fabricated evidence', () => {
     expect(() => {
-      assertPromptMatchesDefinition(jobUnderstandingPromptV3, jobUnderstandingAgentDefinition);
+      assertPromptMatchesDefinition(jobUnderstandingPromptV4, jobUnderstandingAgentDefinition);
     }).not.toThrow();
     const agentInput = {
       title: job.title,

@@ -49,7 +49,7 @@ export function createMatchingTasks(
     clock,
     ids,
   });
-  deterministicMatching.ensureRulesetV4({ id: defaultMatchRulesetId });
+  deterministicMatching.ensureRulesetV5({ id: defaultMatchRulesetId });
   const batches = new MatchingBatchService({
     calculator: deterministicMatching,
   });

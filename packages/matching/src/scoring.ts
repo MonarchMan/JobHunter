@@ -10,6 +10,7 @@ import { matchRulesetV1, weightFor, type MatchRuleset } from './rulesets.js';
 import { calculateRecruitmentMatch } from './recruitment-scoring.js';
 import { calculateEvidenceMatch } from './evidence-scoring.js';
 import { calculateObjectiveMatch } from './objective-scoring.js';
+import { calculateOverlappingMatch } from './overlapping-scoring.js';
 
 /** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function normalized(value: string): string {
@@ -216,6 +217,7 @@ export function calculateDeterministicMatch(
   ruleset: MatchRuleset = matchRulesetV1,
 ): DeterministicMatchOutput {
   if (ruleset.engine === 'objective-v4') return calculateObjectiveMatch(input);
+  if (ruleset.engine === 'objective-v5') return calculateOverlappingMatch(input);
   // v1 历史重放保持原算法；仅带分型权重的版本进入新引擎。
   if (
     ruleset.engine === 'evidence-v3' ||

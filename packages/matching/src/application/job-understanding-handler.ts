@@ -93,6 +93,9 @@ export function createJobUnderstandingTaskHandler(
         experienceText: revision.normalized.experienceText,
         educationText: revision.normalized.educationText,
         recruitmentCategory: recruitmentCategory(revision.normalized),
+        locations: revision.normalized.locations,
+        employmentType: revision.normalized.employmentType,
+        company: input.matching.getCompanyContext(revision.normalized.companyId),
         profile: buildProfileSnapshot(profile.effective),
       };
       try {

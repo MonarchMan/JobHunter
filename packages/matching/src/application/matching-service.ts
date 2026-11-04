@@ -18,6 +18,7 @@ import {
   matchRulesetV31,
   matchRulesetV32,
   matchRulesetV4,
+  matchRulesetV5,
 } from '../rulesets.js';
 import type { MatchingRepository, MatchResultRecord } from '../ports/matching.js';
 import type { CandidateProfileReader } from '@jobhunter/user/contracts';
@@ -135,6 +136,21 @@ export class DeterministicMatchingService {
       version: matchRulesetV4.version,
       definition: matchRulesetV4,
       definitionHash: contentHash(matchRulesetV4),
+      active: input.activate ?? true,
+      createdAt: this.#clock.now(),
+    });
+  }
+
+  /** 登记交叉维度规则的新身份，保留旧结果且不触发全量评分。 */
+  public ensureRulesetV5(input: {
+    readonly id: MatchRulesetId;
+    readonly activate?: boolean;
+  }): ReturnType<MatchingRepository['upsertRuleset']> {
+    return this.#matching.upsertRuleset({
+      id: input.id,
+      version: matchRulesetV5.version,
+      definition: matchRulesetV5,
+      definitionHash: contentHash(matchRulesetV5),
       active: input.activate ?? true,
       createdAt: this.#clock.now(),
     });

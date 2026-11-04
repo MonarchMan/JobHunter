@@ -4,6 +4,7 @@ export * from './job-understanding.js';
 export * from './job-understanding-agent.js';
 export * from './prompts/job-understanding/v2.js';
 export * from './prompts/job-understanding/v3.js';
+export * from './prompts/job-understanding/v4.js';
 export * from './score-composition.js';
 export * from './prompts/job-advice/v1.js';
 export * from './prompts/job-advice/v2.js';

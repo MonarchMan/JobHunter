@@ -1,9 +1,9 @@
 import { z } from 'zod';
 import { parseId, type MatchRulesetId } from '@jobhunter/common/domain';
 
-/** 系统默认匹配规则集身份，初始化与 Worker 必须使用同一个稳定值。 */
+/** v5 默认规则集使用独立身份，初始化与任务装配一致，不覆盖旧 v4 的 306 身份。 */
 export const defaultMatchRulesetId: MatchRulesetId = parseId(
-  '018f0000-0000-7000-8000-000000000306',
+  '018f0000-0000-7000-8000-000000000307',
   'MatchRuleset',
 );
 import type { ScoreDimension } from './model.js';
@@ -40,7 +40,9 @@ export const matchRulesetSchema = z
   .object({
     version: z.string().trim().min(1),
     weights: weightsSchema,
-    engine: z.enum(['evidence-v3', 'evidence-v3.1', 'evidence-v3.2', 'objective-v4']).optional(),
+    engine: z
+      .enum(['evidence-v3', 'evidence-v3.1', 'evidence-v3.2', 'objective-v4', 'objective-v5'])
+      .optional(),
     recruitmentWeights: z
       .object({ social: weightsSchema, campus: weightsSchema, internship: weightsSchema })
       .strict()
@@ -106,6 +108,13 @@ export const matchRulesetV4: MatchRuleset = parseMatchRuleset({
     projects: 0,
     qualification: 100,
   },
+});
+
+/** v5 规则覆盖岗位方向、地点及资格条件，模型仍可综合同一维度。 */
+export const matchRulesetV5: MatchRuleset = parseMatchRuleset({
+  ...matchRulesetV4,
+  version: 'v5',
+  engine: 'objective-v5',
 });
 
 /** 校验并解析匹配规则集。 */

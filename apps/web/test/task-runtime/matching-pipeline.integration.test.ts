@@ -146,12 +146,17 @@ function understandingOutput(request: ModelRequest): unknown {
     experienceText: normalizedJob.experienceText,
     educationText: normalizedJob.educationText,
     recruitmentCategory: 'unknown',
+    locations: normalizedJob.locations,
+    employmentType: normalizedJob.employmentType,
+    company: { sizeCategory: 'large', industry: '大模型应用' },
     profile: {
       targetRoles: ['Agent 开发'],
       domains: ['大模型应用'],
       yearsOfExperience: 5,
       skills: profile.skills,
       professionalSkills: null,
+      education: profile.education,
+      preferences: profile.preferences,
       workExperience: profile.workExperience,
       projects: profile.projects,
       works: [],
@@ -405,6 +410,13 @@ describe('matching persistence pipeline', () => {
     expect(service.compute(input)).toEqual({ match: objective, created: false });
     expect(service.compute({ ...input, rulesetId: v32Id }).match).toEqual(graduationFixed);
     expect(fixture.matching.getActiveRuleset()?.definition.engine).toBe('objective-v4');
+    const v5Id = parseId('018f0000-0000-7000-8000-00000000d013', 'MatchRuleset');
+    service.ensureRulesetV5({ id: v5Id });
+    const overlap = service.compute(input).match;
+    expect(overlap.rulesetId).toBe(v5Id);
+    expect(overlap.id).not.toBe(objective.id);
+    expect(service.compute(input)).toEqual({ match: overlap, created: false });
+    expect(service.compute({ ...input, rulesetId: v4Id }).match).toEqual(objective);
   });
 
   it('pre-filters job revisions by target roles and excluded terms before calculation', async () => {

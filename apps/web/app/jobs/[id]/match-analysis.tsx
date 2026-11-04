@@ -1,4 +1,4 @@
-import { ruleGaps } from './match-summary.js';
+import { objectiveRuleRows, ruleGaps } from './match-summary.js';
 import type { ReactElement } from 'react';
 import type { WebJobDetail } from '@jobhunter/matching/contracts/web';
 import { matchEvidenceCoverage } from '@jobhunter/matching';
@@ -21,6 +21,10 @@ export function MatchAnalysis({ match }: { readonly match: Match }): ReactElemen
   const model = match.components.find((item) => item.dimension === 'model');
   const gaps = ruleGaps(rules);
   const objective = rules.some((item) => item.dimension === 'qualification');
+  const separateDimensions = rules.some(
+    (item) => item.dimension === 'role' || item.dimension === 'location',
+  );
+  const conditionRows = objective ? objectiveRuleRows(match.ruleOutcomes, separateDimensions) : [];
   const uncertain = [
     ...new Set(
       rules
@@ -53,18 +57,28 @@ export function MatchAnalysis({ match }: { readonly match: Match }): ReactElemen
           </p>
         )}
         <dl className={styles.scoreRows}>
-          {rules.map((item) => (
-            <div key={item.dimension}>
-              <dt>{names[item.dimension] ?? item.dimension}</dt>
+          {conditionRows.map((item) => (
+            <div key={item.key}>
+              <dt>{item.label}</dt>
               <dd>
-                {item.evidenceStatus === 'not_applicable'
-                  ? '不适用'
-                  : item.evidenceStatus === 'unknown' && !objective
-                    ? `待确认 / ${item.maximumScore.toFixed(1)}`
-                    : `${item.score.toFixed(1)} / ${item.maximumScore.toFixed(1)}`}
+                {item.score.toFixed(1)} / {item.maximumScore.toFixed(1)}
               </dd>
             </div>
           ))}
+          {rules
+            .filter((item) => item.dimension !== 'qualification')
+            .map((item) => (
+              <div key={item.dimension}>
+                <dt>{names[item.dimension] ?? item.dimension}</dt>
+                <dd>
+                  {item.evidenceStatus === 'not_applicable'
+                    ? '不适用'
+                    : item.evidenceStatus === 'unknown' && !objective
+                      ? `待确认 / ${item.maximumScore.toFixed(1)}`
+                      : `${item.score.toFixed(1)} / ${item.maximumScore.toFixed(1)}`}
+                </dd>
+              </div>
+            ))}
         </dl>
         {gaps.length > 0 && (
           <div className={styles.gaps}>

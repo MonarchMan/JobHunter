@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { hashCanonical } from '@jobhunter/common/agent';
 import { parseCandidateProfile } from '@jobhunter/user/contracts';
 import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import {
@@ -7,6 +8,9 @@ import {
   jobUnderstandingInputSchema,
   matchEvidenceCoverage,
   matchRulesetV4,
+  matchRulesetV5,
+  jobUnderstandingAgentDefinition,
+  jobUnderstandingPromptV4,
   parseDeterministicMatchOutput,
 } from '../src/index.js';
 
@@ -26,6 +30,98 @@ const profile = parseCandidateProfile({
     excludedTerms: [],
     remoteAccepted: null,
   },
+});
+
+describe('v5 overlapping rule and model dimensions', () => {
+  /** 固定同一画像和职位，单独观察方向、地点及资格的计分与过滤。 */
+  function current(
+    targetRoles: string[],
+    overrides: Partial<typeof job> = {},
+  ): ReturnType<typeof calculateDeterministicMatch> {
+    return parseDeterministicMatchOutput(
+      calculateDeterministicMatch(
+        {
+          profile: { ...profile, targetRoles },
+          job: { ...job, ...overrides },
+          company: { sizeCategory: null, industry: null },
+          understanding: null,
+        },
+        matchRulesetV5,
+      ),
+    );
+  }
+  it('shows role and location separately and gives each applicable condition equal weight', () => {
+    const result = current(['后端开发']);
+    expect(result.totalScore).toBe(100);
+    expect(result.components.map((item) => [item.dimension, item.maximumScore])).toEqual([
+      ['role', 50],
+      ['location', 50],
+    ]);
+    expect(result.filterStatus).toBe('eligible');
+    expect(current([]).components.map((item) => item.dimension)).toEqual(['location']);
+    const withQualification = current(['后端开发'], { educationText: '要求本科学历' });
+    expect(withQualification.components.map((item) => item.dimension)).toEqual([
+      'role',
+      'location',
+      'qualification',
+    ]);
+    expect(withQualification.components.reduce((sum, item) => sum + item.maximumScore, 0)).toBe(
+      100,
+    );
+  });
+  it('does not hard-exclude role mismatches but preserves explicit location exclusions', () => {
+    const mismatch = current(['财务']);
+    expect(mismatch.totalScore).toBe(50);
+    expect(mismatch.filterStatus).toBe('eligible');
+    expect(mismatch.ruleOutcomes.find((item) => item.ruleId === 'preference.role')?.status).toBe(
+      'fail',
+    );
+    expect(current(['后端开发'], { locations: ['北京'] }).filterStatus).toBe('excluded');
+    expect(current(['后端开发'], { locations: [] }).filterStatus).toBe('uncertain');
+  });
+  it('does not pretend unfamiliar role classifications match', () => {
+    const unknown = current(['未登记的方向']);
+    expect(unknown.filterStatus).toBe('uncertain');
+    expect(unknown.components.find((item) => item.dimension === 'role')).toMatchObject({
+      score: 0,
+      evidenceStatus: 'unknown',
+    });
+  });
+  it('passes overlapping criteria without personal contact fields and changes the model identity', () => {
+    const snapshot = buildProfileSnapshot(profile);
+    expect(snapshot.preferences).toEqual(profile.preferences);
+    expect(snapshot.education).toEqual(profile.education);
+    expect(snapshot).not.toHaveProperty('basicInfo');
+    expect(jobUnderstandingAgentDefinition.promptVersion).toBe(
+      jobUnderstandingPromptV4.promptVersion,
+    );
+    expect(jobUnderstandingAgentDefinition.version).toBe('4.0.0');
+    expect(jobUnderstandingPromptV4.text).toContain('综合岗位方向、工作地点');
+    expect(jobUnderstandingPromptV4.text).not.toContain('不得在 fitScore 重复扣分');
+    const input = {
+      title: job.title,
+      description: job.description,
+      experienceText: null,
+      educationText: null,
+      recruitmentCategory: 'internship',
+      locations: job.locations,
+      employmentType: job.employmentType,
+      company: { sizeCategory: null, industry: null },
+      profile: snapshot,
+    };
+    expect(jobUnderstandingInputSchema.parse(input)).toEqual(input);
+    expect(
+      hashCanonical(
+        jobUnderstandingInputSchema.parse({
+          ...input,
+          profile: buildProfileSnapshot({
+            ...profile,
+            preferences: { ...profile.preferences, locations: ['北京'] },
+          }),
+        }),
+      ),
+    ).not.toBe(hashCanonical(jobUnderstandingInputSchema.parse(input)));
+  });
 });
 const job = parseNormalizedJob({
   companyId: '018f0000-0000-7000-8000-000000000001',

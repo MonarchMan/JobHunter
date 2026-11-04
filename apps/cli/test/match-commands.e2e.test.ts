@@ -187,7 +187,7 @@ describe('match commands', () => {
         ok: true,
         data: {
           job: { title: 'Agent 开发工程师' },
-          rulesetVersion: 'v4',
+          rulesetVersion: 'v5',
           advice: null,
         },
       });
