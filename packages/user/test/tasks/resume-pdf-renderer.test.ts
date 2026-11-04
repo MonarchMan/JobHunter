@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PlaywrightResumePdfRenderer } from '@jobhunter/user/tasks/resume-pdf-renderer';
 
 describe('Playwright resume PDF renderer', () => {
+  // 真实启动 Chromium 渲染，冷启动在全量套件负载下可能超过默认 5 秒，放宽到 30 秒。
   it('renders a print-background A4 PDF containing Chinese resume content', async () => {
     const renderer = new PlaywrightResumePdfRenderer();
     const pdf = await renderer.render(
@@ -11,7 +12,7 @@ describe('Playwright resume PDF renderer', () => {
 
     expect(new TextDecoder().decode(pdf.slice(0, 5))).toBe('%PDF-');
     expect(pdf.byteLength).toBeGreaterThan(5_000);
-  });
+  }, 30_000);
 
   it('does not launch Chromium for an already-cancelled request', async () => {
     const controller = new AbortController();
