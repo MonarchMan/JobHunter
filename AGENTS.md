@@ -46,8 +46,11 @@ recruitment 和 user 只依赖 common；matching 依赖 common 及两者的纯�
 
 提交说明按独立目的和领域归纳，使用 Conventional Commits 格式 `<type>(<scope>): <description>`，描述使用简洁的中文动宾短语。同一次提交可以包含不同scope的条目，例如 `feat(recruitment)` 和 `fix(web)`。
 
-同一功能或修复所需的内部重构、测试和文档属于配套改动，合并到该目的的主条目，不再分别列出 `refactor`、`test`、`docs` 条目。只有某项独立目的本身是重构、测试或文档时，才使用对应类型。
+首行简洁概括整体目的，空一行后按上述格式分别列出各scope的主条目。确需说明原因、关键行为或兼容性时补充简短正文，不重复标题，不逐项罗列文件和配套工作。不兼容变更使用 `!` 并补充 `BREAKING CHANGE:`。
 
-只有一个scope时，默认只写一行。包含多个scope时，首行简洁概括整体目的，空一行后按上述格式分别列出各scope的主条目。确需说明原因、关键行为或兼容性时补充简短正文，不重复标题，不逐项罗列文件和配套工作。不兼容变更使用 `!` 并补充 `BREAKING CHANGE:`。
+示例：“
+修复模型协商重复请求并提升 Agent 输出预算与错误诊断
 
-例如，新增 B 站适配器及其配套重构、测试和文档，统一写为：`feat(recruitment): 新增 B 站实习与校招适配器并注册独立物理来源`。
+fix(common): 模型客户端按实例缓存结构化输出协商结果避免重复请求
+feat(matching): 提升 JobUnderstanding/JobAdvice 输出预算与超时避免证据截断
+”
