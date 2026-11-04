@@ -7,7 +7,7 @@ import type { createJobUnderstandingTaskHandler } from './job-understanding-hand
 import type { createMatchRevisionTaskHandler } from './matching-handlers.js';
 import { classifyTaskError, TaskExecutionError } from '@jobhunter/common/tasks';
 
-/** 手动触发职位评分任务的输入。 */
+/** 手动触发职位评分任务的输入；mode 决定是否运行模型评分阶段。 */
 export const manualJobScoreTaskPayloadSchema = z
   .object({
     jobRevisionId: z.string().trim().min(1),
@@ -49,6 +49,8 @@ export function createManualJobScoreTaskHandler(input: {
   readonly understanding: UnderstandingHandler;
   readonly matching: MatchingHandler;
   readonly advice: AdviceHandler;
+  /** 求职建议开关；关闭时评分照常完成，只跳过建议阶段。 */
+  readonly adviceEnabled: () => boolean;
 }): TaskHandler<z.infer<typeof manualJobScoreTaskPayloadSchema>, z.infer<typeof outputSchema>> {
   return {
     taskType: 'match.score-job',
@@ -73,15 +75,21 @@ export function createManualJobScoreTaskHandler(input: {
     },
     /** 执行应用适配器的该项操作。 */
     async execute(context: TaskHandlerContext, payload) {
+      // 1、模型评分阶段：规则模式跳过；恢复任务直接使用已提交的评分 ID。
       let jobEnrichmentId: string | null = null;
-      // 1、首次执行理解与评分；恢复任务直接使用已提交的评分 ID。
+      let modelScore: number | null = null;
+      let modelReasons: readonly string[] = [];
       if (payload.mode === 'llm' && !payload.resumeMatchResultId) {
         const enrichment = await input.understanding.execute(context, {
           jobRevisionId: payload.jobRevisionId,
+          profileVersionId: payload.profileVersionId,
           enrichmentVersion: jobUnderstandingAgentDefinition.version,
         });
         jobEnrichmentId = enrichment.jobEnrichmentId;
+        modelScore = enrichment.fitScore;
+        modelReasons = enrichment.fitReasons;
       }
+      // 2、评分阶段：规则引擎与模型分加权合成；模型阶段降级时退回规则口径。
       const matched =
         payload.mode === 'llm' && payload.resumeMatchResultId
           ? { matchResultId: payload.resumeMatchResultId }
@@ -89,11 +97,14 @@ export function createManualJobScoreTaskHandler(input: {
               jobRevisionId: payload.jobRevisionId,
               jobEnrichmentId,
               profileVersionId: payload.profileVersionId,
+              modelScore,
+              modelReasons: [...modelReasons],
             });
-      if (payload.mode === 'rules') {
+      // 3、建议阶段只受求职建议开关控制；关闭时不创建建议运行。
+      if (!input.adviceEnabled()) {
         return { mode: payload.mode, matchResultId: matched.matchResultId, matchAdviceId: null };
       }
-      // 2、建议失败不撤销评分；携带检查点让自动及手动重试只恢复建议。
+      // 4、建议失败不撤销评分；携带检查点让自动及手动重试只恢复建议。
       try {
         const advice = await input.advice.execute(context, {
           matchResultId: matched.matchResultId,

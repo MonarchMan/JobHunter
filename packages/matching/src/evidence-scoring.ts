@@ -32,7 +32,7 @@ export function calculateEvidenceMatch(
   const weights = category === 'unknown' ? null : ruleset.recruitmentWeights?.[category];
   /** 统一证据长度和状态，不适用只由类别配置的零权重声明。 */
   const score = (
-    dimension: ScoreComponent['dimension'],
+    dimension: Exclude<ScoreComponent['dimension'], 'model'>,
     ratio: number | null,
     evidence: readonly MatchingEvidence[] = [],
     missing: readonly string[] = [],

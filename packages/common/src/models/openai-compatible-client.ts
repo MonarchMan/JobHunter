@@ -13,6 +13,7 @@ import {
   type ModelResponse,
   type ModelUsage,
 } from '@jobhunter/common/agent';
+import { networkReason } from './network-error.js';
 import { z } from 'zod';
 
 const configSchema = z
@@ -129,6 +130,26 @@ function isDeepSeekApi(baseUrl: string): boolean {
   }
 }
 
+/** 结构化输出协商格式：json_schema、JSON mode 或无格式参数。 */
+type StructuredFormat = 'json_schema' | 'json_object' | 'none';
+
+/** 将协商格式映射为供应商 response_format 载荷。 */
+function responseFormatPayload(
+  format: Exclude<StructuredFormat, 'none'>,
+  request: ModelRequest,
+): Record<string, unknown> {
+  return format === 'json_object'
+    ? { type: 'json_object' }
+    : {
+        type: 'json_schema',
+        json_schema: {
+          name: request.outputSchemaName,
+          strict: true,
+          schema: request.outputJsonSchema,
+        },
+      };
+}
+
 /** DeepSeek v4 的结构化任务关闭默认思考模式，避免正文生成延迟。 */
 function shouldDisableDeepSeekThinking(baseUrl: string, model: string): boolean {
   return isDeepSeekApi(baseUrl) && model.startsWith('deepseek-v4');
@@ -196,6 +217,8 @@ export class OpenAiCompatibleModelClient implements ModelClient {
   readonly #config: z.infer<typeof configSchema>;
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
+  /** 已协商成功的结构化格式；首次 400 探测后整个客户端生命周期直接复用，不再逐请求重探。 */
+  #negotiatedFormat: StructuredFormat | null = null;
 
   public readonly metadata: ModelClient['metadata'];
 
@@ -284,22 +307,32 @@ export class OpenAiCompatibleModelClient implements ModelClient {
           signal: combined,
         });
       const deepSeek = isDeepSeekApi(this.#config.baseUrl);
-      // 1、DeepSeek Chat Completions 直接使用 json_object；其他网关优先协商 json_schema。
+      // 1、协商成功的格式直接复用；未协商时 DeepSeek 直接 json_object，其余网关优先 json_schema。
+      let format: StructuredFormat = deepSeek
+        ? 'json_object'
+        : (this.#negotiatedFormat ?? 'json_schema');
+      if (format === 'none' && this.#negotiatedFormat === null) format = 'json_schema';
       let response = await dispatch(
-        deepSeek
-          ? { type: 'json_object' }
-          : {
-              type: 'json_schema',
-              json_schema: {
-                name: request.outputSchemaName,
-                strict: true,
-                schema: request.outputJsonSchema,
-              },
-            },
+        format === 'none' ? undefined : responseFormatPayload(format, request),
       );
-      // 1.a、通用网关可能只支持 JSON mode；DeepSeek 或 JSON mode 被拒绝后最终回退纯文本。
-      if (!deepSeek && response.status === 400) response = await dispatch({ type: 'json_object' });
-      if (response.status === 400) response = await dispatch();
+      // 1.a、仅在客户端尚未协商过格式时执行回退探测；成功后整个客户端不再重复 400 试探。
+      if (response.status === 400 && this.#negotiatedFormat === null && format !== 'none') {
+        const next: StructuredFormat | null =
+          format === 'json_schema' ? 'json_object' : deepSeek ? null : 'none';
+        if (next !== null) {
+          response = await dispatch(
+            next === 'none' ? undefined : responseFormatPayload(next, request),
+          );
+          if (response.status === 400 && next !== 'none') {
+            response = await dispatch();
+            format = 'none';
+          } else {
+            format = next;
+          }
+        }
+      }
+      if (response.ok && this.#negotiatedFormat === null && !deepSeek)
+        this.#negotiatedFormat = format;
       if (!response.ok) throw await responseError(response);
       const parsed = responseSchema.parse(await response.json());
       // 1、优先采用官方缓存字段；显式零必须保留，缺失才回退兼容字段。
@@ -408,7 +441,12 @@ export class OpenAiCompatibleModelClient implements ModelClient {
           'invalid_output',
           'Model provider returned an invalid response.',
         );
-      throw new ModelClientError('temporary', 'Model provider request failed.', true);
+      const reason = networkReason(error);
+      throw new ModelClientError(
+        'temporary',
+        `Model provider request failed${reason ? ` (${reason})` : ''}.`,
+        true,
+      );
     }
   }
 }

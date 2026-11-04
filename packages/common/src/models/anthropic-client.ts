@@ -7,6 +7,7 @@ import {
   type ModelResponse,
   type ModelUsage,
 } from '@jobhunter/common/agent';
+import { networkReason } from './network-error.js';
 import { z } from 'zod';
 
 const configSchema = z
@@ -134,6 +135,8 @@ async function responseError(response: Response): Promise<ModelClientError> {
 export class AnthropicModelClient implements ModelClient {
   readonly #config: z.infer<typeof configSchema>;
   readonly #fetch: typeof fetch;
+  /** 已协商成功的结构化输出模式；首次 400 探测后整个客户端生命周期直接复用。 */
+  #negotiatedStructured: boolean | null = null;
 
   public readonly metadata: ModelClient['metadata'];
 
@@ -223,8 +226,15 @@ export class AnthropicModelClient implements ModelClient {
       });
 
     try {
-      let response = await dispatch(true);
-      if (response.status === 400) response = await dispatch(false);
+      // 1、协商成功的模式直接复用；仅在未协商时先尝试结构化输出并在 400 时回退纯提示。
+      let structured = this.#negotiatedStructured ?? true;
+      let response = await dispatch(structured);
+      if (response.status === 400 && structured && this.#negotiatedStructured === null) {
+        structured = false;
+        response = await dispatch(structured);
+      }
+      if (response.ok && this.#negotiatedStructured === null)
+        this.#negotiatedStructured = structured;
       if (!response.ok) throw await responseError(response);
       const parsed = responseSchema.parse(await response.json());
       if (parsed.stop_reason === 'refusal')
@@ -286,7 +296,12 @@ export class AnthropicModelClient implements ModelClient {
           'invalid_output',
           'Model provider returned an invalid response.',
         );
-      throw new ModelClientError('temporary', 'Model provider request failed.', true);
+      const reason = networkReason(error);
+      throw new ModelClientError(
+        'temporary',
+        `Model provider request failed${reason ? ` (${reason})` : ''}.`,
+        true,
+      );
     }
   }
 }

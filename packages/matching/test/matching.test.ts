@@ -12,7 +12,7 @@ import {
   buildJobAdviceReferenceCatalog,
   resolveJobAdviceAgentOutput,
   jobUnderstandingAgentDefinition,
-  jobUnderstandingPromptV1,
+  jobUnderstandingPromptV2,
   matchRulesetV1,
   parseJobUnderstanding,
   parseJobUnderstandingAgentOutput,
@@ -87,8 +87,21 @@ function input(overrides: Partial<DeterministicMatchInput> = {}): DeterministicM
 describe('eligibility and deterministic scoring', () => {
   it('keeps JobUnderstanding prompt versions aligned and rejects fabricated evidence', () => {
     expect(() => {
-      assertPromptMatchesDefinition(jobUnderstandingPromptV1, jobUnderstandingAgentDefinition);
+      assertPromptMatchesDefinition(jobUnderstandingPromptV2, jobUnderstandingAgentDefinition);
     }).not.toThrow();
+    const agentInput = {
+      title: job.title,
+      description: job.description,
+      experienceText: job.experienceText,
+      educationText: job.educationText,
+      profile: {
+        targetRoles: profile.targetRoles,
+        domains: profile.domains,
+        yearsOfExperience: profile.yearsOfExperience,
+        skills: profile.skills.map((skill) => skill.name),
+        professionalSkills: profile.professionalSkills,
+      },
+    };
     expect(() =>
       parseJobUnderstandingAgentOutput(
         {
@@ -99,15 +112,25 @@ describe('eligibility and deterministic scoring', () => {
           minimumYearsExperience: null,
           seniority: null,
           domains: [],
+          fitScore: 50,
+          reasons: ['证据缺失'],
         },
-        {
-          title: job.title,
-          description: job.description,
-          experienceText: job.experienceText,
-          educationText: job.educationText,
-        },
+        agentInput,
       ),
     ).toThrow(/evidence is not present/);
+    // 拟合分与理由是 v2 的必填输出，缺失即拒绝。
+    expect(() =>
+      parseJobUnderstandingAgentOutput(
+        {
+          requiredSkills: [],
+          preferredSkills: [],
+          minimumYearsExperience: null,
+          seniority: null,
+          domains: [],
+        },
+        agentInput,
+      ),
+    ).toThrow();
   });
 
   it('produces five evidence-backed full-score components with the v1 weights', () => {

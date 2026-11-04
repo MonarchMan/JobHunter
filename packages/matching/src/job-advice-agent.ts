@@ -106,7 +106,7 @@ export const jobAdviceAgentDefinition: AgentDefinition<
   z.infer<typeof jobAdviceModelOutputSchema>
 > = defineAgent({
   key: jobAdvicePromptV2.agentKey,
-  version: '2.0.0',
+  version: '2.1.0',
   promptVersion: jobAdvicePromptV2.promptVersion,
   outputSchemaVersion: jobAdvicePromptV2.outputSchemaVersion,
   outputSchemaName: 'JobAdviceOutput',
@@ -120,10 +120,11 @@ export const jobAdviceAgentDefinition: AgentDefinition<
   },
   tools: [],
   limits: {
-    timeoutMs: 90_000,
+    // 与职位理解一致的时长和输出预算，避免建议阶段的引文输出撞上同样的限制。
+    timeoutMs: 240_000,
     maxSteps: 2,
     maxInputTokens: 32_000,
-    maxOutputTokens: 4_000,
+    maxOutputTokens: 16_000,
     maxEstimatedCostMicros: 200_000,
   },
 });

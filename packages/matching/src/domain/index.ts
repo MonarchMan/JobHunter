@@ -9,6 +9,7 @@ import {
   type MatchRulesetId,
   type ProfileVersionId,
 } from '@jobhunter/common/domain';
+import { rulesOnlyScoringVersion } from '../score-composition.js';
 
 /** 模块数据结构或契约。 */
 export interface MatchIdentityInput {
@@ -18,6 +19,8 @@ export interface MatchIdentityInput {
   readonly rulesetVersion: string;
   readonly usesEnrichment: boolean;
   readonly jobEnrichmentId?: JobEnrichmentId | null;
+  /** 总分合成口径参与身份；缺失按历史仅规则口径处理。模型分本身非确定，不入身份以免重复行。 */
+  readonly scoringVersion?: string;
 }
 
 /** 模块数据结构或契约。 */
@@ -27,6 +30,7 @@ export interface MatchIdentity {
   readonly jobEnrichmentId: JobEnrichmentId | null;
   readonly rulesetId: MatchRulesetId;
   readonly rulesetVersion: string;
+  readonly scoringVersion: string;
   readonly inputHash: ContentHash;
 }
 
@@ -42,6 +46,7 @@ export function buildMatchIdentity(input: MatchIdentityInput): MatchIdentity {
   if (!input.rulesetVersion.trim()) {
     throw new DomainError('MATCH_IDENTITY_INCOMPLETE', 'Ruleset version is required.');
   }
+  const scoringVersion = input.scoringVersion ?? rulesOnlyScoringVersion;
 
   return {
     profileVersionId: input.profileVersionId,
@@ -49,12 +54,14 @@ export function buildMatchIdentity(input: MatchIdentityInput): MatchIdentity {
     jobEnrichmentId: enrichment,
     rulesetId: input.rulesetId,
     rulesetVersion: input.rulesetVersion,
+    scoringVersion,
     inputHash: contentHash({
       profileVersionId: input.profileVersionId,
       jobRevisionId: input.jobRevisionId,
       jobEnrichmentId: enrichment ?? 'none',
       rulesetId: input.rulesetId,
       rulesetVersion: input.rulesetVersion,
+      scoringVersion,
     }),
   };
 }

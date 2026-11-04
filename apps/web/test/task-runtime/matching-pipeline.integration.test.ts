@@ -28,7 +28,7 @@ import {
 import { normalizedJobContentHash, parseNormalizedJob } from '@jobhunter/recruitment/domain';
 import { parseCandidateProfile } from '@jobhunter/user/domain';
 import { FakeModelClient } from '@jobhunter/common/models';
-import { jobAdviceAgentDefinition } from '@jobhunter/matching';
+import { jobAdviceAgentDefinition, jobUnderstandingAgentDefinition } from '@jobhunter/matching';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -134,11 +134,19 @@ const profile = parseCandidateProfile({
 });
 
 function understandingOutput(request: ModelRequest): unknown {
+  // 1. Agent 输入包含职位正文与画像快照，快照只含匹配判断所需最小事实。
   expect(request.input).toEqual({
     title: normalizedJob.title,
     description: normalizedJob.description,
     experienceText: normalizedJob.experienceText,
     educationText: normalizedJob.educationText,
+    profile: {
+      targetRoles: ['Agent 开发'],
+      domains: ['大模型应用'],
+      yearsOfExperience: 5,
+      skills: ['TypeScript', 'RAG'],
+      professionalSkills: null,
+    },
   });
   return {
     requiredSkills: [
@@ -152,6 +160,8 @@ function understandingOutput(request: ModelRequest): unknown {
     },
     seniority: null,
     domains: [{ value: '大模型应用', evidence: [{ field: 'title', quote: '大模型' }] }],
+    fitScore: 90,
+    reasons: ['技能与方向高度重合'],
   };
 }
 
@@ -434,6 +444,7 @@ describe('matching persistence pipeline', () => {
         now: () => fixture.clock.now(),
       }),
       matching: fixture.matching,
+      profiles: fixture.profiles,
       clock: fixture.clock,
       ids: fixture.ids,
       onEnrichmentStored: (enrichment) => {
@@ -442,8 +453,12 @@ describe('matching persistence pipeline', () => {
     });
     const enrichmentResult = await handler.execute(fixture.context, {
       jobRevisionId: revisionId,
-      enrichmentVersion: '1.0.0',
+      profileVersionId,
+      enrichmentVersion: jobUnderstandingAgentDefinition.version,
     });
+    // 2. 理解阶段返回拟合分与理由，事实按职位存储且不含判断字段。
+    expect(enrichmentResult.fitScore).toBe(90);
+    expect(enrichmentResult.fitReasons).toEqual(['技能与方向高度重合']);
     const currentMatches = new CurrentMatchQueryService(fixture.matching);
     expect(currentMatches.list({ profileId }).items).toMatchObject([
       { match: { id: base.match.id, jobEnrichmentId: null }, jobStatus: 'active' },
@@ -458,6 +473,10 @@ describe('matching persistence pipeline', () => {
     expect(enriched.match.id).not.toBe(base.match.id);
     expect(enriched.match.inputHash).not.toBe(base.match.inputHash);
     expect(enriched.match.totalScore).toBe(100);
+    // 3. 未传模型分时按规则口径降级，模型分与评分版本随结果持久化。
+    expect(enriched.match.modelScore).toBeNull();
+    expect(enriched.match.scoringVersion).toBe('rules-v1');
+    expect(base.match.scoringVersion).toBe('rules-v1');
     expect(fixture.handle.client.prepare('SELECT count(*) FROM match_results').pluck().get()).toBe(
       2,
     );

@@ -11,7 +11,13 @@ describe('manual scoring stage recovery', () => {
     const matchResultId = '018f0000-0000-7000-8000-000000000001';
     const understanding = {
       ...createJobUnderstandingTaskHandler({ unavailable: true }),
-      execute: vi.fn().mockResolvedValue({ jobEnrichmentId: 'enrichment' }),
+      execute: vi.fn().mockResolvedValue({
+        jobEnrichmentId: 'enrichment',
+        fitScore: 80,
+        fitReasons: ['技能高度重合'],
+        agentRunId: 'run',
+        cacheHit: false,
+      }),
     };
     const matching = {
       ...createMatchRevisionTaskHandler(null),
@@ -26,7 +32,12 @@ describe('manual scoring stage recovery', () => {
         )
         .mockResolvedValue({ matchAdviceId: 'advice' }),
     };
-    const handler = createManualJobScoreTaskHandler({ understanding, matching, advice });
+    const handler = createManualJobScoreTaskHandler({
+      understanding,
+      matching,
+      advice,
+      adviceEnabled: () => true,
+    });
     const payload = {
       jobRevisionId: 'revision',
       profileVersionId: 'profile',
@@ -54,6 +65,10 @@ describe('manual scoring stage recovery', () => {
     });
     expect(understanding.execute).toHaveBeenCalledTimes(1);
     expect(matching.execute).toHaveBeenCalledTimes(1);
+    expect(matching.execute).toHaveBeenCalledWith(
+      context,
+      expect.objectContaining({ modelScore: 80, modelReasons: ['技能高度重合'] }),
+    );
     expect(advice.execute).toHaveBeenCalledTimes(2);
     expect(
       handler.retryPayload?.({ ...payload, profileVersionId: 'another' }, error.result),

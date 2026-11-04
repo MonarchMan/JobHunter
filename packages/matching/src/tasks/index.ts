@@ -29,6 +29,8 @@ export function createMatchingTasks(
     readonly jobs: MatchingJobReader;
     readonly identities: MatchingProfileIdentityReader;
     readonly profiles: CandidateProfileReader;
+    /** 求职建议开关；评分任务据此决定是否运行建议阶段。 */
+    readonly adviceEnabled: () => boolean;
   },
 ): MatchingTaskCapability {
   // 1、只装配匹配仓储，招聘和资料的读取实现由入口提供。
@@ -54,7 +56,9 @@ export function createMatchingTasks(
   registry.register(matchingHandler);
   // 2、模型可选，但所有任务类型始终注册，以提供明确的配置错误。
   const understandingHandler = createJobUnderstandingTaskHandler(
-    runner ? { runner, matching: matchingRepository, clock, ids } : { unavailable: true },
+    runner
+      ? { runner, matching: matchingRepository, profiles: profileRepository, clock, ids }
+      : { unavailable: true },
   );
   const adviceHandler = createJobAdviceTaskHandler(
     runner
@@ -68,6 +72,7 @@ export function createMatchingTasks(
       understanding: understandingHandler,
       matching: matchingHandler,
       advice: adviceHandler,
+      adviceEnabled: input.adviceEnabled,
     }),
   );
   return { matchingRepository, close: () => Promise.resolve() };

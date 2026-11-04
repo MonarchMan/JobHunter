@@ -57,6 +57,10 @@ export interface MatchResultRecord {
   readonly rulesetId: MatchRulesetId;
   readonly filterStatus: DeterministicMatchOutput['filterStatus'];
   readonly totalScore: number;
+  /** 模型阶段拟合分；未配置模型或阶段降级时为 null，总分退回规则口径。 */
+  readonly modelScore: number | null;
+  /** 总分合成口径；随匹配身份参与去重，历史行固定为仅规则口径。 */
+  readonly scoringVersion: string;
   readonly components: DeterministicMatchOutput['components'];
   readonly ruleOutcomes: DeterministicMatchOutput['ruleOutcomes'];
   readonly inputHash: ContentHash;

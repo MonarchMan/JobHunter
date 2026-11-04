@@ -50,7 +50,7 @@ export function createJobAdviceTaskHandler(
     payloadSchema: jobAdviceTaskPayloadSchema,
     outputSchema: jobAdviceTaskOutputSchema,
     defaultMaxAttempts: 3,
-    leaseDurationMs: 120_000,
+    leaseDurationMs: 300_000,
     concurrencyKey: (payload) => `match-advice:${payload.matchResultId}:${payload.adviceVersion}`,
     /** 执行应用适配器的该项操作。 */
     async execute(context, payload) {

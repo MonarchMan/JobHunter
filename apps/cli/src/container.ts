@@ -215,6 +215,7 @@ export function createLocalCliContainer(
         understanding: understandingHandler,
         matching: matchingHandler,
         advice: adviceHandler,
+        adviceEnabled: () => systemSettings.get().matchingAutomation.adviceEnabled,
       }),
     );
     const tasks = new TaskService(

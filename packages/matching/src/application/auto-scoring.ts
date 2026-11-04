@@ -22,7 +22,8 @@ export interface MatchingAutomationReader {
 /**
  * 创建同步提交后的自动评分回调。
  * 仅处理本运行新增/修订的职位修订；画像缺失或职位已关闭时跳过该职位而不中断其余入队。
- * 模式按设置区分：仅评分=rules，评分+建议=llm。
+ * 自动评分开关开启即运行规则与模型两个评分阶段（模型不可用时阶段内降级）；
+ * 求职建议开关只控制评分任务内的建议阶段，不改变评分模式。
  */
 export function createAutoScoringOnSyncCompleted(input: {
   readonly matching: MatchingRepository;
@@ -44,7 +45,7 @@ export function createAutoScoringOnSyncCompleted(input: {
     const automation = input.automation.readMatchingAutomation();
     if (!automation.scoreEnabled) return;
     if (scorableJobIds.length === 0) return;
-    const mode = automation.adviceEnabled ? 'llm' : 'rules';
+    const mode = 'llm' as const;
     for (const jobId of scorableJobIds) {
       try {
         workflow.runForJob({

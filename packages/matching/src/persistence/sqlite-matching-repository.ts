@@ -55,6 +55,8 @@ interface MatchRow {
   readonly ruleset_id: string;
   readonly filter_status: 'eligible' | 'excluded' | 'uncertain';
   readonly total_score: number;
+  readonly model_score: number | null;
+  readonly scoring_version: string;
   readonly components_json: string;
   readonly risks_json: string;
   readonly input_hash: string;
@@ -147,6 +149,8 @@ function match(row: MatchRow): MatchResultRecord {
       row.job_enrichment_id === null ? null : parseId(row.job_enrichment_id, 'JobEnrichment'),
     rulesetId: parseId(row.ruleset_id, 'MatchRuleset'),
     ...output,
+    modelScore: row.model_score,
+    scoringVersion: row.scoring_version,
     inputHash: parseContentHash(row.input_hash),
     createdAt: utcInstant(row.created_at),
   };
@@ -156,7 +160,8 @@ const enrichmentColumns =
   'id, job_revision_id, agent_run_id, schema_version, content_hash, result_json, created_at';
 const rulesetColumns = 'id, version, definition_json, definition_hash, active, created_at';
 const matchColumns = `id, profile_version_id, job_revision_id, job_enrichment_id, ruleset_id,
-                      filter_status, total_score, components_json, risks_json, input_hash, created_at`;
+                      filter_status, total_score, model_score, scoring_version,
+                      components_json, risks_json, input_hash, created_at`;
 const adviceColumns =
   'id, match_result_id, agent_run_id, schema_version, content_hash, result_json, created_at';
 
@@ -304,8 +309,9 @@ export class SqliteMatchingRepository implements MatchingRepository {
       .prepare(
         `INSERT INTO match_results
          (id, profile_version_id, job_revision_id, job_enrichment_id, ruleset_id,
-          filter_status, total_score, components_json, risks_json, input_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          filter_status, total_score, model_score, scoring_version,
+          components_json, risks_json, input_hash, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(input_hash) DO NOTHING`,
       )
       .run(
@@ -316,6 +322,8 @@ export class SqliteMatchingRepository implements MatchingRepository {
         record.rulesetId,
         record.filterStatus,
         record.totalScore,
+        record.modelScore,
+        record.scoringVersion,
         canonicalJson(record.components),
         canonicalJson(record.ruleOutcomes),
         record.inputHash,

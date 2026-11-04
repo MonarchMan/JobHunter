@@ -13,12 +13,14 @@ const outputSchema = z
   })
   .strict();
 
-/** 匹配修订任务的输入，绑定职位修订和简历版本。 */
+/** 匹配修订任务的输入，绑定职位修订和简历版本；模型分缺失表示降级口径。 */
 export const matchRevisionTaskPayloadSchema = z
   .object({
     jobRevisionId: z.string().trim().min(1),
     jobEnrichmentId: z.string().trim().min(1).nullable(),
     profileVersionId: z.string().trim().min(1),
+    modelScore: z.number().min(0).max(100).nullable().optional(),
+    modelReasons: z.array(z.string().trim().min(1).max(300)).max(5).optional(),
   })
   .strict();
 
@@ -43,6 +45,8 @@ export function createMatchRevisionTaskHandler(
             ? null
             : parseId(payload.jobEnrichmentId, 'JobEnrichment'),
         profileVersionId: parseId(payload.profileVersionId, 'ProfileVersion'),
+        modelScore: payload.modelScore ?? null,
+        ...(payload.modelReasons ? { modelReasons: payload.modelReasons } : {}),
         signal: context.signal,
       });
     },

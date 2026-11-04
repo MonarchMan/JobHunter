@@ -54,6 +54,22 @@
   font-size: 0.82rem;
 }
 
+/* 弹窗宽度有限：用量表收紧行距、取消首列加宽，单元格内容不换行。 */
+.compact th,
+.compact td {
+  padding: 0.6rem 0.75rem;
+  white-space: nowrap;
+}
+
+.compact td:first-child {
+  min-width: 0;
+}
+
+.compact td.model {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
 .scroll tbody tr {
   transition: background-color var(--motion-fast) var(--ease-standard);
 }

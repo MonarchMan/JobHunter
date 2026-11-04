@@ -2,6 +2,14 @@
 
 > 状态：Implemented
 
+## 规则与模型两阶段加权评分
+
+评分任务分为规则评分与模型评分两个阶段，最终总分按规则 30%、模型 70% 加权求和并限制在 0..100。规则阶段沿用既有 v1/v2/v3 证据引擎产出 `rulesTotal`；模型阶段由职位理解 Agent（JobUnderstanding 2.0.0）在同一次运行中额外输出 0..100 整数 `fitScore` 及 1-5 条中文理由。`composeMatchScore(rulesTotal, modelScore)` 是纯函数：`modelScore` 为空时降级为规则分并标记 `scoringVersion = rules-v1`，否则加权并标记 `weighted-v1`。加权后的模型贡献作为独立 `dimension: 'model'` 分项追加到 components，上限 70，携带模型分与理由证据，规则分项与既有引擎不变。
+
+降级路径：模型未配置（端口注入 `unavailable`）或理解阶段在最后一次尝试（`context.attempt >= 3`）仍失败时，理解 Handler 返回 `fitScore: null`，匹配阶段以规则分完成，任务成功而非失败；建议阶段是否运行由独立的求职建议开关决定，不受模型降级影响。
+
+`modelScore` 与 `scoringVersion` 持久化到 `match_results`（迁移 0046，历史行 `scoring_version` 默认 `rules-v1`、`model_score` 为 NULL）。模型分是非确定性输出，**不参与** `buildMatchIdentity` 的身份哈希，只有 `scoringVersion` 参与，避免同一有效输入因模型抖动产生重复记录。理解 Agent 输入新增画像快照（目标角色、领域、年限、技能），但其持久化的职位理解事实仍只按职位存储且不含画像内容（Prompt 规则 6）；`fitScore` 只随该次匹配调用传递，不写入 enrichment。
+
 ## v3.2 毕业资格修复
 
 新增纯函数毕业条件消费者，仅在新版本校招/实习资格路径使用。识别届别列表、范围及明确毕业年月窗口，保留原文和画像教育日期证据；年月按月份闭区间比较，不读取当前时间、不推断在读身份或学位授予。多个可能适用日期使用一致性判定，缺失或混合结论为 unknown；“均可”等非封闭列举不用于排除。窗口解释同句届别，不重复套用公历年份。剥离已识别片段后继续检查同句学历、在读等剩余条件；无法解释的括号/逻辑不擅自拆解。v3.2 独立版本及 ID，v3/v3.1 路径保持不变。补合成正负边界与版本集成测试，再复跑同一冻结 AI 开发参考集，不修改真实运行库。
@@ -50,12 +58,13 @@ Worker 的 match Handler 读取不可变输入，在事务外执行：
 1. 选择匹配 JobRevision 的成功 enrichment；没有则使用标准化字段并标记语义未知。
 2. 运行所有 eligibility rules。
 3. 按规则版本运行 v1 五维或 v2 分型 scorer，生成 components 和 total。
-4. 以 ProfileVersion、JobRevision、实际 JobEnrichmentIdOrNone 和 Ruleset 计算 inputHash，在短事务中幂等写入不可变 MatchResult。
-5. eligible/uncertain 且达到建议阈值时入队 advice task；阈值默认 60，可配置，不影响分数。
+4. LLM 模式下把理解 Agent 输出的 fitScore 按 30/70 加权合成总分并追加 model 分项；模型分缺失时降级为规则分。
+5. 以 ProfileVersion、JobRevision、实际 JobEnrichmentIdOrNone、Ruleset 和 scoringVersion 计算 inputHash，在短事务中幂等写入不可变 MatchResult。
+6. eligible/uncertain 且达到建议阈值时入队 advice task；阈值默认 60，可配置，不影响分数。
 
 JobAdviceAgent 输入只包含有效画像必要字段、职位要求、分项与证据；输出通过 Schema 后新增 MatchAdvice 并引用 AgentRun。建议失败只保留 AgentRun，不修改 MatchResult。
 
-Web 和 CLI 统一提交 `match.score-job` 用户意图任务。规则模式直接以标准化职位字段计算；LLM 模式在同一可重试任务内顺序调用既有 JobUnderstanding、确定性匹配和 JobAdvice 能力。批量操作只是在应用边界为用户明确勾选的职位逐条入队，不引入全量扫描或后台自动触发。
+Web 和 CLI 统一提交 `match.score-job` 用户意图任务。规则模式直接以标准化职位字段计算；LLM 模式在同一可重试任务内顺序调用 JobUnderstanding（含模型分）、加权确定性匹配，求职建议开关启用时再调用 JobAdvice。自动评分开关开启即运行两阶段评分；建议开关只控制任务内的建议阶段，两者互不耦合。批量操作只是在应用边界为用户明确勾选的职位逐条入队，不引入全量扫描或后台自动触发。
 
 ## 当前结果
 

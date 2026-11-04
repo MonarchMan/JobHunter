@@ -29,7 +29,7 @@ function rounded(value: number): number {
 
 /** 执行模块的解析、转换、评分或调用辅助逻辑。 */
 function component(input: {
-  readonly dimension: ScoreComponent['dimension'];
+  readonly dimension: Exclude<ScoreComponent['dimension'], 'model'>;
   readonly ratio: number;
   readonly ruleset: MatchRuleset;
   readonly matchedEvidence?: readonly MatchingEvidence[];

@@ -459,10 +459,12 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 | `job_enrichment_id`  | TEXT    | FK job_enrichments, NULL      | 实际使用的语义结果                  |
 | `ruleset_id`         | TEXT    | FK match_rulesets, NOT NULL   | 规则版本                            |
 | `filter_status`      | TEXT    | CHECK                         | `eligible`、`excluded`、`uncertain` |
-| `total_score`        | REAL    | CHECK 0..100                  | 确定性总分                          |
+| `total_score`        | REAL    | CHECK 0..100                  | 最终总分（规则分或 30/70 加权分）   |
+| `model_score`        | REAL    | CHECK 0..100, NULL            | 模型阶段 fitScore；降级时为 NULL    |
+| `scoring_version`    | TEXT    | NOT NULL, 默认 `rules-v1`     | `weighted-v1`（加权）或 `rules-v1`  |
 | `components_json`    | TEXT    | NOT NULL                      | 分项分数、规则和证据                |
 | `risks_json`         | TEXT    | NOT NULL                      | 风险项                              |
-| `input_hash`         | TEXT    | UNIQUE NOT NULL               | 全部有效输入的组合哈希              |
+| `input_hash`         | TEXT    | UNIQUE NOT NULL               | 全部有效输入的组合哈希（不含模型分）|
 | `created_at`         | INTEGER | NOT NULL                      | 创建时间                            |
 
 索引：`(profile_version_id, job_revision_id, ruleset_id)`、`(profile_version_id, filter_status, total_score DESC)`。

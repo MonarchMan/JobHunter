@@ -9,6 +9,7 @@ import {
   type ProfileVersionId,
 } from '@jobhunter/common/domain';
 import { buildMatchIdentity } from '../domain/index.js';
+import { composeMatchScore, scoreWeights } from '../score-composition.js';
 import { calculateDeterministicMatch } from '../scoring.js';
 import {
   matchRulesetV1,
@@ -125,10 +126,13 @@ export class DeterministicMatchingService {
 
   /** 计算简历版本与职位之间的匹配结果。 */
   public compute(input: {
-    // 1、读取并校验规则集；2、规范化简历/职位输入；3、计算分项得分；4、汇总并持久化结果。
+    // 1、读取并校验规则集；2、规范化简历/职位输入；3、计算分项得分；4、合成总分并持久化结果。
     readonly profileVersionId: ProfileVersionId;
     readonly jobRevisionId: JobRevisionId;
     readonly jobEnrichmentId: JobEnrichmentId | null;
+    /** 模型阶段拟合分与理由；null 表示模型不可用或降级，总分退回规则口径。 */
+    readonly modelScore?: number | null;
+    readonly modelReasons?: readonly string[];
     readonly rulesetId?: MatchRulesetId;
   }): { readonly match: MatchResultRecord; readonly created: boolean } {
     const profile = this.#profiles.getVersion(input.profileVersionId);
@@ -148,7 +152,7 @@ export class DeterministicMatchingService {
       ? this.#matching.getRuleset(input.rulesetId)
       : this.#matching.getActiveRuleset();
     if (!ruleset) throw new MatchingInputError('No match ruleset is available.');
-    const output = calculateDeterministicMatch(
+    const rules = calculateDeterministicMatch(
       {
         profile: profile.effective,
         job: revision.normalized,
@@ -157,6 +161,28 @@ export class DeterministicMatchingService {
       },
       ruleset.definition,
     );
+    // 5、规则分与模型分按固定权重合成；模型分缺失时不猜测，退回规则口径。
+    const modelScore = input.modelScore ?? null;
+    const composition = composeMatchScore(rules.totalScore, modelScore);
+    const components =
+      modelScore === null
+        ? rules.components
+        : [
+            ...rules.components,
+            {
+              dimension: 'model' as const,
+              score: Math.round(modelScore * scoreWeights.model * 100) / 100,
+              maximumScore: Math.round(scoreWeights.model * 100),
+              matchedEvidence: (input.modelReasons ?? []).map((reason) => ({
+                source: 'enrichment' as const,
+                path: '/fitScore',
+                summary: reason,
+              })),
+              missingEvidence: [],
+              uncertainties: [],
+              modelScore,
+            },
+          ];
     const identity = buildMatchIdentity({
       profileVersionId: profile.id,
       jobRevisionId: revision.id,
@@ -164,6 +190,7 @@ export class DeterministicMatchingService {
       usesEnrichment: enrichment !== null,
       rulesetId: ruleset.id,
       rulesetVersion: ruleset.version,
+      scoringVersion: composition.scoringVersion,
     });
     const candidateId = parseId(this.#ids.generate(), 'MatchResult');
     const match = this.#matching.createOrGetMatch({
@@ -172,10 +199,12 @@ export class DeterministicMatchingService {
       jobRevisionId: revision.id,
       jobEnrichmentId: enrichment?.id ?? null,
       rulesetId: ruleset.id,
-      filterStatus: output.filterStatus,
-      totalScore: output.totalScore,
-      components: output.components,
-      ruleOutcomes: output.ruleOutcomes,
+      filterStatus: rules.filterStatus,
+      totalScore: composition.totalScore,
+      modelScore,
+      scoringVersion: composition.scoringVersion,
+      components,
+      ruleOutcomes: rules.ruleOutcomes,
       inputHash: identity.inputHash,
       createdAt: this.#clock.now(),
     });

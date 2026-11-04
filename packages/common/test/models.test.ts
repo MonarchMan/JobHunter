@@ -168,6 +168,37 @@ describe('Anthropic model client', () => {
     expect(bodies[1]).not.toHaveProperty('output_config');
   });
 
+  it('reuses the negotiated Anthropic output mode instead of probing again', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const client = new AnthropicModelClient({
+      baseUrl: 'https://gateway.example.test',
+      apiKey: 'anthropic-secret',
+      model: 'claude-test',
+      fetchImplementation: (_input, init) => {
+        bodies.push(requestBody(init));
+        return Promise.resolve(
+          bodies.length === 1
+            ? new Response('{}', { status: 400 })
+            : new Response(
+                JSON.stringify({
+                  content: [{ type: 'text', text: '{"ok":true}' }],
+                  stop_reason: 'end_turn',
+                  usage: { input_tokens: 1, output_tokens: 1 },
+                }),
+                { status: 200 },
+              ),
+        );
+      },
+    });
+
+    await client.complete(request, new AbortController().signal);
+    await client.complete(request, new AbortController().signal);
+    expect(bodies.length).toBe(3);
+    expect(bodies[0]).toHaveProperty('output_config');
+    expect(bodies[1]).not.toHaveProperty('output_config');
+    expect(bodies[2]).not.toHaveProperty('output_config');
+  });
+
   it('classifies Anthropic refusals and rate limits', async () => {
     const create = (response: Response): AnthropicModelClient =>
       new AnthropicModelClient({
@@ -340,5 +371,61 @@ describe('OpenAI-compatible model client', () => {
         retryable: true,
       },
     );
+  });
+
+  it('remembers a negotiated JSON mode instead of probing json_schema on every request', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const client = new OpenAiCompatibleModelClient({
+      baseUrl: 'https://gateway.example.test/v1',
+      apiKey: 'test-secret',
+      model: 'test-model',
+      fetchImplementation: (_input, init) => {
+        bodies.push(requestBody(init));
+        return Promise.resolve(
+          bodies.length === 1
+            ? new Response('{}', { status: 400 })
+            : new Response(
+                JSON.stringify({
+                  choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }],
+                  usage: { prompt_tokens: 1, completion_tokens: 1 },
+                }),
+                { status: 200 },
+              ),
+        );
+      },
+    });
+
+    await client.complete(request, new AbortController().signal);
+    await client.complete(request, new AbortController().signal);
+    // 首次请求探测 json_schema 失败后回退 json_object；第二次请求直接复用协商结果。
+    expect(bodies.length).toBe(3);
+    expect(bodies[0]?.response_format).toMatchObject({ type: 'json_schema' });
+    expect(bodies[1]?.response_format).toEqual({ type: 'json_object' });
+    expect(bodies[2]?.response_format).toEqual({ type: 'json_object' });
+  });
+
+  it('appends a sanitized network reason to temporary failures', async () => {
+    const client = new OpenAiCompatibleModelClient({
+      baseUrl: 'https://models.example.test/v1',
+      apiKey: 'test-secret',
+      model: 'test-model',
+      fetchImplementation: () =>
+        Promise.reject(
+          Object.assign(new Error('connect ECONNREFUSED 172.16.2.210:4000'), {
+            code: 'ECONNREFUSED',
+          }),
+        ),
+    });
+    const failure = client.complete(request, new AbortController().signal);
+    await expect(failure).rejects.toMatchObject({
+      category: 'temporary',
+      retryable: true,
+      message: 'Model provider request failed (ECONNREFUSED).',
+    });
+    await expect(failure).rejects.toThrow(/Model provider request failed \(ECONNREFUSED\)\./);
+    const reason = await failure.catch((error: unknown) =>
+      error instanceof Error ? error.message : '',
+    );
+    expect(reason).not.toContain('172.16.2.210');
   });
 });

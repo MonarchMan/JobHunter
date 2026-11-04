@@ -161,6 +161,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
         task.taskType,
         {
           taskId: task.id,
+          attempt: task.attemptCount,
           signal: controller.signal,
           clock: this.#clock,
           logger: this.#logger,

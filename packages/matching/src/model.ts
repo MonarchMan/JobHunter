@@ -22,7 +22,7 @@ export const ruleOutcomeSchema = z
   })
   .strict();
 
-/** 可解释评分维度。 */
+/** 可解释评分维度；model 为模型阶段独立评分，不参与规则引擎权重。 */
 export const scoreDimensionSchema = z.enum([
   'skills',
   'experience',
@@ -30,6 +30,7 @@ export const scoreDimensionSchema = z.enum([
   'industry',
   'location',
   'projects',
+  'model',
 ]);
 
 /** 单个评分维度的分数和证据。 */
@@ -43,6 +44,8 @@ export const scoreComponentSchema = z
     uncertainties: z.array(z.string()),
     evidenceStatus: z.enum(['known', 'unknown', 'not_applicable']).optional(),
     recruitmentCategory: z.enum(['social', 'campus', 'internship', 'unknown']).optional(),
+    /** 仅 model 维度：模型阶段原始 0-100 分，便于展示与审计加权口径。 */
+    modelScore: z.number().min(0).max(100).optional(),
   })
   .strict()
   .refine((value) => value.score <= value.maximumScore, 'Component score exceeds its maximum.');

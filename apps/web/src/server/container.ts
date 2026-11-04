@@ -261,6 +261,8 @@ export function createLocalWebContainer(
         understanding: understandingHandler,
         matching: matchingHandler,
         advice: adviceHandler,
+        // Web 进程不执行模型任务，开关读取结果不影响实际执行，保持与 Worker 同一装配签名。
+        adviceEnabled: () => false,
       }),
     );
 

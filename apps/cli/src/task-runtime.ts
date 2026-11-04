@@ -61,6 +61,7 @@ export function createProductionTaskApplication(
           jobs: new SqliteMatchingJobReader(client),
           identities: new SqliteProfileIdentityReader(client),
           profiles,
+          adviceEnabled: () => settings.get().matchingAutomation.adviceEnabled,
         });
         const onSyncCompleted = createAutoScoringOnSyncCompleted({
           matching: matching.matchingRepository,

@@ -51,6 +51,8 @@
 - **AGT-011**：首个线上 Provider 必须支持 OpenAI 兼容的 Chat Completions JSON 接口；模型配置统一从 `.env` 的 `BASE_URL`、`API_KEY`、`MODEL` 读取，不再接受 `JOBHUNTER_MODEL_*` 或显式 Provider。`BASE_URL` 缺省为 `https://api.openai.com/v1`。
 - **AGT-012**：线上 Provider 必须支持 Anthropic Messages JSON 接口；配置边界根据 `BASE_URL` 自动选择协议，主机名标签或路径段含独立 `anthropic` 时选择 Anthropic，否则选择 OpenAI 兼容协议。原生请求、工具调用、结构化输出、用量与错误必须转换为项目自有 DTO，且不得暴露 API Key。
 - **AGT-013**：DeepSeek Chat Completions 必须优先使用其支持的 `json_object` 模式；模型返回代码围栏 JSON、空正文或非 JSON 正文时，适配器必须先执行有界规范化，仍无法解析则交给 Runner 的唯一一次结构化修复，禁止在适配器与 Runner 之间形成无限重试。
+- **AGT-017**：OpenAI 兼容与 Anthropic 适配器必须按客户端实例记忆协商成功的结构化输出格式；首次 400 回退探测只发生一次，后续请求直接使用已协商格式，不逐请求重复 400 试探。网关响应格式能力变化时按新客户端实例重新协商。
+- **AGT-018**：网络类失败的 `temporary` 错误摘要必须附带脱敏原因代码（如 `ECONNREFUSED`），只保留字母数字与点划线且限长，不得包含地址、URL、请求或响应正文。
 
 ## 质量与安全需求
 
@@ -72,6 +74,8 @@
 9. 显式在线烟测可以使用本地 `.env` 发起最小结构化请求；普通测试和 CI 不读取真实密钥、不产生付费调用。（AGT-001,011, AGT-Q02）
 10. `BASE_URL` 指向 Anthropic 官方地址或含独立 `anthropic` 标识的网关时，Worker 与 CLI 自动使用 Messages API 完成结构化输出和工具调用；其他地址继续使用 OpenAI 兼容协议。（AGT-001,012, AGT-Q02, AGT-Q04）
 11. DeepSeek 首次请求直接使用 `json_object`；代码围栏 JSON 可在本地规范化，普通文本或空正文触发一次无工具修复，第二次仍非法时保存 `invalid_output`。（AGT-004,009,013）
+12. 不支持 `json_schema` 的通用网关首次请求收到 400 后回退 `json_object` 成功；同一客户端的第二次请求直接携带 `json_object`，不再发送 `json_schema` 400 试探。（AGT-017）
+13. 模型网关连接被拒绝时运行失败分类为 `temporary` 且摘要含 `ECONNREFUSED` 原因代码，日志不出现网关地址。（AGT-018, AGT-Q02）
 
 ## 未解决问题
 

@@ -66,8 +66,7 @@ export default async function AgentRunPage({
         </dl>
         {run.status === 'failed' ? (
           <p className="risk">
-            {run.errorCategory ? labelAgentErrorCategory(run.errorCategory) : '未分类'}：
-            {run.errorSummary ?? '系统未记录可展示的失败原因。'}
+            {run.errorCategory ? labelAgentErrorCategory(run.errorCategory) : '未分类'}
           </p>
         ) : null}
       </section>

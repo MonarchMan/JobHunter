@@ -89,7 +89,10 @@ export function parseMatchRuleset(input: unknown): MatchRuleset {
   return matchRulesetSchema.parse(input);
 }
 
-/** 获取指定评分维度的权重。 */
-export function weightFor(ruleset: MatchRuleset, dimension: ScoreDimension): number {
+/** 获取指定评分维度的权重；模型维度不占用规则集权重。 */
+export function weightFor(
+  ruleset: MatchRuleset,
+  dimension: Exclude<ScoreDimension, 'model'>,
+): number {
   return ruleset.weights[dimension] ?? 0;
 }

@@ -407,12 +407,7 @@ export function AgentRunDetailsDialog({
             {run.status === 'failed' ? (
               <section className={styles.failureDetail} aria-labelledby="agent-failure-heading">
                 <h3 id="agent-failure-heading">失败原因</h3>
-                <p>
-                  <strong>
-                    {run.errorCategory ? labelAgentErrorCategory(run.errorCategory) : '未分类'}
-                  </strong>
-                </p>
-                <p>{run.errorSummary ?? '系统未记录可展示的失败原因。'}</p>
+                <p>{run.errorCategory ? labelAgentErrorCategory(run.errorCategory) : '未分类'}</p>
               </section>
             ) : null}
             {loading ? <p className="muted">正在加载工具调用……</p> : null}

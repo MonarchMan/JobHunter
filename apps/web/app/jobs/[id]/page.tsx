@@ -25,6 +25,7 @@ const dimensionLabels: Readonly<Record<string, string>> = {
   role: '岗位方向',
   industry: '行业',
   location: '地点',
+  model: '模型评分',
 };
 
 const adviceStatusLabels = {

@@ -89,15 +89,16 @@ describe('auto scoring on sync completed', () => {
     return { callback, calls };
   }
 
-  it('enqueues rules-mode scoring for each new revision when only scoring is enabled', () => {
+  it('enqueues two-stage scoring for each new revision when only scoring is enabled', () => {
     const { callback, calls } = createHandler({ scoreEnabled: true, adviceEnabled: false });
     callback({ status: 'succeeded', scorableJobIds: [JOB_ID] });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.command.taskType).toBe('match.score-job');
-    expect(calls[0]?.command.payload).toMatchObject({ mode: 'rules' });
+    // 自动评分开启即运行规则与模型两个阶段；建议开关不改变评分模式。
+    expect(calls[0]?.command.payload).toMatchObject({ mode: 'llm' });
   });
 
-  it('enqueues llm-mode scoring when both scoring and advice are enabled', () => {
+  it('keeps the scoring mode independent from the advice switch', () => {
     const { callback, calls } = createHandler({ scoreEnabled: true, adviceEnabled: true });
     callback({ status: 'succeeded', scorableJobIds: [JOB_ID] });
     expect(calls[0]?.command.payload).toMatchObject({ mode: 'llm' });

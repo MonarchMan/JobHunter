@@ -33,6 +33,8 @@ export class MatchingBatchService {
     readonly jobRevisionId: JobRevisionId;
     readonly jobEnrichmentId: JobEnrichmentId | null;
     readonly profileVersionId: ProfileVersionId;
+    readonly modelScore?: number | null;
+    readonly modelReasons?: readonly string[];
     readonly rulesetId?: MatchRulesetId;
     readonly signal: AbortSignal;
   }): Promise<MatchBatchResult> {
@@ -43,6 +45,8 @@ export class MatchingBatchService {
       profileVersionId: input.profileVersionId,
       jobRevisionId: input.jobRevisionId,
       jobEnrichmentId: input.jobEnrichmentId,
+      ...(input.modelScore !== undefined ? { modelScore: input.modelScore } : {}),
+      ...(input.modelReasons ? { modelReasons: input.modelReasons } : {}),
       ...(input.rulesetId ? { rulesetId: input.rulesetId } : {}),
     });
     this.#onMatch?.(result.match);

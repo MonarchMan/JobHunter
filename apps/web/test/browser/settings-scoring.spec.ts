@@ -28,8 +28,8 @@ for (const width of [1280, 390]) {
         await scoring.press('Space');
       } else await scoring.setChecked(enabled);
       await expect(scoring).toBeChecked({ checked: enabled });
-      if (enabled) await expect(advice).toBeEnabled();
-      else await expect(advice).toBeDisabled();
+      // 建议开关独立于评分开关，任何评分状态下都可切换。
+      await expect(advice).toBeEnabled();
       const unsaved = await page.request.get('/api/settings');
       expect(await storedScoring(unsaved)).toBe(persistedBefore);
       const responsePromise = page.waitForResponse(

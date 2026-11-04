@@ -152,26 +152,24 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
             checked={scoreEnabled}
             onChange={(event) => {
               setScoreEnabled(event.target.checked);
-              if (!event.target.checked) setAdviceEnabled(false);
             }}
           />
           <span>
             <strong>同步后自动评分</strong>
-            <small>为新职位计算与当前画像的匹配度</small>
+            <small>为新职位运行规则与模型两阶段评分</small>
           </span>
         </label>
         <label className={styles.settingsToggle}>
           <input
             type="checkbox"
             checked={adviceEnabled}
-            disabled={!scoreEnabled}
             onChange={(event) => {
               setAdviceEnabled(event.target.checked);
             }}
           />
           <span>
             <strong>自动生成求职建议</strong>
-            <small>需要已经配置 AI 模型</small>
+            <small>评分完成后生成求职建议，需要已经配置 AI 模型</small>
           </span>
         </label>
       </fieldset>

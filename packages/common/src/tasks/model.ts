@@ -43,6 +43,8 @@ export interface TaskLogger {
 /** 应用层数据结构或端口契约。 */
 export interface TaskHandlerContext {
   readonly taskId?: TaskId;
+  /** 当前是第几次尝试；缺失表示执行环境未提供（如测试替身）。 */
+  readonly attempt?: number;
   readonly signal: AbortSignal;
   readonly clock: Clock;
   readonly logger: TaskLogger;

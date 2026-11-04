@@ -1,8 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('shows cached billing breakdown with unknown cache values kept distinct from zero', async ({
-  page,
-}) => {
+test('shows per-request usage and cost with one value per cell', async ({ page }) => {
   // 1、仅替换详情接口的合成计费字段，覆盖真实弹窗与空值展示。
   await page.route('**/api/agent-runs/*', async (route) => {
     const response = await route.fetch();
@@ -58,12 +56,33 @@ test('shows cached billing breakdown with unknown cache values kept distinct fro
     .locator('[data-agent-section]')
     .getByRole('button', { name: '职位理解', exact: true })
     .click();
-  const section = page.getByRole('region', { name: '缓存用量与分项费用' });
-  await expect(section).toContainText('缓存命中 600 · 未命中 1400 · 缓存写入 —');
-  await expect(section).toContainText('USD 0.000210');
-  await expect(section).toContainText('闲时');
-  await expect(section).toContainText('1 小时：600');
-  await expect(section).toContainText('CNY 0.051200');
+  const section = page.getByRole('region', { name: '请求用量与费用' });
+  await expect(section.getByRole('columnheader', { name: '时间' })).toBeVisible();
+  await expect(section.getByRole('columnheader', { name: '模型' })).toBeVisible();
+  await expect(section.getByRole('columnheader', { name: '输入' })).toBeVisible();
+  await expect(section.getByRole('columnheader', { name: '输出' })).toBeVisible();
+  await expect(section.getByRole('columnheader', { name: '成本' })).toBeVisible();
+  const rows = section.getByRole('row');
+  await expect(rows).toHaveCount(3);
+  const first = rows.nth(1).getByRole('cell');
+  await expect(first.nth(0)).toHaveText('22:49:41');
+  await expect(first.nth(0)).toHaveAttribute('title', '2026/10/30 22:49:41');
+  await expect(first.nth(1)).toHaveText('deepseek-flash');
+  await expect(first.nth(2)).toHaveText('1000');
+  await expect(first.nth(3)).toHaveText('100');
+  await expect(first.nth(4)).toHaveText('$0.000210');
+  const second = rows.nth(2).getByRole('cell');
+  await expect(second.nth(0)).toHaveText('20:00:00');
+  await expect(second.nth(1)).toHaveText('kimi-k3');
+  await expect(second.nth(2)).toHaveText('2000');
+  await expect(second.nth(3)).toHaveText('100');
+  await expect(second.nth(4)).toHaveText('¥0.051200');
+  // 表格不超出弹窗宽度，横向无需滚动。
+  const dialogBox = await page.locator('dialog').boundingBox();
+  const tableBox = await section.locator('table').boundingBox();
+  expect(dialogBox).not.toBeNull();
+  expect(tableBox).not.toBeNull();
+  if (dialogBox && tableBox) expect(tableBox.width).toBeLessThanOrEqual(dialogBox.width);
   // 2、窄屏仍能读取明细，横向溢出限定在表格内部。
   await page.setViewportSize({ width: 390, height: 844 });
   // 移动端独立进入页面，再从卡片打开详情。
