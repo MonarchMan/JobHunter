@@ -1,6 +1,22 @@
 import type { WebJobDetail } from '@jobhunter/matching/contracts/web';
 type Match = WebJobDetail['matches'][number];
 
+/** 规则标识映射为简洁名称；数据中不重复保存展示文案。 */
+export function ruleLabel(id: string): string {
+  const labels: Record<string, string> = {
+    'preference.role': '岗位方向',
+    'preference.location': '工作地点',
+    'preference.company-size': '公司规模',
+    'preference.employment-type': '用工类型',
+    'preference.excluded-terms': '排除词',
+    'qualification.condition': '岗位资格要求',
+    'qualification.minimum-experience': '工作经验',
+    'qualification.graduation-v3.2': '毕业条件',
+    'qualification.recruitment-category': '招聘类别',
+  };
+  return labels[id] ?? id;
+}
+
 /** 将等权条件展开为具体规则行；独立分项只隐藏展示，仍计入总分母。 */
 export function objectiveRuleRows(
   outcomes: Match['ruleOutcomes'],

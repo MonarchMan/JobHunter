@@ -40,14 +40,13 @@ const requestStateLabels = {
 } as const;
 
 const taskStateLabels = {
-  pending: '等待 Worker',
+  pending: '等待执行',
   running: '研究执行中',
   succeeded: '任务已完成',
   failed: '任务失败',
   cancelled: '任务已取消',
 } as const;
 
-const maximumBundleBytes = 2 * 1024 * 1024;
 type ResearchExecutorKey = 'configured-model' | 'codex-local' | 'claude-local';
 
 function defaultExecutor(): ResearchExecutorKey {
@@ -55,19 +54,15 @@ function defaultExecutor(): ResearchExecutorKey {
 }
 
 function taskFailure(task: ResearchTaskView | null): string | null {
-  if (task?.status === 'cancelled') return '研究任务已取消。可以重新发布，或手动导入结果。';
+  if (task?.status === 'cancelled') return '研究任务已取消。可以重新发布，或检查本地结果文件。';
   if (task?.status !== 'failed') return null;
   if (task.errorCategory === 'invalid_config') {
-    return '本地研究执行器尚未配置。仍可复制 Prompt 交给其他 Agent，并手动导入结果。';
+    return '本地研究执行器尚未配置。仍可复制 Prompt 交给其他 Agent，并检查本地结果文件。';
   }
   if (task.errorCategory === 'validation_failed') {
     return 'Agent 返回的内容未通过 Schema 校验。请在任务页查看诊断，并按当前 Schema 重新生成。';
   }
   return '研究任务未完成。请在任务页查看诊断后重试。';
-}
-
-function byteLabel(bytes: number): string {
-  return bytes < 1024 ? `${String(bytes)} B` : `${(bytes / 1024).toFixed(1)} KiB`;
 }
 
 export function ResearchWorkbench({
@@ -80,11 +75,9 @@ export function ResearchWorkbench({
   const router = useRouter();
   const { showToast } = useToast();
   const feedbackRef = useRef<HTMLParagraphElement>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
   const [current, setCurrent] = useState(detail);
   const [currentTask, setCurrentTask] = useState(task);
   const [executorKey, setExecutorKey] = useState<ResearchExecutorKey>(() => defaultExecutor());
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackError, setFeedbackError] = useState(false);
@@ -162,7 +155,7 @@ export function ResearchWorkbench({
         result.data.deduplicated
           ? '相同研究任务已在队列中，将继续等待结果。'
           : executorKey === 'configured-model'
-            ? '研究任务已发布。Worker 将采集公开网页，再交给配置模型处理；离开此页不会中断。'
+            ? '研究任务已发布。中央任务服务将采集公开网页，再交给配置模型处理；离开此页不会中断。'
             : executorKey === 'claude-local'
               ? '研究任务已发布给 Claude Code，由其自行联网研究；离开此页不会中断。'
               : '研究任务已发布给 Codex CLI，由其自行联网研究；离开此页不会中断。',
@@ -203,49 +196,20 @@ export function ResearchWorkbench({
     }
   };
 
-  const chooseFile = (file: File | null): void => {
-    setFeedback(null);
-    if (!file) {
-      setSelectedFile(null);
-      return;
-    }
-    if (!file.name.toLowerCase().endsWith('.json')) {
-      setSelectedFile(null);
-      report('请选择 JSON 研究结果文件。', true);
-      return;
-    }
-    if (file.size < 1 || file.size > maximumBundleBytes) {
-      setSelectedFile(null);
-      report('研究结果必须大于 0 且不超过 2 MiB。', true);
-      return;
-    }
-    setSelectedFile(file);
-  };
-
   const importBundle = async (): Promise<void> => {
-    if (!selectedFile) {
-      report('请先选择一份 JSON 研究结果。', true);
-      queueMicrotask(() => fileInput.current?.focus());
-      return;
-    }
     setBusy('import');
     setFeedback(null);
     try {
-      const form = new FormData();
-      form.set('file', selectedFile);
-      form.set('expectedRevision', String(current.request.revision));
       const response = await fetch(`/api/interview/research/${current.request.id}/bundles`, {
         method: 'POST',
-        headers: await mutationHeaders(false),
-        body: form,
+        headers: await mutationHeaders(),
+        body: JSON.stringify({ expectedRevision: current.request.revision }),
       });
       const result = (await response.json()) as ApiEnvelope<ExperienceResearchDetail>;
       if (!response.ok || !result.data) {
         throw new Error(result.error?.message ?? '无法导入研究结果。');
       }
       setCurrent(result.data);
-      setSelectedFile(null);
-      if (fileInput.current) fileInput.current.value = '';
       report(`已导入 ${String(result.data.experiences.length)} 份候选面经，请逐条核对。`);
       router.refresh();
     } catch (caught) {
@@ -474,48 +438,18 @@ export function ResearchWorkbench({
 
         <section className={styles.bundleImport} aria-labelledby="bundle-import-title">
           <header>
-            <h2 id="bundle-import-title">导入 JSON 研究包</h2>
+            <h2 id="bundle-import-title">检查本地研究结果</h2>
           </header>
           <p>只接受当前 Schema、当前 Brief 指纹和公开 HTTP(S) 来源；单文件最大 2 MiB。</p>
-          <label htmlFor="research-bundle-file">选择 Agent 返回的 JSON</label>
-          <input
-            ref={fileInput}
-            id="research-bundle-file"
-            type="file"
-            accept=".json,application/json,application/schema+json"
-            disabled={busy !== null || replacementBlocked}
-            onChange={(event) => {
-              chooseFile(event.currentTarget.files?.[0] ?? null);
-            }}
-          />
-          <div className={styles.selectedFile} aria-live="polite">
-            {selectedFile ? (
-              <>
-                <strong>{selectedFile.name}</strong>
-                <span>{byteLabel(selectedFile.size)}</span>
-                <button
-                  type="button"
-                  className="button-link"
-                  disabled={busy !== null}
-                  onClick={() => {
-                    setSelectedFile(null);
-                    if (fileInput.current) fileInput.current.value = '';
-                  }}
-                >
-                  移除
-                </button>
-              </>
-            ) : (
-              <span>尚未选择文件</span>
-            )}
-          </div>
+          <p>让外部 Agent 在以下位置生成结果，然后检查文件：</p>
+          <code>{current.outputPath}</code>
           <button
             type="button"
             className="button-secondary"
-            disabled={busy !== null || !selectedFile || replacementBlocked}
+            disabled={busy !== null || taskPending}
             onClick={() => void importBundle()}
           >
-            {busy === 'import' ? '校验并导入中…' : '校验并导入候选'}
+            {busy === 'import' ? '校验并导入中…' : '检查结果文件'}
           </button>
           {current.request.bundleFileVersionNo ? (
             <small>当前 Bundle 版本：v{current.request.bundleFileVersionNo} / 5</small>

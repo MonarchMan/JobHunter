@@ -1,3 +1,4 @@
+import { scanTaskProjection } from './scan-task-sql.js';
 import type {
   SourceChannelOverview,
   SourceManagementRepository,
@@ -38,8 +39,8 @@ const query = `
   FROM job_sources source
   JOIN companies company ON company.id = source.company_id
   JOIN source_channels channel ON channel.id = source.channel_id
-  LEFT JOIN sync_runs run ON run.id = (
-    SELECT latest.id FROM sync_runs latest
+  LEFT JOIN ${scanTaskProjection} run ON run.id = (
+    SELECT latest.id FROM ${scanTaskProjection} latest
     WHERE latest.source_id = source.id
     ORDER BY latest.started_at DESC, latest.id DESC LIMIT 1
   )`;

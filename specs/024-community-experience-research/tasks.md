@@ -1,5 +1,7 @@
 # 024 外部 Agent 网友面经研究任务
 
+> 后续调整以 [034 规格](../034-ai-sessions-and-projects/spec.md) 为准；下文已完成记录描述迁移前实现。画像自动合并锁定、项目档案快照、上传材料及人工上传研究包等冲突流程不再作为目标，替代实现及验收已在 034 完成。
+
 > 状态：Implemented
 
 - [x] **COMM-T001** 实现 Research Brief/Bundle Schema、冻结 Prompt/JSON Schema、URL/引用校验与确定性去重。（COMM-001, COMM-002, COMM-005, COMM-006, COMM-007, COMM-008, COMM-Q02, COMM-Q03, COMM-Q04）

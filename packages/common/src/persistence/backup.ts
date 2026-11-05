@@ -22,6 +22,25 @@ import {
   type SqliteDatabaseHandle,
 } from './connection.js';
 import { PersistenceError } from '@jobhunter/common/persistence/errors';
+import { acquireTaskServiceLock } from './task-service-lock.js';
+
+/** 恢复检查和目录替换共用中央服务排他锁，禁止校验后或重命名窗口内重新启动执行器。 */
+async function withStoppedTaskService<T>(
+  dataRoot: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const release = acquireTaskServiceLock(dataRoot);
+  if (!release)
+    throw new PersistenceError(
+      'DATABASE_UPGRADE_REQUIRES_STOP',
+      'Restore requires stopping the central task service first (task service stop).',
+    );
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
 
 const manifestSchema = z
   .object({
@@ -364,7 +383,7 @@ function restoreToken(input: {
 }
 
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
-export async function planRestoreBackup(
+async function planRestoreBackupUnlocked(
   backupDirectory: string,
   targetDataRoot: string,
   options: { readonly now?: number; readonly tokenLifetimeMs?: number } = {},
@@ -411,7 +430,7 @@ export async function planRestoreBackup(
   };
 }
 
-export async function restoreBackup(
+async function restoreBackupUnlocked(
   backupDirectory: string,
   targetDataRoot: string,
   confirmationToken: string,
@@ -507,4 +526,27 @@ export async function restoreBackup(
     await lock.close();
     await rm(lockPath, { force: true });
   }
+}
+
+/** 生成恢复计划时同样拒绝活动服务；确认令牌仍验证目标和备份未被修改。 */
+export function planRestoreBackup(
+  backupDirectory: string,
+  targetDataRoot: string,
+  options: { readonly now?: number; readonly tokenLifetimeMs?: number } = {},
+): Promise<RestoreOperationPlan> {
+  return withStoppedTaskService(targetDataRoot, () =>
+    planRestoreBackupUnlocked(backupDirectory, targetDataRoot, options),
+  );
+}
+
+/** 全程持有与中央服务相同的外部锁，目录替换不能绕过进程所有权。 */
+export function restoreBackup(
+  backupDirectory: string,
+  targetDataRoot: string,
+  confirmationToken: string,
+  options: { readonly now?: number } = {},
+): Promise<RestoreResult> {
+  return withStoppedTaskService(targetDataRoot, () =>
+    restoreBackupUnlocked(backupDirectory, targetDataRoot, confirmationToken, options),
+  );
 }

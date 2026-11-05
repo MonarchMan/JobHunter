@@ -1,5 +1,5 @@
 import { webExecuteExperienceResearchSchema } from '@jobhunter/user/contracts/research-web';
-import { getWebContainer } from '../../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../../../../src/server/http.js';
 import {
@@ -16,7 +16,7 @@ export async function POST(
   try {
     const input = webExecuteExperienceResearchSchema.parse(await request.json());
     const { id } = await context.params;
-    const result = (await getWebContainer()).services.research.enqueueExecution({
+    const result = (await getWebMutationContainer()).services.research.enqueueExecution({
       requestId: id,
       ...input,
     });

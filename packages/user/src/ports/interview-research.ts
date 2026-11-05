@@ -50,7 +50,7 @@ export interface CommunityInterviewExperienceRecord {
   readonly id: InterviewExperienceId;
   readonly fileId: string;
   readonly sequenceNo: number;
-  readonly researchRequestId: ExperienceResearchRequestId;
+  readonly researchRequestId: ExperienceResearchRequestId | null;
   readonly reviewStatus: 'needs_review' | 'accepted' | 'rejected';
   readonly company: string | null;
   readonly role: string | null;
@@ -78,6 +78,7 @@ export interface CommunityInterviewQuestionRecord {
 
 /** 应用层数据结构或端口契约。 */
 export interface ExperienceResearchDetail {
+  readonly outputPath?: string;
   readonly request: ExperienceResearchRequestRecord;
   readonly experiences: readonly CommunityInterviewExperienceRecord[];
   readonly questions: readonly CommunityInterviewQuestionRecord[];

@@ -1,7 +1,15 @@
 import { setTimeout as delay } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
+import { withTaskExecution } from './execution-scope.js';
 import type { Clock, TaskId } from '@jobhunter/common/domain';
 import type { HandlerRegistry } from './handler-registry.js';
-import type { TaskCancellationNotifier, TaskLogger, TaskQueue, TaskRecord } from './model.js';
+import type {
+  TaskCancellationNotifier,
+  TaskHandlerContext,
+  TaskLogger,
+  TaskQueue,
+  TaskRecord,
+} from './model.js';
 import { classifyTaskError, TaskExecutionError } from './retry-policy.js';
 import type { RetryPolicy } from './retry-policy.js';
 import type { ScheduleService } from './schedule-service.js';
@@ -9,6 +17,11 @@ import type { ScheduleService } from './schedule-service.js';
 /** 应用层数据结构或端口契约。 */
 export interface WorkerDelay {
   wait(milliseconds: number, signal: AbortSignal): Promise<void>;
+}
+
+/** 中央引擎将已领取任务交给执行宿主；宿主不能自行领取或推进定时计划。 */
+export interface TaskExecutionPort {
+  execute(task: TaskRecord, context: TaskHandlerContext): Promise<unknown>;
 }
 
 /** 基于 Node 定时器的默认延时实现。 */
@@ -28,6 +41,12 @@ export interface WorkerEngineOptions {
   readonly shutdownGraceMs?: number;
   readonly services?: Readonly<Record<string, unknown>>;
   readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
+}
+
+/** 运行任务必须携带领取时生成的分派身份，缺失时拒绝提交。 */
+function executionOwner(task: TaskRecord): string {
+  if (!task.leaseOwner) throw new TypeError('Task dispatch has no owner');
+  return task.leaseOwner;
 }
 
 const silentLogger: TaskLogger = {
@@ -59,6 +78,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
   readonly #delay: WorkerDelay;
   readonly #periodicWork: ((signal: AbortSignal) => Promise<void>) | undefined;
   readonly #isQueueBusy: (error: unknown) => boolean;
+  readonly #executor: TaskExecutionPort | undefined;
   readonly #lifecycle = new AbortController();
   #periodicLoop: Promise<void> | undefined;
   readonly #options: Required<WorkerEngineOptions>;
@@ -77,6 +97,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     readonly workerDelay?: WorkerDelay;
     readonly periodicWork?: (signal: AbortSignal) => Promise<void>;
     readonly isQueueBusy?: (error: unknown) => boolean;
+    readonly executor?: TaskExecutionPort;
     readonly options: WorkerEngineOptions;
   }) {
     this.#queue = input.queue;
@@ -88,6 +109,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     this.#delay = input.workerDelay ?? nativeWorkerDelay;
     this.#periodicWork = input.periodicWork;
     this.#isQueueBusy = input.isQueueBusy ?? (() => false);
+    this.#executor = input.executor;
     this.#options = {
       workerId: input.options.workerId,
       heartbeatIntervalMs: input.options.heartbeatIntervalMs ?? 30_000,
@@ -115,7 +137,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     for (const queueType of queues) {
       const task = this.#queue.claim({
         taskType: queueType,
-        workerId: this.#options.workerId,
+        workerId: `${this.#options.workerId}:${randomUUID()}`,
         now: this.#clock.now(),
         leaseDurationMsFor: (claimedType) =>
           this.#registry.has(claimedType)
@@ -149,7 +171,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       taskId: task.id,
       taskType: task.taskType,
       attempt: task.attemptCount,
-      leaseOwner: this.#options.workerId,
+      leaseOwner: executionOwner(task),
     });
 
     // 1、执行处理器并根据晚到取消策略决定结果优先级。
@@ -157,31 +179,49 @@ export class WorkerEngine implements TaskCancellationNotifier {
       if (!handler) {
         throw new TaskExecutionError('invalid_config', 'No handler is registered for task type.');
       }
-      const output = await this.#registry.execute(
-        task.taskType,
+      const output = await withTaskExecution(
         {
           taskId: task.id,
+          owner: executionOwner(task),
           attempt: task.attemptCount,
-          checkpoint: (result: unknown): void => {
-            if (
-              !this.#queue.checkpoint(
-                task.id,
-                this.#options.workerId,
-                task.attemptCount,
-                this.#clock.now(),
-                result,
-              )
-            ) {
-              controller.abort('lease_lost' satisfies AbortReason);
-              throw new TaskExecutionError('cancelled', 'Task no longer owns its execution lease.');
-            }
-          },
-          signal: controller.signal,
-          clock: this.#clock,
-          logger: this.#logger,
-          services: this.#options.services,
+          now: () => this.#clock.now(),
         },
-        handler.retryPayload?.(task.payload, task.result) ?? task.payload,
+        () => {
+          const context: TaskHandlerContext = {
+            taskId: task.id,
+            attempt: task.attemptCount,
+            checkpoint: (result: unknown): void => {
+              if (
+                !this.#queue.checkpoint(
+                  task.id,
+                  executionOwner(task),
+                  task.attemptCount,
+                  this.#clock.now(),
+                  result,
+                )
+              ) {
+                controller.abort('lease_lost' satisfies AbortReason);
+                throw new TaskExecutionError(
+                  'cancelled',
+                  'Task no longer owns its execution lease.',
+                );
+              }
+            },
+            signal: controller.signal,
+            clock: this.#clock,
+            logger: this.#logger,
+            services: this.#options.services,
+          };
+          if (this.#executor)
+            return this.#executor
+              .execute(task, context)
+              .then((output) => handler.outputSchema.parse(output));
+          return this.#registry.execute(
+            task.taskType,
+            context,
+            handler.retryPayload?.(task.payload, task.result) ?? task.payload,
+          );
+        },
       );
       const lateCancellationPolicy =
         typeof handler.lateCancellationPolicy === 'function'
@@ -189,14 +229,14 @@ export class WorkerEngine implements TaskCancellationNotifier {
           : handler.lateCancellationPolicy;
       const completionWinsLateCancellation = lateCancellationPolicy === 'complete';
       if (controller.signal.reason === 'cancelled' && !completionWinsLateCancellation) {
-        this.#queue.markCancelled(task.id, this.#options.workerId, this.#clock.now());
+        this.#queue.markCancelled(task.id, executionOwner(task), this.#clock.now());
       } else if (
         !controller.signal.aborted ||
         (controller.signal.reason === 'cancelled' && completionWinsLateCancellation)
       ) {
         const completed = this.#queue.complete(
           task.id,
-          this.#options.workerId,
+          executionOwner(task),
           this.#clock.now(),
           output,
           { allowRequestedCancellation: completionWinsLateCancellation },
@@ -229,7 +269,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       heartbeatStopped = true;
       controller.abort('finished');
       await heartbeat;
-      this.#controllers.delete(task.id);
+      if (this.#controllers.get(task.id) === controller) this.#controllers.delete(task.id);
     }
   }
 
@@ -250,7 +290,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
       try {
         const result = this.#queue.heartbeat({
           taskId: task.id,
-          workerId: this.#options.workerId,
+          workerId: executionOwner(task),
           now: this.#clock.now(),
           leaseDurationMs,
         });
@@ -280,7 +320,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     const reason = controller.signal.reason as AbortReason | undefined;
     if (reason === 'shutdown' || reason === 'lease_lost') return;
     if (reason === 'cancelled') {
-      this.#queue.markCancelled(task.id, this.#options.workerId, this.#clock.now());
+      this.#queue.markCancelled(task.id, executionOwner(task), this.#clock.now());
       this.#logger.info('task.finished', {
         taskId: task.id,
         taskType: task.taskType,
@@ -306,7 +346,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     if (decision.retry && decision.availableAt !== null) {
       this.#queue.reschedule({
         taskId: task.id,
-        workerId: this.#options.workerId,
+        workerId: executionOwner(task),
         availableAt: decision.availableAt,
         occurredAt: this.#clock.now(),
         category: classified.category,
@@ -326,7 +366,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     const category = classified.category;
     this.#queue.fail({
       taskId: task.id,
-      workerId: this.#options.workerId,
+      workerId: executionOwner(task),
       finishedAt: this.#clock.now(),
       category,
       summary: classified.safeSummary,
@@ -345,7 +385,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
   #finalizeRequestedCancellation(task: TaskRecord): boolean {
     const current = this.#queue.get(task.id);
     if (current?.status !== 'running' || current.cancelRequestedAt === null) return false;
-    const cancelled = this.#queue.markCancelled(task.id, this.#options.workerId, this.#clock.now());
+    const cancelled = this.#queue.markCancelled(task.id, executionOwner(task), this.#clock.now());
     if (cancelled) {
       this.#logger.info('task.finished', {
         taskId: task.id,

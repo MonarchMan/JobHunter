@@ -1,5 +1,5 @@
 import { ZodError } from 'zod';
-import { getWebContainer } from '../../../../src/server/container.js';
+import { getWebContainer, getWebMutationContainer } from '../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../src/server/csrf.js';
 import {
   badRequestResponse,
@@ -45,9 +45,12 @@ export async function POST(
   )
     return new Response(null, { status: 404 });
   try {
-    return dataResponse((await getWebContainer()).services[provider].mutate(await request.json()), {
-      status: 202,
-    });
+    return dataResponse(
+      (await getWebMutationContainer()).services[provider].mutate(await request.json()),
+      {
+        status: 202,
+      },
+    );
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError || error instanceof SyntaxError)
       return badRequestResponse('平台操作参数无效。');

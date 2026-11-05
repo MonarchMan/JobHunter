@@ -1,3 +1,4 @@
+import { ExtractionReview } from './extraction-review.js';
 import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
@@ -135,7 +136,7 @@ export default async function ProfilePage({
                 <time dateTime={version.createdAt}>
                   {new Intl.DateTimeFormat('zh-CN').format(new Date(version.createdAt))}
                 </time>
-                <span>{version.lockedPaths.length} 个锁定字段</span>
+                <span>{version.isCandidate ? '待确认提取' : '已确认'}</span>
               </li>
             ))}
           </ol>
@@ -155,13 +156,8 @@ export default async function ProfilePage({
           />
         </article>
       </section>
-      <section className={styles.comparison} data-profile-comparison aria-label="提取值与有效值">
-        <details className="panel-block developer-details">
-          <summary>开发者详情：原提取值 JSON</summary>
-          <pre tabIndex={0} aria-label="原提取值 JSON">
-            {JSON.stringify(detail.current.extracted, null, 2)}
-          </pre>
-        </details>
+      <ExtractionReview detail={detail} />
+      <section className={styles.comparison} data-profile-comparison aria-label="当前画像">
         <details className="panel-block developer-details">
           <summary>开发者详情：当前有效值 JSON</summary>
           <pre tabIndex={0} aria-label="当前有效值 JSON">
@@ -170,7 +166,7 @@ export default async function ProfilePage({
         </details>
       </section>
       <details className="panel-block developer-details profile-advanced-tools">
-        <summary>高级维护：字段锁定与 JSON 修正</summary>
+        <summary>高级维护：JSON 修正</summary>
         <ProfileEditor detail={detail} />
       </details>
       {detail.current.resumeDocumentId ? (

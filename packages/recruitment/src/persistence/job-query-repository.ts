@@ -1,3 +1,4 @@
+import { currentJobContentSql } from './current-job-sql.js';
 import type {
   CompanyLookupRepository,
   CompanySummary,
@@ -127,7 +128,7 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     const scoreExpression = filter.profileVersionId
       ? `(SELECT MAX(json_extract(snapshot.value, '$.totalScore'))
           FROM json_each(?) snapshot
-          JOIN job_revisions jr ON jr.id = json_extract(snapshot.value, '$.jobRevisionId')
+          JOIN ${currentJobContentSql} jr ON jr.id = json_extract(snapshot.value, '$.jobRevisionId')
           WHERE jr.job_id = j.id)`
       : 'NULL';
     const selectParameters: unknown[] = filter.profileVersionId
@@ -330,7 +331,7 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     const scoreExpression = profileVersionId
       ? `(SELECT MAX(json_extract(snapshot.value, '$.totalScore'))
           FROM json_each(?) snapshot
-          JOIN job_revisions jr ON jr.id = json_extract(snapshot.value, '$.jobRevisionId')
+          JOIN ${currentJobContentSql} jr ON jr.id = json_extract(snapshot.value, '$.jobRevisionId')
           WHERE jr.job_id = j.id)`
       : 'NULL';
     const row = this.#client

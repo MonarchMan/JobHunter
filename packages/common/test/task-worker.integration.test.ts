@@ -1009,10 +1009,8 @@ describe('worker execution', () => {
     await startedPromise;
     await worker.shutdown();
     await running;
-    expect(input.queue.get(first.task.id)).toMatchObject({
-      status: 'running',
-      leaseOwner: 'worker-a',
-    });
+    expect(input.queue.get(first.task.id)?.status).toBe('running');
+    expect(input.queue.get(first.task.id)?.leaseOwner).toMatch(/^worker-a:[0-9a-f-]+$/u);
     expect(await worker.runOnce()).toBe(false);
   });
 });

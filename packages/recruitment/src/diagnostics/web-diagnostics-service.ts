@@ -41,6 +41,7 @@ export interface WebDiagnosticsRepository {
   };
   getAgentRun(id: string): WebAgentRunDetail | null;
   getSourceSyncTaskDetail(input: {
+    readonly taskId: string;
     readonly sourceId: string;
     readonly sourceIds?: readonly string[];
     readonly trigger: 'manual' | 'schedule' | 'retry';
@@ -118,6 +119,7 @@ function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): We
     sourceSync:
       sourceSyncPayload?.success === true
         ? repository.getSourceSyncTaskDetail({
+            taskId: task.id,
             sourceId:
               sourceSyncPayload.data.sourceId ?? sourceSyncPayload.data.sourceIds?.[0] ?? '',
             ...(sourceSyncPayload.data.sourceIds

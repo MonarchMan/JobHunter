@@ -6,7 +6,7 @@ import {
   errorResponse,
   forbiddenResponse,
 } from '../../../../../src/server/http.js';
-import { getWebContainer } from '../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../src/server/csrf.js';
 
 /** 模块数据结构或契约。 */
@@ -25,7 +25,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
       sourceId: id,
       idempotencyToken: body.idempotencyToken,
     });
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     return dataResponse(container.services.webSources.mutate(mutation), { status: 202 });
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError)

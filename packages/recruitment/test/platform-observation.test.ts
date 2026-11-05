@@ -14,7 +14,6 @@ function task(provider: string, status: TaskRecord['status'], round = 0): TaskRe
     payload: { action: 'next', generation: 1 },
     idempotencyKey: `${provider}:stability:1:${String(round)}:next`,
     concurrencyKey: null,
-    scheduleId: null,
     retryOfTaskId: null,
     priority: 0,
     attemptCount: 1,

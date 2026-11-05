@@ -1,4 +1,5 @@
 import type { TaskRecord, TaskStatus } from '@jobhunter/common/tasks';
+import { TaskServiceConnectionError } from '@jobhunter/common/task-service';
 import { Command, CommanderError, Option } from 'commander';
 import type { CliContainer } from './container.js';
 import type { CliIo } from './io.js';
@@ -175,6 +176,27 @@ function addJobFilterOptions(command: Command, includePagination = true): Comman
 /** 将任意异常转换为稳定 CLI 错误。 */
 function errorFrom(value: unknown): CliError {
   if (value instanceof CliError) return value;
+  if (value instanceof TaskServiceConnectionError) {
+    return new CliError({
+      code: `TASK_SERVICE_${value.code.toUpperCase()}`,
+      message:
+        value.code === 'incompatible'
+          ? '中央任务服务的配置与当前入口不一致，请执行 task service restart。'
+          : '中央任务服务未能完成请求，请检查数据目录下的 logs/task-service.log；停止未完成时请勿迁移或恢复数据。',
+      exitCode: value.code === 'incompatible' ? cliExitCode.usage : cliExitCode.internal,
+    });
+  }
+  if (
+    value instanceof Error &&
+    'code' in value &&
+    value.code === 'DATABASE_UPGRADE_REQUIRES_STOP'
+  ) {
+    return new CliError({
+      code: value.code,
+      message: '数据库需要升级，请先执行 task service stop 并关闭 Web 和其他数据库连接。',
+      exitCode: cliExitCode.usage,
+    });
+  }
   if (typeof value === 'object' && value !== null && 'exitCode' in value && value.exitCode === 0)
     return new CliError({
       code: 'CLI_INFORMATION_DISPLAYED',
@@ -376,7 +398,7 @@ export function createProgram(input: {
                 message: '请指定一个来源或使用 --all。',
                 exitCode: cliExitCode.usage,
               });
-            const queued = sourceService.sync(options.all ? 'all' : (selector ?? ''));
+            const queued = await sourceService.sync(options.all ? 'all' : (selector ?? ''));
             const waits = [];
             if (options.wait) {
               for (const item of queued)
@@ -424,6 +446,29 @@ export function createProgram(input: {
     );
 
   const task = program.command('task').description('查看和维护后台任务');
+  const taskService = task.command('service').description('查看、停止或重启中央任务服务');
+  for (const operation of ['status', 'stop', 'restart'] as const) {
+    taskService
+      .command(operation)
+      .description(
+        {
+          status: '探测服务状态',
+          stop: '停止服务并等待执行进程退出',
+          restart: '按当前配置重启服务',
+        }[operation],
+      )
+      .action(async () => {
+        if (!input.container.taskService)
+          throw new CliError({
+            code: 'CONFIGURATION_ERROR',
+            message: '中央任务服务未装配。',
+            exitCode: cliExitCode.usage,
+          });
+        const result = await input.container.taskService[operation]();
+        const status = result?.status ?? (operation === 'stop' ? 'stopped' : 'ready');
+        input.onResult({ data: { status }, human: `中央任务服务：${status}` });
+      });
+  }
   task
     .command('list')
     .description('列出任务')
@@ -485,7 +530,7 @@ export function createProgram(input: {
     .command('retry')
     .description('重试失败任务')
     .argument('<taskId>')
-    .action((taskId: string) => {
+    .action(async (taskId: string) => {
       if (!input.container.task)
         throw new CliError({
           code: 'CONFIGURATION_ERROR',
@@ -498,7 +543,7 @@ export function createProgram(input: {
           message: '任务不存在。',
           exitCode: cliExitCode.notFound,
         });
-      const result = input.container.task.retry(taskId);
+      const result = await input.container.task.retry(taskId);
       input.onResult({ data: result, human: `已创建重试任务：${result.task.id}` });
     });
   task
@@ -615,7 +660,7 @@ export function createProgram(input: {
   const profile = program.command('profile').description('查看和维护版本化候选人画像');
   profile
     .command('show')
-    .description('显示当前有效值、原提取值、锁定路径和 Agent 版本')
+    .description('显示当前画像和 Agent 信息')
     .argument('<profileId>')
     .action((profileId: string) => {
       if (!input.container.profile)
@@ -630,7 +675,6 @@ export function createProgram(input: {
         human: [
           `画像版本：${String(inspection.version.versionNo)}（${inspection.version.id}）`,
           `来源简历：${inspection.version.resumeDocumentId ?? '-'}`,
-          `锁定路径：${inspection.version.lockedPaths.join('、') || '-'}`,
           `目标岗位：${inspection.version.effective.targetRoles.join('、') || '-'}`,
           `目标地点：${inspection.version.effective.preferences.locations.join('、') || '-'}`,
           `技能：${inspection.version.effective.skills.map((skill) => skill.name).join('、') || '-'}`,
@@ -655,7 +699,7 @@ export function createProgram(input: {
           versions
             .map(
               (item) =>
-                `v${String(item.version.versionNo)}\t${item.version.id}\t${item.version.lockedPaths.join(',') || '-'}`,
+                `v${String(item.version.versionNo)}\t${item.version.id}\t${item.version.isCandidate ? '待确认' : '已确认'}`,
             )
             .join('\n') || '尚无画像版本。',
       });
@@ -689,26 +733,40 @@ export function createProgram(input: {
         human: `已创建画像版本 v${String(inspection.version.versionNo)}。`,
       });
     });
-  for (const operation of ['lock', 'unlock'] as const) {
-    profile
-      .command(operation)
-      .description(`${operation === 'lock' ? '锁定' : '解锁'} JSON Pointer，并创建新版本`)
-      .argument('<profileId>')
-      .argument('<pointer>')
-      .action((profileId: string, pointer: string) => {
+  profile
+    .command('confirm')
+    .description('选择候选提取字段并确认为新画像版本')
+    .argument('<profileId>')
+    .argument('<candidateVersionId>')
+    .requiredOption('--expected-version <id>', '预览时的当前版本 ID')
+    .requiredOption('--fields <names>', '逗号分隔的一级字段，例如 skills,projects')
+    .action(
+      (
+        profileId: string,
+        candidateVersionId: string,
+        options: { expectedVersion: string; fields: string },
+      ) => {
         if (!input.container.profile)
           throw new CliError({
             code: 'CONFIGURATION_ERROR',
             message: '画像服务未装配。',
             exitCode: cliExitCode.usage,
           });
-        const inspection = input.container.profile[operation](profileId, pointer);
+        const inspection = input.container.profile.confirm(
+          profileId,
+          candidateVersionId,
+          options.expectedVersion,
+          options.fields
+            .split(',')
+            .map((field) => field.trim())
+            .filter(Boolean),
+        );
         input.onResult({
           data: inspection,
-          human: `${operation === 'lock' ? '已锁定' : '已解锁'} ${pointer}；当前版本 v${String(inspection.version.versionNo)}。`,
+          human: `已确认画像版本 v${String(inspection.version.versionNo)}。`,
         });
-      });
-  }
+      },
+    );
 
   const match = program.command('match').description('查看匹配结果，或为单个职位手动评分');
   match
@@ -725,7 +783,7 @@ export function createProgram(input: {
           exitCode: cliExitCode.usage,
         });
       const matchService = input.container.match;
-      const queued = matchService.scoreForJob({
+      const queued = await matchService.scoreForJob({
         jobId,
         ...(options.profile ? { profileVersionId: options.profile } : {}),
       });

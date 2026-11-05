@@ -17,7 +17,6 @@ import { calculateDeterministicMatch, currentMatchRuleset } from '@jobhunter/mat
 import { contentHash, utcInstant } from '@jobhunter/common/domain';
 import { parseNormalizedJob, type NormalizedJob } from '@jobhunter/recruitment/domain';
 import type { CandidateProfileData } from '@jobhunter/user/domain';
-import { drillCoverageDimensions } from '@jobhunter/user/domain';
 
 const ids = {
   company: '018f0000-0000-7000-8f00-000000000101',
@@ -199,10 +198,7 @@ function insertJob(
     );
   database.client
     .prepare(
-      `INSERT INTO job_revisions
-       (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
-        source_url, snapshot_json, change_set_json, created_at)
-       VALUES (?, ?, 1, ?, 'fake-campus-v1', ?, ?, ?, ?, ?)`,
+      `UPDATE jobs SET content_id=d.id,content_hash=d.content_hash,source_payload_hash=d.source_payload_hash,source_url=d.source_url FROM (SELECT ? AS id, ? AS job_id, 1 AS revision_no, ? AS content_hash, 'fake-campus-v1' AS normalizer_version, ? AS source_payload_hash, ? AS source_url, ? AS snapshot_json, ? AS change_set_json, ? AS created_at) d WHERE jobs.id=d.job_id`,
     )
     .run(
       input.revisionId,
@@ -219,7 +215,7 @@ function insertJob(
 /** 构造测试输入或执行断言的辅助逻辑。 */
 async function seedFixture(dataRoot: string): Promise<void> {
   const database = openSqliteDatabase({ dataRoot });
-  seedPlatformJobs(database);
+  seedPlatformJobs(database, { bossCount: 11 });
   const adapter = new FakeAdapter();
   const profile = await loadProfileFromFakeModel();
   const interviewProfile = makeCandidateProfile({
@@ -280,12 +276,10 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run(ids.source, ids.company, ids.channel);
     database.client
       .prepare(
-        `INSERT INTO sync_runs
-         (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-          sync_policy_version, source_config_hash, stats_json, started_at, finished_at)
-         VALUES (?, ?, 'manual', 'succeeded', 'complete', 'fake-campus-v1',
+        `WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
+          sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES (?, ?, 'manual', 'succeeded', 'complete', 'fake-campus-v1',
           'fake-campus-v1', 'fake-v1', 'fake-source-hash',
-          '{"discovered":3,"created":3}', 1, 2)`,
+          '{"discovered":3,"created":3}', 1, 2)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture`,
       )
       .run(ids.syncRun, ids.source);
 
@@ -437,10 +431,10 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run(ids.profile);
     database.client
       .prepare(
-        `INSERT INTO profile_versions
-         (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at)
-         VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 1)`,
+        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+          content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 1))
+INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
       )
       .run(
         ids.profileVersion,
@@ -457,10 +451,10 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run(ids.interviewProfile);
     database.client
       .prepare(
-        `INSERT INTO profile_versions
-         (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at)
-         VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 2)`,
+        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+          content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 2))
+INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
       )
       .run(
         ids.interviewProfileVersion,
@@ -479,10 +473,10 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run(ids.studioProfile);
     database.client
       .prepare(
-        `INSERT INTO profile_versions
-         (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at)
-         VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 3)`,
+        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+          content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 3))
+INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
       )
       .run(
         ids.studioProfileVersion,
@@ -500,7 +494,9 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run('018f0000-0000-7000-8000-000000000631');
     database.client
       .prepare(
-        "INSERT INTO profile_versions (id,profile_id,version_no,extracted_json,effective_json,locked_paths_json,content_hash,is_current,created_at) VALUES (?,?,1,?,?,'[]',?,1,4)",
+        `WITH profile_fixture (id,profile_id,version_no,extracted_json,effective_json,locked_paths_json,content_hash,is_current,created_at) AS (VALUES (?,?,1,?,?,'[]',?,1,4))
+INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
       )
       .run(
         '018f0000-0000-7000-8000-000000000632',
@@ -509,139 +505,30 @@ async function seedFixture(dataRoot: string): Promise<void> {
         JSON.stringify(profile),
         createHash('sha256').update(JSON.stringify(profile)).digest('hex'),
       );
-    const deepProject = interviewProfile.projects[1];
-    if (!deepProject) throw new Error('Deep drill browser fixture project is missing.');
-    const materialText = [
-      '# 任务与事务边界',
-      '',
-      '数据库事务只负责冻结任务与版本映射，外部模型调用由 Worker 在事务提交后执行。',
-    ].join('\n');
-    const materialBytes = Buffer.from(materialText, 'utf8');
-    const materialHash = createHash('sha256').update(materialBytes).digest('hex');
-    const materialChunk = {
-      id: ids.deepMaterialChunk,
-      heading: '任务与事务边界',
-      start: 0,
-      end: materialText.length,
-      contentHash: contentHash(materialText),
-    };
-    const materialBinding = {
-      fileId: ids.deepMaterialFile,
-      entityId: ids.deepMaterialEntity,
-      versionNo: 1,
-      fileName: 'architecture.md',
-      contentHash: materialHash,
-    };
     database.client.transaction(() => {
       database.client
         .prepare(
-          `INSERT INTO project_dossiers
-        (id, snapshot_id, source_profile_id, source_profile_version_id, project_index, project_json, content_hash, snapshot_created_at, notebook_file_id, notebook_source_hash, revision, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 1, ?, ?, 3, NULL, NULL, 0, 3, 3)`,
+          "INSERT INTO ai_sessions(id,type,title,created_at,updated_at) VALUES(?,'interview','项目面试',3,4)",
         )
-        .run(
-          ids.deepDossier,
-          ids.deepSnapshot,
-          ids.interviewProfile,
-          ids.interviewProfileVersion,
-          JSON.stringify(deepProject),
-          contentHash(deepProject),
-        );
+        .run(ids.deepSession);
       database.client
         .prepare(
-          `INSERT INTO files
-           (id, kind, name, state, revision, properties_json, created_at, updated_at)
-           VALUES (?, 'project_material', 'architecture.md', 'stored', 1, ?, 3, 3)`,
-        )
-        .run(
-          ids.deepMaterialFile,
-          JSON.stringify({ dossierId: ids.deepDossier, fileName: 'architecture.md' }),
-        );
-      database.client
-        .prepare(
-          `INSERT INTO entities
-           (id, relative_path, media_type, sha256, byte_size, created_at, deleted_at)
-           VALUES (?, ?, 'text/markdown; charset=utf-8', ?, ?, 3, NULL)`,
-        )
-        .run(
-          ids.deepMaterialEntity,
-          `fixture/project-material/${materialHash}.md`,
-          materialHash,
-          materialBytes.byteLength,
-        );
-      database.client
-        .prepare(
-          `INSERT INTO file_entity_mappings
-           (file_id, entity_id, version_no, parser_version, parse_status, extracted_text,
-            normalized_text, error_summary, metadata_json, created_at)
-           VALUES (?, ?, 1, 'project-material-markdown@v1', 'parsed', NULL, ?, NULL, ?, 3)`,
-        )
-        .run(
-          ids.deepMaterialFile,
-          ids.deepMaterialEntity,
-          materialText,
-          JSON.stringify({ chunks: [materialChunk] }),
-        );
-      database.client
-        .prepare(
-          `INSERT INTO drill_sessions
-           (id, dossier_id, profile_key, profile_version, profile_definition_hash,
-            capability_summary_json, material_bindings_json, status, context_revision,
-            created_at, updated_at, completed_at)
-           VALUES (?, ?, 'docs-grounded', 'v1', ?, ?, ?, 'completed', 1, 3, 4, 4)`,
-        )
-        .run(
-          ids.deepSession,
-          ids.deepDossier,
-          contentHash({ profile: 'docs-grounded@v1' }),
-          JSON.stringify({
-            evidenceKinds: ['resume_project', 'user_answer', 'derived_claim', 'project_material'],
-            tools: ['selected_markdown_heading_search', 'selected_markdown_chunk_read'],
-          }),
-          JSON.stringify([materialBinding]),
-        );
-      database.client
-        .prepare(
-          `INSERT INTO drill_turns
-           (id, session_id, turn_no, status, context_hash, question, intent,
-            primary_dimension, guidance_slots_json, evidence_refs_json, question_task_id,
-            question_agent_run_id, digest_task_id, digest_agent_run_id, created_at, updated_at)
-           VALUES (?, ?, 1, 'ready', ?, ?, ?, 'architecture_design', ?, ?, NULL, NULL,
-                   NULL, NULL, 3, 4)`,
+          "INSERT INTO ai_messages(id,session_id,role,content,sequence,status,created_at,updated_at) VALUES(?,?,'assistant',?,1,'completed',3,4)",
         )
         .run(
           ids.deepTurn,
           ids.deepSession,
-          contentHash({ sessionId: ids.deepSession, turnNo: 1 }),
           '为什么把模型调用放在事务提交之后，失败时如何保持任务可重试？',
-          '核实候选人是否理解外部调用与数据库短事务的边界。',
-          JSON.stringify(['事务边界', '失败恢复', '幂等策略']),
-          JSON.stringify([{ kind: 'project_material', id: ids.deepMaterialChunk }]),
         );
-      const coverage = database.client.prepare(
-        `UPDATE drill_sessions SET coverage_json = json_set(coverage_json, '$.' || ?, json_object('status', ?, 'evidenceItemIds', json('[]'), 'updatedAt', 4)) WHERE id = ?`,
-      );
-      for (const dimension of drillCoverageDimensions) {
-        coverage.run(
-          dimension,
-          dimension === 'architecture_design' ? 'asked' : 'unasked',
-          ids.deepSession,
-        );
-      }
     })();
     database.client
       .prepare(
-        `INSERT INTO match_rulesets
-         (id, definition_json, definition_hash, active, created_at)
-         VALUES (?, '{}', ?, 1, 1)`,
+        `SELECT * FROM (SELECT ? AS id, '{}' AS definition_json, ? AS definition_hash, 1 AS active, 1 AS created_at) d`,
       )
       .run(ids.ruleset, 'e'.repeat(64));
     database.client
       .prepare(
-        `INSERT INTO match_results
-         (id, profile_version_id, job_revision_id, ruleset_id, filter_status, total_score,
-          components_json, risks_json, input_hash, created_at)
-         VALUES (?, ?, ?, ?, 'eligible', 86.5, ?, ?, ?, 3)`,
+        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'match_result',json_object('content_id',d.job_revision_id,'profile_version_id',d.profile_version_id,'enrichment_id',NULL,'rules_hash','fixture','filter_status',d.filter_status,'total_score',d.total_score,'input_hash',d.input_hash,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(d.components_json) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),d.created_at,d.created_at FROM (SELECT ? AS id, ? AS profile_version_id, ? AS job_revision_id, ? AS ruleset_id, 'eligible' AS filter_status, 86.5 AS total_score, ? AS components_json, ? AS risks_json, ? AS input_hash, 3 AS created_at) d`,
       )
       .run(
         ids.match,
@@ -689,7 +576,7 @@ async function seedFixture(dataRoot: string): Promise<void> {
     });
     database.client
       .prepare(
-        `INSERT INTO match_rulesets (id, definition_json, definition_hash, active, created_at) VALUES (?, ?, ?, 0, 1)`,
+        `SELECT * FROM (SELECT ? AS id, ? AS definition_json, ? AS definition_hash, 0 AS active, 1 AS created_at) d`,
       )
       .run(
         '018f0000-0000-7000-8000-000000000631',
@@ -698,7 +585,7 @@ async function seedFixture(dataRoot: string): Promise<void> {
       );
     database.client
       .prepare(
-        `INSERT INTO match_results (id, profile_version_id, job_revision_id, ruleset_id, filter_status, total_score, components_json, risks_json, input_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 3)`,
+        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'match_result',json_object('content_id',d.job_revision_id,'profile_version_id',d.profile_version_id,'enrichment_id',NULL,'rules_hash','fixture','filter_status',d.filter_status,'total_score',d.total_score,'input_hash',d.input_hash,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(d.components_json) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),d.created_at,d.created_at FROM (SELECT ? AS id, ? AS profile_version_id, ? AS job_revision_id, ? AS ruleset_id, ? AS filter_status, ? AS total_score, ? AS components_json, ? AS risks_json, ? AS input_hash, 3 AS created_at) d`,
       )
       .run(
         '018f0000-0000-7000-8000-000000000632',
@@ -714,7 +601,7 @@ async function seedFixture(dataRoot: string): Promise<void> {
     database.client
       .prepare(
         `INSERT INTO tasks
-         (id, task_type, payload_json, status, idempotency_key, attempt_count, max_attempts,
+         (id, task_type, private_state, status, idempotency_key, attempt_count, max_attempts,
           available_at, created_at)
          VALUES (?, 'source.sync', '{"sourceId":"campus"}', 'pending',
           'fixture-pending-sync', 0, 3, 1, 2)`,
@@ -722,7 +609,7 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run(ids.task);
     // 1、维护记录仅用于只读审计展示，不应提供普通队列的重试/取消入口。
     database.client.exec(`INSERT INTO tasks
-      (id,task_type,payload_json,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
+      (id,task_type,private_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
       VALUES('018f0000-0000-7000-8000-000000000709','maintenance.sqlite','{}','failed',
       'fixture-maintenance-audit',1,1,1,3)`);
     database.client
@@ -761,6 +648,46 @@ async function seedFixture(dataRoot: string): Promise<void> {
           errorSummary: null,
         }),
       );
+    // 当前画像项目使用系统身份；候选提取供选择确认页面验收使用。
+    database.client.exec(
+      `UPDATE profile_versions SET projects_json=COALESCE((SELECT json_group_array(json_set(value,'$.id',profile_versions.profile_id || ':project:' || key,'$.local_path',NULL)) FROM json_each(profile_versions.projects_json)),'[]');`,
+    );
+    const candidate = database.client
+      .prepare('SELECT * FROM profile_versions WHERE id=?')
+      .get(ids.interviewProfileVersion) as Record<string, unknown>;
+    database.client
+      .prepare(
+        'INSERT INTO candidate_profiles(id,name,created_at,updated_at) VALUES(?,?,999999,999999)',
+      )
+      .run('018f0000-0000-7000-8000-000000000620', '提取确认测试');
+    candidate.profile_id = '018f0000-0000-7000-8000-000000000620';
+    candidate.target_roles_json = '[]';
+    candidate.id = '018f0000-0000-7000-8000-000000000621';
+    database.client
+      .prepare(
+        `INSERT INTO profile_versions (${Object.keys(candidate).join(',')}) VALUES(${Object.keys(
+          candidate,
+        )
+          .map(() => '?')
+          .join(',')})`,
+      )
+      .run(...Object.values(candidate));
+    candidate.id = '018f0000-0000-7000-8000-000000000629';
+    candidate.version_no = 2;
+    candidate.is_current = 0;
+    candidate.is_candidate = 1;
+    candidate.base_version_id = '018f0000-0000-7000-8000-000000000621';
+    candidate.professional_skills = '候选提取：熟练使用 TypeScript';
+    candidate.self_evaluation = '此字段未选择时不应应用';
+    database.client
+      .prepare(
+        `INSERT INTO profile_versions (${Object.keys(candidate).join(',')}) VALUES(${Object.keys(
+          candidate,
+        )
+          .map(() => '?')
+          .join(',')})`,
+      )
+      .run(...Object.values(candidate));
   } finally {
     database.close();
   }

@@ -77,7 +77,6 @@ export class TaskService {
       priority,
       idempotencyKey,
       concurrencyKey,
-      scheduleId: null,
       retryOfTaskId: null,
       maxAttempts,
       availableAt: command.availableAt ?? now,
@@ -109,6 +108,9 @@ export class TaskService {
 
   /** 请求取消任务，并通知正在运行的 Worker。 */
   public cancel(taskId: TaskId): CancelTaskResult {
+    const task = this.#queue.get(taskId);
+    if (task?.parentTaskId && !this.#registry.has(task.taskType))
+      throw new TypeError('Internal stages are controlled by their parent task.');
     const result = this.#queue.cancel(taskId, this.#dependencies.clock.now());
     if (result.kind === 'cancel_requested') {
       this.#cancellationNotifier?.notifyCancellation(taskId);
@@ -120,6 +122,8 @@ export class TaskService {
   public retryFailed(taskId: TaskId, retryToken: string): EnqueueTaskResult {
     const source = this.#queue.get(taskId);
     if (!source) throw new TypeError('Task was not found.');
+    if (source.parentTaskId && !this.#registry.has(source.taskType))
+      throw new TypeError('Internal stages are retried through their parent task.');
     const token = retryToken.trim();
     if (!token) throw new TypeError('Retry token must not be empty.');
     const handler = this.#registry.get(source.taskType);
@@ -136,7 +140,6 @@ export class TaskService {
       priority: source.priority,
       idempotencyKey: token,
       concurrencyKey: source.concurrencyKey,
-      scheduleId: null,
       retryOfTaskId: source.retryOfTaskId,
       maxAttempts: handler.defaultMaxAttempts,
       availableAt: now,

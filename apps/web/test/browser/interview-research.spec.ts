@@ -1,9 +1,11 @@
+import { writeFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 interface CreateResearchResponse {
   readonly data?: {
     readonly detail: {
+      readonly outputPath: string;
       readonly request: {
         readonly id: string;
         readonly requestFingerprint: string;
@@ -72,7 +74,7 @@ test.describe('外部 Agent 网友面经研究', () => {
     const prompt = await promptResponse.text();
     expect(prompt).toContain(role);
     expect(prompt).toContain(request.requestFingerprint);
-    expect(prompt).toContain('community-research-prompt@v4');
+    expect(prompt).toContain('输出 Schema 版本：community-research-bundle@v2');
 
     expect(schemaResponse.ok()).toBe(true);
     expect(schemaResponse.headers()['content-type']).toContain('application/schema+json');
@@ -133,17 +135,16 @@ test.describe('外部 Agent 网友面经研究', () => {
       ],
       warnings: ['来源内容尚未由 JobHunter 独立核验。'],
     };
-    await page.getByLabel('选择 Agent 返回的 JSON').setInputFiles({
-      name: 'browser-community-research.json',
-      mimeType: 'application/json',
-      buffer: Buffer.from(JSON.stringify(bundle)),
-    });
+    const outputPath = await page.locator('code').filter({ hasText: 'result.json' }).textContent();
+    expect(outputPath).toBeTruthy();
+    if (!outputPath) throw new Error('Missing research output path');
+    await writeFile(outputPath, JSON.stringify(bundle));
     const bundleImport = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
         new URL(response.url()).pathname === `/api/interview/research/${request.id}/bundles`,
     );
-    await page.getByRole('button', { name: '校验并导入候选' }).click();
+    await page.getByRole('button', { name: '检查结果文件' }).click();
     expect((await bundleImport).ok()).toBe(true);
     await expect(
       page.getByLabel('通知').getByRole('status').filter({ hasText: '已导入 2 份候选面经' }),

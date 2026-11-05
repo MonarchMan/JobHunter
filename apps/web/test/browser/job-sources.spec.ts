@@ -39,15 +39,15 @@ test('jobs default to official and isolate platform provider, categories and pag
   const providerBox = await provider.boundingBox();
   expect(Math.abs((officialSourceBox?.x ?? 0) - (platformSourceBox?.x ?? 0))).toBeLessThan(1);
   expect(providerBox?.x ?? Infinity).toBeLessThan(platformSourceBox?.x ?? 0);
-  await expect(page.getByText('共 3 个职位', { exact: false })).toBeVisible();
+  await expect(page.getByText('共 12 个职位', { exact: false })).toBeVisible();
   await expect(
     page.getByRole('link', { name: 'BOSS 平台工程师 1', exact: true }).first(),
   ).toBeVisible();
   await provider.click();
   await page.getByRole('option', { name: 'BOSS 直聘', exact: true }).click();
   await expect(page).toHaveURL(/provider=boss/);
-  await expect(page.getByText('共 2 个职位', { exact: false })).toBeVisible();
-  await page.goto('/jobs?source=platform&provider=boss&limit=1');
+  await expect(page.getByText('共 11 个职位', { exact: false })).toBeVisible();
+  await page.goto('/jobs?source=platform&provider=boss&pageSize=10');
   await page
     .getByRole('navigation', { name: '职位分页' })
     .getByRole('link', { name: '2', exact: true })

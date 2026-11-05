@@ -91,6 +91,7 @@ export function createJobAdviceTaskHandler(
         const stored = input.matching.saveAdvice({
           id: parseId(input.ids.generate(), 'MatchAdvice'),
           matchResultId: match.id,
+          matchInputHash: match.inputHash,
           agentRunId: result.run.id,
           schemaVersion: jobAdviceAgentDefinition.outputSchemaVersion,
           contentHash: contentHash(output),

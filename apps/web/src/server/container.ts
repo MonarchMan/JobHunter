@@ -1,3 +1,7 @@
+import { NodeResearchDelivery } from '@jobhunter/user/persistence/research-delivery';
+import { AiSessionService } from '@jobhunter/user/ai/service';
+import { createAiReplyHandler } from '@jobhunter/user/ai/handler';
+import { SqliteAiSessionRepository } from '@jobhunter/user/persistence/ai-session-repository';
 import { UsageService } from '@jobhunter/common/usage';
 import { SqliteUsageRepository } from '@jobhunter/common/persistence/usage-repository';
 import { ProfilePlatformSearchProvider } from '@jobhunter/matching/profile-platform-search';
@@ -50,13 +54,8 @@ import {
 } from '@jobhunter/matching/application';
 import {
   createExperienceResearchTaskHandler,
-  createProjectAnswerDigestTaskHandler,
-  createProjectNotebookTaskHandler,
-  createProjectQuestionTaskHandler,
   ExperienceResearchService,
   InterviewExperienceService,
-  InterviewProjectService,
-  ProjectQuestionGenerator,
 } from '@jobhunter/user/interview';
 import { createSourceHealthTaskHandler } from '@jobhunter/recruitment/sync/source-health-handler';
 import { createSourceSyncTaskHandler } from '@jobhunter/recruitment/sync/job-sync-handler';
@@ -70,7 +69,6 @@ import { SystemSettingsService } from '@jobhunter/recruitment/settings';
 import { createCleanupTaskHandler } from '@jobhunter/common/operations/cleanup-handler';
 import { MailboxSettingsService } from '@jobhunter/recruitment/mail-application';
 import { loadRuntimeAppConfig, type AppConfig } from '@jobhunter/common/config/index';
-import { AgentRunner, type ModelClient } from '@jobhunter/common/agent';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteArtifactStore } from '@jobhunter/user/persistence/artifact-store';
 import { SqliteSettingsStore } from '@jobhunter/recruitment/persistence/settings';
@@ -91,18 +89,15 @@ import { SqliteCandidateProfileRepository } from '@jobhunter/user/persistence';
 import { SqliteResumeDeletionRepository } from '@jobhunter/user/persistence/resume-deletion-repository';
 import { SqliteResumeDocumentRepository } from '@jobhunter/user/persistence/resume-document-repository';
 import { SqliteResumeDraftRepository } from '@jobhunter/user/persistence/resume-draft-repository';
-import { SqliteInterviewProjectRepository } from '@jobhunter/user/persistence/interview-project-repository';
 import { SqliteInterviewExperienceRepository } from '@jobhunter/user/persistence/interview-experience-repository';
 import { SqliteInterviewResearchRepository } from '@jobhunter/user/persistence/interview-research-repository';
 import { SqliteInterviewTaskRetryCoordinator } from '@jobhunter/user/persistence/interview-task-retry-coordinator';
 import { SqliteInterviewTaskPublisher } from '@jobhunter/user/persistence/interview-task-publisher';
-import { SqliteProjectNotebookReader } from '@jobhunter/user/persistence/project-notebook-reader';
 import { SqliteRecruitmentMailRepository } from '@jobhunter/recruitment/persistence/sqlite-recruitment-mail-repository';
 import { SqlitePlatformActivityRepository } from '@jobhunter/recruitment/persistence/platform-activity-repository';
 import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
 import { firstPartySourceCatalog } from '@jobhunter/recruitment/catalog-data';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
-import { createConfiguredModelClient } from '@jobhunter/common/models';
 import {
   EncryptedFileCredentialVault,
   FileMailboxConfigStore,
@@ -112,6 +107,8 @@ import { mailConnectorMetadata } from '@jobhunter/recruitment/mail-metadata';
 import path from 'node:path';
 import { createRetryableSingleton } from './retryable-singleton.js';
 import { browserFixtureIdentity } from './browser-test-isolation.js';
+import { ensureConfiguredTaskService } from '@jobhunter/common/task-service';
+import { pathToFileURL } from 'node:url';
 
 /** 模块数据结构或契约。 */
 export interface WebApplicationServices {
@@ -141,7 +138,7 @@ export interface WebApplicationServices {
   readonly calendar: WebCalendarQueryService;
   readonly applications: WebApplicationProgressService;
   readonly sourceSchedules: SourceScheduleReconciliationService;
-  readonly interview: InterviewProjectService;
+  readonly aiSessions: AiSessionService;
   readonly experiences: InterviewExperienceService;
   readonly research: ExperienceResearchService;
 }
@@ -172,7 +169,7 @@ export interface WebApplicationContainer {
 /** 打开本地数据库并装配 Web 查询和面试准备服务。 */
 export function createLocalWebContainer(
   config: AppConfig,
-  options: { readonly migrationsFolder?: string; readonly modelClient?: ModelClient } = {},
+  options: { readonly migrationsFolder?: string } = {},
 ): WebApplicationContainer {
   const database = openSqliteDatabase({
     dataRoot: config.bootstrap.dataRoot.value,
@@ -207,6 +204,7 @@ export function createLocalWebContainer(
       createMailboxKey: () => ids.generate().replaceAll('-', '').slice(0, 16).toLowerCase(),
     });
     const registry = new HandlerRegistry();
+    registry.register(createAiReplyHandler({}));
     registry.register(
       createPlatformRetentionTaskHandler({
         execute: () => {
@@ -221,7 +219,6 @@ export function createLocalWebContainer(
         }),
       );
     const artifacts = new SqliteArtifactStore(database.client, config.bootstrap.dataRoot.value);
-    const interviewRepository = new SqliteInterviewProjectRepository(database.client);
     const recruitmentMailRepository = new SqliteRecruitmentMailRepository(database.client);
     const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
     const resumeDeletion = new ResumeDeletionService({
@@ -248,12 +245,7 @@ export function createLocalWebContainer(
     registry.register(createResumePolishTaskHandler({ unavailable: true }));
     registry.register(createResumePdfExportTaskHandler());
     registry.register(createResumeDeletionTaskHandler(resumeDeletion));
-    registry.register(createProjectQuestionTaskHandler({ unavailable: true }));
-    registry.register(createProjectAnswerDigestTaskHandler({ unavailable: true }));
     registry.register(createExperienceResearchTaskHandler({ unavailable: true }));
-    registry.register(
-      createProjectNotebookTaskHandler({ repository: interviewRepository, artifacts, ids }),
-    );
     const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
     const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
     const matchingHandler = createMatchRevisionTaskHandler(null);
@@ -280,7 +272,7 @@ export function createLocalWebContainer(
     const interviewTaskPublisher = new SqliteInterviewTaskPublisher({
       client: database.client,
       tasks,
-      projects: interviewRepository,
+
       research: interviewResearchRepository,
     });
     const profileRepository = new SqliteCandidateProfileRepository(
@@ -288,45 +280,6 @@ export function createLocalWebContainer(
       new SqliteProfileDerivedDataManager(database.client),
     );
     const agentRuns = new SqliteAgentRunStore(database.client);
-    const configuredModel =
-      config.model.modelName.value && config.model.apiKey.value
-        ? createConfiguredModelClient({
-            provider: config.model.provider.value,
-            baseUrl: config.model.baseUrl.value,
-            model: config.model.modelName.value,
-            apiKey: config.model.apiKey.value.reveal(),
-            cacheReadPrice:
-              config.model.cacheReadPrice.source === 'default'
-                ? undefined
-                : config.model.cacheReadPrice.value,
-            cacheWritePrice:
-              config.model.cacheWritePrice.source === 'default'
-                ? undefined
-                : config.model.cacheWritePrice.value,
-            cacheWrite1hPrice:
-              config.model.cacheWrite1hPrice.source === 'default'
-                ? undefined
-                : config.model.cacheWrite1hPrice.value,
-            autoModelPricing:
-              config.model.inputCostPerMillionUsd.source === 'default' &&
-              config.model.outputCostPerMillionUsd.source === 'default',
-            inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value,
-            outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value,
-            costCurrency: config.model.costCurrency.value,
-          })
-        : null;
-    const questionModel = options.modelClient ?? configuredModel;
-    const questionGenerator = questionModel
-      ? new ProjectQuestionGenerator({
-          runner: new AgentRunner({
-            store: agentRuns,
-            model: questionModel,
-            createId: () => ids.generate(),
-            now: () => clock.now(),
-          }),
-          repository: interviewRepository,
-        })
-      : undefined;
     const candidateProfiles = new CandidateProfileService({
       repository: profileRepository,
       clock,
@@ -474,19 +427,12 @@ export function createLocalWebContainer(
         new ApplicationProgressQueryService(recruitmentMailRepository),
       ),
       sourceSchedules,
-      interview: new InterviewProjectService({
+      aiSessions: new AiSessionService({
+        repository: new SqliteAiSessionRepository(database.client),
         profiles: profileRepository,
-        repository: interviewRepository,
         tasks,
-        taskPublisher: interviewTaskPublisher,
         clock,
         ids,
-        artifacts,
-        notebooks: new SqliteProjectNotebookReader(
-          database.client,
-          config.bootstrap.dataRoot.value,
-        ),
-        ...(questionGenerator ? { questionGenerator } : {}),
       }),
       experiences: new InterviewExperienceService({
         repository: new SqliteInterviewExperienceRepository(database.client),
@@ -495,6 +441,7 @@ export function createLocalWebContainer(
         ids,
       }),
       research: new ExperienceResearchService({
+        delivery: new NodeResearchDelivery(config.bootstrap.dataRoot.value),
         repository: interviewResearchRepository,
         artifacts,
         tasks,
@@ -552,6 +499,21 @@ const loadSharedContainer = createRetryableSingleton(async () => {
 /** 获取进程级单例 Web 容器，避免每个请求重复打开数据库。 */
 export function getWebContainer(): Promise<WebApplicationContainer> {
   return loadSharedContainer();
+}
+
+/** 写入口在发布工作前确认中央服务可用；服务崩溃后下一次操作按需恢复，读页面不撤销显式停止。 */
+export async function getWebMutationContainer(): Promise<WebApplicationContainer> {
+  const container = await getWebContainer();
+  // 独立临时浏览器夹具提供合成执行器，不能连接用户模型、邮箱或浏览器会话。
+  if (!browserFixtureIdentity(process.env)) {
+    const workspaceRoot = process.env.JOBHUNTER_WORKSPACE_ROOT ?? process.cwd();
+    const config = await loadRuntimeAppConfig({ workspaceRoot });
+    await ensureConfiguredTaskService(config, {
+      entry: pathToFileURL(path.join(workspaceRoot, 'apps/web/src/server/task-service-main.ts')),
+      workspaceRoot,
+    });
+  }
+  return container;
 }
 
 /** 浏览器夹具专用内存凭据库，避免端到端测试访问用户的系统凭据。 */

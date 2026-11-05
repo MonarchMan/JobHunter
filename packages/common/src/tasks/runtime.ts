@@ -1,4 +1,12 @@
-import { SystemIdGenerator, utcInstant, type Clock, type IdGenerator } from '../domain/index.js';
+import {
+  SystemIdGenerator,
+  parseId,
+  utcInstant,
+  type Clock,
+  type IdGenerator,
+} from '../domain/index.js';
+import { z } from 'zod';
+import type { CentralTaskRuntime } from './service-host.js';
 import { AgentRunner, ModelClientError, type ModelClient } from '../agent/index.js';
 import { createConfiguredModelClient } from '../models/index.js';
 import { SqliteAgentRunStore } from '../persistence/agent-run-store.js';
@@ -7,6 +15,10 @@ import { SqliteTaskRepository } from '../persistence/task-repository.js';
 import { isSqliteUnavailableError } from '../persistence/busy-error.js';
 import { createSqliteMaintenanceTick } from './sqlite-maintenance.js';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
+import { withTaskExecution } from './execution-scope.js';
+import { TaskExecutionError } from './retry-policy.js';
+import type { TaskRecord } from './model.js';
+import type { TaskExecutionPort } from './worker-engine.js';
 import {
   AsyncSemaphore,
   AsyncSemaphoreCancelledError,
@@ -43,6 +55,11 @@ export interface TaskRuntimeContext {
 
 /** 宿主创建任务运行时所需的通用配置，业务选项由模块自行声明。 */
 export interface TaskRuntimeOptions {
+  readonly executor?: TaskExecutionPort;
+  readonly executionOnly?: boolean;
+  /** 仅允许已经持有中央服务排他锁的组合根启用。 */
+  readonly recoverPreviousExecutions?: boolean;
+  readonly networkSemaphore?: AsyncSemaphore;
   readonly dataRoot: string;
   readonly workerId?: string;
   readonly pollIntervalMs?: number;
@@ -55,6 +72,9 @@ export interface TaskRuntimeOptions {
 /** CLI/Web 共用任务应用；关闭必须先停止任务，再释放模块资源与数据库。 */
 export interface TaskApplication {
   readonly engine: WorkerEngine;
+  readonly request?: CentralTaskRuntime['request'];
+  /** 内部执行宿主专用：只运行给定分派，不领取任务或启动调度。 */
+  executeAssigned?(task: TaskRecord, signal: AbortSignal): Promise<unknown>;
   close(): Promise<void>;
 }
 
@@ -95,14 +115,19 @@ export function createTaskRuntime(
   factories: readonly ((context: TaskRuntimeContext) => TaskCapability)[],
 ): TaskApplication {
   // 1、先建立所有工厂共享的连接、队列、时钟和模型运行能力。
-  const database = openSqliteDatabase({ dataRoot: input.dataRoot });
+  const database = openSqliteDatabase({
+    dataRoot: input.dataRoot,
+    runMigrations: !input.executionOnly,
+  });
   const ids = new SystemIdGenerator();
   const clock: Clock = { now: () => utcInstant(Date.now()) };
   const registry = new HandlerRegistry();
   const queue = new SqliteTaskRepository(database.client);
+  if (input.recoverPreviousExecutions) queue.revokePreviousExecutions(clock.now());
   const tasks = new TaskService({ queue, clock, ids }, registry);
   const schedules = new ScheduleService({ queue, clock, ids }, registry);
-  const networkSemaphore = new AsyncSemaphore(input.maxConcurrentNetworkTasks ?? 4);
+  const networkSemaphore =
+    input.networkSemaphore ?? new AsyncSemaphore(input.maxConcurrentNetworkTasks ?? 4);
   const createRunner = (timeoutMs?: number): AgentRunner | null =>
     input.model
       ? new AgentRunner({
@@ -134,7 +159,7 @@ export function createTaskRuntime(
   try {
     // 2、先登记全部处理器，再创建计划，防止计划引用尚未注册的任务。
     for (const factory of factories) capabilities.push(factory(context));
-    for (const capability of capabilities) capability.initialize?.();
+    if (!input.executionOnly) for (const capability of capabilities) capability.initialize?.();
     // 2.a、只记录公共并发和事件循环指标，不记录业务正文或外部地址。
     if (input.logger) {
       eventLoopDelay?.enable();
@@ -159,6 +184,7 @@ export function createTaskRuntime(
       retryPolicy: new RetryPolicy({ next: () => Math.random() }),
       periodicWork: createSqliteMaintenanceTick(database, input.logger, abort.signal),
       isQueueBusy: isSqliteUnavailableError,
+      ...(input.executor ? { executor: input.executor } : {}),
       options: {
         workerId: input.workerId ?? `tasks-${String(process.pid)}`,
         emptyPollMinimumMs: input.pollIntervalMs ?? 1_000,
@@ -171,6 +197,89 @@ export function createTaskRuntime(
     let closing: Promise<void> | undefined;
     return {
       engine,
+      request(method, value) {
+        // 1、所有 IPC 入参在通用边界校验，具体 payload 继续由处理器 Schema 校验。
+        if (method === 'enqueue') {
+          const command = z
+            .object({
+              taskType: z.string().min(1),
+              payload: z.unknown(),
+              idempotencyKey: z.string().min(1),
+            })
+            .strict()
+            .parse(value);
+          const result = tasks.enqueue({ ...command, payload: command.payload });
+          return { kind: result.kind, taskId: result.task.id };
+        }
+        if (method === 'retry') {
+          const request = z
+            .object({ taskId: z.uuid(), token: z.string().min(1) })
+            .strict()
+            .parse(value);
+          const result = tasks.retryFailed(parseId(request.taskId, 'Task'), request.token);
+          return { kind: result.kind, taskId: result.task.id };
+        }
+        const request = z.object({ taskId: z.uuid() }).strict().parse(value);
+        const id = parseId(request.taskId, 'Task');
+        if (method === 'cancel') {
+          const result = tasks.cancel(id);
+          engine.notifyCancellation(id);
+          return { kind: result.kind, taskId: id };
+        }
+        const task = tasks.get(id);
+        if (!task) return null;
+        return {
+          id: task.id,
+          taskType: task.taskType,
+          status: task.status,
+          attemptCount: task.attemptCount,
+          result: task.result,
+          errorCategory: task.errorCategory,
+          errorSummary: task.errorSummary,
+        };
+      },
+      async executeAssigned(task, signal) {
+        // 1、分派输入和输出仍由所属业务 Schema 校验；检查点写入验证当前执行身份。
+        if (!task.leaseOwner || task.status !== 'running')
+          throw new TypeError('Invalid task dispatch');
+        const owner = task.leaseOwner;
+        const handler = registry.get(task.taskType);
+        return withTaskExecution(
+          {
+            taskId: task.id,
+            owner: task.leaseOwner,
+            attempt: task.attemptCount,
+            now: () => clock.now(),
+          },
+          () =>
+            registry.execute(
+              task.taskType,
+              {
+                taskId: task.id,
+                attempt: task.attemptCount,
+                signal,
+                clock,
+                logger: input.logger ?? {
+                  info() {
+                    /* 未配置日志时忽略诊断。 */
+                  },
+                  warn() {
+                    /* 未配置日志时忽略诊断。 */
+                  },
+                  error() {
+                    /* 未配置日志时忽略诊断。 */
+                  },
+                },
+                services: {},
+                checkpoint(result) {
+                  if (!queue.checkpoint(task.id, owner, task.attemptCount, clock.now(), result))
+                    throw new TaskExecutionError('cancelled', 'Task dispatch was revoked.');
+                },
+              },
+              handler.retryPayload?.(task.payload, task.result) ?? task.payload,
+            ),
+        );
+      },
       close() {
         // 3、关闭幂等并等待在途任务，资源释放顺序与构造顺序相反。
         return (closing ??= (async () => {

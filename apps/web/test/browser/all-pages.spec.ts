@@ -87,7 +87,6 @@ test('every actual page renders valid data without runtime or server errors', as
     '/profile': '/profile',
     '/jobs/[id]': '/jobs/018f0000-0000-7000-8000-000000000401',
     '/agent-runs/[id]': '/agent-runs/018f0000-0000-7000-8000-000000000801',
-    '/interview/projects/[id]': '/interview/projects/018f0000-0000-7000-8000-000000000902',
     '/interview/experiences/[id]': `/interview/experiences/${experience.data.documentId}`,
     '/interview/research/[id]': `/interview/research/${research.data.detail.request.id}`,
     '/resume-studio/[draftId]': `/resume-studio/${draft.data.draft.id}`,

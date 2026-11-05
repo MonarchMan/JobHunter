@@ -40,7 +40,6 @@ export function createProductionTaskApplication(
       ...input,
       taskTypeConcurrency: {
         ...(input.taskTypeConcurrency ?? {}),
-        'interview.project-notebook.render': 1,
         'resume.export.pdf@v1': 1,
       },
     },
@@ -107,13 +106,17 @@ export function createProductionTaskApplication(
 }
 
 /** CLI/Web 将业务配置和浏览器资源注入同一套模块工厂。 */
-export function createConfiguredTaskApplication(config: AppConfig): TaskApplication {
+export function createConfiguredTaskApplication(
+  config: AppConfig,
+  runtimeOptions: Partial<TaskRuntimeOptions> = {},
+): TaskApplication {
   // 1、浏览器池属于招聘模块，由宿主负责在任务停止后释放。
   const pageClient = createSourcePageClient();
   try {
     return createConfiguredTaskHost(config, (options) => {
       const application = createProductionTaskApplication({
         ...options,
+        ...runtimeOptions,
         pageClient,
         platformRequestIntervalMs: config.platforms.requestIntervalMs.value,
         platformRequestIntervalMsByProvider: config.platforms.requestIntervalMsByProvider.value,
@@ -129,6 +132,10 @@ export function createConfiguredTaskApplication(config: AppConfig): TaskApplicat
       });
       return {
         engine: application.engine,
+        ...(application.request ? { request: application.request.bind(application) } : {}),
+        ...(application.executeAssigned
+          ? { executeAssigned: application.executeAssigned.bind(application) }
+          : {}),
         async close() {
           // 2、任务停止后归还浏览器会话，最后由公共宿主关闭日志。
           try {

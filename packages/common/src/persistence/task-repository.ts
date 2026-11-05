@@ -20,18 +20,19 @@ import {
   type UtcInstant,
 } from '@jobhunter/common/domain';
 import type Database from 'better-sqlite3';
+import { periodicConfigPrefix, periodicConfigProjection } from './periodic-config.js';
 import { isSqliteMaintenanceActive } from './maintenance-gate.js';
 
 /** 数据库查询结果对应的行结构。 */
 interface TaskRow {
+  readonly parent_task_id: string | null;
   readonly id: string;
   readonly task_type: string;
-  readonly payload_json: string;
+  readonly private_state: string;
   readonly status: TaskStatus;
   readonly priority: number;
   readonly idempotency_key: string;
   readonly concurrency_key: string | null;
-  readonly schedule_id: string | null;
   readonly retry_of_task_id: string | null;
   readonly attempt_count: number;
   readonly max_attempts: number;
@@ -42,7 +43,7 @@ interface TaskRow {
   readonly cancel_requested_at: number | null;
   readonly error_category: TaskErrorCategory | null;
   readonly error_summary: string | null;
-  readonly result_json: string | null;
+  readonly public_state: string | null;
   readonly created_at: number;
   readonly started_at: number | null;
   readonly finished_at: number | null;
@@ -100,14 +101,14 @@ function nullableInstant(value: number | null): UtcInstant | null {
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function taskFromRow(row: TaskRow): TaskRecord {
   return {
+    parentTaskId: row.parent_task_id === null ? null : parseId(row.parent_task_id, 'Task'),
     id: parseId(row.id, 'Task'),
     taskType: row.task_type,
-    payload: JSON.parse(row.payload_json) as unknown,
+    payload: JSON.parse(row.private_state) as unknown,
     status: row.status,
     priority: row.priority,
     idempotencyKey: row.idempotency_key,
     concurrencyKey: row.concurrency_key,
-    scheduleId: row.schedule_id,
     retryOfTaskId: row.retry_of_task_id === null ? null : parseId(row.retry_of_task_id, 'Task'),
     attemptCount: row.attempt_count,
     maxAttempts: row.max_attempts,
@@ -118,7 +119,7 @@ function taskFromRow(row: TaskRow): TaskRecord {
     cancelRequestedAt: nullableInstant(row.cancel_requested_at),
     errorCategory: row.error_category,
     errorSummary: row.error_summary,
-    result: row.result_json === null ? null : (JSON.parse(row.result_json) as unknown),
+    result: row.public_state === null ? null : (JSON.parse(row.public_state) as unknown),
     createdAt: utcInstant(row.created_at),
     startedAt: nullableInstant(row.started_at),
     finishedAt: nullableInstant(row.finished_at),
@@ -143,10 +144,10 @@ function scheduleFromRow(row: ScheduleRow): ScheduleRecord {
 }
 
 const TASK_COLUMNS = `
-  id, task_type, payload_json, status, priority, idempotency_key, concurrency_key,
-  schedule_id, retry_of_task_id, attempt_count, max_attempts, available_at,
+  id, parent_task_id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
+  retry_of_task_id, attempt_count, max_attempts, available_at,
   lease_owner, lease_expires_at, last_heartbeat_at, cancel_requested_at,
-  error_category, error_summary, result_json, created_at, started_at, finished_at`;
+  error_category, error_summary, public_state, created_at, started_at, finished_at`;
 
 const SCHEDULE_COLUMNS = `
   id, schedule_key, task_type, payload_json, cron_expression, timezone, enabled,
@@ -226,10 +227,10 @@ export class SqliteTaskRepository implements TaskQueue {
         // 3、保留业务身份、原始幂等键和累计次数；累计上限追加本轮预算，避免重试后立即耗尽。
         this.#client
           .prepare(
-            `UPDATE tasks SET status = 'pending', payload_json = ?,
+            `UPDATE tasks SET status = 'pending', private_state = ?,
         max_attempts = ?, available_at = ?, lease_owner = NULL, lease_expires_at = NULL,
         last_heartbeat_at = NULL, cancel_requested_at = NULL, error_category = NULL,
-        error_summary = NULL, result_json = NULL, started_at = NULL, finished_at = NULL WHERE id = ?`,
+        error_summary = NULL, public_state = NULL, started_at = NULL, finished_at = NULL WHERE id = ?`,
           )
           .run(
             canonicalJson(input.payload),
@@ -249,11 +250,11 @@ export class SqliteTaskRepository implements TaskQueue {
     const row = this.#client
       .prepare(
         `INSERT INTO tasks
-         (id, task_type, payload_json, status, priority, idempotency_key, concurrency_key,
-          schedule_id, retry_of_task_id, attempt_count, max_attempts, available_at,
+         (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
+          retry_of_task_id, attempt_count, max_attempts, available_at,
           lease_owner, lease_expires_at, last_heartbeat_at, cancel_requested_at,
-          error_category, error_summary, result_json, created_at, started_at, finished_at)
-         VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL,
+          error_category, error_summary, public_state, created_at, started_at, finished_at)
+         VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL,
                  NULL, NULL, NULL, ?, NULL, NULL)
          RETURNING ${TASK_COLUMNS}`,
       )
@@ -264,7 +265,6 @@ export class SqliteTaskRepository implements TaskQueue {
         input.priority,
         input.idempotencyKey,
         input.concurrencyKey,
-        input.scheduleId,
         input.retryOfTaskId,
         input.maxAttempts,
         input.availableAt,
@@ -322,7 +322,7 @@ export class SqliteTaskRepository implements TaskQueue {
 
   /** 执行数据库组件对外暴露的操作。 */
   public list(filter: TaskListFilter): readonly TaskRecord[] {
-    const conditions: string[] = [];
+    const conditions: string[] = filter.taskType ? [] : ['parent_task_id IS NULL'];
     const parameters: unknown[] = [];
     if (filter.statuses && filter.statuses.length > 0) {
       const valid = new Set<TaskStatus>(['pending', 'running', 'succeeded', 'failed', 'cancelled']);
@@ -356,7 +356,7 @@ export class SqliteTaskRepository implements TaskQueue {
 
   /** 执行数据库组件对外暴露的操作。 */
   public count(filter: Omit<TaskListFilter, 'limit' | 'offset'>): number {
-    const conditions: string[] = [];
+    const conditions: string[] = filter.taskType ? [] : ['parent_task_id IS NULL'];
     const parameters: unknown[] = [];
     if (filter.statuses && filter.statuses.length > 0) {
       const valid = new Set<TaskStatus>(['pending', 'running', 'succeeded', 'failed', 'cancelled']);
@@ -392,7 +392,7 @@ export class SqliteTaskRepository implements TaskQueue {
            COALESCE(SUM(CASE WHEN status = 'running' AND lease_expires_at <= ? THEN 1 ELSE 0 END), 0)
              AS expired_leases,
            MIN(CASE WHEN status = 'pending' THEN created_at END) AS oldest_pending_at
-         FROM tasks`,
+         FROM tasks WHERE parent_task_id IS NULL`,
       )
       .get(now) as QueueSummaryRow;
     return {
@@ -443,6 +443,20 @@ export class SqliteTaskRepository implements TaskQueue {
   }
 
   /** 执行数据库组件对外暴露的操作。 */
+  /** 中央服务取得排他所有权后撤销旧代次的全部执行，禁止旧进程在恢复窗口继续提交。 */
+  public revokePreviousExecutions(now: UtcInstant): void {
+    this.#client
+      .transaction(() => {
+        this.#client
+          .prepare(
+            "UPDATE tasks SET lease_expires_at = ? WHERE status = 'running' AND lease_owner IS NOT NULL",
+          )
+          .run(now - 1);
+        this.#recoverExpiredInside(now);
+      })
+      .immediate();
+  }
+
   public recoverExpired(now: UtcInstant): {
     readonly recovered: number;
     readonly exhausted: number;
@@ -547,7 +561,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return (
       this.#client
         .prepare(
-          `UPDATE tasks SET result_json = ? WHERE id = ? AND status = 'running' AND lease_owner = ? AND attempt_count = ? AND lease_expires_at > ? AND cancel_requested_at IS NULL`,
+          `UPDATE tasks SET public_state = ? WHERE id = ? AND status = 'running' AND lease_owner = ? AND attempt_count = ? AND lease_expires_at > ? AND cancel_requested_at IS NULL`,
         )
         .run(JSON.stringify(result), taskId, workerId, attempt, now).changes === 1
     );
@@ -564,7 +578,7 @@ export class SqliteTaskRepository implements TaskQueue {
     return (
       this.#client
         .prepare(
-          `UPDATE tasks SET status = 'succeeded', finished_at = ?, result_json = ?, lease_owner = NULL,
+          `UPDATE tasks SET status = 'succeeded', finished_at = ?, public_state = ?, lease_owner = NULL,
              lease_expires_at = NULL, last_heartbeat_at = NULL
            WHERE id = ? AND status = 'running' AND lease_owner = ?
              AND (? = 1 OR cancel_requested_at IS NULL) AND lease_expires_at > ?`,
@@ -595,7 +609,7 @@ export class SqliteTaskRepository implements TaskQueue {
         .prepare(
           `UPDATE tasks SET status = 'pending', available_at = ?, lease_owner = NULL,
              lease_expires_at = NULL, last_heartbeat_at = NULL,
-             error_category = ?, error_summary = ?, result_json = COALESCE(?, result_json)
+             error_category = ?, error_summary = ?, public_state = COALESCE(?, public_state)
            WHERE id = ? AND status = 'running' AND lease_owner = ? AND lease_expires_at > ?`,
         )
         .run(
@@ -624,7 +638,7 @@ export class SqliteTaskRepository implements TaskQueue {
         .prepare(
           `UPDATE tasks SET status = 'failed', finished_at = ?, lease_owner = NULL,
              lease_expires_at = NULL, last_heartbeat_at = NULL,
-             error_category = ?, error_summary = ?, result_json = COALESCE(?, result_json)
+             error_category = ?, error_summary = ?, public_state = COALESCE(?, public_state)
            WHERE id = ? AND status = 'running' AND lease_owner = ? AND lease_expires_at > ?`,
         )
         .run(
@@ -691,45 +705,50 @@ export class SqliteTaskRepository implements TaskQueue {
 
   /** 执行数据库组件对外暴露的操作。 */
   public upsertSchedule(input: PersistedScheduleInput): ScheduleRecord {
-    const row = this.#client
-      .prepare(
-        `INSERT INTO schedules
-         (id, schedule_key, task_type, payload_json, cron_expression, timezone, enabled,
-          next_run_at, last_enqueued_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
-         ON CONFLICT(schedule_key) DO UPDATE SET
-           task_type = excluded.task_type, payload_json = excluded.payload_json,
-           cron_expression = excluded.cron_expression, timezone = excluded.timezone,
-           enabled = excluded.enabled,
-           next_run_at = CASE
-             WHEN schedules.task_type != excluded.task_type
-               OR schedules.payload_json != excluded.payload_json
-               OR schedules.cron_expression != excluded.cron_expression
-               OR schedules.timezone != excluded.timezone
-             THEN excluded.next_run_at ELSE schedules.next_run_at END,
-           updated_at = excluded.updated_at
-         RETURNING ${SCHEDULE_COLUMNS}`,
-      )
-      .get(
-        input.id,
-        input.scheduleKey,
-        input.taskType,
-        canonicalJson(input.payload),
-        input.cronExpression,
-        input.timezone,
-        input.enabled ? 1 : 0,
-        input.nextRunAt,
-        input.now,
-        input.now,
-      ) as ScheduleRow;
-    return scheduleFromRow(row);
+    // 1、配置与下一次触发进度同事务更新；重复装配不得推进已有 occurrence。
+    return this.#client
+      .transaction(() => {
+        const key = periodicConfigPrefix + input.scheduleKey;
+        const existing = this.#client
+          .prepare('SELECT value_json FROM application_settings WHERE key = ?')
+          .get(key) as { value_json: string } | undefined;
+        const previous = existing ? (JSON.parse(existing.value_json) as ScheduleRow) : undefined;
+        const payload = canonicalJson(input.payload);
+        const changed =
+          previous?.task_type !== input.taskType ||
+          previous.payload_json !== payload ||
+          previous.cron_expression !== input.cronExpression ||
+          previous.timezone !== input.timezone;
+        const row: ScheduleRow = {
+          id: previous?.id ?? input.id,
+          schedule_key: input.scheduleKey,
+          task_type: input.taskType,
+          payload_json: payload,
+          cron_expression: input.cronExpression,
+          timezone: input.timezone,
+          enabled: input.enabled ? 1 : 0,
+          next_run_at: changed ? input.nextRunAt : previous.next_run_at,
+          last_enqueued_at: previous?.last_enqueued_at ?? null,
+          created_at: previous?.created_at ?? input.now,
+          updated_at: input.now,
+        };
+        this.#client
+          .prepare(
+            `INSERT INTO application_settings (key, value_json, schema_version, updated_at)
+        VALUES (?, ?, 'task-periodic@v1', ?) ON CONFLICT(key) DO UPDATE SET
+        value_json = excluded.value_json, schema_version = excluded.schema_version, updated_at = excluded.updated_at`,
+          )
+          .run(key, canonicalJson(row), input.now);
+        return scheduleFromRow(row);
+      })
+      .immediate();
   }
 
   /** 执行数据库组件对外暴露的操作。 */
   public dueSchedules(now: UtcInstant, limit: number): readonly ScheduleRecord[] {
     const rows = this.#client
       .prepare(
-        `SELECT ${SCHEDULE_COLUMNS} FROM schedules
+        `SELECT ${SCHEDULE_COLUMNS} FROM ${periodicConfigProjection}
          WHERE enabled = 1 AND next_run_at <= ?
          ORDER BY next_run_at ASC, id ASC LIMIT ?`,
       )
@@ -749,8 +768,11 @@ export class SqliteTaskRepository implements TaskQueue {
     // 1、维护期间保留到期调度，结束后按原错过周期策略只补一次。
     if (isSqliteMaintenanceActive(this.#client)) return null;
     const schedule = this.#client
-      .prepare('SELECT next_run_at FROM schedules WHERE id = ? AND enabled = 1')
-      .get(input.scheduleId) as { readonly next_run_at: number } | undefined;
+      .prepare(
+        `SELECT setting_key, next_run_at FROM ${periodicConfigProjection} WHERE id = ? AND enabled = 1`,
+      )
+      .get(input.scheduleId) as
+      { readonly setting_key: string; readonly next_run_at: number } | undefined;
     if (schedule?.next_run_at !== input.expectedNextRunAt) return null;
 
     let result: EnqueueTaskResult;
@@ -761,14 +783,15 @@ export class SqliteTaskRepository implements TaskQueue {
     }
     this.#client
       .prepare(
-        `UPDATE schedules SET next_run_at = ?, last_enqueued_at = ?, updated_at = ?
-         WHERE id = ? AND next_run_at = ?`,
+        `UPDATE application_settings SET value_json = json_set(value_json, '$.next_run_at', ?, '$.last_enqueued_at', ?, '$.updated_at', ?), updated_at = ?
+         WHERE key = ? AND json_extract(value_json, '$.next_run_at') = ?`,
       )
       .run(
         input.nextRunAt,
         input.occurrenceAt,
         input.now,
-        input.scheduleId,
+        input.now,
+        schedule.setting_key,
         input.expectedNextRunAt,
       );
     return result;

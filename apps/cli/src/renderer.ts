@@ -12,7 +12,17 @@ export class JsonRenderer implements CliRenderer {
     this.#io = io;
   }
   public success(result: CommandResult): void {
-    this.#io.stdout.write(`${JSON.stringify({ ok: true, data: result.data })}\n`);
+    this.#io.stdout.write(
+      `${JSON.stringify({ ok: true, data: result.data }, (_key, value: unknown) => {
+        // 任务输入和执行凭证仅供运行时使用，公开诊断不输出 private_state 的内容。
+        if (value && typeof value === 'object' && 'taskType' in value && 'attemptCount' in value) {
+          return Object.fromEntries(
+            Object.entries(value).filter(([key]) => !['payload', 'leaseOwner'].includes(key)),
+          );
+        }
+        return value;
+      })}\n`,
+    );
   }
   /** 执行模块组件对外暴露的操作。 */
   public failure(error: CliErrorBody): void {

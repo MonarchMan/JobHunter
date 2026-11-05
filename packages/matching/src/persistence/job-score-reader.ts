@@ -1,3 +1,4 @@
+import { matchMetadataSql } from './metadata-sql.js';
 import type Database from 'better-sqlite3';
 import type { ProfileVersionId } from '@jobhunter/common/domain';
 import type { JobScoreSnapshotReader } from '@jobhunter/recruitment/contracts/job-scores';
@@ -15,7 +16,7 @@ export class SqliteJobScoreReader implements JobScoreSnapshotReader {
       .parse(
         this.client
           .prepare(
-            'SELECT job_revision_id AS jobRevisionId, total_score AS totalScore FROM match_results WHERE profile_version_id = ?',
+            `SELECT job_revision_id AS jobRevisionId, total_score AS totalScore FROM ${matchMetadataSql} WHERE profile_version_id = ?`,
           )
           .all(profileVersionId),
       );

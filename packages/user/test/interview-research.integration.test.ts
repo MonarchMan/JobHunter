@@ -1,3 +1,5 @@
+import { researchTaskSelect } from '../src/persistence/research-task-sql.js';
+import { NodeResearchDelivery } from '@jobhunter/user/persistence/research-delivery';
 import {
   createExperienceResearchTaskHandler,
   ExperienceResearchBundleError,
@@ -28,7 +30,6 @@ import {
   type SqliteDatabaseHandle,
 } from '@jobhunter/common/persistence/connection';
 import { SqliteArtifactStore } from '@jobhunter/user/persistence/artifact-store';
-import { SqliteInterviewProjectRepository } from '@jobhunter/user/persistence/interview-project-repository';
 import { SqliteInterviewResearchRepository } from '@jobhunter/user/persistence/interview-research-repository';
 import { SqliteInterviewTaskPublisher } from '@jobhunter/user/persistence/interview-task-publisher';
 import { SqliteInterviewTaskRetryCoordinator } from '@jobhunter/user/persistence/interview-task-retry-coordinator';
@@ -138,7 +139,7 @@ async function setup(options: { readonly failFinalizeOnce?: boolean } = {}): Pro
   const taskPublisher = new SqliteInterviewTaskPublisher({
     client: handle.client,
     tasks,
-    projects: new SqliteInterviewProjectRepository(handle.client),
+
     research: repository,
   });
   return {
@@ -150,6 +151,7 @@ async function setup(options: { readonly failFinalizeOnce?: boolean } = {}): Pro
     queue,
     tasks,
     service: new ExperienceResearchService({
+      delivery: new NodeResearchDelivery(root.path),
       repository,
       artifacts,
       clock,
@@ -219,10 +221,38 @@ function researchBundle(generatedAt = '2026-08-30T08:00:00.000Z'): CommunityRese
 }
 
 describe('community interview research persistence', () => {
+  it('checks the assigned local file idempotently and retains reviewed experiences after task cleanup', async () => {
+    const { service, handle } = await setup();
+    const created = await service.create(brief);
+    const requestId = created.detail.request.id;
+    expect(created.detail.outputPath).toMatch(/result\.json$/);
+    await service.deliverResult(
+      requestId,
+      new TextEncoder().encode(JSON.stringify(researchBundle())),
+    );
+    const imported = await service.checkResult({ requestId, expectedRevision: 0 });
+    const accepted = service.review({
+      requestId,
+      experienceId: imported.experiences[0]?.id ?? '',
+      expectedRevision: imported.request.revision,
+      decision: 'accept',
+    });
+    const replay = await service.checkResult({ requestId, expectedRevision: 0 });
+    expect(replay.experiences).toEqual(accepted.experiences);
+    expect(
+      handle.client.prepare('SELECT status FROM tasks WHERE id=?').pluck().get(requestId),
+    ).toBe('succeeded');
+    handle.client.prepare('DELETE FROM tasks WHERE id=?').run(requestId);
+    expect(service.listAccepted()).toHaveLength(1);
+    expect(service.listAccepted()[0]?.experience.researchRequestId).toBeNull();
+    expect(handle.client.pragma('foreign_key_check')).toEqual([]);
+  });
+
   it('deduplicates concurrent creation without leaving extra prompt or schema files', async () => {
     const { root, handle, service } = await setup();
     const secondHandle = openSqliteDatabase({ dataRoot: root.path });
     const secondService = new ExperienceResearchService({
+      delivery: new NodeResearchDelivery(root.path),
       repository: new SqliteInterviewResearchRepository(secondHandle.client),
       artifacts: new SqliteArtifactStore(secondHandle.client, root.path),
       clock: new TestClock(),
@@ -238,7 +268,7 @@ describe('community interview research persistence', () => {
       expect(new Set(results.map((result) => result.detail.request.id))).toHaveLength(1);
       expect(results.filter((result) => !result.deduplicated)).toHaveLength(1);
       expect(
-        handle.client.prepare('SELECT count(*) FROM experience_research_requests').pluck().get(),
+        handle.client.prepare(`SELECT count(*) FROM (${researchTaskSelect})`).pluck().get(),
       ).toBe(1);
       expect(
         handle.client
@@ -292,7 +322,9 @@ describe('community interview research persistence', () => {
     const { handle, service } = await setup();
     const created = await service.create(brief);
     handle.client
-      .prepare('UPDATE experience_research_requests SET schema_version = ? WHERE id = ?')
+      .prepare(
+        `UPDATE tasks SET private_state=json_set(private_state,'$.research.schema_version',?) WHERE id=?`,
+      )
       .run('community-experience-bundle/v-next', created.detail.request.id);
 
     await expect(
@@ -309,6 +341,7 @@ describe('community interview research persistence', () => {
     const created = await service.create(brief);
     const secondHandle = openSqliteDatabase({ dataRoot: root.path });
     const secondService = new ExperienceResearchService({
+      delivery: new NodeResearchDelivery(root.path),
       repository: new SqliteInterviewResearchRepository(secondHandle.client),
       artifacts: new SqliteArtifactStore(secondHandle.client, root.path),
       clock: new TestClock(),
@@ -361,7 +394,7 @@ describe('community interview research persistence', () => {
         handle.client
           .prepare(
             `SELECT bundle_import_token, bundle_import_claimed_at, bundle_import_file_id
-             FROM experience_research_requests WHERE id = ?`,
+             FROM (${researchTaskSelect}) WHERE id = ?`,
           )
           .get(detail.request.id),
       ).toEqual({
@@ -400,7 +433,7 @@ describe('community interview research persistence', () => {
       handle.client
         .prepare(
           `SELECT bundle_import_token, bundle_import_claimed_at, bundle_import_file_id
-           FROM experience_research_requests WHERE id = ?`,
+           FROM (${researchTaskSelect}) WHERE id = ?`,
         )
         .get(created.detail.request.id),
     ).toEqual({
@@ -514,7 +547,7 @@ describe('community interview research persistence', () => {
     expect(imported.experiences).toMatchObject([{ sourceUrl: actualFinalUrl }]);
     expect(
       handle.client
-        .prepare('SELECT source_url FROM interview_experiences WHERE research_request_id = ?')
+        .prepare('SELECT source_url FROM interview_experiences WHERE research_task_id = ?')
         .pluck()
         .get(created.detail.request.id),
     ).toBe(actualFinalUrl);
@@ -531,7 +564,7 @@ describe('community interview research persistence', () => {
       detail: { request: { id: created.detail.request.id } },
     });
     expect(
-      handle.client.prepare('SELECT count(*) FROM experience_research_requests').pluck().get(),
+      handle.client.prepare(`SELECT count(*) FROM (${researchTaskSelect})`).pluck().get(),
     ).toBe(1);
     expect(
       handle.client
@@ -788,7 +821,7 @@ describe('community interview research persistence', () => {
     expect(first).toMatchObject({ deduplicated: false, task: { status: 'pending' } });
     expect(replay).toMatchObject({ deduplicated: true, task: { id: first.task.id } });
     expect(service.get(created.detail.request.id).request.currentTaskId).toBe(first.task.id);
-    expect(handle.client.prepare('SELECT count(*) FROM tasks').pluck().get()).toBe(1);
+    expect(handle.client.prepare('SELECT count(*) FROM tasks').pluck().get()).toBe(2);
   });
 
   it('atomically relinks a failed research request to its manual retry task', async () => {
@@ -869,7 +902,7 @@ describe('community interview research persistence', () => {
   });
 
   it('removes a staged automatic bundle when cancellation wins before finalize', async () => {
-    const { handle, repository, artifacts, service, queue, clock, tasks } = await setup();
+    const { root, handle, repository, artifacts, service, queue, clock, tasks } = await setup();
     const created = await service.create(brief);
     const execution = service.enqueueExecution({
       requestId: created.detail.request.id,
@@ -902,6 +935,7 @@ describe('community interview research persistence', () => {
       purgeQuarantined: (artifact) => artifacts.purgeQuarantined(artifact),
     };
     const importingService = new ExperienceResearchService({
+      delivery: new NodeResearchDelivery(root.path),
       repository,
       artifacts: cancellingArtifacts,
       clock,
@@ -940,7 +974,7 @@ describe('community interview research persistence', () => {
       handle.client
         .prepare(
           `SELECT bundle_import_token, bundle_import_claimed_at, bundle_import_file_id
-           FROM experience_research_requests WHERE id = ?`,
+           FROM (${researchTaskSelect}) WHERE id = ?`,
         )
         .get(created.detail.request.id),
     ).toEqual({
@@ -968,6 +1002,7 @@ describe('community interview research persistence', () => {
       });
       expect(running?.id).toBe(execution.task.id);
       let receivedPrompt = '';
+      let executionCalls = 0;
       const executor: ExternalResearchExecutor = {
         key: executorKey,
         version: 'fixture-v1',
@@ -980,6 +1015,7 @@ describe('community interview research persistence', () => {
               : 'web-search-only-local-process',
         },
         execute(input) {
+          executionCalls += 1;
           receivedPrompt = input.prompt;
           expect(input.requestId).toBe(created.detail.request.id);
           expect(input).not.toHaveProperty('promptVersion');
@@ -1061,6 +1097,24 @@ describe('community interview research persistence', () => {
         },
       );
 
+      const replay = await registry.execute(
+        'interview.experience-research.execute',
+        {
+          taskId: execution.task.id,
+          signal: new AbortController().signal,
+          clock,
+          logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+          services: {},
+        },
+        {
+          requestId: created.detail.request.id,
+          requestFingerprint: created.detail.request.requestFingerprint,
+          expectedRevision: 0,
+          executorKey,
+        },
+      );
+      expect(replay).toMatchObject({ candidateCount: 2, bundleFileVersionNo: 1 });
+      expect(executionCalls).toBe(1);
       expect(receivedPrompt).toContain(created.detail.request.requestFingerprint);
       expect(output).toMatchObject({
         requestId: created.detail.request.id,

@@ -40,19 +40,19 @@ BOSS 当前按 [ADR-0048](../adr/0048-boss-browser-default-and-page-lifecycle.md
 
 招聘平台：用户请求 → Worker 读取一页 → 串行补齐该页必需详情 → 逐条统一职位写入。列表已有完整正文时复用已校验事实，不依赖点击详情或收藏。切换查询、取消或失败后不继续请求，不自动翻页。
 
-正式职位均复用 jobs、job_revisions、job_observations、匹配及求职业务，不建立平台临时职位表。摘要仅是尚未达到质量要求的请求工作集，不能向匹配层伪装成完整职位。前端显示任务执行、成功批次入库计数和失败状态，职位内容统一通过职位页读取；失败和取消保留已提交数据。
+正式职位均复用 jobs、job_observations、匹配及求职业务，不建立平台临时职位表。摘要仅是尚未达到质量要求的请求工作集，不能向匹配层伪装成完整职位。前端显示任务执行、成功批次入库计数和失败状态，职位内容统一通过职位页读取；失败和取消保留已提交数据。
 
 ## 2. 模块与依赖
 
-| 模块                         | 所有权                                                                                                |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------- |
-| packages/recruitment/src/platform/contracts       | 平台元数据、能力、候选、分页结果、错误与传输契约；不依赖数据库或浏览器                                |
-| packages/recruitment/src/platform/connectors | boss、zhaopin 协议和边界 Schema；session 中的内存凭据与 CDP 实现；transport 中的受限 HTTP／浏览器实现 |
+| 模块                                          | 所有权                                                                                                |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| packages/recruitment/src/platform/contracts   | 平台元数据、能力、候选、分页结果、错误与传输契约；不依赖数据库或浏览器                                |
+| packages/recruitment/src/platform/connectors  | boss、zhaopin 协议和边界 Schema；session 中的内存凭据与 CDP 实现；transport 中的受限 HTTP／浏览器实现 |
 | packages/recruitment/src/platform/application | 连接、浏览、详情、正式写入和清理用例；声明会话、浏览工作集和仓储端口                                  |
-| packages/recruitment/src/domain | 来源类别、职位身份和纯生命周期规则，不包含会话令牌                                                    |
-| packages/recruitment/src/persistence | 来源迁移、统一职位仓储、观察与清理事务                                                                |
-| recruitment/tasks 与 CLI/Web                  | 模块提供任务能力，CLI/Web 注入跨模块端口；common 管理取消与执行                                                              |
-| apps/web                     | 提交请求、展示进度和持久职位，不持有 Cookie 或执行平台网络请求                                        |
+| packages/recruitment/src/domain               | 来源类别、职位身份和纯生命周期规则，不包含会话令牌                                                    |
+| packages/recruitment/src/persistence          | 来源迁移、统一职位仓储、观察与清理事务                                                                |
+| recruitment/tasks 与 CLI/Web                  | 模块提供任务能力，CLI/Web 注入跨模块端口；common 管理取消与执行                                       |
+| apps/web                                      | 提交请求、展示进度和持久职位，不持有 Cookie 或执行平台网络请求                                        |
 
 基础设施实现应用端口，应用不得反向导入平台实现。跨包只能使用公开入口；避免为复用而将官网私有浏览器代码导入平台包。首版直接在 Worker 使用已有 Node/Playwright 能力，不复制 BossHunter 的独立通用 HTTP-CDP 代理，不新增微服务。
 

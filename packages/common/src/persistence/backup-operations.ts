@@ -28,7 +28,12 @@ export class SqliteBackupOperations implements BackupOperationsPort {
     if (!relation || (!relation.startsWith('..') && !path.isAbsolute(relation))) {
       throw new TypeError('Backup destination must be outside the data root.');
     }
-    const database = openSqliteDatabase({ dataRoot: this.#dataRoot });
+    // 备份必须捕获升级前的库，不能为了创建备份先自动应用待执行迁移。
+    const database = openSqliteDatabase({
+      dataRoot: this.#dataRoot,
+      runMigrations: false,
+      checkIntegrity: true,
+    });
     try {
       return await createBackup(database, target);
     } finally {

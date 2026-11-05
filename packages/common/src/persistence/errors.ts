@@ -4,6 +4,7 @@ export type PersistenceErrorCode =
   | 'DATABASE_CAPABILITY_MISSING'
   | 'DATABASE_INTEGRITY_ERROR'
   | 'DATABASE_OPEN_FAILED'
+  | 'DATABASE_UPGRADE_REQUIRES_STOP'
   | 'SETTING_NOT_ALLOWED';
 
 /** 数据库层统一错误，避免向上层泄露驱动细节。 */

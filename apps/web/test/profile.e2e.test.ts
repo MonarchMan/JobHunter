@@ -59,11 +59,11 @@ function seedProfile(dataRoot: string): void {
       .run();
     database.client
       .prepare(
-        `INSERT INTO profile_versions
-         (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at)
-         VALUES ('018f0000-0000-7000-8000-000000000602',
-          '018f0000-0000-7000-8000-000000000601', 1, ?, ?, '[]', ?, 1, 1)`,
+        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+          content_hash, is_current, created_at) AS (VALUES ('018f0000-0000-7000-8000-000000000602',
+          '018f0000-0000-7000-8000-000000000601', 1, ?, ?, '[]', ?, 1, 1))
+INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
       )
       .run(JSON.stringify(initialProfile), JSON.stringify(initialProfile), '0'.repeat(64));
   } finally {
@@ -170,7 +170,7 @@ describe('Web profile management', () => {
     }
   });
 
-  it('versions corrections, preferences and locks with optimistic concurrency', async () => {
+  it('versions corrections and preferences with optimistic concurrency', async () => {
     const root = await createTemporaryDataRoot('jobhunter-web-profile-');
     try {
       seedProfile(root.path);
@@ -187,9 +187,8 @@ describe('Web profile management', () => {
           profile: { name: 'Agent 求职画像' },
           current: {
             versionNumber: 1,
-            extracted: { preferences: { locations: ['北京'] } },
             effective: { preferences: { locations: ['北京'] } },
-            lockedPaths: [],
+            isCandidate: false,
           },
         });
 
@@ -207,7 +206,7 @@ describe('Web profile management', () => {
           versionNumber: 2,
           effective: { preferences: { locations: ['上海', '杭州'], remoteAccepted: true } },
         });
-        expect(preferences.current.extracted.preferences.locations).toEqual(['北京']);
+        expect(preferences.current).not.toHaveProperty('extracted');
 
         const replaced = container.services.webProfiles.mutate({
           kind: 'replace',
@@ -243,30 +242,23 @@ describe('Web profile management', () => {
 
         expect(() =>
           container.services.webProfiles.mutate({
-            kind: 'lock',
+            kind: 'set',
             profileId,
             expectedVersionId: preferences.current.id,
             pointer: '/preferences/locations',
+            value: ['北京'],
           }),
         ).toThrow(ProfileVersionConflictError);
-
-        const locked = container.services.webProfiles.mutate({
-          kind: 'lock',
-          profileId,
-          expectedVersionId: replaced.current.id,
-          pointer: '/preferences/locations',
-        });
-        expect(locked.current.lockedPaths).toEqual(['/preferences/locations']);
 
         const corrected = container.services.webProfiles.mutate({
           kind: 'set',
           profileId,
-          expectedVersionId: locked.current.id,
+          expectedVersionId: replaced.current.id,
           pointer: '/targetRoles',
           value: ['大模型应用工程师'],
         });
         expect(corrected.current.effective.targetRoles).toEqual(['大模型应用工程师']);
-        expect(corrected.versions.map((version) => version.versionNumber)).toEqual([5, 4, 3, 2, 1]);
+        expect(corrected.versions.map((version) => version.versionNumber)).toEqual([4, 3, 2, 1]);
       } finally {
         container.close();
       }

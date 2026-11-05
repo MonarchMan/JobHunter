@@ -1,0 +1,18 @@
+/** 研究任务的业务读取投影；状态和检查点只存于 tasks，不创建兼容表或视图。 */
+export const researchTaskSelect = `SELECT id, created_at, json_extract(private_state, '$.research.brief_json') AS brief_json,
+  json_extract(private_state, '$.research.request_fingerprint') AS request_fingerprint,
+  json_extract(private_state, '$.research.prompt_hash') AS prompt_hash,
+  json_extract(private_state, '$.research.schema_version') AS schema_version,
+  json_extract(private_state, '$.research.prompt_file_id') AS prompt_file_id,
+  json_extract(private_state, '$.research.prompt_file_version_no') AS prompt_file_version_no,
+  json_extract(private_state, '$.research.schema_file_id') AS schema_file_id,
+  json_extract(private_state, '$.research.schema_file_version_no') AS schema_file_version_no,
+  json_extract(private_state, '$.research.bundle_file_id') AS bundle_file_id,
+  json_extract(private_state, '$.research.bundle_file_version_no') AS bundle_file_version_no,
+  json_extract(private_state, '$.research.current_task_id') AS current_task_id,
+  json_extract(private_state, '$.research.state') AS state,
+  json_extract(private_state, '$.research.revision') AS revision,
+  json_extract(private_state, '$.research.updated_at') AS updated_at,
+  json_extract(private_state, '$.research.bundle_import_token') AS bundle_import_token,
+  json_extract(private_state, '$.research.bundle_import_claimed_at') AS bundle_import_claimed_at,
+  json_extract(private_state, '$.research.bundle_import_file_id') AS bundle_import_file_id FROM tasks WHERE task_type = 'interview.experience-research'`;

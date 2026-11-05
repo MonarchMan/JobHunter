@@ -1,3 +1,5 @@
+import { scanTaskProjection } from './scan-task-sql.js';
+import { currentJobContentSql } from './current-job-sql.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import type {
@@ -28,7 +30,7 @@ export class SqliteRecruitmentDashboardReader implements RecruitmentDashboardRea
       .parse(
         this.client
           .prepare(
-            `SELECT j.id, c.name AS companyName, j.title, j.locations_json AS locations, j.status, (SELECT r.id FROM job_revisions r WHERE r.job_id=j.id ORDER BY r.revision_no DESC LIMIT 1) AS latestRevisionId, j.published_at AS publishedAt, j.updated_at AS updatedAt, j.first_seen_at AS firstSeenAt FROM jobs j JOIN companies c ON c.id=j.company_id`,
+            `SELECT j.id, c.name AS companyName, j.title, j.locations_json AS locations, j.status, (SELECT r.id FROM ${currentJobContentSql} r WHERE r.job_id=j.id ORDER BY r.revision_no DESC LIMIT 1) AS latestRevisionId, j.published_at AS publishedAt, j.updated_at AS updatedAt, j.first_seen_at AS firstSeenAt FROM jobs j JOIN companies c ON c.id=j.company_id`,
           )
           .all(),
       );
@@ -40,7 +42,7 @@ export class SqliteRecruitmentDashboardReader implements RecruitmentDashboardRea
       .parse(
         this.client
           .prepare(
-            `SELECT c.name AS sourceName, sr.status, sr.finished_at AS finishedAt FROM sync_runs sr JOIN job_sources js ON js.id=sr.source_id JOIN companies c ON c.id=js.company_id WHERE sr.finished_at IS NOT NULL ORDER BY sr.finished_at DESC, sr.id DESC LIMIT 1`,
+            `SELECT c.name AS sourceName, sr.status, sr.finished_at AS finishedAt FROM ${scanTaskProjection} sr JOIN job_sources js ON js.id=sr.source_id JOIN companies c ON c.id=js.company_id WHERE sr.finished_at IS NOT NULL ORDER BY sr.finished_at DESC, sr.id DESC LIMIT 1`,
           )
           .get(),
       );

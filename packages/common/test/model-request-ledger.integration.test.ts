@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { z } from 'zod';
-import { AgentRunner, defineAgent } from '../src/agent/index.js';
+import { AgentRunner, defineAgent, withModelMessage } from '../src/agent/index.js';
 import { OpenAiCompatibleModelClient } from '../src/models/openai-compatible-client.js';
 import { SqliteAgentRunStore } from '../src/persistence/agent-run-store.js';
 import { SqliteAgentRunCleanup } from '../src/persistence/agent-run-cleanup.js';
@@ -66,8 +66,20 @@ it('persists each negotiation attempt before the next HTTP and retains the ledge
       },
     });
     const input = { definition, value: {}, signal: new AbortController().signal };
-    const result = await runner.run(input);
+    db.client.exec(
+      "INSERT INTO ai_sessions VALUES('conversation','chat','合成对话',1,1); INSERT INTO ai_messages VALUES('reply','conversation','assistant','',1,'pending',1,1);",
+    );
+    const result = await withModelMessage('reply', () => runner.run(input));
     expect(result.run.requestIds).toHaveLength(2);
+    expect(db.client.prepare('SELECT ai_message_id FROM model_requests').pluck().all()).toEqual([
+      'reply',
+      'reply',
+    ]);
+    db.client.prepare("DELETE FROM ai_sessions WHERE id='conversation'").run();
+    expect(db.client.prepare('SELECT ai_message_id FROM model_requests').pluck().all()).toEqual([
+      null,
+      null,
+    ]);
     expect(new Set(result.run.requestIds).size).toBe(2);
     expect(result.run.billingCalls?.map((call) => call.statusCode)).toEqual([400, 200]);
     const ledger = new SqliteModelRequestRepository(db.client);

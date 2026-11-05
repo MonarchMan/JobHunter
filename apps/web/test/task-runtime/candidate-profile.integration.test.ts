@@ -136,7 +136,71 @@ async function setup(): Promise<{
 }
 
 describe('candidate profile versioning', () => {
-  it('preserves preferences and locked paths across re-extraction and exposes history', async () => {
+  it('preserves project identity through edits and ordering while ignoring model-supplied paths', async () => {
+    const { service } = await setup();
+    const candidate = service.createProfile('项目身份');
+    const project = (name: string): CandidateProfileData['projects'][number] => ({
+      name,
+      role: null,
+      startDate: null,
+      endDate: null,
+      highlights: ['开发'],
+      evidence: [],
+    });
+    const first = service.applyExtraction({
+      profileId: candidate.id,
+      expectedCurrentVersionId: null,
+      resumeDocumentId: '018f0000-0000-7000-8000-000000009002',
+      agentRunId: null,
+      extracted: profile({ projects: [project('A'), project('B')] }),
+    });
+    const [a, b] = first.effective.projects;
+    if (!a || !b) throw new Error('Expected two projects');
+    const edited = service.applyManualCorrection({
+      profileId: candidate.id,
+      expectedCurrentVersionId: first.id,
+      patch: {
+        projects: [
+          { ...b, local_path: '/local/b' },
+          { ...a, name: '改名后的 A', local_path: '/local/a' },
+        ],
+      },
+    });
+    expect(edited.effective.projects.map((item) => item.id)).toEqual([b.id, a.id]);
+    const extraction = service.applyExtraction({
+      profileId: candidate.id,
+      expectedCurrentVersionId: edited.id,
+      resumeDocumentId: '018f0000-0000-7000-8000-000000009002',
+      agentRunId: null,
+      extracted: profile({
+        projects: [
+          { ...project('改名后的 A'), id: 'model-id', local_path: '/model/path' },
+          project('B'),
+        ],
+      }),
+    });
+    expect(extraction.effective.projects.map((item) => item.id)).toEqual([a.id, b.id]);
+    expect(extraction.effective.projects.map((item) => item.local_path)).toEqual([
+      '/local/a',
+      '/local/b',
+    ]);
+    const confirmed = service.confirmExtraction({
+      profileId: candidate.id,
+      candidateVersionId: extraction.id,
+      expectedCurrentVersionId: edited.id,
+      fields: ['projects'],
+    });
+    const cleared = service.applyManualCorrection({
+      profileId: candidate.id,
+      expectedCurrentVersionId: confirmed.id,
+      patch: {
+        projects: confirmed.effective.projects.map((item) => ({ ...item, local_path: null })),
+      },
+    });
+    expect(cleared.effective.projects.every((item) => item.local_path === null)).toBe(true);
+  });
+
+  it('requires explicit field selection for re-extraction and rejects stale candidates', async () => {
     const { handle, service } = await setup();
     const candidate = service.createProfile('脱敏候选人');
     const first = service.applyExtraction({
@@ -154,7 +218,6 @@ describe('candidate profile versioning', () => {
         intendedRoles: ['算法工程师', 'Agent 开发工程师'],
         preferences: { ...first.effective.preferences, locations: ['上海'] },
       },
-      lockedPaths: ['/preferences/locations'],
     });
     // 两字段独立往返 SQLite；人工意向不需要额外锁定即可跨重新提取保留。
     expect(
@@ -174,7 +237,7 @@ describe('candidate profile versioning', () => {
         targetRoles: ['大模型算法'],
         preferences: { ...first.effective.preferences, locations: ['深圳'] },
         skills: [
-          ...first.extracted.skills,
+          ...first.effective.skills,
           {
             name: 'Python',
             level: 'proficient',
@@ -185,9 +248,10 @@ describe('candidate profile versioning', () => {
     });
 
     expect(refreshed.versionNo).toBe(3);
-    expect(refreshed.effective.preferences.locations).toEqual(['上海']);
+    expect(refreshed.effective.preferences.locations).toEqual(['深圳']);
+    expect(service.getCurrent(candidate.id)?.id).toBe(corrected.id);
+    expect(refreshed.isCandidate).toBe(true);
     expect(refreshed.effective.targetRoles).toEqual(['大模型算法']);
-    expect(refreshed.effective.intendedRoles).toEqual(['算法工程师', 'Agent 开发工程师']);
     expect(refreshed.effective.skills.map((skill) => skill.name)).toEqual(['TypeScript', 'Python']);
     expect(service.history(candidate.id).map((version) => version.versionNo)).toEqual([3, 2, 1]);
     expect(handle.client.prepare('SELECT count(*) FROM profile_versions').pluck().get()).toBe(3);
@@ -197,6 +261,24 @@ describe('candidate profile versioning', () => {
         .pluck()
         .get(),
     ).toBe(1);
+    const confirmed = service.confirmExtraction({
+      profileId: candidate.id,
+      candidateVersionId: refreshed.id,
+      expectedCurrentVersionId: corrected.id,
+      fields: ['skills'],
+    });
+    expect(confirmed.effective.preferences.locations).toEqual(['上海']);
+    expect(confirmed.effective.targetRoles).toEqual(['研发']);
+    expect(confirmed.effective.intendedRoles).toEqual(['算法工程师', 'Agent 开发工程师']);
+    expect(confirmed.effective.skills).toHaveLength(2);
+    expect(() =>
+      service.confirmExtraction({
+        profileId: candidate.id,
+        candidateVersionId: refreshed.id,
+        expectedCurrentVersionId: confirmed.id,
+        fields: ['skills'],
+      }),
+    ).toThrow(ProfileVersionConflictError);
     const inspected = new ProfileInspectionService({
       profiles: new SqliteCandidateProfileRepository(
         handle.client,
@@ -206,10 +288,8 @@ describe('candidate profile versioning', () => {
     }).current(candidate.id);
     expect(inspected).toMatchObject({
       version: {
-        id: refreshed.id,
-        extracted: refreshed.extracted,
-        effective: refreshed.effective,
-        lockedPaths: ['/preferences/locations'],
+        id: confirmed.id,
+        effective: confirmed.effective,
         resumeDocumentId: '018f0000-0000-7000-8000-000000009002',
       },
       extractionAgent: {

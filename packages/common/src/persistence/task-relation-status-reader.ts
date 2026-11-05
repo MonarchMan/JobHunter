@@ -15,7 +15,7 @@ export class SqliteTaskRelationStatusReader implements TaskRelationStatusReader 
     if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(field)) throw new TypeError('Invalid relation field.');
     const row = this.client
       .prepare(
-        'SELECT status FROM tasks WHERE task_type = ? AND json_extract(payload_json, ?) = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+        'SELECT status FROM tasks WHERE task_type = ? AND json_extract(private_state, ?) = ? ORDER BY created_at DESC, id DESC LIMIT 1',
       )
       .get(taskType, `$.${field}`, value) as { status: unknown } | undefined;
     // 2、没有关联任务表示尚未请求；已有任务严格校验状态。

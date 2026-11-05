@@ -60,13 +60,10 @@ function seedSync(handle: SqliteDatabaseHandle): void {
        '018f0000-0000-7000-8000-000000000001',
        '018f0000-0000-7000-8200-000000000103', 'fixture', 'fixture',
        'https://example.com', '{}', '1', '{}', 1, 'supported', 'healthy', 1, 1);
-    INSERT INTO sync_runs
-      (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-       sync_policy_version, source_config_hash, stats_json, started_at)
-    VALUES
-      ('018f0000-0000-7000-8000-000000000010',
+    WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
+       sync_policy_version, source_config_hash, stats_json, started_at) AS (VALUES ('018f0000-0000-7000-8000-000000000010',
        '018f0000-0000-7000-8000-000000000002', 'manual', 'running', 'unknown',
-       '1', '1', '1', 'hash', '{}', 1);
+       '1', '1', '1', 'hash', '{}', 1)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,NULL,NULL,NULL FROM scan_fixture;
   `);
 }
 
@@ -91,7 +88,7 @@ describe('SqliteUnitOfWork and job repository', () => {
       });
     });
 
-    for (const table of ['jobs', 'job_revisions', 'job_observations', 'events']) {
+    for (const table of ['jobs', 'job_observations', 'events']) {
       expect(handle.client.prepare(`SELECT count(*) FROM ${table}`).pluck().get()).toBe(1);
     }
     const current = uow.run(({ jobs }) =>
@@ -425,24 +422,16 @@ describe('SqliteJobQueryRepository', () => {
     handle.client.exec(`
       INSERT INTO candidate_profiles (id, name, created_at, updated_at)
       VALUES ('018f0000-0000-7000-8000-000000000053', 'Fixture', 1, 1);
-      INSERT INTO profile_versions
-        (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-         content_hash, is_current, created_at)
-      VALUES
-        ('018f0000-0000-7000-8000-000000000054',
-         '018f0000-0000-7000-8000-000000000053', 1, '{}', '{}', '[]', 'profile-hash', 1, 1);
-      INSERT INTO match_rulesets
-        (id, definition_json, definition_hash, active, created_at)
-      VALUES
-        ('018f0000-0000-7000-8000-000000000055', '{}', 'rules-hash', 1, 1);
-      INSERT INTO match_results
-        (id, profile_version_id, job_revision_id, ruleset_id, filter_status, total_score,
-         components_json, risks_json, input_hash, created_at)
-      VALUES
-        ('018f0000-0000-7000-8000-000000000056',
-         '018f0000-0000-7000-8000-000000000054',
-         '018f0000-0000-7000-8000-000000000051',
-         '018f0000-0000-7000-8000-000000000055', 'eligible', 88, '[]', '[]', 'input-hash', 1);
+      WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+         content_hash, is_current, created_at) AS (VALUES ('018f0000-0000-7000-8000-000000000054',
+         '018f0000-0000-7000-8000-000000000053', 1, '{}', '{}', '[]', 'profile-hash', 1, 1))
+INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture;
+      SELECT * FROM (SELECT '018f0000-0000-7000-8000-000000000055' AS id, '{}' AS definition_json, 'rules-hash' AS definition_hash, 1 AS active, 1 AS created_at) d;
+      INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'match_result',json_object('content_id',d.job_revision_id,'profile_version_id',d.profile_version_id,'enrichment_id',NULL,'rules_hash','fixture','filter_status',d.filter_status,'total_score',d.total_score,'input_hash',d.input_hash,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(d.components_json) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),d.created_at,d.created_at FROM (SELECT '018f0000-0000-7000-8000-000000000056' AS id,
+         '018f0000-0000-7000-8000-000000000054' AS profile_version_id,
+         '018f0000-0000-7000-8000-000000000051' AS job_revision_id,
+         '018f0000-0000-7000-8000-000000000055' AS ruleset_id, 'eligible' AS filter_status, 88 AS total_score, '[]' AS components_json, '[]' AS risks_json, 'input-hash' AS input_hash, 1 AS created_at) d;
     `);
 
     const repository = new SqliteJobQueryRepository(

@@ -1,3 +1,7 @@
+import { NodeResearchDelivery } from '@jobhunter/user/persistence/research-delivery';
+import { AiSessionService } from '../ai/service.js';
+import { createAiReplyHandler } from '../ai/handler.js';
+import { SqliteAiSessionRepository } from '../persistence/ai-session-repository.js';
 import type { TaskRuntimeContext, TaskCapability } from '@jobhunter/common/task-runtime';
 import type { ProfileDerivedDataManager } from '../contracts/profile-dependencies.js';
 import { SqliteAgentRunCleanup } from '@jobhunter/common/persistence/agent-run-cleanup';
@@ -13,20 +17,15 @@ import {
 } from '@jobhunter/user/profile';
 import {
   createExperienceResearchTaskHandler,
-  createProjectAnswerDigestTaskHandler,
-  createProjectNotebookTaskHandler,
-  createProjectQuestionTaskHandler,
   ExperienceResearchService,
 } from '@jobhunter/user/interview';
 import { SqliteArtifactStore } from '@jobhunter/user/persistence/artifact-store';
 import { SqliteCandidateProfileRepository } from '@jobhunter/user/persistence';
-import { SqliteInterviewProjectRepository } from '@jobhunter/user/persistence/interview-project-repository';
 import { SqliteInterviewResearchRepository } from '@jobhunter/user/persistence/interview-research-repository';
 import { SqliteResumeDocumentRepository } from '@jobhunter/user/persistence/resume-document-repository';
 import { SqliteResumeArtifactReader } from '@jobhunter/user/persistence/resume-artifact-reader';
 import { SqliteResumeDeletionRepository } from '@jobhunter/user/persistence/resume-deletion-repository';
 import { SqliteResumeDraftRepository } from '@jobhunter/user/persistence/resume-draft-repository';
-import { parseId } from '@jobhunter/common/domain';
 import { TesseractResumeOcrEngine } from '@jobhunter/user/ocr';
 import {
   ClaudeCodeResearchExecutor,
@@ -57,13 +56,13 @@ export function createUserTasks(
     database.client,
     input.derivedData,
   );
-  const interviewRepository = new SqliteInterviewProjectRepository(database.client);
   const interviewResearchRepository = new SqliteInterviewResearchRepository(database.client);
   const interviewArtifacts = new SqliteArtifactStore(database.client, dataRoot);
   registry.register(
     createExperienceResearchTaskHandler({
       repository: interviewResearchRepository,
       service: new ExperienceResearchService({
+        delivery: new NodeResearchDelivery(dataRoot),
         repository: interviewResearchRepository,
         artifacts: interviewArtifacts,
         clock,
@@ -74,22 +73,6 @@ export function createUserTasks(
         new CodexLocalResearchExecutor(),
         new ClaudeCodeResearchExecutor(),
       ],
-    }),
-  );
-  const enqueueInterviewNotebook = (dossierId: string): void => {
-    const detail = interviewRepository.getDossier(parseId(dossierId, 'ProjectDossier'));
-    if (!detail) return;
-    interviewTasks.enqueue({
-      taskType: 'interview.project-notebook.render',
-      payload: { dossierId, sourceRevision: detail.dossier.revision },
-      idempotencyKey: `interview.project-notebook:${dossierId}:${String(detail.dossier.revision)}`,
-    });
-  };
-  registry.register(
-    createProjectNotebookTaskHandler({
-      repository: interviewRepository,
-      artifacts: interviewArtifacts,
-      ids,
     }),
   );
   const resumeDeletion = new ResumeDeletionService({
@@ -119,6 +102,18 @@ export function createUserTasks(
       artifacts: resumeExportArtifacts,
     }),
   );
+  registry.register(
+    createAiReplyHandler({
+      service: new AiSessionService({
+        repository: new SqliteAiSessionRepository(database.client),
+        profiles: profileRepository,
+        tasks: interviewTasks,
+        clock,
+        ids,
+      }),
+      ...(configuredRunner ? { runner: configuredRunner } : {}),
+    }),
+  );
   const profiles = new CandidateProfileService({ repository: profileRepository, clock, ids });
   // 2、无模型配置仍注册处理器，由处理器给出明确配置错误，不能遗失任务类型。
   registry.register(
@@ -136,29 +131,6 @@ export function createUserTasks(
     createResumePolishTaskHandler(
       configuredRunner
         ? { runner: configuredRunner, profiles: profileRepository }
-        : { unavailable: true },
-    ),
-  );
-  registry.register(
-    createProjectQuestionTaskHandler(
-      configuredRunner
-        ? {
-            runner: configuredRunner,
-            repository: interviewRepository,
-            onCommitted: enqueueInterviewNotebook,
-          }
-        : { unavailable: true },
-    ),
-  );
-  registry.register(
-    createProjectAnswerDigestTaskHandler(
-      configuredRunner
-        ? {
-            runner: configuredRunner,
-            repository: interviewRepository,
-            ids,
-            onCommitted: enqueueInterviewNotebook,
-          }
         : { unavailable: true },
     ),
   );

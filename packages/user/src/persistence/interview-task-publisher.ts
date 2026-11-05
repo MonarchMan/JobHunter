@@ -1,6 +1,5 @@
 import { InterviewTaskPublicationConflictError } from '../ports/interview-task-publisher.js';
 import type { EnqueueTaskResult, EnqueueTaskCommand, TaskService } from '@jobhunter/common/tasks';
-import type { InterviewProjectRepository } from '../ports/interview-projects.js';
 import type { InterviewResearchRepository } from '../ports/interview-research.js';
 import type { InterviewTaskPublisher } from '../ports/interview-task-publisher.js';
 import { canonicalJson } from '@jobhunter/common/domain';
@@ -21,56 +20,17 @@ function assertSameTaskIntent(result: EnqueueTaskResult, command: EnqueueTaskCom
 export class SqliteInterviewTaskPublisher implements InterviewTaskPublisher {
   readonly #client: Database.Database;
   readonly #tasks: TaskService;
-  readonly #projects: InterviewProjectRepository;
   readonly #research: InterviewResearchRepository;
 
   /** 执行数据库组件对外暴露的操作。 */
   public constructor(input: {
     readonly client: Database.Database;
     readonly tasks: TaskService;
-    readonly projects: InterviewProjectRepository;
     readonly research: InterviewResearchRepository;
   }) {
     this.#client = input.client;
     this.#tasks = input.tasks;
-    this.#projects = input.projects;
     this.#research = input.research;
-  }
-
-  /** 执行数据库组件对外暴露的操作。 */
-  public publishProjectQuestion(
-    input: Parameters<InterviewTaskPublisher['publishProjectQuestion']>[0],
-  ): ReturnType<InterviewTaskPublisher['publishProjectQuestion']> {
-    return this.#client
-      .transaction(() => {
-        const result = this.#tasks.enqueue(input.command);
-        assertSameTaskIntent(result, input.command);
-        this.#projects.attachQuestionTask({
-          turnId: input.turnId,
-          taskId: result.task.id,
-          now: input.now,
-        });
-        return result;
-      })
-      .immediate();
-  }
-
-  /** 执行数据库组件对外暴露的操作。 */
-  public publishProjectAnswerDigest(
-    input: Parameters<InterviewTaskPublisher['publishProjectAnswerDigest']>[0],
-  ): ReturnType<InterviewTaskPublisher['publishProjectAnswerDigest']> {
-    return this.#client
-      .transaction(() => {
-        const result = this.#tasks.enqueue(input.command);
-        assertSameTaskIntent(result, input.command);
-        this.#projects.attachDigestTask({
-          turnId: input.turnId,
-          taskId: result.task.id,
-          now: input.now,
-        });
-        return result;
-      })
-      .immediate();
   }
 
   /** 执行数据库组件对外暴露的操作。 */
@@ -91,6 +51,12 @@ export class SqliteInterviewTaskPublisher implements InterviewTaskPublisher {
         ) {
           throw new TypeError('Research request changed before task publication.');
         }
+        this.#client
+          .prepare('UPDATE tasks SET parent_task_id=? WHERE id=?')
+          .run(input.requestId, result.task.id);
+        this.#client
+          .prepare(`UPDATE tasks SET public_state='{"phase":"executing"}' WHERE id=?`)
+          .run(input.requestId);
         return result;
       })
       .immediate();

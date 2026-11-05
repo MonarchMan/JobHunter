@@ -23,6 +23,6 @@
   .root {
     min-width: 0;
     grid-column: 1 / -1;
-    grid-template-columns: minmax(0, max-content) auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

@@ -5,7 +5,7 @@ import { parseNormalizedJob } from '@jobhunter/recruitment/domain';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { createProductionTaskApplication } from '../src/task-runtime.js';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { vi, describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -98,12 +98,9 @@ function seedMatchingInputs(dataRoot: string): void {
   });
   try {
     database.client.exec(`
-      INSERT INTO sync_runs
-        (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-         sync_policy_version, source_config_hash, stats_json, started_at)
-      VALUES
-        ('${ids.syncRun}', '018f0000-0000-7000-8000-000000000201', 'manual', 'running',
-         'unknown', 'fixture', 'fixture', 'v1', 'fixture', '{}', 1);
+      WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
+         sync_policy_version, source_config_hash, stats_json, started_at) AS (VALUES ('${ids.syncRun}', '018f0000-0000-7000-8000-000000000201', 'manual', 'running',
+         'unknown', 'fixture', 'fixture', 'v1', 'fixture', '{}', 1)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,NULL,NULL,NULL FROM scan_fixture;
       INSERT INTO jobs
         (id, company_id, source_id, external_job_id, title, department, job_family,
          recruitment_category,
@@ -117,22 +114,17 @@ function seedMatchingInputs(dataRoot: string): void {
          '使用 TypeScript 开发 Agent 平台。', 'https://careers.tencent.com/job/agent',
          'https://careers.tencent.com/apply/agent', 1700000000000, 'active', 0,
          '${'b'.repeat(64)}', 1, 2, 1, 2);
-      INSERT INTO job_revisions
-        (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
-         source_url, snapshot_json, change_set_json, created_at)
-      VALUES
-        ('${ids.revision}', '${ids.job}', 1, '${'b'.repeat(64)}', 'fixture',
-         '${'a'.repeat(64)}', 'https://careers.tencent.com/job/agent',
-         '${canonicalJson(normalized).replaceAll("'", "''")}', '[]', 1);
+      UPDATE jobs SET content_id=d.id,content_hash=d.content_hash,source_payload_hash=d.source_payload_hash,source_url=d.source_url FROM (SELECT '${ids.revision}' AS id, '${ids.job}' AS job_id, 1 AS revision_no, '${'b'.repeat(64)}' AS content_hash, 'fixture' AS normalizer_version,
+         '${'a'.repeat(64)}' AS source_payload_hash, 'https://careers.tencent.com/job/agent' AS source_url,
+         '${canonicalJson(normalized).replaceAll("'", "''")}' AS snapshot_json, '[]' AS change_set_json, 1 AS created_at) d WHERE jobs.id=d.job_id;
       INSERT INTO candidate_profiles (id, name, created_at, updated_at)
       VALUES ('${ids.profile}', '脱敏候选人', 1, 1);
-      INSERT INTO profile_versions
-        (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
-         effective_json, locked_paths_json, content_hash, is_current, created_at)
-      VALUES
-        ('${ids.profileVersion}', '${ids.profile}', 1, NULL, NULL,
+      WITH profile_fixture (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
+         effective_json, locked_paths_json, content_hash, is_current, created_at) AS (VALUES ('${ids.profileVersion}', '${ids.profile}', 1, NULL, NULL,
          '${canonicalJson(profile).replaceAll("'", "''")}',
-         '${canonicalJson(profile).replaceAll("'", "''")}', '[]', '${'c'.repeat(64)}', 1, 1);
+         '${canonicalJson(profile).replaceAll("'", "''")}', '[]', '${'c'.repeat(64)}', 1, 1))
+INSERT INTO profile_versions (id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture;
     `);
   } finally {
     database.close();
@@ -213,3 +205,9 @@ describe('match commands', () => {
     }
   });
 });
+
+// 命令契约测试不启动网络执行器；中央服务真实生命周期由 embedded-tasks 覆盖。
+vi.mock(import('@jobhunter/common/task-service'), async (original) => ({
+  ...(await original()),
+  ensureConfiguredTaskService: vi.fn(() => Promise.resolve()),
+}));

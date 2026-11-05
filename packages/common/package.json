@@ -168,6 +168,16 @@
       "development": "./src/persistence/usage-repository.ts",
       "types": "./dist/persistence/usage-repository.d.ts",
       "import": "./dist/persistence/usage-repository.js"
+    },
+    "./task-service": {
+      "development": "./src/tasks/service-entry.ts",
+      "types": "./dist/tasks/service-entry.d.ts",
+      "import": "./dist/tasks/service-entry.js"
+    },
+    "./persistence/periodic-config": {
+      "development": "./src/persistence/periodic-config.ts",
+      "types": "./dist/persistence/periodic-config.d.ts",
+      "import": "./dist/persistence/periodic-config.js"
     }
   },
   "files": [

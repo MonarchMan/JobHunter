@@ -14,6 +14,8 @@
 }
 
 .tooltip {
+  /* 不可见的提示不能撑大表格滚动区域。 */
+  display: none;
   position: absolute;
   z-index: 30;
   top: calc(100% + 0.45rem);
@@ -41,6 +43,7 @@
 .root:hover .tooltip,
 .root:focus-visible .tooltip,
 :global(.job-link):focus-visible .tooltip {
+  display: block;
   opacity: 1;
   transform: translateY(0);
 }

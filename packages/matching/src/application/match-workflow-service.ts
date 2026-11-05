@@ -80,7 +80,8 @@ export class MatchWorkflowService {
     const profile = input.profileVersionId
       ? this.#profiles.getVersion(parseId(input.profileVersionId, 'ProfileVersion'))
       : this.#currentProfileVersion();
-    if (!profile) throw new MatchProfileNotFoundError(input.profileVersionId ?? 'current');
+    if (!profile || profile.isCandidate)
+      throw new MatchProfileNotFoundError(input.profileVersionId ?? 'current');
     const revision = this.#matching.getLatestRevisionForJob(jobId);
     if (!revision) throw new MatchResultNotFoundError(input.jobId);
     if (revision.jobStatus === 'closed') {
@@ -114,7 +115,8 @@ export class MatchWorkflowService {
     const profile = input.profileVersionId
       ? this.#profiles.getVersion(parseId(input.profileVersionId, 'ProfileVersion'))
       : this.#currentProfileVersion();
-    if (!profile) throw new MatchProfileNotFoundError(input.profileVersionId ?? 'current');
+    if (!profile || profile.isCandidate)
+      throw new MatchProfileNotFoundError(input.profileVersionId ?? 'current');
     // 全部校验成功后才入队，避免部分职位无效时仍创建半批任务。
     const jobRevisionIds = uniqueJobIds.map((jobId) => {
       const revision = this.#matching.getLatestRevisionForJob(parseId(jobId, 'Job'));

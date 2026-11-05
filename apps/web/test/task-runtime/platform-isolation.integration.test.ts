@@ -1,3 +1,4 @@
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { SqliteRuntimeReferenceReader } from '@jobhunter/common/persistence/runtime-reference-reader';
 import { SqliteUserResourceReferenceReader } from '@jobhunter/user/persistence/resource-reference-reader';
 import { SqliteMatchingResourceReferenceReader } from '@jobhunter/matching/persistence/resource-reference-reader';
@@ -111,7 +112,7 @@ it('isolates four providers with identical external IDs, task keys and generatio
         ).jobId,
       ).toBe(saved.jobId);
       db.client
-        .prepare("UPDATE tasks SET status='succeeded',payload_json=?,result_json=? WHERE id=?")
+        .prepare("UPDATE tasks SET status='succeeded',private_state=?,public_state=? WHERE id=?")
         .run(
           JSON.stringify({ action: 'detail', generation: 1, externalJobId: 'same-job' }),
           JSON.stringify(saved),
@@ -125,8 +126,8 @@ it('isolates four providers with identical external IDs, task keys and generatio
     expect(
       db.client.prepare('SELECT count(DISTINCT concurrency_key) FROM tasks').pluck().get(),
     ).toBe(4);
-    expect(db.client.prepare('SELECT count(*) FROM job_revisions').pluck().get()).toBe(4);
-    expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
+    expect(db.client.prepare(`SELECT count(*) FROM jobs`).pluck().get()).toBe(4);
+    expect(db.client.prepare(`SELECT count(*) FROM ${scanTaskProjection}`).pluck().get()).toBe(0);
     expect(db.client.prepare('SELECT sum(missing_count) FROM jobs').pluck().get()).toBe(0);
     expect(
       db.client
@@ -190,7 +191,7 @@ it('records local activity monotonically, protects viewed jobs and only exposes 
     const taskId = new SystemIdGenerator().generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
       )
       .run(taskId, taskId);
     const jobId = repository.save(

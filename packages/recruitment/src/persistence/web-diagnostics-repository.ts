@@ -1,3 +1,4 @@
+import { scanTaskProjection } from './scan-task-sql.js';
 import {
   webAgentRunDetailSchema,
   webTaskSchema,
@@ -129,7 +130,7 @@ const taskEntriesCte = `
            NULL AS company_name, NULL AS channel, NULL AS source_slug,
            NULL AS total, NULL AS pending, NULL AS running, NULL AS succeeded,
            NULL AS failed, NULL AS cancelled
-    FROM tasks task WHERE task.task_type != 'source.job-detail'
+    FROM tasks task WHERE task.task_type NOT IN ('source.job-detail', 'source.scan')
     UNION ALL
     SELECT * FROM batch_entries
   )`;
@@ -176,7 +177,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     const rows = this.#client
       .prepare(
         `
-      SELECT task.payload_json, task.started_at AS window_started_at,
+      SELECT task.private_state, task.started_at AS window_started_at,
         task.finished_at AS window_finished_at, json_object(
         'kind', 'task', 'id', task.id, 'taskType', task.task_type, 'status', task.status,
         'attemptCount', task.attempt_count, 'maxAttempts', task.max_attempts,
@@ -188,12 +189,12 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
         'finishedAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.finished_at / 1000.0, 'unixepoch'),
         'jobDetailBatch', NULL,
         'syncScoring', CASE WHEN task.task_type = 'source.sync' AND
-            json_type(task.result_json, '$.scoring') = 'object' THEN
-          json_extract(task.result_json, '$.scoring') ELSE NULL END,
+            json_type(task.public_state, '$.scoring') = 'object' THEN
+          json_extract(task.public_state, '$.scoring') ELSE NULL END,
         'sourceSync', CASE WHEN source.id IS NULL THEN NULL ELSE json_object(
           'companyName', company.name, 'channel', channel.channel,
           'sourceSlug', source.slug, 'adapterKey', source.adapter_key,
-          'trigger', json_extract(task.payload_json, '$.trigger'),
+          'trigger', json_extract(task.private_state, '$.trigger'),
           'run', CASE WHEN run.id IS NULL THEN NULL ELSE json_object(
             'id', run.id, 'status', run.status, 'coverage', run.coverage,
             'stats', json(run.stats_json), 'errorCategory', run.error_category,
@@ -204,14 +205,15 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       FROM tasks task
       LEFT JOIN job_sources source ON task.task_type = 'source.sync'
         AND source.id = task.source_id
-        AND json_extract(task.payload_json, '$.trigger') IN ('manual', 'schedule', 'retry')
+        AND json_extract(task.private_state, '$.trigger') IN ('manual', 'schedule', 'retry')
       LEFT JOIN companies company ON company.id = source.company_id
       LEFT JOIN source_channels channel ON channel.id = source.channel_id
-      LEFT JOIN sync_runs run ON run.id = (
-        SELECT candidate.id FROM sync_runs candidate
+      LEFT JOIN ${scanTaskProjection} run ON run.id = (
+        SELECT candidate.id FROM ${scanTaskProjection} candidate
         WHERE candidate.source_id = source.id
+          AND (candidate.parent_task_id = task.id OR (candidate.parent_task_id IS NULL
           AND candidate.started_at >= COALESCE(task.started_at, task.created_at)
-          AND (task.finished_at IS NULL OR candidate.started_at <= task.finished_at)
+          AND (task.finished_at IS NULL OR candidate.started_at <= task.finished_at)))
         ORDER BY candidate.started_at DESC, candidate.id DESC LIMIT 1
       )
       WHERE task.id IN (SELECT value FROM json_each(?))
@@ -219,20 +221,21 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       )
       .all(JSON.stringify(ids)) as {
       readonly detail_json: string;
-      readonly payload_json: string;
+      readonly private_state: string;
       readonly window_started_at: number | null;
       readonly window_finished_at: number | null;
     }[];
     // 2、与单任务详情共用运行时校验，阻止原始执行数据进入页面。
     return rows.map((row) => {
       const task = webTaskSchema.parse(JSON.parse(row.detail_json) as unknown);
-      const payload = JSON.parse(row.payload_json) as { readonly sourceIds?: unknown };
+      const payload = JSON.parse(row.private_state) as { readonly sourceIds?: unknown };
       if (!task.sourceSync || !Array.isArray(payload.sourceIds)) return task;
       const sourceIds = payload.sourceIds.filter((id): id is string => typeof id === 'string');
       if (sourceIds.length < 2) return task;
       const trigger = task.sourceSync.trigger;
       const sources = sourceIds.flatMap((sourceId) => {
         const detail = this.getSourceSyncTaskDetail({
+          taskId: task.id,
           sourceId,
           trigger,
           windowStartedAt: row.window_started_at ?? Date.parse(task.createdAt),
@@ -388,6 +391,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
 
   /** 执行数据库组件对外暴露的操作。 */
   public getSourceSyncTaskDetail(input: {
+    readonly taskId: string;
     readonly sourceId: string;
     readonly sourceIds?: readonly string[];
     readonly trigger: 'manual' | 'schedule' | 'retry';
@@ -402,16 +406,18 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
          FROM job_sources source
          JOIN companies company ON company.id = source.company_id
          JOIN source_channels channel ON channel.id = source.channel_id
-         LEFT JOIN sync_runs run ON run.id = (
-           SELECT candidate.id FROM sync_runs candidate
+         LEFT JOIN ${scanTaskProjection} run ON run.id = (
+           SELECT candidate.id FROM ${scanTaskProjection} candidate
            WHERE candidate.source_id = source.id
+             AND (candidate.parent_task_id = ? OR (candidate.parent_task_id IS NULL
              AND candidate.started_at >= ?
-             AND (? IS NULL OR candidate.started_at <= ?)
+             AND (? IS NULL OR candidate.started_at <= ?)))
            ORDER BY candidate.started_at DESC, candidate.id DESC LIMIT 1
          )
          WHERE source.id = ?`,
       )
       .get(
+        input.taskId,
         input.windowStartedAt,
         input.windowFinishedAt,
         input.windowFinishedAt,
@@ -452,6 +458,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     if (!input.sourceIds || input.sourceIds.length < 2) return detail;
     const sources = input.sourceIds.flatMap((sourceId) => {
       const source = this.getSourceSyncTaskDetail({
+        taskId: input.taskId,
         sourceId,
         trigger: input.trigger,
         windowStartedAt: input.windowStartedAt,

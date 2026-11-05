@@ -1,5 +1,5 @@
 import { parseId, type CandidateProfileId } from '@jobhunter/common/domain';
-import type { CandidateProfileData } from '@jobhunter/user/domain';
+import { candidateProfileSchema, type CandidateProfileData } from '@jobhunter/user/domain';
 import { isResumeOcrMediaType } from '@jobhunter/user/media';
 import type { ResumeFileReader } from '../ports/resume-documents.js';
 import type { EnqueueTaskResult, TaskService } from '@jobhunter/common/tasks';
@@ -204,6 +204,22 @@ export class ProfileManagementService {
     return this.#inspection.history(profileId);
   }
 
+  /** CLI 与 Web 共用候选确认语义；只接受明确选择的一级字段。 */
+  public confirm(
+    id: string,
+    candidateVersionId: string,
+    expectedVersionId: string,
+    fields: readonly string[],
+  ): ProfileVersionInspection {
+    this.#profiles.confirmExtraction({
+      profileId: this.#profileId(id),
+      candidateVersionId: parseId(candidateVersionId, 'ProfileVersion'),
+      expectedCurrentVersionId: parseId(expectedVersionId, 'ProfileVersion'),
+      fields: fields.map((field) => candidateProfileSchema.unwrap().keyof().parse(field)),
+    });
+    return this.show(id);
+  }
+
   public set(
     id: string,
     pointer: string,
@@ -240,54 +256,6 @@ export class ProfileManagementService {
       profileId,
       expectedCurrentVersionId: current.id,
       patch: structuredClone(profile),
-    });
-    return this.show(id);
-  }
-
-  /** 执行应用组件对外暴露的操作。 */
-  public lock(
-    id: string,
-    pointer: string,
-    expectedCurrentVersionId?: string,
-  ): ProfileVersionInspection {
-    return this.#locks(id, pointer, true, expectedCurrentVersionId);
-  }
-
-  /** 执行应用组件对外暴露的操作。 */
-  public unlock(
-    id: string,
-    pointer: string,
-    expectedCurrentVersionId?: string,
-  ): ProfileVersionInspection {
-    return this.#locks(id, pointer, false, expectedCurrentVersionId);
-  }
-
-  /** 处理应用类内部的辅助逻辑。 */
-  #locks(
-    id: string,
-    pointer: string,
-    add: boolean,
-    expectedCurrentVersionId?: string,
-  ): ProfileVersionInspection {
-    pointerSegments(pointer);
-    const profileId = this.#profileId(id);
-    const current = this.#profiles.getCurrent(profileId);
-    if (!current) throw new CandidateProfileNotFoundError(id);
-    if (expectedCurrentVersionId && current.id !== expectedCurrentVersionId) {
-      throw new ProfileVersionConflictError(current.id);
-    }
-    const alreadyInState = add
-      ? current.lockedPaths.includes(pointer)
-      : !current.lockedPaths.includes(pointer);
-    if (alreadyInState) return this.show(id);
-    const lockedPaths = add
-      ? [...new Set([...current.lockedPaths, pointer])].toSorted()
-      : current.lockedPaths.filter((path) => path !== pointer);
-    this.#profiles.applyManualCorrection({
-      profileId,
-      expectedCurrentVersionId: current.id,
-      patch: {},
-      lockedPaths,
     });
     return this.show(id);
   }

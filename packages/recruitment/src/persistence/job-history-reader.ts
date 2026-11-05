@@ -1,3 +1,4 @@
+import { currentJobContentSql } from './current-job-sql.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import type { JobHistoryReader } from '../contracts/job-history.js';
@@ -21,7 +22,7 @@ export class SqliteJobHistoryReader implements JobHistoryReader {
       .parse(
         this.client
           .prepare(
-            'SELECT id, revision_no, change_set_json, created_at FROM job_revisions WHERE job_id = ? ORDER BY revision_no DESC',
+            `SELECT id, revision_no, change_set_json, created_at FROM ${currentJobContentSql} WHERE job_id = ? ORDER BY revision_no DESC`,
           )
           .all(jobId),
       );

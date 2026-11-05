@@ -1377,6 +1377,15 @@ function ProjectEditor({
                   onChange(next);
                 }}
               />
+              <Field
+                label="本地项目路径（仅关联位置，不上传文件）"
+                value={item.local_path ?? null}
+                onChange={(local_path) => {
+                  const next = [...entries];
+                  next[index] = { ...item, local_path };
+                  onChange(next);
+                }}
+              />
               <DateRangeField
                 start={item.startDate}
                 end={item.endDate}

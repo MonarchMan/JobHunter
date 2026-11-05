@@ -7,7 +7,7 @@ import {
   errorResponse,
   forbiddenResponse,
 } from '../../../../src/server/http.js';
-import { getWebContainer } from '../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../src/server/csrf.js';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ export async function POST(request: Request): Promise<Response> {
       return badRequestResponse('简历文件必须大于 0 且不超过 10 MiB。');
     }
     const profileId = profileIdSchema.parse(form.get('profileId') ?? undefined);
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     const result = await container.services.resumes.importBytes({
       bytes: new Uint8Array(await file.arrayBuffer()),
       ...(profileId ? { profileId } : {}),

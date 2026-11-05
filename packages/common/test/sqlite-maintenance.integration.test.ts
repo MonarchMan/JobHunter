@@ -46,13 +46,13 @@ describe('SQLite automatic maintenance infrastructure', () => {
       const now = Date.now();
       database.client
         .prepare(
-          `INSERT INTO schedules(id,schedule_key,task_type,payload_json,
-        cron_expression,timezone,enabled,next_run_at,created_at,updated_at)
-        VALUES('soon','soon','test','{}','* * * * *','UTC',1,?,0,0)`,
+          `INSERT INTO application_settings(key,value_json,schema_version,updated_at)
+        VALUES('task.periodic:soon',json_object('id','soon','schedule_key','soon','task_type','test','payload_json','{}',
+        'cron_expression','* * * * *','timezone','UTC','enabled',1,'next_run_at',?,'created_at',0,'updated_at',0), 'task-periodic@v1',0)`,
         )
         .run(now + 30_000);
       expect(await maintenance.maintain('truncate', now)).toBe('work_pending');
-      database.client.exec('DELETE FROM schedules');
+      database.client.exec("DELETE FROM application_settings WHERE key GLOB 'task.periodic:*'");
       reader.client.exec('BEGIN');
       reader.client.prepare('SELECT count(*) FROM tasks').get();
       expect(await maintenance.maintain('truncate', now)).toBe('checkpoint_busy');
@@ -114,7 +114,7 @@ describe('SQLite automatic maintenance infrastructure', () => {
     const database = openSqliteDatabase({ dataRoot: root.path });
     const maintenance = new SqliteMaintenanceRepository(database.databasePath);
     try {
-      database.client.exec(`INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,
+      database.client.exec(`INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,
         max_attempts,available_at,created_at) VALUES('running','test','{}','running','running',1,0,0)`);
       const nextCheckAt = database.client
         .prepare('SELECT next_check_at FROM database_maintenance WHERE id = 1')

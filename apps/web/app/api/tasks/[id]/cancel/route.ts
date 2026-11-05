@@ -7,7 +7,7 @@ import {
   forbiddenResponse,
   notFoundResponse,
 } from '../../../../../src/server/http.js';
-import { getWebContainer } from '../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../src/server/csrf.js';
 
 /** 模块数据结构或契约。 */
@@ -21,7 +21,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
   try {
     const { id } = await context.params;
     const mutation = webTaskMutationSchema.parse({ kind: 'cancel', taskId: id });
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     const result = container.services.diagnostics.mutate(mutation);
     if (result.kind === 'not_found') return notFoundResponse('任务不存在。');
     return dataResponse(result);

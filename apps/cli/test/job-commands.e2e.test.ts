@@ -2,7 +2,7 @@ import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { vi, describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -208,3 +208,9 @@ describe('job commands', () => {
     }
   });
 });
+
+// 命令契约测试不启动网络执行器；中央服务真实生命周期由 embedded-tasks 覆盖。
+vi.mock(import('@jobhunter/common/task-service'), async (original) => ({
+  ...(await original()),
+  ensureConfiguredTaskService: vi.fn(() => Promise.resolve()),
+}));

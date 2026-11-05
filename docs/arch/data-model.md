@@ -1,5 +1,13 @@
 # 数据模型与 SQLite 表设计
 
+> 周期存储更新：0054 将周期配置与触发进度迁入 application_settings，删除 schedules 和 tasks.schedule_id；到期扫描由中央服务负责，历史表说明仅用于理解迁移来源。该迁移尚未应用于真实数据。
+
+0055 已将 tasks.payload_json/result_json 迁为 private_state/public_state，并补充输入更新后的关联索引维护；仅在临时数据库完成验证，尚未应用到真实数据。
+
+> 面试准备与画像的新目标见 [034 规格](../../specs/034-ai-sessions-and-projects/spec.md) 与 [ADR-0063](../adr/0063-ai-sessions-and-local-projects.md)。会话/消息/元数据替代专用对话表，项目关联本地路径，研究结果写入指定 JSON 路径。旧表定义用于迁移来源说明，不代表新目标已落地。
+
+> 0056 已将 sync_runs 合并为扫描阶段任务，观测和已见集合外键转向 tasks；public_state/private_state 和周期设置迁移已实现，三个阶段验收与真实数据迁移已于 2026-11-06 完成。详见 [ADR-0062](../adr/0062-central-task-scheduler.md)。
+
 > 状态：Proposed
 > 版本：2.1.1
 > 日期：2026-10-14
@@ -7,15 +15,13 @@
 
 ## 1. 目的、范围与设计目标
 
-2026-09-29 增量：[ADR-0051](../adr/0051-current-job-content-only.md) 覆盖下文职位不可变历史约束。job_revisions 每个 job 只保留当前内容，内部 ID/序号用于并发代际校验；替换内容时删除旧理解、评分及建议并取消旧任务，观察记录重绑当前内容。画像版本不变。
-
 本文档定义 JobHunter 的目标 SQLite 数据模型，是 Drizzle Schema、迁移、Repository、清理、备份和集成测试的共同依据。本文只描述业务表；SQLite 自身的 `sqlite_*`、Drizzle 迁移表等内部对象不属于业务数据模型。
 
 ### 招聘平台目标模型增量（设计已确定，尚未迁移）
 
 [ADR-0045](../adr/0045-platform-job-lifecycle-and-tasks.md) 与 [028 设计](../../specs/028-recruitment-platforms/design.md) 扩展下文官网基线约束：job_sources 新增 official/platform 类别，官网 company_id、channel_id 非空，平台两者为空且不适用 coverage_role；用 CHECK 限制分支，不放松既有官网不变量。平台招聘公司由职位解析，经 provider_key + external_company_id 的唯一身份映射关联 companies，不把平台当公司。
 
-新增 platform_connections 仅存非敏感配置、generation 和脱敏连接状态；凭据、私有游标、推荐上下文不入库。jobs、job_revisions 与匹配沿用正式事实模型，不建平台职位缓存表；jobs 增加核验及用户交互时间供保留策略使用。job_observations 归属为 sync_run_id 或 platform_task_id，外键与 CHECK 保证恰有一种；平台不写 sync_seen_jobs 或伪同步运行。首次职位写入在同一短事务内保存修订、相应观察与状态事件，已见标记只适用于官网同步。
+新增 platform_connections 仅存非敏感配置、generation 和脱敏连接状态；凭据、私有游标、推荐上下文不入库。jobs 与匹配沿用正式事实模型，不建平台职位缓存表；jobs 增加核验及用户交互时间供保留策略使用。job_observations 归属为 sync_run_id 或 platform_task_id，外键与 CHECK 保证恰有一种；平台不写 sync_seen_jobs 或伪同步运行。首次职位写入在同一短事务内保存当前内容、相应观察与状态事件，已见标记只适用于官网同步。
 
 平台清理使用更短的可配置保留期限和独立检查频率，不以来源缺失推导下架。收藏、投递、面试准备、笔记及当前任务引用优先保护；删除前事务内重检，观察对任务的引用也须纳入清理排序。正式职位清理不是缓存淘汰，物理压缩仍遵守 ADR-0020。以下表中尚未扩展的非空及同步归属约束描述官网现有基线，平台迁移以本增量和 028 设计为准。
 
@@ -67,12 +73,12 @@
 
 数据按语义分为四类：
 
-| 类型       | 例子                                                | 更新规则                       |
-| ---------- | --------------------------------------------------- | ------------------------------ |
-| 当前态     | `jobs`、`candidate_profiles`、`job_applications`    | 原地更新，服务主要查询入口     |
-| 不可变版本 | `job_revisions`、`profile_versions`                 | 不静默覆盖；按领域保留策略淘汰 |
-| 观察与事件 | `job_observations`、`application_events`、`events`  | 只追加或按明确保留策略清理     |
-| 推导结果   | `job_enrichments`、`match_results`、`match_advices` | 引用不可变输入，绝不反写事实   |
+| 类型       | 例子                                               | 更新规则                       |
+| ---------- | -------------------------------------------------- | ------------------------------ |
+| 当前态     | `jobs`、`candidate_profiles`、`job_applications`   | 原地更新，服务主要查询入口     |
+| 不可变版本 | `profile_versions`                                 | 不静默覆盖；按领域保留策略淘汰 |
+| 观察与事件 | `job_observations`、`application_events`、`events` | 只追加或按明确保留策略清理     |
+| 推导结果   | `job_metadata`                                     | 引用不可变输入，绝不反写事实   |
 
 相同有效输入必须用稳定哈希或唯一约束实现幂等。只有内容实际变化时才产生新版本；重复观察不制造新版本。
 
@@ -222,28 +228,15 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 应用层必须校验来源公司与所属渠道公司一致。索引覆盖 `channel_id`、启用状态和健康查询。
 
-#### 3.1.4 `sync_runs`
+#### 3.1.4 来源扫描阶段任务
 
-一次物理来源同步的运行事实。
+一次物理来源扫描保存为 tasks 中的 source.scan 阶段任务，parent_task_id 关联 source.sync 主任务。没有 sync_runs 表。阶段由主任务在当前分派下执行，不参与独立领取；主任务失去执行权时原子取消未完成阶段。
 
-| 列                                  | 类型    | 约束                     | 说明                                                     |
-| ----------------------------------- | ------- | ------------------------ | -------------------------------------------------------- |
-| `id`                                | TEXT    | PK                       | 运行 ID                                                  |
-| `source_id`                         | TEXT    | FK job_sources, NOT NULL | 物理来源                                                 |
-| `trigger`                           | TEXT    | CHECK                    | `manual`、`schedule`、`retry`                            |
-| `status`                            | TEXT    | CHECK                    | `running`、`succeeded`、`partial`、`failed`、`cancelled` |
-| `coverage`                          | TEXT    | CHECK                    | `complete`、`partial`、`unknown`                         |
-| `adapter_version`                   | TEXT    | NOT NULL                 | 适配器版本                                               |
-| `normalizer_version`                | TEXT    | NOT NULL                 | 标准化器版本                                             |
-| `sync_policy_version`               | TEXT    | NOT NULL                 | 状态策略版本                                             |
-| `source_config_hash`                | TEXT    | NOT NULL                 | 脱敏配置哈希                                             |
-| `cursor_in_json`、`cursor_out_json` | TEXT    | NULL                     | 输入和输出游标                                           |
-| `stats_json`                        | TEXT    | NOT NULL DEFAULT `'{}'`  | 发现、增改、关闭和失败计数                               |
-| `coverage_evidence_json`            | TEXT    | NOT NULL DEFAULT `'{}'`  | 覆盖完整性证据                                           |
-| `error_category`、`error_summary`   | TEXT    | NULL                     | 脱敏失败信息                                             |
-| `started_at`、`finished_at`         | INTEGER | NOT NULL / NULL          | 运行时间                                                 |
+- private_state：sourceId、trigger，以及成功扫描得到的 cursorOut。输入游标可从上次成功扫描重建；版本号和配置哈希不重复保存。
+- public_state：status（保留 partial 业务结果）、coverage、stats、coverageEvidence；通用 status 将已完成的 partial 扫描记为 succeeded，来源健康和缺失判断仍使用 coverage。
+- 公共列：id、parent_task_id、source_id 索引投影、执行状态、错误分类/摘要与时间。
 
-索引：`(source_id, started_at DESC)`、`(status, started_at DESC)`；部分唯一索引 `source_id WHERE status = 'running'` 保证一个来源最多一个运行中同步。
+保留历史扫描 ID 及观测关联；新一次全量扫描使用新 ID。只有评分恢复时复用原扫描。部分唯一索引保证每个来源最多一个 running 扫描，来源和开始时间索引支持最近扫描查询。
 
 #### 3.1.5 `source_job_details`
 
@@ -261,16 +254,16 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 | `fetched_at`                      | INTEGER | NULL                     | 成功抓取时间               |
 | `updated_at`                      | INTEGER | NOT NULL                 | 最近更新                   |
 
-复合主键：`(source_id, external_job_id)`。网络请求结束并校验后，以一个短事务覆盖该缓存；不得被 `job_revisions` 当作永久证据引用。
+复合主键：`(source_id, external_job_id)`。网络请求结束并校验后，以一个短事务覆盖该缓存；不得被职位当作永久证据引用。
 
 #### 3.1.6 `sync_seen_jobs`
 
 同步运行期间的有界工作集，用于流式记录本轮已观察职位，避免在内存保存来源全部职位。
 
-| 列            | 类型 | 约束                   | 说明       |
-| ------------- | ---- | ---------------------- | ---------- |
-| `sync_run_id` | TEXT | FK sync_runs, NOT NULL | 同步运行   |
-| `job_id`      | TEXT | FK jobs, NOT NULL      | 已观察职位 |
+| 列            | 类型 | 约束               | 说明       |
+| ------------- | ---- | ------------------ | ---------- |
+| `sync_run_id` | TEXT | FK tasks, NOT NULL | 同步运行   |
+| `job_id`      | TEXT | FK jobs, NOT NULL  | 已观察职位 |
 
 复合主键：`(sync_run_id, job_id)`。与 `job_observations` 在同一个职位写入事务中登记；运行完成或恢复清理后删除，不作为长期历史。
 
@@ -316,35 +309,19 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 关键词搜索使用 `title LIKE ? OR department LIKE ? OR description LIKE ?`，输入中的 `%`、`_` 和转义符必须转义并设置显式 `ESCAPE`。
 
-#### 3.2.2 `job_revisions`
+#### 3.2.2 当前职位内容
 
-职位不可变标准化版本。删除原始记录后，该表是职位内容历史的唯一权威记录。
-
-| 列                    | 类型    | 约束                | 说明                     |
-| --------------------- | ------- | ------------------- | ------------------------ |
-| `id`                  | TEXT    | PK                  | 修订 ID                  |
-| `job_id`              | TEXT    | FK jobs, NOT NULL   | 职位                     |
-| `revision_no`         | INTEGER | NOT NULL CHECK >= 1 | 从 1 递增                |
-| `content_hash`        | TEXT    | NOT NULL            | 标准化快照哈希           |
-| `normalizer_version`  | TEXT    | NOT NULL            | 标准化器版本             |
-| `source_payload_hash` | TEXT    | NOT NULL            | 当次来源内容的不可逆哈希 |
-| `source_url`          | TEXT    | NOT NULL            | 当次来源 URL             |
-| `snapshot_json`       | TEXT    | NOT NULL            | 完整标准化职位快照       |
-| `change_set_json`     | TEXT    | NOT NULL            | 与前一版的字段差异       |
-| `created_at`          | INTEGER | NOT NULL            | 观察并创建修订的时间     |
-
-唯一约束：`(job_id, revision_no)`、`(job_id, content_hash)`。只有标准化 `content_hash` 变化时创建修订；`source_payload_hash` 不支持恢复原始响应。
+jobs 直接保存当前事实，content_id 唯一标识当前输入；内容变化替换该身份，并清理派生结果。source_payload_hash 与 source_url 保存来源追溯信息，不保留历史正文快照。
 
 #### 3.2.3 `job_observations`
 
 证明某职位的某个标准化版本在一次同步中被看到。
 
-| 列                | 类型    | 约束                       | 说明                 |
-| ----------------- | ------- | -------------------------- | -------------------- |
-| `job_id`          | TEXT    | FK jobs, NOT NULL          | 职位                 |
-| `sync_run_id`     | TEXT    | FK sync_runs, NOT NULL     | 同步运行             |
-| `job_revision_id` | TEXT    | FK job_revisions, NOT NULL | 当时生效的标准化版本 |
-| `observed_at`     | INTEGER | NOT NULL                   | 观察时间             |
+| 列            | 类型    | 约束               | 说明     |
+| ------------- | ------- | ------------------ | -------- |
+| `job_id`      | TEXT    | FK jobs, NOT NULL  | 职位     |
+| `sync_run_id` | TEXT    | FK tasks, NOT NULL | 同步运行 |
+| `observed_at` | INTEGER | NOT NULL           | 观察时间 |
 
 复合主键：`(job_id, sync_run_id)`。应用层必须保证 `job_revision_id` 属于同一个 `job_id`；该不变量由 Repository 和集成测试验证。
 
@@ -366,29 +343,17 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 #### 3.3.2 `profile_versions`
 
-候选人事实的不可变版本，保存模型提取结果与人工覆盖后的有效结果；每个画像最多保留最新 5 个版本。
+画像按明确的一级属性分列，不保存 extracted_json、effective_json 或 locked_paths_json。集合使用各自 JSON 列：basic_info_json、matching_constraints_json、target_roles_json、intended_roles_json、preferences_json、education_json、work_experience_json、projects_json、works_json、competitions_json、certificates_json、languages_json、skills_json、domains_json；标量为 professional_skills、self_evaluation、years_of_experience、management_experience。
 
-| 列                  | 类型    | 约束                            | 说明                           |
-| ------------------- | ------- | ------------------------------- | ------------------------------ |
-| `id`                | TEXT    | PK                              | 画像版本 ID                    |
-| `profile_id`        | TEXT    | FK candidate_profiles, NOT NULL | 所属画像                       |
-| `version_no`        | INTEGER | NOT NULL CHECK >= 1             | 递增版本号                     |
-| `resume_file_id`    | TEXT    | FK files, NULL                  | 来源简历逻辑文件；人工创建可空 |
-| `agent_run_id`      | TEXT    | FK agent_runs, NULL             | 提取运行                       |
-| `extracted_json`    | TEXT    | NOT NULL                        | 原始结构化提取                 |
-| `effective_json`    | TEXT    | NOT NULL                        | 合并人工修订后的有效画像       |
-| `locked_paths_json` | TEXT    | NOT NULL DEFAULT `'[]'`         | 禁止后续提取覆盖的路径         |
-| `content_hash`      | TEXT    | NOT NULL                        | 有效画像哈希                   |
-| `is_current`        | INTEGER | NOT NULL CHECK                  | 当前版本标志                   |
-| `created_at`        | INTEGER | NOT NULL                        | 创建时间                       |
+公共身份列保留 id、profile_id、version_no、resume_file_id、agent_run_id、content_hash、created_at。is_current 标识唯一当前版本；is_candidate 标识待确认提取结果，base_version_id 记录其提取基线。首次提取建立当前画像；再次提取只追加候选，用户选择字段且基线未变化时才生成生效版本。匹配不得读取候选。最近五个已确认版本保留，候选不挤占其保留名额。
 
-唯一约束：`(profile_id, version_no)`；部分唯一索引 `profile_id WHERE is_current = 1` 保证一个画像最多一个当前版本。版本号单调递增且不复用；写入新版本的同一事务按 `version_no DESC` 保留最新 5 个，先删除超额版本关联的 `match_results`（以及级联的 `match_advices`），再删除超额 `profile_versions`。
+projects 中每项使用稳定 id 和可空 local_path；模型不能覆盖身份和路径，人工编辑、排序保持 id。画像删除或项目移除时清除会话的对应元数据关联，不删除消息。
 
 ### 3.4 Agent、匹配与推导结果
 
 本领域保存 Agent 执行事实和以不可变输入生成的匹配结果。模型输出只能形成新推导结果，不能覆盖职位、画像或用户答案。
 
-**事务边界：**Agent 运行开始先提交 `running`；模型调用在事务外；成功或失败结果用短事务完成。任务随后独立提交 `result_json`；若两次提交间崩溃，重试通过 Agent 缓存恢复。确定性匹配结果及其输入引用在一个事务中创建。
+**事务边界：**Agent 运行开始先提交 `running`；模型调用在事务外；成功或失败结果用短事务完成。任务随后独立提交 `public_state`；若两次提交间崩溃，重试通过 Agent 缓存恢复。确定性匹配结果及其输入引用在一个事务中创建。
 
 #### 3.4.1 `agent_runs`
 
@@ -396,7 +361,7 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 逐请求事实保存于 common 的 `model_requests`，不再使用 `model_usage_json`，运行表也不保存请求 ID 数组。运行详情通过 `agent_run_id` 返回请求 ID 和账单；运行汇总列保留，无请求明细的历史合计不伪造明细。参见 [ADR-0059](../adr/0059-model-request-ledger.md)。
 
-`model_requests` 保存请求 ID、可空 `agent_run_id`（ON DELETE SET NULL）、`agent_key` 快照、`state`（running/completed）、请求时间、供应商主机、模型、HTTP 状态、错误类别、耗时、首字、归一化用量、分项费用、币种、价格版本/时段/精度和 `rates_json` 单价快照。每次网络请求发起前登记，结束后幂等更新；未知字段为 NULL，不包含正文、提示词或密钥。时间、运行关联及供应商/模型与时间建立索引。运行清理不删除账本。
+`model_requests` 保存请求 ID、可空 `ai_message_id`（消息删除置空）、可空 `agent_run_id`（ON DELETE SET NULL）、`agent_key` 快照、`state`（running/completed）、请求时间、供应商主机、模型、HTTP 状态、错误类别、耗时、首字、归一化用量、分项费用、币种、价格版本/时段/精度和 `rates_json` 单价快照。每次网络请求发起前登记，结束后幂等更新；未知字段为 NULL，不包含正文、提示词或密钥。时间、运行关联及供应商/模型与时间建立索引。运行清理不删除账本。
 
 | 列                                 | 类型    | 约束            | 说明                                          |
 | ---------------------------------- | ------- | --------------- | --------------------------------------------- |
@@ -418,74 +383,20 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 隐私敏感 Agent 可以使用受限输出记录。`recruitment-mail.classify@v1` 禁用持久化输出缓存并使用独立运行身份；其 `output_json` 只允许保存输出哈希和校验状态，不得保存邮件文本、结构化字段或证据。已接受和已忽略结果分别通过 `application_events` 与 `mail_message_refs.processing_status` 实现业务幂等，待确认结果重新读取原邮件，不从 AgentRun 恢复字段结果。
 
-#### 3.4.2 `job_enrichments`
+#### 3.4.2 `job_metadata`
 
-保存针对特定职位修订产生的结构化补充结果。
+| 字段       | 类型    | 约束与用途                             |
+| ---------- | ------- | -------------------------------------- |
+| id         | TEXT    | 独立主键                               |
+| job_id     | TEXT    | jobs 外键，删除级联                    |
+| name       | TEXT    | enrichment、match_result、match_advice |
+| value      | TEXT    | 严格校验的 JSON 对象                   |
+| created_at | INTEGER | 首次创建时间                           |
+| updated_at | INTEGER | 最近结果更新时间                       |
 
-| 列                | 类型    | 约束                       | 说明                 |
-| ----------------- | ------- | -------------------------- | -------------------- |
-| `id`              | TEXT    | PK                         | 语义结果 ID          |
-| `job_revision_id` | TEXT    | FK job_revisions, NOT NULL | 输入职位修订         |
-| `agent_run_id`    | TEXT    | FK agent_runs, NOT NULL    | 运行                 |
-| `schema_version`  | TEXT    | NOT NULL                   | 输出 Schema 版本     |
-| `content_hash`    | TEXT    | NOT NULL                   | 结果哈希             |
-| `result_json`     | TEXT    | NOT NULL                   | 必备项、技能、职级等 |
-| `created_at`      | INTEGER | NOT NULL                   | 创建时间             |
+UNIQUE(job_id, name) 保证每职位每类型只保存一份当前结果；覆盖保留 ID。规则定义由代码常量提供。
 
-唯一约束：`(job_revision_id, agent_run_id)`。
-
-#### 3.4.3 `match_rulesets`
-
-保存可复用、可追溯的职位匹配规则版本。
-
-| 列                | 类型    | 约束            | 说明         |
-| ----------------- | ------- | --------------- | ------------ |
-| `id`              | TEXT    | PK              | 规则集 ID    |
-| `version`         | TEXT    | UNIQUE NOT NULL | 规则版本     |
-| `definition_json` | TEXT    | NOT NULL        | 规则定义     |
-| `definition_hash` | TEXT    | UNIQUE NOT NULL | 定义哈希     |
-| `active`          | INTEGER | NOT NULL CHECK  | 是否当前启用 |
-| `created_at`      | INTEGER | NOT NULL        | 创建时间     |
-
-部分唯一索引保证最多一个 `active = 1` 规则集。
-
-#### 3.4.4 `match_results`
-
-保存候选人画像版本与职位修订之间的匹配计算结果。
-
-| 列                   | 类型    | 约束                          | 说明                                |
-| -------------------- | ------- | ----------------------------- | ----------------------------------- |
-| `id`                 | TEXT    | PK                            | 匹配结果 ID                         |
-| `profile_version_id` | TEXT    | FK profile_versions, NOT NULL | 输入画像版本                        |
-| `job_revision_id`    | TEXT    | FK job_revisions, NOT NULL    | 输入职位修订                        |
-| `job_enrichment_id`  | TEXT    | FK job_enrichments, NULL      | 实际使用的语义结果                  |
-| `ruleset_id`         | TEXT    | FK match_rulesets, NOT NULL   | 规则版本                            |
-| `filter_status`      | TEXT    | CHECK                         | `eligible`、`excluded`、`uncertain` |
-| `total_score`        | REAL    | CHECK 0..100                  | 最终总分（规则分或 30/70 加权分）   |
-| `model_score`        | REAL    | CHECK 0..100, NULL            | 模型阶段 fitScore；降级时为 NULL    |
-| `scoring_version`    | TEXT    | NOT NULL, 默认 `rules-v1`     | `weighted-v1`（加权）或 `rules-v1`  |
-| `components_json`    | TEXT    | NOT NULL                      | 分项分数、规则和证据                |
-| `risks_json`         | TEXT    | NOT NULL                      | 风险项                              |
-| `input_hash`         | TEXT    | UNIQUE NOT NULL               | 全部有效输入的组合哈希（不含模型分）|
-| `created_at`         | INTEGER | NOT NULL                      | 创建时间                            |
-
-索引：`(profile_version_id, job_revision_id, ruleset_id)`、`(profile_version_id, filter_status, total_score DESC)`。
-
-#### 3.4.5 `match_advices`
-
-保存基于匹配结果生成的求职准备建议。
-
-| 列                | 类型    | 约束                       | 说明                 |
-| ----------------- | ------- | -------------------------- | -------------------- |
-| `id`              | TEXT    | PK                         | 建议 ID              |
-| `match_result_id` | TEXT    | FK match_results, NOT NULL | 确定性匹配结果       |
-| `agent_run_id`    | TEXT    | FK agent_runs, NOT NULL    | 建议运行             |
-| `schema_version`  | TEXT    | NOT NULL                   | 输出 Schema 版本     |
-| `content_hash`    | TEXT    | NOT NULL                   | 建议哈希             |
-| `result_json`     | TEXT    | NOT NULL                   | 亮点、缺口和准备建议 |
-| `created_at`      | INTEGER | NOT NULL                   | 创建时间             |
-
-唯一约束：`(match_result_id, agent_run_id)`。失败运行不创建建议。
+评分 JSON 保存输入身份和摘要、filter_status、total_score、components、risk_results、unknown_rules、model。components 仅保存 dimension、score、max_score；风险与未知规则为标识数组；model 为 null 或 {score, reasons}。解析和建议保存结果及 Agent 运行引用，建议绑定评分输入摘要。评分排序通过 JSON 表达式索引实现。
 
 ### 3.5 任务、计划与设置
 
@@ -500,14 +411,14 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 | 列                                        | 类型    | 约束                   | 说明                                                     |
 | ----------------------------------------- | ------- | ---------------------- | -------------------------------------------------------- |
 | `id`                                      | TEXT    | PK                     | 任务 ID                                                  |
+| `parent_task_id`                          | TEXT    | FK tasks, NULL         | 内部阶段归属的主任务                                     |
 | `task_type`                               | TEXT    | NOT NULL               | Handler 注册键                                           |
-| `payload_json`                            | TEXT    | NOT NULL               | 已校验参数                                               |
-| `result_json`                             | TEXT    | NULL                   | 已校验成功结果；终态定位信息                             |
+| `private_state`                           | TEXT    | NOT NULL               | 经任务 Schema 校验的执行输入                             |
+| `public_state`                            | TEXT    | NULL                   | 脱敏进度、检查点、结果及定位信息                         |
 | `status`                                  | TEXT    | CHECK                  | `pending`、`running`、`succeeded`、`failed`、`cancelled` |
 | `priority`                                | INTEGER | NOT NULL DEFAULT 0     | 越大越优先                                               |
 | `idempotency_key`                         | TEXT    | UNIQUE NOT NULL        | 逻辑幂等键                                               |
 | `concurrency_key`                         | TEXT    | NULL                   | 活动任务互斥键                                           |
-| `schedule_id`                             | TEXT    | FK schedules, NULL     | 来源计划                                                 |
 | `retry_of_task_id`                        | TEXT    | FK tasks, NULL         | 手动重试来源                                             |
 | `attempt_count`                           | INTEGER | NOT NULL DEFAULT 0     | 已领取次数                                               |
 | `max_attempts`                            | INTEGER | NOT NULL               | 最大尝试次数                                             |
@@ -520,11 +431,11 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 领取索引：`(task_type, status, available_at, priority DESC, created_at)`；恢复索引：`(status, lease_expires_at)`；部分唯一索引 `concurrency_key WHERE status IN ('pending', 'running')`。
 
-`result_json` 只保存任务的小型结构化结果或结果 ID，不复制大型文档。简历润色结果由 `agent_runs.output_json` 保存，任务结果只保存 `agentRunId` 等定位字段。
+`public_state` 只保存任务的小型结构化结果或结果 ID，不复制大型文档。简历润色结果由 `agent_runs.output_json` 保存，任务结果只保存 `agentRunId` 等定位字段。
 
-#### 3.5.2 `schedules`
+#### 3.5.2 周期设置
 
-保存周期任务的调度定义及下一次入队游标。
+调度定义和下一次入队进度保存在 `application_settings` 的 `task.periodic:<scheduleKey>` 设置中，以下是 value_json 的属性，不再建立 schedules 表。运行时通过 JSON 表达式部分索引查找到期设置，使用 CAS 原子推进下一次触发时间并发布任务。
 
 | 列                                | 类型    | 约束            | 说明           |
 | --------------------------------- | ------- | --------------- | -------------- |
@@ -559,120 +470,43 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 本领域包含简历项目拷打、个人面经和网友面经研究。项目代码不进入数据库；深档只读取用户显式上传并冻结的 Markdown 版本，外部研究 Agent 只接收岗位 Brief、Prompt 与输出 Schema。
 
-**事务边界：**创建项目档案时快照和档案原子提交；资料文件写入和 Markdown 解析在事务外完成，版本登记与档案修订在短事务中提交，深档会话在同一事务重验并冻结精确版本；问题、摘要和研究 Task 的入队与业务引用必须同事务，手工重试同事务把引用从失败 Task 切换到新 Task；创建问题、提交回答、消化知识和更新覆盖状态分别使用带修订号的短事务，最终提交核验当前 Task 为 running 且未取消；个人面经草稿替换必须以文件 `revision` CAS，并在同事务替换经历和问题；研究包先在短事务内以研究请求 `revision` 和当前 Task 状态取得带租约的 import claim，再在事务外完成文件写入，最后在短事务内再次核验 Task 并提升正式版本、原子替换未审核候选，逐条审核同样使用 CAS。外部 Agent 与网络调用不进入数据库事务。
+**事务边界：**创建 AI 会话、追加消息及发布回复任务使用短事务。模型调用在事务外执行，提交前检查当前消息和可选项目事实未变化；用户编辑覆盖当前内容并取消未完成回复。个人面经草稿及审核继续使用 revision CAS；研究的执行与导入检查点由 tasks 承载。
 
-#### 3.6.1 项目档案与不可变快照：`project_dossiers`
+#### 3.6.1 本地项目关联
 
-档案与项目快照共享生命周期，合并存储。snapshot_id 继续作为唯一证据标识；来源画像删除或版本淘汰不删除项目快照。
+项目事实使用当前画像 projects_json，稳定 id 保持编辑、排序后的身份，local_path 仅记录本地位置。系统不上传、复制或自动扫描项目目录。project_dossiers、resume_project_snapshots、项目材料和备忘录管理已移除；项目删除只解除会话关联。
 
-| 字段 | 作用与约束 |
-| --- | --- |
-| id | 档案主键，供会话和知识项引用 |
-| snapshot_id | 唯一快照标识，保留既有问答证据引用 |
-| source_profile_id、source_profile_version_id | 来源身份，允许来源失效后继续准备 |
-| project_index、project_json、content_hash | 冻结项目内容，下标非负、哈希 64 位；来源版本＋下标＋哈希唯一 |
-| snapshot_created_at | 快照创建时间，与档案时间分别保留 |
-| notebook_file_id、notebook_source_hash | 当前准备文档及输入哈希；文件外键限制删除 |
-| revision、created_at、updated_at | 档案 CAS 修订号与生命周期时间 |
+#### 3.6.3 通用会话与消息
 
-#### 3.6.3 `drill_sessions`
+- ai_sessions：id、type（interview/chat）、title、created_at、updated_at。会话无暂停、完成或截止状态。
+- ai_messages：id、session_id（级联删除）、role、content、sequence、status（pending/completed/failed/cancelled）、created_at、updated_at。session_id/sequence 唯一，每会话最多一条 pending 消息。编辑 user 消息覆盖当前值，通过 updated_at 检查并发，不保留回答修订。
+- ai_session_metadata：独立 id、session_id、name、value、created_at、updated_at；session_id/name 唯一。profile_id、project_id 为可选关联，失效后对话仍可继续。
+- model_requests.ai_message_id：可空外键指向 assistant 消息，一条消息可对应协商、重试等多次请求；消息删除置空，账本保留。非对话请求为空。
 
-一次项目拷打过程的会话状态和能力档位快照。
+0058 将旧问题及每题最新回答分别迁为消息，保留确定顺序；移除 drill_sessions、drill_turns、drill_answer_revisions、project_knowledge_items 和覆盖状态。旧任务停止分派，旧派生摘要不保留回答历史。对话 Agent 不缓存或另存输出，任务输入只保存会话及消息 ID；模型返回后在事务内检查输入指纹，拒绝被编辑或取消的迟到回复。
 
-| 列                                         | 类型    | 约束                          | 说明                                                   |
-| ------------------------------------------ | ------- | ----------------------------- | ------------------------------------------------------ |
-| `id`                                       | TEXT    | PK                            | 会话 ID                                                |
-| `dossier_id`                               | TEXT    | FK project_dossiers, NOT NULL | 所属档案                                               |
-| `profile_key`、`profile_version`           | TEXT    | NOT NULL CHECK                | `resume-only` 或 `docs-grounded`；首版均为 `v1`        |
-| `profile_definition_hash`                  | TEXT    | NOT NULL                      | 档位定义哈希                                           |
-| `capability_summary_json`                  | TEXT    | NOT NULL                      | 允许的工具和能力摘要                                   |
-| `coverage_json` | TEXT | NOT NULL，合法 JSON 对象 | 十维覆盖状态与证据引用 |
-| `material_bindings_json`                   | TEXT    | NOT NULL DEFAULT `'[]'`       | 深档冻结的 file/version/entity/name/hash；浅档必须为空 |
-| `status`                                   | TEXT    | CHECK                         | `active`、`paused`、`completed`                        |
-| `context_revision`                         | INTEGER | NOT NULL DEFAULT 0            | 问题生成上下文修订号                                   |
-| `created_at`、`updated_at`、`completed_at` | INTEGER | NOT NULL / NOT NULL / NULL    | 生命周期时间                                           |
-
-部分唯一索引保证一个档案最多一个 `active` 会话；同一档案可保留多个 `paused` 或 `completed` 会话。恢复旧会话时，在同一事务中暂停当前 active 会话并激活目标会话。深档绑定必须包含 1–8 个不同逻辑文件且在创建事务中重验；浅档绑定必须为空。项目资料本身不建立专用表：`files(kind=project_material)` 标识逻辑资料，映射的 `normalized_text` 保存规范文本，`metadata_json` 保存所属 dossier、安全文件名、解析器版本和带哈希的标题分块范围。
-
-#### 3.6.4 `drill_turns`
-
-一次渐进式拷打的问题回合。
-
-| 列                                             | 类型    | 约束                        | 说明                                     |
-| ---------------------------------------------- | ------- | --------------------------- | ---------------------------------------- |
-| `id`                                           | TEXT    | PK                          | 回合 ID                                  |
-| `session_id`                                   | TEXT    | FK drill_sessions, NOT NULL | 所属会话                                 |
-| `turn_no`                                      | INTEGER | NOT NULL CHECK >= 1         | 会话内序号                               |
-| `status`                                       | TEXT    | CHECK                       | pending、awaiting、ready、skipped 等状态 |
-| `context_hash`                                 | TEXT    | NOT NULL                    | 生成问题的上下文哈希                     |
-| `question`、`intent`                           | TEXT    | NULL                        | 问题和意图                               |
-| `primary_dimension`                            | TEXT    | NULL CHECK                  | 主要覆盖维度                             |
-| `guidance_slots_json`                          | TEXT    | NOT NULL DEFAULT `'[]'`     | 只含指导槽位，不含代写答案               |
-| `evidence_refs_json`                           | TEXT    | NOT NULL DEFAULT `'[]'`     | 问题使用的证据引用                       |
-| `question_task_id`、`digest_task_id`           | TEXT    | FK tasks, NULL              | 异步任务                                 |
-| `question_agent_run_id`、`digest_agent_run_id` | TEXT    | FK agent_runs, NULL         | Agent 运行                               |
-| `created_at`、`updated_at`                     | INTEGER | NOT NULL                    | 生命周期时间                             |
-
-唯一约束：`(session_id, turn_no)`；索引：`(session_id, status, turn_no DESC)`。
-
-#### 3.6.5 `drill_answer_revisions`
-
-用户回答的不可变修订。
-
-| 列                | 类型    | 约束                     | 说明         |
-| ----------------- | ------- | ------------------------ | ------------ |
-| `id`              | TEXT    | PK                       | 回答修订 ID  |
-| `turn_id`         | TEXT    | FK drill_turns, NOT NULL | 所属回合     |
-| `revision_no`     | INTEGER | NOT NULL CHECK >= 1      | 回答版本号   |
-| `answer_text`     | TEXT    | NOT NULL CHECK 非空      | 用户原始回答 |
-| `content_hash`    | TEXT    | NOT NULL                 | 回答哈希     |
-| `idempotency_key` | TEXT    | NOT NULL                 | 提交幂等键   |
-| `created_at`      | INTEGER | NOT NULL                 | 创建时间     |
-
-唯一约束：`(turn_id, revision_no)`、`(turn_id, idempotency_key)`。
-
-#### 3.6.6 `project_knowledge_items`
-
-只能从用户回答中提取、带原文证据的项目知识。
-
-| 列                           | 类型    | 约束                                | 说明                                                          |
-| ---------------------------- | ------- | ----------------------------------- | ------------------------------------------------------------- |
-| `id`                         | TEXT    | PK                                  | 知识项 ID                                                     |
-| `dossier_id`                 | TEXT    | FK project_dossiers, NOT NULL       | 所属档案                                                      |
-| `source_answer_revision_id`  | TEXT    | FK drill_answer_revisions, NOT NULL | 来源回答修订                                                  |
-| `kind`                       | TEXT    | CHECK                               | fact、decision、metric、incident、lesson、ambiguity、conflict |
-| `statement`                  | TEXT    | NOT NULL                            | 结构化陈述                                                    |
-| `quote`                      | TEXT    | NOT NULL                            | 用户回答中的原文证据                                          |
-| `source_start`、`source_end` | INTEGER | NOT NULL CHECK                      | 合法字符范围                                                  |
-| `status`                     | TEXT    | CHECK                               | `active`、`superseded`                                        |
-| `created_at`                 | INTEGER | NOT NULL                            | 创建时间                                                      |
-
-索引：`(dossier_id, status, created_at)`。系统不得把推测或代码扫描结果写成用户事实。
-
-#### 3.6.7 会话内的维度覆盖状态
-
-`drill_sessions.coverage_json` 以十个固定维度为键，每项包含 status、evidenceItemIds 和 updatedAt。状态使用 unasked、asked、evidence_partial、evidence_sufficient、needs_clarification。创建会话时校验维度完整且不重复；问题提交和回答摘要在原事务中用 json_set 更新目标维度，保留其他维度和证据。该状态是持久化的小型快照，不在每次选题时重放历史。
+0059 删除旧项目档案与系统材料索引；0060 将研究请求迁入 tasks。旧项目 API 和界面实现已删除。
 
 #### 3.6.8 `interview_experiences`
 
 个人面经或研究包中的有序面试经历。文档状态、解析文本和警告保存在对应 `files` 与当前 `file_entity_mappings`；`source_type` 和约束保证网友内容不会被当成用户事实。
 
-| 列                                           | 类型    | 约束                                  | 说明                                              |
-| -------------------------------------------- | ------- | ------------------------------------- | ------------------------------------------------- |
-| `id`                                         | TEXT    | PK                                    | 经历 ID                                           |
-| `file_id`                                    | TEXT    | FK files, NOT NULL                    | 个人面经文件或研究 Bundle 逻辑文件                |
-| `sequence_no`                                | INTEGER | NOT NULL CHECK >= 1                   | 文件内顺序                                        |
-| `source_type`                                | TEXT    | CHECK `personal/community`            | 来源边界                                          |
-| `review_status`                              | TEXT    | CHECK                                 | draft、needs_review、accepted、rejected           |
-| `research_request_id`                        | TEXT    | FK experience_research_requests, NULL | 网友候选所属请求；个人经历必须为空                |
-| `company`、`role`、`stage`                   | TEXT    | NULL                                  | 公司、岗位和阶段                                  |
-| `occurred_on`                                | TEXT    | NULL CHECK 日期格式                   | 面试日期                                          |
-| `outcome`、`difficulty`                      | TEXT    | NULL                                  | 仅个人面经使用的结果和难度                        |
-| `tags_json`                                  | TEXT    | NOT NULL DEFAULT `'[]'`               | 标签                                              |
-| `notes`                                      | TEXT    | NULL                                  | 未分类过程备注                                    |
-| `source_url`、`source_title`                 | TEXT    | community 时 NOT NULL                 | 公开来源                                          |
-| `source_published_at`、`source_retrieved_at` | TEXT    | NULL / community 时 NOT NULL          | 来源发布与检索时间                                |
-| `verification_status`                        | TEXT    | CHECK                                 | personal 为 not_applicable；首版网友为 unverified |
+| 列                                           | 类型    | 约束                         | 说明                                              |
+| -------------------------------------------- | ------- | ---------------------------- | ------------------------------------------------- |
+| `id`                                         | TEXT    | PK                           | 经历 ID                                           |
+| `file_id`                                    | TEXT    | FK files, NOT NULL           | 个人面经文件或研究 Bundle 逻辑文件                |
+| `sequence_no`                                | INTEGER | NOT NULL CHECK >= 1          | 文件内顺序                                        |
+| `source_type`                                | TEXT    | CHECK `personal/community`   | 来源边界                                          |
+| `review_status`                              | TEXT    | CHECK                        | draft、needs_review、accepted、rejected           |
+| `research_task_id`                           | TEXT    | FK tasks, ON DELETE SET NULL | 网友候选所属请求；个人经历必须为空                |
+| `company`、`role`、`stage`                   | TEXT    | NULL                         | 公司、岗位和阶段                                  |
+| `occurred_on`                                | TEXT    | NULL CHECK 日期格式          | 面试日期                                          |
+| `outcome`、`difficulty`                      | TEXT    | NULL                         | 仅个人面经使用的结果和难度                        |
+| `tags_json`                                  | TEXT    | NOT NULL DEFAULT `'[]'`      | 标签                                              |
+| `notes`                                      | TEXT    | NULL                         | 未分类过程备注                                    |
+| `source_url`、`source_title`                 | TEXT    | community 时 NOT NULL        | 公开来源                                          |
+| `source_published_at`、`source_retrieved_at` | TEXT    | NULL / community 时 NOT NULL | 来源发布与检索时间                                |
+| `verification_status`                        | TEXT    | CHECK                        | personal 为 not_applicable；首版网友为 unverified |
 
 唯一约束：`(file_id, sequence_no)`。
 
@@ -695,28 +529,13 @@ SQLite 使用 WAL、`foreign_keys = ON` 和有限 `busy_timeout`。默认事务�
 
 唯一约束：`(experience_id, sequence_no)`。人工修改内容时清除对应自动解析范围，避免错误指向原文。
 
-#### 3.6.10 `experience_research_requests`
+#### 3.6.10 面经研究阶段任务
 
-保存一项长期网友面经研究意图；某次执行状态和失败诊断仍由通用 `tasks` 保存，不在本表复制任务状态。
+不再保留 experience_research_requests 表。tasks 中 interview.experience-research 父任务保存冻结 Brief、Prompt/Schema 引用、导入检查点和 CAS 修订；private_state.research 归 user 模块解释，public_state 只包含阶段和候选数。等待外部结果时父任务不占执行器，系统采集由关联的 interview.experience-research.execute 子任务承担。任务页链接到研究工作台，执行子任务可单独取消和重试。
 
-| 列                                                 | 类型           | 约束                     | 说明                                               |
-| -------------------------------------------------- | -------------- | ------------------------ | -------------------------------------------------- |
-| `id`                                               | TEXT           | PK                       | 研究请求 ID                                        |
-| `brief_json`                                       | TEXT           | NOT NULL，严格 Schema    | 冻结岗位、公司、时间、域名和数量约束               |
-| `request_fingerprint`                              | TEXT           | UNIQUE NOT NULL，SHA-256 | Brief + 协议版本；封存后派生 generation 的实例指纹 |
-| `prompt_version`、`schema_version`                 | TEXT           | NOT NULL                 | 交接协议版本                                       |
-| `prompt_file_id`、`schema_file_id`                 | TEXT           | FK files, NOT NULL       | Prompt 与 JSON Schema 逻辑文件                     |
-| `prompt_file_version_no`、`schema_file_version_no` | INTEGER        | CHECK 1..5               | 冻结文件版本                                       |
-| `bundle_file_id`、`bundle_file_version_no`         | TEXT / INTEGER | 成对为空或版本 1..5      | 当前有效研究包逻辑文件及版本                       |
-| `bundle_import_token`                              | TEXT           | NULL，claim 时非空       | 当前 Bundle 导入 claim 的唯一 token                |
-| `bundle_import_claimed_at`                         | INTEGER        | NULL，claim 时非负       | claim 时间；超过 5 分钟可回收                      |
-| `bundle_import_file_id`                            | TEXT           | NULL，claim 时非空       | 本次 claim 独占的 staging 逻辑文件 ID              |
-| `current_task_id`                                  | TEXT           | FK tasks, NULL           | 最近一次外部执行任务                               |
-| `state`                                            | TEXT           | CHECK                    | ready、needs_review、completed                     |
-| `revision`                                         | INTEGER        | NOT NULL DEFAULT 0       | 导包与审核 CAS                                     |
-| `created_at`、`updated_at`                         | INTEGER        | NOT NULL                 | 生命周期时间                                       |
+输出位置由数据根目录与父任务 ID 决定：research-results/<taskId>/result.json，重定位数据目录后自动重算。外部 Agent 在指定位置交付；系统执行器原子写入同一位置后走同一校验。拒绝非普通文件、符号链接、无效 UTF-8/JSON、错误指纹和超过 2 MiB 的内容。重复检查相同字节保留候选身份及审核状态；新内容受修订号与导入声明保护，已接受内容不得覆盖。
 
-Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一请求的有效 Bundle 最多五个版本。三个 import claim 字段必须全空或全非空；有效租约阻止同修订并发导入，过期租约的 staging 映射与无共享实体由下一次 claim 回收。Bundle 候选在没有 accepted 项时可按请求修订号整体替换，一旦已有接受项便禁止静默覆盖。
+导入成功即将父任务标记 succeeded，后续审核只更新面经记录和审核修订，不改变执行完成状态。来源关联 research_task_id 为可空外键，删除任务不删除面经或问题。Prompt/Schema/有效 Bundle 继续通过通用文件存储留存，输入输出不在数据库事务内读取或生成。
 
 ### 3.7 通用文件与事件基础设施
 
@@ -728,15 +547,15 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 
 业务引用的逻辑文件身份，独立于具体物理内容版本。
 
-| 列                         | 类型    | 约束                    | 说明                                                             |
-| -------------------------- | ------- | ----------------------- | ---------------------------------------------------------------- |
-| `id`                       | TEXT    | PK                      | 逻辑文件 ID                                                      |
-| `kind`                     | TEXT    | NOT NULL                | Registry 类型：resume、interview_experience、project_notebook 等 |
-| `name`                     | TEXT    | NOT NULL CHECK 非空     | 安全显示名称，不解释为本地路径                                   |
-| `state`                    | TEXT    | NOT NULL                | 类型相关状态，由 kind 对应 Schema 校验                           |
-| `revision`                 | INTEGER | NOT NULL DEFAULT 0      | 可编辑逻辑文件 CAS 修订号                                        |
-| `properties_json`          | TEXT    | NOT NULL DEFAULT `'{}'` | 类型相关低频元数据                                               |
-| `created_at`、`updated_at` | INTEGER | NOT NULL                | 生命周期时间                                                     |
+| 列                         | 类型    | 约束                    | 说明                                                               |
+| -------------------------- | ------- | ----------------------- | ------------------------------------------------------------------ |
+| `id`                       | TEXT    | PK                      | 逻辑文件 ID                                                        |
+| `kind`                     | TEXT    | NOT NULL                | Registry 类型：resume、interview_experience、interview_research 等 |
+| `name`                     | TEXT    | NOT NULL CHECK 非空     | 安全显示名称，不解释为本地路径                                     |
+| `state`                    | TEXT    | NOT NULL                | 类型相关状态，由 kind 对应 Schema 校验                             |
+| `revision`                 | INTEGER | NOT NULL DEFAULT 0      | 可编辑逻辑文件 CAS 修订号                                          |
+| `properties_json`          | TEXT    | NOT NULL DEFAULT `'{}'` | 类型相关低频元数据                                                 |
+| `created_at`、`updated_at` | INTEGER | NOT NULL                | 生命周期时间                                                       |
 
 索引：`(kind, updated_at DESC)`。删除业务文档时通常硬删除逻辑文件；历史保留由引用它的业务事实决定。
 
@@ -890,9 +709,9 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 
 | 用例           | 同一事务内必须完成                                                            | 事务外工作与失败恢复                                                      |
 | -------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 开始同步       | 创建 `sync_runs(running)`                                                     | HTTP 和浏览器抓取在提交后执行                                             |
-| 首次发现职位   | `jobs`、首个 `job_revisions`、`job_observations`、`sync_seen_jobs`、状态事件  | 解析与标准化先完成并校验                                                  |
-| 职位内容变化   | 更新 `jobs`、新增 `job_revisions`、新增观察和已见标记                         | 无原始响应落库；失败整项回滚                                              |
+| 开始同步       | 创建 `tasks(source.scan, running)`                                            | HTTP 和浏览器抓取在提交后执行                                             |
+| 首次发现职位   | `jobs`、`job_observations`、`sync_seen_jobs`、状态事件                        | 解析与标准化先完成并校验                                                  |
+| 职位内容变化   | 更新 `jobs` 当前内容、失效派生结果、新增观察和已见标记                        | 无原始响应落库；失败整项回滚                                              |
 | 重复观察       | 新增观察和已见标记、更新 `last_seen_at`                                       | 不创建修订                                                                |
 | 职位状态变化   | 更新状态/缺失计数并追加 `job.status.changed`                                  | 完整性计算在事务前完成；可按职位批次提交                                  |
 | 同步完成       | 更新运行状态、覆盖证据、统计和游标                                            | 仅在所有缺失推进批次完成后标记成功                                        |
@@ -913,14 +732,14 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 | 确认招聘邮件   | 重验瞬时分类结果和目标申请、追加申请事件并更新消息状态与申请当前投影          | 重新读取和分类在事务外；首版只允许确认、忽略或选择申请，不允许修改字段    |
 | 断开邮箱       | 删除或停用本地配置、停止计划并登记稳定删除影响                                | 提供商撤销、凭据库删除和运行状态文件更新在事务外；失败保留可恢复错误状态  |
 | 删除敏感文档   | 重验影响快照、删除业务引用和逻辑文件、追加审计事件                            | 先隔离独占物理实体；事务失败恢复，成功后清除                              |
-| 推进计划       | 更新 `schedules.next_run_at` 并创建幂等 Task                                  | Cron 计算在事务前完成                                                     |
+| 推进计划       | 更新 周期设置的 `next_run_at` 并创建幂等 Task                                 | Cron 计算在事务前完成                                                     |
 
 ## 5. 关键跨表不变量
 
 1. 每家公司恰好有三个逻辑渠道；每个物理来源只属于同公司的一个逻辑渠道。
 2. 一个物理来源最多一个 `running` SyncRun，最多一个相同并发键的 pending/running Task。
-3. `sync_runs.coverage != complete` 时不得推进未观察职位的 `missing_count`。
-4. `jobs.content_hash` 改变必须创建对应 `job_revisions`；状态改变必须追加事件。
+3. 扫描阶段的 `public_state.coverage != complete` 时不得推进未观察职位的 `missing_count`。
+4. `jobs.content_hash` 改变必须更新 content_id 并失效派生结果；状态改变必须追加事件。
 5. `job_observations.job_revision_id` 必须属于同一 `job_id`。
 6. 一个 CandidateProfile 最多一个当前 ProfileVersion。
 7. MatchResult 必须引用不可变画像版本、职位修订、实际语义结果或空哨兵及规则集。
@@ -936,11 +755,11 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 17. 同一稳定邮箱键的 `external_message_key` 唯一；增量页的数据库提交成功后才能推进文件游标，游标未推进只允许造成可安全消重的重复读取。
 18. 邮件来源申请事件必须引用对应 `mail_message_refs`，并以消息引用、内容哈希和邮件内事件序号保持唯一；分类器版本变化不能制造重复事实。
 19. 申请事件与申请当前态在同一事务提交；待确认或忽略消息不能推进状态。首版不允许修改分类字段、既有事件或追加人工事件。
-20. 邮件事件可以选择性关联职位，但不能更新 `jobs`、`job_revisions`、`job_observations`、来源健康或职位匹配结果。
+20. 邮件事件可以选择性关联职位，但不能更新 `jobs`、`job_observations`、来源健康或职位匹配结果。
 
 ## 6. 保留、清理与备份
 
-- `jobs` 和 `job_revisions` 默认长期保留；`job_observations` 默认保留 180 天。
+- `jobs` 默认长期保留；`job_observations` 默认保留 180 天。
 - 不保存完整原始职位响应；`source_job_details` 是可重建缓存，默认最多保留 30 天未命中记录，失败缓存可以更短。
 - `sync_seen_jobs` 在运行完成后清理；异常退出的工作集由恢复任务清理。
 - `events` 按事件类型保留：职位生命周期和敏感删除审计长期保留；同步失败与 Agent 工具诊断可随其运行保留策略清理。
@@ -960,16 +779,16 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 
 在现有 33 张目标业务表基础上，招聘邮件能力新增 3 张专用表，目标模型共 36 张业务表：
 
-| 领域           | 表                                                                                                                                                                                                                                            |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 来源目录与同步 | `companies`、`source_channels`、`job_sources`、`sync_runs`、`source_job_details`、`sync_seen_jobs`                                                                                                                                            |
-| 职位事实       | `jobs`、`job_revisions`、`job_observations`                                                                                                                                                                                                   |
-| 候选人画像     | `candidate_profiles`、`profile_versions`                                                                                                                                                                                                      |
-| Agent 与匹配   | `agent_runs`、`job_enrichments`、`match_rulesets`、`match_results`、`match_advices`                                                                                                                                                           |
-| 任务与设置     | `tasks`、`schedules`、`application_settings`                                                                                                                                                                                                  |
-| 面试准备       | `project_dossiers`、`drill_sessions`、`drill_turns`、`drill_answer_revisions`、`project_knowledge_items`、`experience_research_requests`、`interview_experiences`、`interview_question_entries` |
-| 招聘进展       | `mail_message_refs`、`job_applications`、`application_events`                                                                                                                                                                                 |
-| 通用基础设施   | `files`、`entities`、`file_entity_mappings`、`events`                                                                                                                                                                                         |
+| 领域           | 表                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------- |
+| 来源目录与同步 | `companies`、`source_channels`、`job_sources`、`source_job_details`、`sync_seen_jobs`                      |
+| 职位事实       | `jobs`、`job_observations`                                                                                 |
+| 候选人画像     | `candidate_profiles`、`profile_versions`                                                                   |
+| Agent 与匹配   | `agent_runs`、`job_metadata`                                                                               |
+| 任务与设置     | `tasks`、`application_settings`                                                                            |
+| 面试准备       | `ai_sessions`、`ai_messages`、`ai_session_metadata`、`interview_experiences`、`interview_question_entries` |
+| 招聘进展       | `mail_message_refs`、`job_applications`、`application_events`                                              |
+| 通用基础设施   | `files`、`entities`、`file_entity_mappings`、`events`                                                      |
 
 ### 7.2 删除或合并结论
 
@@ -991,8 +810,8 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 - `source_job_details` 有实际缓存读路径，能避免列表未变化时重复抓详情；它可过期、可重建，不是原始档案。
 - `sync_seen_jobs` 是内存有界同步所需的临时工作集，不进入长期业务查询。
 - `job_observations` 是“某次完整同步确实看到职位”的长期证据，不能只依赖 `last_seen_at`。
-- 十维覆盖状态内置于 drill_sessions.coverage_json，保留物化状态以避免反复重放回答历史。
-- `experience_research_requests` 保存长期研究意图和人工审核生命周期；一次外部执行仍复用 `tasks`，两者职责不重复。
+- 会话消息是交互事实，不保存十维覆盖或二次知识提取；模型上下文策略另行设计。
+- 面经研究及阶段检查点使用 tasks，人工审核属于 interview_experiences；任务清理不删除业务面经。
 - `interview_experiences` 和 `interview_question_entries` 是受约束的领域实体，不应退化为文件 JSON。
 - `application_events` 需要申请外键、流内顺序、稳定邮件来源约束和高频时间线查询，不能退化为通用 `events` 的多态 JSON。
 - `mail_message_refs` 是增量幂等、来源定位和正文按需重取所需的最小记录，不是原始邮件、中间分类结果或分类历史归档；无关和待确认邮件的主题、地址与正文不能借该表保留。
@@ -1003,7 +822,7 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 
 1. 空库初始化成功，业务表清单与第 7.1 节完全一致。
 2. 从上一正式 Schema 升级不丢失职位修订、观察、简历、面经、项目拷打、任务、Agent 和匹配数据。
-3. `raw_job_records` 删除前，将被修订使用的来源哈希和 URL 回填到 `job_revisions`，将观察映射到对应 `job_revision_id`。
+3. `raw_job_records` 删除前，将被修订使用的来源哈希和 URL 回填到 `jobs`，观察通过 `job_id` 关联职位。
 4. FTS 虚表、shadow tables 和同步触发器全部删除，关键词查询回归测试覆盖 `%`、`_` 和转义符。
 5. 旧文档表正确映射到逻辑文件、物理实体和版本；共享内容只生成一个活动物理实体。
 6. 第六个文件实体版本被数据库拒绝；删除共享逻辑文件不影响其余引用。
@@ -1020,3 +839,7 @@ Prompt、Schema 和 Bundle 均使用 `files(kind=interview_research)`；同一�
 本文是目标设计，当前代码与迁移在完成实现和全部验证前不得标记为 Accepted。
 
 JobAdvice v3 的 MatchAdvice 与对应 AgentRun 输出仅包含亮点、缺口、待确认项和准备建议，不再保存引用编号、引用明细或简历重点。0047 数据迁移清理旧结构并重算内容哈希，保留原记录和运行身份；新 Agent 版本隔离旧格式缓存。
+
+# 当前职位与派生信息
+
+职位当前事实归 recruitment 的 jobs；matching 使用 job_metadata(id, job_id, name, value, created_at, updated_at)，按 (job_id, name) 唯一保存当前解析、评分和建议。规则配置由代码常量提供，不再持久化规则集。评分明细压缩为分项分数、风险规则标识、未知规则标识及独立模型分数和理由。内容身份与输入摘要负责过期检测，不保存历史职位快照。

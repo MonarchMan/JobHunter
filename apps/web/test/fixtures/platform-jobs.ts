@@ -3,7 +3,10 @@ import { type SqliteDatabaseHandle } from '@jobhunter/common/persistence/connect
 import { SystemIdGenerator } from '@jobhunter/common/domain';
 
 /** 为统一职位查询提供三个完整平台职位；只操作调用方的隔离测试数据库。 */
-export function seedPlatformJobs(database: SqliteDatabaseHandle): void {
+export function seedPlatformJobs(
+  database: SqliteDatabaseHandle,
+  options: { readonly bossCount?: number } = {},
+): void {
   // 1、模拟持有有效租约的平台任务，复用真实仓储与身份规则。
   for (const provider of ['boss', 'zhilian'] as const) {
     const repository = new SqlitePlatformRepository(database.client, provider);
@@ -12,11 +15,11 @@ export function seedPlatformJobs(database: SqliteDatabaseHandle): void {
     database.client
       .prepare(
         `INSERT INTO tasks
-      (id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
+      (id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
       VALUES (?,?,'{}','running',?,1,0,0,10000)`,
       )
       .run(taskId, `platform.${provider}`, taskId);
-    for (let index = 1; index <= (provider === 'boss' ? 2 : 1); index++) {
+    for (let index = 1; index <= (provider === 'boss' ? (options.bossCount ?? 2) : 1); index++) {
       repository.save(
         {
           externalJobId: `platform-fixture-${index}`,

@@ -1,3 +1,4 @@
+import { currentJobContentSql } from './current-job-sql.js';
 import type {
   CurrentJobRecord,
   JobRepository,
@@ -49,7 +50,7 @@ export class SqliteJobRepository implements JobRepository {
         `SELECT j.id, r.id AS revision_id, j.source_id, j.external_job_id, j.status, j.missing_count,
                 j.last_seen_at, j.closed_at, r.revision_no, r.content_hash, r.snapshot_json
          FROM jobs j
-         JOIN job_revisions r ON r.job_id = j.id
+         JOIN ${currentJobContentSql} r ON r.job_id = j.id
          WHERE j.source_id = ? AND j.external_job_id = ?
          ORDER BY r.revision_no DESC
          LIMIT 1`,
@@ -168,23 +169,9 @@ export class SqliteJobRepository implements JobRepository {
 
     this.#client
       .prepare(
-        `INSERT INTO job_revisions
-         (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
-          source_url, snapshot_json, change_set_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        'UPDATE jobs SET content_id = ?, source_payload_hash = ?, source_url = ? WHERE id = ?',
       )
-      .run(
-        input.revisionId,
-        input.jobId,
-        input.decision.revisionNumber,
-        input.decision.contentHash,
-        input.normalizerVersion,
-        input.sourcePayloadHash,
-        input.sourceUrl,
-        canonicalJson(normalized),
-        canonicalJson(input.decision.type === 'create' ? [] : input.decision.changes),
-        input.observedAt,
-      );
+      .run(input.revisionId, input.sourcePayloadHash, input.sourceUrl, input.jobId);
     this.recordObservation({
       jobId: input.jobId,
       syncRunId: input.syncRunId,
@@ -226,23 +213,9 @@ export class SqliteJobRepository implements JobRepository {
       );
     this.#client
       .prepare(
-        `INSERT INTO job_revisions
-         (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
-          source_url, snapshot_json, change_set_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        'UPDATE jobs SET content_id = ?, source_payload_hash = ?, source_url = ? WHERE id = ?',
       )
-      .run(
-        input.revisionId,
-        input.decision.jobId,
-        input.decision.revisionNumber,
-        input.decision.contentHash,
-        input.normalizerVersion,
-        input.sourcePayloadHash,
-        input.sourceUrl,
-        canonicalJson(normalized),
-        canonicalJson(input.decision.changes),
-        input.occurredAt,
-      );
+      .run(input.revisionId, input.sourcePayloadHash, input.sourceUrl, input.decision.jobId);
   }
 
   /** 执行数据库组件对外暴露的操作。 */
@@ -255,17 +228,11 @@ export class SqliteJobRepository implements JobRepository {
   }): void {
     this.#client
       .prepare(
-        `INSERT INTO job_observations (job_id, sync_run_id, job_revision_id, observed_at, platform_task_id)
-         VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO job_observations (job_id, sync_run_id, observed_at, platform_task_id)
+         VALUES (?, ?, ?, ?)
          ON CONFLICT DO NOTHING`,
       )
-      .run(
-        input.jobId,
-        input.syncRunId,
-        input.jobRevisionId,
-        input.observedAt,
-        input.platformTaskId ?? null,
-      );
+      .run(input.jobId, input.syncRunId, input.observedAt, input.platformTaskId ?? null);
     if (input.syncRunId === null) return;
     this.#client
       .prepare(

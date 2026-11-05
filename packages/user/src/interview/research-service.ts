@@ -1,3 +1,4 @@
+import type { ResearchDelivery } from '../ports/research-delivery.js';
 import {
   contentHash,
   parseId,
@@ -100,6 +101,7 @@ export class ExperienceResearchArtifactError extends Error {
 
 /** 编排网友面经研究请求、外部执行、结果导入和审核。 */
 export class ExperienceResearchService {
+  readonly #delivery: ResearchDelivery | null;
   readonly #repository: InterviewResearchRepository;
   readonly #artifacts: ArtifactStore;
   readonly #tasks: TaskService | null;
@@ -109,6 +111,7 @@ export class ExperienceResearchService {
 
   /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
+    readonly delivery?: ResearchDelivery;
     readonly repository: InterviewResearchRepository;
     readonly artifacts: ArtifactStore;
     readonly clock: Clock;
@@ -116,6 +119,7 @@ export class ExperienceResearchService {
     readonly tasks?: TaskService;
     readonly taskPublisher?: InterviewTaskPublisher;
   }) {
+    this.#delivery = input.delivery ?? null;
     this.#repository = input.repository;
     this.#artifacts = input.artifacts;
     this.#tasks = input.tasks ?? null;
@@ -150,7 +154,10 @@ export class ExperienceResearchService {
       parseId(requestIdValue, 'ExperienceResearchRequest'),
     );
     if (!detail) throw new ExperienceResearchNotFoundError();
-    return detail;
+    return {
+      ...detail,
+      ...(this.#delivery ? { outputPath: this.#delivery.location(detail.request.id) } : {}),
+    };
   }
 
   /** 创建冻结研究简报，并持久化对应 Prompt 与输出 Schema。 */
@@ -176,7 +183,10 @@ export class ExperienceResearchService {
       const accepted = detail.experiences.some(
         (experience) => experience.reviewStatus === 'accepted',
       );
-      if (!accepted) return { detail, deduplicated: true };
+      if (!accepted) {
+        await this.#delivery?.prepare(request.id);
+        return { detail: this.get(request.id), deduplicated: true };
+      }
     }
     const generation = related.length + 1;
     const fingerprint =
@@ -184,7 +194,10 @@ export class ExperienceResearchService {
         ? baseFingerprint
         : contentHash({ baseFingerprint, generation, kind: 'experience-research-request' });
     const concurrent = this.#repository.findByFingerprint(fingerprint);
-    if (concurrent) return { detail: concurrent, deduplicated: true };
+    if (concurrent) {
+      await this.#delivery?.prepare(concurrent.request.id);
+      return { detail: this.get(concurrent.request.id), deduplicated: true };
+    }
     const now = this.#clock.now();
     const requestId = parseId(this.#ids.generate(), 'ExperienceResearchRequest');
     const prompt = renderCommunityResearchPrompt(brief, fingerprint);
@@ -227,11 +240,16 @@ export class ExperienceResearchService {
       createdAt: now,
       updatedAt: now,
     });
-    return { detail, deduplicated: detail.request.id !== requestId };
+    await this.#delivery?.prepare(detail.request.id);
+    return { detail: this.get(detail.request.id), deduplicated: detail.request.id !== requestId };
   }
 
   /** 读取指定请求的冻结 Prompt 文本。 */
-  public async prompt(requestIdValue: string, signal?: AbortSignal): Promise<string> {
+  public async prompt(
+    requestIdValue: string,
+    signal?: AbortSignal,
+    includeDelivery = true,
+  ): Promise<string> {
     const detail = this.get(requestIdValue);
     let bytes: Uint8Array;
     try {
@@ -253,7 +271,9 @@ export class ExperienceResearchService {
     try {
       const prompt = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
       if (!prompt.trim()) throw new TypeError('Frozen research prompt is empty.');
-      return prompt;
+      if (!this.#delivery || !includeDelivery) return prompt;
+      await this.#delivery.prepare(detail.request.id);
+      return `${prompt}\n\n交付要求：将 JSON 保存至 ${this.#delivery.location(detail.request.id)}。先写同目录临时文件，再原子改名为 result.json；不要上传项目文件。`;
     } catch (error) {
       throw new ExperienceResearchArtifactError('Frozen research prompt is invalid.', {
         cause: error,
@@ -345,6 +365,48 @@ export class ExperienceResearchService {
       throw error;
     }
     return { task: result.task, deduplicated: result.kind !== 'enqueued' };
+  }
+
+  /** 将系统执行结果写到与外部 Agent 相同的交付位置。 */
+  public async deliverResult(requestId: string, content: Uint8Array): Promise<void> {
+    this.get(requestId);
+    if (!this.#delivery) throw new TypeError('Research delivery is unavailable.');
+    await this.#delivery.write(requestId, content);
+  }
+
+  /** 检查指定位置；相同内容重复检查保留原候选 ID 和审核结果。 */
+  public async checkResult(input: {
+    readonly requestId: string;
+    readonly expectedRevision: number;
+    readonly taskId?: TaskId;
+    readonly signal?: AbortSignal;
+  }): Promise<ExperienceResearchDetail> {
+    if (!this.#delivery) throw new TypeError('Research delivery is unavailable.');
+    input.signal?.throwIfAborted();
+    const current = this.get(input.requestId);
+    let bytes: Uint8Array;
+    try {
+      bytes = await this.#delivery.read(input.requestId);
+    } catch (error) {
+      throw new ExperienceResearchBundleError(
+        error instanceof Error ? error.message : '无法读取研究结果文件。',
+      );
+    }
+    if (current.request.bundleFileId && current.request.bundleFileVersionNo) {
+      const previous = await this.#artifacts.read({
+        id: current.request.bundleFileId,
+        versionNo: current.request.bundleFileVersionNo,
+        kind: 'interview_research',
+        maximumBytes: maximumBundleBytes,
+      });
+      if (
+        previous.content.length === bytes.length &&
+        previous.content.every((value, index) => value === bytes[index])
+      )
+        return current;
+    }
+    await this.importBundle({ ...input, bytes });
+    return this.get(input.requestId);
   }
 
   /** 导入外部研究 JSON 包，校验来源、问题去重与版本后保存候选。 */

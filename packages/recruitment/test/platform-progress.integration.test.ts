@@ -20,7 +20,7 @@ it('BOSS 恢复观察进度持久化并通过 Web 白名单投影', async () => 
     const taskId = ids.generate();
     db.client
       .prepare(
-        `INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
+        `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
       VALUES (?,'platform.boss',?,'running',?,1,0,0,10000)`,
       )
       .run(taskId, JSON.stringify({ action: 'next', generation }), randomUUID());
@@ -71,7 +71,7 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
       const id = save(...args);
       // 1、直接在事务提交后、应用下一步之前核验检查点与计数原子更新。
       const result: unknown = JSON.parse(
-        String(db.client.prepare('SELECT result_json FROM tasks WHERE id=?').pluck().get(args[2])),
+        String(db.client.prepare('SELECT public_state FROM tasks WHERE id=?').pluck().get(args[2])),
       );
       const expectedSaved = args[0].externalJobId === 'a:2' ? 2 : 1;
       expect(result).toMatchObject({
@@ -113,7 +113,7 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
                   JSON.parse(
                     String(
                       db.client
-                        .prepare('SELECT result_json FROM tasks WHERE id=?')
+                        .prepare('SELECT public_state FROM tasks WHERE id=?')
                         .pluck()
                         .get(taskId),
                     ),
@@ -141,7 +141,7 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
       );
       db.client
         .prepare(
-          `INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
+          `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
       VALUES (?,'platform.liepin',?,'running',?,1,0,0,10000)`,
         )
         .run(taskId, JSON.stringify({ action: 'next', generation: 1 }), randomUUID());
@@ -193,7 +193,9 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
       expect(web.snapshot().task?.progress).toBeNull();
       expect(
         JSON.parse(
-          String(db.client.prepare('SELECT result_json FROM tasks WHERE id=?').pluck().get(taskId)),
+          String(
+            db.client.prepare('SELECT public_state FROM tasks WHERE id=?').pluck().get(taskId),
+          ),
         ),
       ).toMatchObject({ progress: { saved: 1 } });
     } finally {

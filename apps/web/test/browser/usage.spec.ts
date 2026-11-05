@@ -31,6 +31,9 @@ test('usage tab shares filters across totals, charts, models and paginated logs'
   await page.getByRole('combobox', { name: '供应商', exact: true }).click();
   await page.getByRole('option', { name: '供应商', exact: true }).click();
   await expect(page.getByRole('combobox', { name: '模型', exact: true })).toHaveText('模型');
+  // 同一轮页面验收会生成其他合成调用；分页断言只统计本测试的 28 条固定账单。
+  await page.getByRole('combobox', { name: '模型', exact: true }).click();
+  await page.getByRole('option', { name: 'usage-fixture-model', exact: true }).click();
   await page.getByRole('button', { name: '更多指标' }).click();
   await expect(page.getByText('Output', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '更多指标' }).click();

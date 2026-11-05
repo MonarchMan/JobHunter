@@ -1,3 +1,4 @@
+import { matchMetadataSql, enrichmentMetadataSql, adviceMetadataSql } from './metadata-sql.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import type { ProfileDerivedDataManager } from '@jobhunter/user/contracts/profile-dependencies';
@@ -13,7 +14,7 @@ export class SqliteProfileDerivedDataManager implements ProfileDerivedDataManage
       .parse(
         this.client
           .prepare(
-            'SELECT id FROM match_results WHERE profile_version_id IN (SELECT value FROM json_each(?)) ORDER BY id',
+            `SELECT id FROM ${matchMetadataSql} WHERE profile_version_id IN (SELECT value FROM json_each(?)) ORDER BY id`,
           )
           .pluck()
           .all(JSON.stringify(ids)),
@@ -27,7 +28,7 @@ export class SqliteProfileDerivedDataManager implements ProfileDerivedDataManage
       .parse(
         this.client
           .prepare(
-            'SELECT DISTINCT agent_run_id FROM match_advices WHERE match_result_id IN (SELECT value FROM json_each(?)) ORDER BY agent_run_id',
+            `SELECT DISTINCT agent_run_id FROM ${adviceMetadataSql} WHERE match_result_id IN (SELECT value FROM json_each(?)) ORDER BY agent_run_id`,
           )
           .pluck()
           .all(JSON.stringify(ids)),
@@ -39,7 +40,7 @@ export class SqliteProfileDerivedDataManager implements ProfileDerivedDataManage
     // 1、由匹配所有者删除派生结果；建议沿用现有外键级联语义。
     this.client
       .prepare(
-        'DELETE FROM match_results WHERE profile_version_id IN (SELECT value FROM json_each(?))',
+        `DELETE FROM job_metadata WHERE name='match_result' AND json_extract(value,'$.profile_version_id') IN (SELECT value FROM json_each(?))`,
       )
       .run(JSON.stringify(ids));
   }
@@ -47,7 +48,9 @@ export class SqliteProfileDerivedDataManager implements ProfileDerivedDataManage
   /** 清理已经确认的匹配身份，不扩大删除范围。 */
   public deleteMatchResults(ids: readonly string[]): void {
     this.client
-      .prepare('DELETE FROM match_results WHERE id IN (SELECT value FROM json_each(?))')
+      .prepare(
+        `DELETE FROM job_metadata WHERE name='match_result' AND id IN (SELECT value FROM json_each(?))`,
+      )
       .run(JSON.stringify(ids));
   }
 
@@ -56,7 +59,7 @@ export class SqliteProfileDerivedDataManager implements ProfileDerivedDataManage
     return Boolean(
       this.client
         .prepare(
-          'SELECT EXISTS(SELECT 1 FROM job_enrichments WHERE agent_run_id=? UNION ALL SELECT 1 FROM match_advices WHERE agent_run_id=?)',
+          `SELECT EXISTS(SELECT 1 FROM ${enrichmentMetadataSql} WHERE agent_run_id=? UNION ALL SELECT 1 FROM ${adviceMetadataSql} WHERE agent_run_id=?)`,
         )
         .pluck()
         .get(id, id),

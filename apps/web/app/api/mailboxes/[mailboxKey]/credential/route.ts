@@ -1,5 +1,5 @@
 import { MailboxSettingsError } from '@jobhunter/recruitment/mail-application';
-import { getWebContainer } from '../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../src/server/container.js';
 import {
   badRequestResponse,
   dataResponse,
@@ -19,7 +19,9 @@ export async function POST(
   try {
     // 1、按稳定邮箱键读取唯一允许回显的 password 字段。
     const { mailboxKey } = await context.params;
-    const password = await (await getWebContainer()).services.mailboxes.readCredential(mailboxKey);
+    const password = await (
+      await getWebMutationContainer()
+    ).services.mailboxes.readCredential(mailboxKey);
     // 2、禁止浏览器、代理和开发工具缓存包含明文凭据的响应。
     const response = dataResponse({ password });
     response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');

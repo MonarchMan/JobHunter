@@ -1,15 +1,17 @@
 # 007 简历导入与候选人画像设计
 
+> 后续调整以 [034 规格](../034-ai-sessions-and-projects/spec.md) 为准；下文已完成记录描述迁移前实现。画像自动合并锁定、项目档案快照、上传材料及人工上传研究包等冲突流程不再作为目标，画像字段展开和候选确认已实现；真实数据统一迁移仍待三阶段完成。
+
 > 状态：Implemented
 
 ## 组件
 
-- `packages/resume/import`：媒体探测、大小限制和 Artifact 写入。
-- `packages/resume/parsers`：PDF 使用 `pdfjs-dist`，DOCX 使用 `mammoth`，TXT 严格 UTF-8。
-- `packages/resume/rule-profile-extractor`：按独立章节标题、条目头、日期和项目符号确定性映射画像，并返回成功或非敏感回退原因。
-- `packages/resume/profile-schema`：画像与 evidence Schema。
-- `packages/resume/resume-polish-agent`：按目标岗位改写选中经历描述的 Agent 定义、输入输出 Schema 与事实保持校验。
-- `packages/application/profile`：导入、提取、修正、锁定、版本切换和删除预览。
+- `packages/user/src/resume/import`：媒体探测、大小限制和 Artifact 写入。
+- `packages/user/src/resume/parsers`：PDF 使用 `pdfjs-dist`，DOCX 使用 `mammoth`，TXT 严格 UTF-8。
+- `packages/user/src/resume/rule-profile-extractor`：按独立章节标题、条目头、日期和项目符号确定性映射画像，并返回成功或非敏感回退原因。
+- `packages/user/src/resume/profile-schema`：画像与 evidence Schema。
+- `packages/user/src/resume/resume-polish-agent`：按目标岗位改写选中经历描述的 Agent 定义、输入输出 Schema 与事实保持校验。
+- `packages/user/src/profile`：导入、提取、修正、候选确认、版本切换和删除预览。
 
 导入和文本解析可在 CLI 同步执行小文件，画像提取统一提交 Worker 任务。Worker 在 OCR/文本解析后先执行规则提取；只有规则返回 fallback 才调用 Agent。内容哈希作为导入和任务幂等键的一部分。画像 Agent 面向较长 OCR 简历不设置应用层最大输出 token，仅受模型供应商自身限制约束；模型请求超时与 Agent 总时限分别采用 180 秒和 240 秒，避免长结构化输出被固定短超时截断。
 
@@ -23,7 +25,7 @@ AI 润色同样只由 Worker 执行。Web 用例只提交 `profileId`、来源�
 
 ## 合并与事务
 
-规则或 Agent 成功后应用层读取当前版本，在事务外计算合并，再在短事务内将旧 current 置 0、插入新版本，并按 `version_no DESC` 只保留该画像最新 5 个版本。版本号保持单调递增，不因淘汰旧版本而重排或复用；淘汰前先删除引用旧版本的 `match_results`，其 `match_advices` 随匹配结果级联删除。并发修改通过预期 current version ID 检测冲突。
+规则或 Agent 成功后应用层读取当前版本，首次提取建立当前画像，再次提取保存带基线的候选版本。用户选择一级字段后重验当前版本，在一个短事务内更新当前指针并追加确认结果。当前画像一级字段分别存列，集合各自使用 JSON；项目保留稳定 ID 和可空本地路径，模型不能决定这两项。最近五个已确认版本按序号保留，候选不占保留名额；淘汰通过匹配模块的派生数据端口清理引用。
 
 润色建议不属于画像版本，也不自动参与合并。建议保存 `profileId`、来源 `ProfileVersionId`、所选章节、对应描述数组和 AgentRun 引用；页面只有在来源版本仍是当前编辑基线时才允许把建议应用到客户端草稿。采用建议只替换对应条目的 `highlights`，随后复用完整在线简历的“保存简历”操作创建人工修正版。项目名称、公司、职位、角色、日期、证据和未选章节均沿用原草稿。
 

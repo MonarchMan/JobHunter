@@ -102,11 +102,9 @@ describe('cleanup infrastructure', () => {
         VALUES ('source', 'company', 'channel', 'cleanup-social', 'cleanup.fixture',
                 'https://careers.example.com', '{}', 'v1', '{}', 1, 'supported',
                 'healthy', 0, 1, 1);
-        INSERT INTO sync_runs
-          (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-           sync_policy_version, source_config_hash, stats_json, started_at, finished_at)
-        VALUES ('sync', 'source', 'manual', 'succeeded', 'complete', '1', '1', 'v1',
-                '${'a'.repeat(64)}', '{}', 1, 2);
+        WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
+           sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES ('sync', 'source', 'manual', 'succeeded', 'complete', '1', '1', 'v1',
+                '${'a'.repeat(64)}', '{}', 1, 2)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture;
         INSERT INTO jobs
           (id, company_id, source_id, external_job_id, title, department, job_family,
            locations_json, employment_type, experience_text, education_text, description,
@@ -116,13 +114,10 @@ describe('cleanup infrastructure', () => {
                 NULL, NULL, 'Fixture', 'https://careers.example.com/job',
                 'https://careers.example.com/job', NULL, 'active', 0, '${'c'.repeat(64)}',
                 1, 1, NULL, 1, 1);
-        INSERT INTO job_revisions
-          (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
-           source_url, snapshot_json, change_set_json, created_at)
-        VALUES ('revision', 'job', 1, '${'c'.repeat(64)}', '1', '${'b'.repeat(64)}',
-                'https://careers.example.com/job', '{}', '[]', 1);
-        INSERT INTO job_observations (job_id, sync_run_id, job_revision_id, observed_at)
-        VALUES ('job', 'sync', 'revision', 1);
+        UPDATE jobs SET content_id=d.id,content_hash=d.content_hash,source_payload_hash=d.source_payload_hash,source_url=d.source_url FROM (SELECT 'revision' AS id, 'job' AS job_id, 1 AS revision_no, '${'c'.repeat(64)}' AS content_hash, '1' AS normalizer_version, '${'b'.repeat(64)}' AS source_payload_hash,
+                'https://careers.example.com/job' AS source_url, '{}' AS snapshot_json, '[]' AS change_set_json, 1 AS created_at) d WHERE jobs.id=d.job_id;
+        INSERT INTO job_observations (job_id, sync_run_id, observed_at)
+        VALUES ('job', 'sync', 1);
         INSERT INTO source_job_details
           (source_id, external_job_id, list_content_hash, adapter_version, detail_json,
            status, fetched_at, updated_at)
@@ -147,7 +142,7 @@ describe('cleanup infrastructure', () => {
       expect(handle.client.prepare('SELECT count(*) FROM source_job_details').pluck().get()).toBe(
         0,
       );
-      expect(handle.client.prepare('SELECT count(*) FROM job_revisions').pluck().get()).toBe(1);
+      expect(handle.client.prepare(`SELECT count(*) FROM jobs`).pluck().get()).toBe(1);
     } finally {
       handle.close();
       await root.cleanup();

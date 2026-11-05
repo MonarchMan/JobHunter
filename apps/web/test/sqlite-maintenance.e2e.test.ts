@@ -13,7 +13,7 @@ describe('SQLite maintenance HTTP responses', () => {
       const database = openSqliteDatabase({ dataRoot: root.path });
       database.client
         .prepare(
-          `INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,
+          `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,
         max_attempts,available_at,created_at) VALUES(?,'maintenance.sqlite','{}','failed',?,1,0,0)`,
         )
         .run(id, id);

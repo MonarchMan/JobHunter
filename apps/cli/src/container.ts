@@ -1,3 +1,4 @@
+import { createAiReplyHandler } from '@jobhunter/user/ai/handler';
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
 import { agentDefinitionHash } from '@jobhunter/common/agent';
 import { SqliteMatchingJobReader } from '@jobhunter/recruitment/persistence/matching-job-reader';
@@ -14,11 +15,7 @@ import {
 } from '@jobhunter/user/profile';
 import { BackupService } from '@jobhunter/common/operations/backup-service';
 import { createCleanupTaskHandler } from '@jobhunter/common/operations/cleanup-handler';
-import {
-  createExperienceResearchTaskHandler,
-  createProjectAnswerDigestTaskHandler,
-  createProjectQuestionTaskHandler,
-} from '@jobhunter/user/interview';
+import { createExperienceResearchTaskHandler } from '@jobhunter/user/interview';
 import {
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
@@ -83,7 +80,13 @@ import { hashCanonical } from '@jobhunter/common/agent';
 import { createConfiguredModelClient } from '@jobhunter/common/models';
 import { jobAdviceAgentDefinition } from '@jobhunter/matching';
 import { firstPartySourceCatalog } from '@jobhunter/recruitment';
-import { createConfiguredTaskApplication } from './task-runtime.js';
+import {
+  ensureConfiguredTaskService,
+  requestTaskService,
+  stopTaskService,
+  taskServiceConfiguration,
+  TaskServiceConnectionError,
+} from '@jobhunter/common/task-service';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -97,15 +100,20 @@ export interface CliContainer {
   readonly source?: {
     list(): readonly SourceChannelOverview[];
     /** 执行模块适配器的该项操作。 */
-    sync(selector: string): readonly EnqueueTaskResult[];
+    sync(selector: string): readonly EnqueueTaskResult[] | Promise<readonly EnqueueTaskResult[]>;
     wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
   };
   readonly task?: {
     list(filter?: TaskListFilter): readonly TaskRecord[];
     get(taskId: string): TaskRecord | null;
-    retry(taskId: string): EnqueueTaskResult;
+    retry(taskId: string): EnqueueTaskResult | Promise<EnqueueTaskResult>;
     cancel(taskId: string): ReturnType<TaskService['cancel']>;
     wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
+  };
+  readonly taskService?: {
+    status(): Promise<{ readonly status: 'ready' | 'unavailable' | 'incompatible' }>;
+    stop(): Promise<void>;
+    restart(): Promise<void>;
   };
   readonly job?: {
     list(input: Parameters<JobQueryService['list']>[0]): ReturnType<JobQueryService['list']>;
@@ -122,14 +130,20 @@ export interface CliContainer {
   readonly profile?: {
     show(id: string): ReturnType<ProfileManagementService['show']>;
     history(id: string): ReturnType<ProfileManagementService['history']>;
+    confirm(
+      id: string,
+      candidateVersionId: string,
+      expectedVersionId: string,
+      fields: readonly string[],
+    ): ReturnType<ProfileManagementService['confirm']>;
     set(id: string, pointer: string, value: unknown): ReturnType<ProfileManagementService['set']>;
-    lock(id: string, pointer: string): ReturnType<ProfileManagementService['lock']>;
-    unlock(id: string, pointer: string): ReturnType<ProfileManagementService['unlock']>;
   };
   readonly match?: {
     scoreForJob(
       input: Parameters<MatchWorkflowService['runForJob']>[0],
-    ): ReturnType<MatchWorkflowService['runForJob']>;
+    ):
+      | ReturnType<MatchWorkflowService['runForJob']>
+      | Promise<ReturnType<MatchWorkflowService['runForJob']>>;
     list(
       input: Parameters<MatchWorkflowService['list']>[0],
     ): ReturnType<MatchWorkflowService['list']>;
@@ -204,8 +218,7 @@ export function createLocalCliContainer(
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
     registry.register(createResumePolishTaskHandler({ unavailable: true }));
     registry.register(createExperienceResearchTaskHandler({ unavailable: true }));
-    registry.register(createProjectQuestionTaskHandler({ unavailable: true }));
-    registry.register(createProjectAnswerDigestTaskHandler({ unavailable: true }));
+    registry.register(createAiReplyHandler({}));
     const matchingHandler = createMatchRevisionTaskHandler(null);
     const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
     const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
@@ -347,22 +360,22 @@ export function createLocalCliContainer(
     };
     return services;
   };
-  let taskApplication: ReturnType<typeof createConfiguredTaskApplication> | undefined;
-  let taskLoop: Promise<void> | undefined;
-  const taskAbort = new AbortController();
-  /** 等待任务时启动同一套公共运行时，取消与退出均等待资源回收。 */
-  async function waitForTask(taskId: string, signal: AbortSignal): Promise<TaskRecord | null> {
-    // 1、只有等待命令启动任务消费，帮助、查询和只入队命令不启动后台工作。
+  /** 提交和等待均确认中央服务可用，命令退出不停止后台执行。 */
+  async function ensureService(signal?: AbortSignal): Promise<void> {
     operational();
-    taskApplication ??= createConfiguredTaskApplication(config);
-    taskLoop ??= taskApplication.engine.run(taskAbort.signal);
-    // 2、同时观察循环失败，避免后台失败后等待到超时。
-    return Promise.race([
-      operational().wait.wait(parseId(taskId, 'Task'), signal),
-      taskLoop.then(() => {
-        throw new Error('任务运行时在等待完成前停止。');
-      }),
-    ]);
+    await ensureConfiguredTaskService(config, {
+      entry: new URL(
+        import.meta.url.endsWith('.ts') ? './task-service-main.ts' : './task-service-main.js',
+        import.meta.url,
+      ),
+      workspaceRoot,
+      ...(signal ? { signal } : {}),
+    });
+  }
+  /** 等待只连接共享中央服务，不在 CLI 内领取任务。 */
+  async function waitForTask(taskId: string, signal: AbortSignal): Promise<TaskRecord | null> {
+    await ensureService(signal);
+    return operational().wait.wait(parseId(taskId, 'Task'), signal);
   }
   return {
     version: { get: () => ({ ...versions, node: process.versions.node }) },
@@ -449,6 +462,7 @@ export function createLocalCliContainer(
           timezone: 'Asia/Shanghai',
           enabled: true,
         });
+        await ensureService();
         return {
           ...initialized,
           bootstrap: {
@@ -475,7 +489,8 @@ export function createLocalCliContainer(
     },
     source: {
       list: () => operational().sources.listChannels(),
-      sync: (selector) => {
+      sync: async (selector) => {
+        await ensureService();
         const service = operational().sources;
         if (selector === 'all') return service.enqueueChannelSync({ channelIds: 'all' });
         const channel = service
@@ -499,9 +514,43 @@ export function createLocalCliContainer(
     task: {
       list: (filter) => operational().tasks.list(filter),
       get: (taskId) => operational().tasks.get(parseId(taskId, 'Task')),
-      retry: (taskId) => operational().tasks.retryFailed(parseId(taskId, 'Task'), ids.generate()),
+      retry: async (taskId) => {
+        await ensureService();
+        return operational().tasks.retryFailed(parseId(taskId, 'Task'), ids.generate());
+      },
       cancel: (taskId) => operational().tasks.cancel(parseId(taskId, 'Task')),
       wait: (taskId, signal) => waitForTask(taskId, signal),
+    },
+    taskService: {
+      async status() {
+        try {
+          await requestTaskService({
+            dataRoot: config.bootstrap.dataRoot.value,
+            configuration: taskServiceConfiguration(config),
+            method: 'ping',
+          });
+          return { status: 'ready' };
+        } catch (error) {
+          if (
+            error instanceof TaskServiceConnectionError &&
+            (error.code === 'unavailable' || error.code === 'incompatible')
+          )
+            return { status: error.code };
+          throw error;
+        }
+      },
+      stop: () =>
+        stopTaskService({
+          dataRoot: config.bootstrap.dataRoot.value,
+          configuration: taskServiceConfiguration(config),
+        }),
+      async restart() {
+        await stopTaskService({
+          dataRoot: config.bootstrap.dataRoot.value,
+          configuration: taskServiceConfiguration(config),
+        });
+        await ensureService();
+      },
     },
     job: {
       list: (input) => operational().jobs.list(input),
@@ -509,17 +558,23 @@ export function createLocalCliContainer(
       export: (input) => operational().jobExports.export(input),
     },
     resume: {
-      import: (input) => operational().resumes.import(input),
+      import: async (input) => {
+        await ensureService(input.signal);
+        return operational().resumes.import(input);
+      },
     },
     profile: {
       show: (id) => operational().profiles.show(id),
       history: (id) => operational().profiles.history(id),
+      confirm: (id, candidateVersionId, expectedVersionId, fields) =>
+        operational().profiles.confirm(id, candidateVersionId, expectedVersionId, fields),
       set: (id, pointer, value) => operational().profiles.set(id, pointer, value),
-      lock: (id, pointer) => operational().profiles.lock(id, pointer),
-      unlock: (id, pointer) => operational().profiles.unlock(id, pointer),
     },
     match: {
-      scoreForJob: (input) => operational().matches.runForJob(input),
+      scoreForJob: async (input) => {
+        await ensureService();
+        return operational().matches.runForJob(input);
+      },
       list: (input) => operational().matches.list(input),
       show: (id) => operational().matches.show(id),
       wait: (taskId, signal) => waitForTask(taskId, signal),
@@ -535,18 +590,10 @@ export function createLocalCliContainer(
           ...(input.confirmationToken ? { confirmationToken: input.confirmationToken } : {}),
         }),
     },
-    close: async () => {
-      // 1、先停止任务消费并等待清理，再关闭命令查询连接。
-      taskAbort.abort();
-      try {
-        await taskLoop;
-      } finally {
-        try {
-          await taskApplication?.close();
-        } finally {
-          database?.close();
-        }
-      }
+    close: () => {
+      // 客户端只关闭自己的查询连接，后台服务独立存活。
+      database?.close();
+      return Promise.resolve();
     },
   };
 }

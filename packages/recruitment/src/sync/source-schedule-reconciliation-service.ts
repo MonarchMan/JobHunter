@@ -11,7 +11,7 @@ export interface SourceAutomationPolicy {
   readonly time: string;
 }
 
-/** 根据来源启用状态对通用 schedules 进行幂等对账。 */
+/** 根据来源启用状态对公共周期配置进行幂等对账。 */
 export class SourceScheduleReconciliationService {
   readonly #sources: SourceManagementRepository;
   readonly #schedules: Pick<ScheduleService, 'upsert'>;

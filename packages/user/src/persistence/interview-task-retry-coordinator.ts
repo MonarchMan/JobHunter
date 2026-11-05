@@ -1,8 +1,4 @@
-import {
-  experienceResearchTaskPayloadSchema,
-  projectAnswerDigestTaskPayloadSchema,
-  projectQuestionTaskPayloadSchema,
-} from '../interview/index.js';
+import { experienceResearchTaskPayloadSchema } from '../interview/index.js';
 import type { EnqueueTaskResult, TaskRetryCoordinator } from '@jobhunter/common/tasks';
 import { canonicalJson } from '@jobhunter/common/domain';
 import type Database from 'better-sqlite3';
@@ -58,70 +54,19 @@ export class SqliteInterviewTaskRetryCoordinator implements TaskRetryCoordinator
   ): boolean {
     if (taskType === 'interview.experience-research.execute') {
       const parsed = experienceResearchTaskPayloadSchema.parse(payload);
-      return this.#replaceTaskReference({
-        table: 'experience_research_requests',
-        idColumn: 'id',
-        taskColumn: 'current_task_id',
-        id: parsed.requestId,
-        sourceTaskId,
-        retryTaskId,
-        retriedAt,
-        statusClause: "state = 'ready' AND bundle_import_token IS NULL",
-      });
-    }
-    if (taskType === 'interview.project-question') {
-      const parsed = projectQuestionTaskPayloadSchema.parse(payload);
-      return this.#replaceTaskReference({
-        table: 'drill_turns',
-        idColumn: 'id',
-        taskColumn: 'question_task_id',
-        id: parsed.turnId,
-        sourceTaskId,
-        retryTaskId,
-        retriedAt,
-        statusClause: "status = 'question_pending'",
-      });
-    }
-    if (taskType === 'interview.project-answer-digest') {
-      const parsed = projectAnswerDigestTaskPayloadSchema.parse(payload);
-      return this.#replaceTaskReference({
-        table: 'drill_turns',
-        idColumn: 'id',
-        taskColumn: 'digest_task_id',
-        id: parsed.turnId,
-        sourceTaskId,
-        retryTaskId,
-        retriedAt,
-        statusClause: "status = 'digest_pending'",
-      });
+      return (
+        this.#client
+          .prepare(
+            `UPDATE tasks SET private_state=json_set(private_state,
+        '$.research.current_task_id', ?, '$.research.updated_at', ?)
+        WHERE id=? AND task_type='interview.experience-research'
+          AND json_extract(private_state,'$.research.current_task_id') IN (?,?)
+          AND json_extract(private_state,'$.research.state')='ready'
+          AND json_extract(private_state,'$.research.bundle_import_token') IS NULL`,
+          )
+          .run(retryTaskId, retriedAt, parsed.requestId, sourceTaskId, retryTaskId).changes === 1
+      );
     }
     return true;
-  }
-
-  /** 处理数据库类内部的辅助逻辑。 */
-  #replaceTaskReference(input: {
-    readonly table: 'experience_research_requests' | 'drill_turns';
-    readonly idColumn: 'id';
-    readonly taskColumn: 'current_task_id' | 'question_task_id' | 'digest_task_id';
-    readonly id: string;
-    readonly sourceTaskId: string;
-    readonly retryTaskId: string;
-    readonly retriedAt: number;
-    readonly statusClause: string;
-  }): boolean {
-    const current = this.#client
-      .prepare(`SELECT ${input.taskColumn} FROM ${input.table} WHERE ${input.idColumn} = ?`)
-      .pluck()
-      .get(input.id) as string | null | undefined;
-    if (current === input.retryTaskId) return true;
-    if (current !== input.sourceTaskId) return false;
-    return (
-      this.#client
-        .prepare(
-          `UPDATE ${input.table} SET ${input.taskColumn} = ?, updated_at = ?
-           WHERE ${input.idColumn} = ? AND ${input.taskColumn} = ? AND ${input.statusClause}`,
-        )
-        .run(input.retryTaskId, input.retriedAt, input.id, input.sourceTaskId).changes === 1
-    );
   }
 }

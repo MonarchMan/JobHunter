@@ -1,3 +1,4 @@
+import { matchMetadataSql } from './metadata-sql.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import type { ProfileIdentityReader } from '@jobhunter/user/contracts';
@@ -31,7 +32,7 @@ export class SqliteMatchingDashboardReader {
       .parse(
         this.client
           .prepare(
-            'SELECT id, job_revision_id AS revisionId, profile_version_id AS profileId, filter_status AS filterStatus, total_score AS score, components_json AS components, created_at AS createdAt FROM match_results WHERE profile_version_id IN (SELECT value FROM json_each(?))',
+            `SELECT id, job_revision_id AS revisionId, profile_version_id AS profileId, filter_status AS filterStatus, total_score AS score, components_json AS components, created_at AS createdAt FROM ${matchMetadataSql} WHERE profile_version_id IN (SELECT value FROM json_each(?))`,
           )
           .all(JSON.stringify(profileIds)),
       );

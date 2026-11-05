@@ -223,6 +223,11 @@
       "development": "./src/tasks/*.ts",
       "types": "./dist/tasks/*.d.ts",
       "import": "./dist/tasks/*.js"
+    },
+    "./persistence/scan-task-sql": {
+      "development": "./src/persistence/scan-task-sql.ts",
+      "types": "./dist/persistence/scan-task-sql.d.ts",
+      "import": "./dist/persistence/scan-task-sql.js"
     }
   },
   "files": [

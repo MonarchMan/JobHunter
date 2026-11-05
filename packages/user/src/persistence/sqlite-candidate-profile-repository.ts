@@ -4,7 +4,7 @@ import type {
   CandidateProfileRepository,
   ProfileVersionRecord,
 } from '../ports/profiles.js';
-import { parseCandidateProfile } from '@jobhunter/user/domain';
+import { profileColumns, readProfileColumns, writeProfileColumns } from './profile-columns.js';
 import { parseContentHash, parseId, type CandidateProfileId } from '@jobhunter/common/domain';
 import type Database from 'better-sqlite3';
 import type { ProfileDerivedDataManager } from '../contracts/profile-dependencies.js';
@@ -18,17 +18,16 @@ interface ProfileRow {
 }
 
 /** 数据库查询结果对应的行结构。 */
-interface VersionRow {
+interface VersionRow extends Record<string, unknown> {
   readonly id: string;
   readonly profile_id: string;
   readonly version_no: number;
   readonly resume_document_id: string | null;
   readonly agent_run_id: string | null;
-  readonly extracted_json: string;
-  readonly effective_json: string;
-  readonly locked_paths_json: string;
   readonly content_hash: string;
   readonly is_current: number;
+  readonly is_candidate: number;
+  readonly base_version_id: string | null;
   readonly created_at: number;
 }
 
@@ -36,7 +35,7 @@ const maximumRetainedProfileVersions = 5;
 
 const versionSelection = `SELECT id, profile_id, version_no,
                                  resume_file_id AS resume_document_id, agent_run_id,
-                                 extracted_json, effective_json, locked_paths_json, content_hash,
+                                 ${Object.values(profileColumns).join(', ')}, is_candidate, base_version_id, content_hash,
                                  is_current, created_at
                           FROM profile_versions`;
 
@@ -52,19 +51,15 @@ function profileRecord(row: ProfileRow): CandidateProfileRecord {
 
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function versionRecord(row: VersionRow): ProfileVersionRecord {
-  const locked = JSON.parse(row.locked_paths_json) as unknown;
-  if (!Array.isArray(locked) || !locked.every((value) => typeof value === 'string')) {
-    throw new TypeError('Stored profile locked paths are invalid.');
-  }
   return {
     id: parseId(row.id, 'ProfileVersion'),
     profileId: parseId(row.profile_id, 'CandidateProfile'),
     versionNo: row.version_no,
     resumeDocumentId: row.resume_document_id,
     agentRunId: row.agent_run_id,
-    extracted: parseCandidateProfile(JSON.parse(row.extracted_json) as unknown),
-    effective: parseCandidateProfile(JSON.parse(row.effective_json) as unknown),
-    lockedPaths: locked,
+    effective: readProfileColumns(row),
+    isCandidate: row.is_candidate === 1,
+    baseVersionId: row.base_version_id ? parseId(row.base_version_id, 'ProfileVersion') : null,
     contentHash: parseContentHash(row.content_hash),
     isCurrent: row.is_current === 1,
     createdAt: row.created_at as ProfileVersionRecord['createdAt'],
@@ -144,7 +139,7 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
       if ((current?.id ?? null) !== input.expectedCurrentVersionId) {
         return { kind: 'conflict', currentVersionId: current?.id ?? null } as const;
       }
-      if (current) {
+      if (current && !input.version.isCandidate) {
         this.#client
           .prepare('UPDATE profile_versions SET is_current = 0 WHERE id = ? AND is_current = 1')
           .run(current.id);
@@ -153,9 +148,9 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
       this.#client
         .prepare(
           `INSERT INTO profile_versions
-             (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
-              effective_json, locked_paths_json, content_hash, is_current, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+             (id, profile_id, version_no, resume_file_id, agent_run_id,
+              ${Object.values(profileColumns).join(', ')}, content_hash, is_current, is_candidate, base_version_id, created_at)
+           VALUES (${Array.from({ length: Object.keys(profileColumns).length + 10 }, () => '?').join(', ')})`,
         )
         .run(
           version.id,
@@ -163,10 +158,11 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
           version.versionNo,
           version.resumeDocumentId,
           version.agentRunId,
-          JSON.stringify(version.extracted),
-          JSON.stringify(version.effective),
-          JSON.stringify(version.lockedPaths),
+          ...writeProfileColumns(version.effective),
           version.contentHash,
+          version.isCurrent ? 1 : 0,
+          version.isCandidate ? 1 : 0,
+          version.baseVersionId,
           version.createdAt,
         );
       this.#client
@@ -175,7 +171,7 @@ export class SqliteCandidateProfileRepository implements CandidateProfileReposit
       const obsoleteVersionIds = this.#client
         .prepare(
           `SELECT id FROM profile_versions
-           WHERE profile_id = ?
+           WHERE profile_id = ? AND is_candidate = 0
            ORDER BY version_no DESC, id DESC
            LIMIT -1 OFFSET ?`,
         )

@@ -19,6 +19,9 @@ const datedExperience = {
 /** 候选人项目经历的领域 Schema。 */
 export const candidateProjectSchema = z
   .object({
+    // 提取边界允许缺省，保存时由系统赋予身份；模型不能决定本地路径。
+    id: normalizedText.optional(),
+    local_path: optionalText.optional(),
     name: normalizedText,
     role: normalizedText.nullable(),
     ...datedExperience,

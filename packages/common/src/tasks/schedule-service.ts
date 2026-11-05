@@ -116,7 +116,6 @@ export class ScheduleService {
           priority: 0,
           idempotencyKey: `schedule:${schedule.scheduleKey}:${String(occurrenceAt)}`,
           concurrencyKey: handler.concurrencyKey?.(payload) ?? null,
-          scheduleId: schedule.id,
           retryOfTaskId: null,
           maxAttempts: handler.defaultMaxAttempts,
           availableAt: now,

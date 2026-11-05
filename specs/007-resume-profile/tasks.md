@@ -1,5 +1,7 @@
 # 007 简历导入与候选人画像任务
 
+> 后续调整以 [034 规格](../034-ai-sessions-and-projects/spec.md) 为准；下文已完成记录描述迁移前实现。画像自动合并锁定、项目档案快照、上传材料及人工上传研究包等冲突流程不再作为目标，替代实现及验收已在 034 完成。
+
 > 状态：Implemented
 > 显式覆盖：RES-001, RES-002, RES-003, RES-004, RES-005, RES-006, RES-007, RES-008, RES-009, RES-010, RES-011, RES-012, RES-013, RES-014, RES-015, RES-016, RES-Q01, RES-Q02, RES-Q03, RES-Q04, RES-Q05, RES-Q06
 

@@ -91,15 +91,6 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
     });
   };
 
-  const lockMutation = (kind: 'lock' | 'unlock', lockPointer: string): void => {
-    void mutate({
-      kind,
-      profileId: detail.profile.id,
-      expectedVersionId: detail.current.id,
-      pointer: lockPointer,
-    });
-  };
-
   return (
     <section className={styles.root} aria-labelledby="profile-editor-title">
       <div className="section-heading">
@@ -199,42 +190,8 @@ export function ProfileEditor({ detail }: Readonly<{ detail: WebProfileDetail }>
             <button type="submit" disabled={submitting}>
               创建修正版
             </button>
-            <button
-              type="button"
-              className="button-muted"
-              disabled={submitting}
-              onClick={() => {
-                lockMutation('lock', pointer);
-              }}
-            >
-              锁定字段
-            </button>
           </div>
         </form>
-      </div>
-      <div className={['panel-block', styles.lockedPaths].join(' ')}>
-        <h3>已锁定字段</h3>
-        {detail.current.lockedPaths.length === 0 ? (
-          <p className="muted">暂无锁定字段。</p>
-        ) : (
-          <ul>
-            {detail.current.lockedPaths.map((path) => (
-              <li key={path}>
-                <code>{path}</code>
-                <button
-                  type="button"
-                  className="button-link"
-                  disabled={submitting}
-                  onClick={() => {
-                    lockMutation('unlock', path);
-                  }}
-                >
-                  解锁
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
       </div>
     </section>
   );

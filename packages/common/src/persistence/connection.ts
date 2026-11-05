@@ -4,12 +4,15 @@ import Database from 'better-sqlite3';
 import { contentHash } from '@jobhunter/common/domain';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { PersistenceError } from '@jobhunter/common/persistence/errors';
 import {
   assertDatabaseIntegrity,
   assertSqliteCapabilities,
 } from '@jobhunter/common/persistence/health';
 import { installSqliteMaintenanceGate } from '@jobhunter/common/persistence/maintenance';
+import { installTaskExecutionGate } from './task-execution-gate.js';
+import { acquireTaskServiceLock, hasTaskServiceOwnership } from './task-service-lock.js';
 
 const activeConnections = new Map<string, number>();
 
@@ -92,6 +95,7 @@ export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabase
   mkdirSync(resolved.dataRoot, { recursive: true });
   const databasePath = path.join(resolved.dataRoot, resolved.databaseFileName);
   let client: Database.Database | undefined;
+  let releaseMigrationLock: (() => void) | undefined;
 
   try {
     client = new Database(databasePath);
@@ -105,6 +109,31 @@ export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabase
     const changesBefore = changes.get()?.total;
     const schemaBefore = client.pragma('schema_version', { simple: true });
     if (resolved.runMigrations) {
+      // 2.a、有待应用迁移时必须独占服务所有权，禁止入口更新 Schema 后旧执行器继续写入。
+      const migrations = readMigrationFiles({ migrationsFolder: resolved.migrationsFolder });
+      const hasJournal = client
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'")
+        .get();
+      const applied = hasJournal
+        ? Number(
+            client
+              .prepare('SELECT COALESCE(MAX(created_at), 0) FROM __drizzle_migrations')
+              .pluck()
+              .get(),
+          )
+        : 0;
+      if (
+        migrations.some((migration) => migration.folderMillis > applied) &&
+        !hasTaskServiceOwnership(resolved.dataRoot)
+      ) {
+        const release = acquireTaskServiceLock(resolved.dataRoot);
+        if (!release)
+          throw new PersistenceError(
+            'DATABASE_UPGRADE_REQUIRES_STOP',
+            'Database upgrade requires stopping the central task service first (task service stop).',
+          );
+        releaseMigrationLock = release;
+      }
       // 数据迁移可重建 JSON 内容哈希及清理文本，不把业务领域依赖引入连接层。
       client.function('migration_json_hash', (value: string) =>
         contentHash(JSON.parse(value) as unknown),
@@ -127,6 +156,7 @@ export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabase
       assertDatabaseIntegrity(client);
     }
     installSqliteMaintenanceGate(client);
+    installTaskExecutionGate(client);
     registerConnection(databasePath);
     let closed = false;
 
@@ -150,5 +180,7 @@ export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabase
       'Unable to initialize the SQLite database.',
       error,
     );
+  } finally {
+    releaseMigrationLock?.();
   }
 }

@@ -1,3 +1,4 @@
+import { matchMetadataSql, adviceMetadataSql } from './metadata-sql.js';
 import type { JobHistoryReader } from '@jobhunter/recruitment/contracts/job-history';
 import type { CandidateProfileReader } from '@jobhunter/user/contracts';
 import type { TaskRelationStatusReader } from '@jobhunter/common/tasks';
@@ -68,12 +69,12 @@ export class SqliteWebJobTraceRepository implements WebJobTraceRepository {
         `WITH candidates AS (
          SELECT mr.*,
                 ROW_NUMBER() OVER (PARTITION BY mr.profile_version_id ORDER BY mr.created_at DESC, mr.id DESC) AS preference
-         FROM match_results mr
+         FROM ${matchMetadataSql} mr
          WHERE mr.job_revision_id = ? AND mr.profile_version_id IN (SELECT value FROM json_each(?))
        )
        SELECT c.id, c.profile_version_id, c.filter_status, c.total_score, c.components_json,
               c.risks_json, c.created_at,
-              (SELECT ma.result_json FROM match_advices ma WHERE ma.match_result_id = c.id ORDER BY ma.created_at DESC, ma.id DESC LIMIT 1) AS advice_json
+              (SELECT ma.result_json FROM ${adviceMetadataSql} ma WHERE ma.match_result_id = c.id ORDER BY ma.created_at DESC, ma.id DESC LIMIT 1) AS advice_json
        FROM candidates c WHERE c.preference = 1 ORDER BY c.total_score DESC, c.created_at DESC`,
       )
       .all(revisions[0]?.id ?? null, JSON.stringify(profileIds)) as Omit<

@@ -1,3 +1,5 @@
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
+import { periodicConfigProjection } from '@jobhunter/common/persistence/periodic-config';
 import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
@@ -52,11 +54,9 @@ function seedSource(dataRoot: string): void {
       .run(sourceId, companyId, channelId);
     database.client
       .prepare(
-        `INSERT INTO sync_runs
-         (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-          sync_policy_version, source_config_hash, stats_json, started_at, finished_at)
-         VALUES ('018f0000-0000-7000-8000-000000000301', ?, 'manual', 'succeeded',
-          'complete', 'v1', 'v1', 'v1', 'hash', '{"created":3,"updated":1}', 1, 2)`,
+        `WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
+          sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES ('018f0000-0000-7000-8000-000000000301', ?, 'manual', 'succeeded',
+          'complete', 'v1', 'v1', 'v1', 'hash', '{"created":3,"updated":1}', 1, 2)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture`,
       )
       .run(sourceId);
     const profile = JSON.stringify({
@@ -89,11 +89,11 @@ function seedSource(dataRoot: string): void {
       .run();
     database.client
       .prepare(
-        `INSERT INTO profile_versions
-         (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at)
-         VALUES ('018f0000-0000-7000-8000-000000000402',
-                 '018f0000-0000-7000-8000-000000000401', 1, ?, ?, '[]', ?, 1, 1)`,
+        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+          content_hash, is_current, created_at) AS (VALUES ('018f0000-0000-7000-8000-000000000402',
+                 '018f0000-0000-7000-8000-000000000401', 1, ?, ?, '[]', ?, 1, 1))
+INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
       )
       .run(profile, profile, 'a'.repeat(64));
   } finally {
@@ -128,7 +128,9 @@ describe('Web source management', () => {
             idempotencyToken: 'blocked-request',
           }),
         ).toThrow('请先在个人资料中确认目标岗位');
-        expect(container.services.tasks.list()).toEqual([]);
+        expect(
+          container.services.tasks.list().filter((task) => task.taskType !== 'source.scan'),
+        ).toEqual([]);
       } finally {
         container.close();
       }
@@ -174,6 +176,7 @@ describe('Web source management', () => {
         expect(
           container.services.tasks
             .list()
+            .filter((task) => task.taskType !== 'source.scan')
             .map((task) => task.payload)
             .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right))),
         ).toEqual([
@@ -237,7 +240,9 @@ describe('Web source management', () => {
           jobListPreferences: { defaultSort: 'published_desc', rememberFilters: true },
         });
         container.services.sourceSchedules.reconcile();
-        expect(container.services.tasks.list()[0]?.status).toBe('cancelled');
+        expect(
+          container.services.tasks.list().find((task) => task.taskType !== 'source.scan')?.status,
+        ).toBe('cancelled');
         expect(
           container.services.webSources.list().find((source) => source.id === sourceId)?.schedule,
         ).toMatchObject({ enabled: false, cronExpression: '30 9 * * 1' });
@@ -297,13 +302,13 @@ describe('Web source management', () => {
 
       const initial = openSqliteDatabase({ dataRoot: root.path });
       try {
-        expect(initial.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(
-          catalogCounts.sources,
-        );
+        expect(
+          initial.client.prepare(`SELECT count(*) FROM ${periodicConfigProjection}`).pluck().get(),
+        ).toBe(catalogCounts.sources);
         expect(
           initial.client
             .prepare(
-              "SELECT count(*) FROM schedules WHERE task_type = 'source.sync' AND enabled = 1",
+              `SELECT count(*) FROM ${periodicConfigProjection} WHERE task_type = 'source.sync' AND enabled = 1`,
             )
             .pluck()
             .get(),
@@ -323,12 +328,10 @@ describe('Web source management', () => {
           .run();
         customized.client
           .prepare(
-            `INSERT INTO sync_runs
-             (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-              sync_policy_version, source_config_hash, stats_json, started_at, finished_at)
-             VALUES ('018f0000-0000-7000-8f00-00000000f911',
+            `WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
+              sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES ('018f0000-0000-7000-8f00-00000000f911',
                      '018f0000-0000-7000-8000-000000000211', 'manual', 'succeeded',
-                     'complete', 'v1', 'v1', 'v1', 'preserved', '{}', 1, 2)`,
+                     'complete', 'v1', 'v1', 'v1', 'preserved', '{}', 1, 2)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture`,
           )
           .run();
       } finally {
@@ -347,9 +350,9 @@ describe('Web source management', () => {
         expect(database.client.prepare('SELECT count(*) FROM job_sources').pluck().get()).toBe(
           catalogCounts.sources,
         );
-        expect(database.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(
-          catalogCounts.sources,
-        );
+        expect(
+          database.client.prepare(`SELECT count(*) FROM ${periodicConfigProjection}`).pluck().get(),
+        ).toBe(catalogCounts.sources);
         expect(
           database.client
             .prepare('SELECT DISTINCT channel FROM source_channels WHERE enabled = 1')
@@ -367,7 +370,7 @@ describe('Web source management', () => {
         expect(
           database.client
             .prepare(
-              `SELECT count(*) FROM sync_runs
+              `SELECT count(*) FROM ${scanTaskProjection}
                WHERE source_id = '018f0000-0000-7000-8000-000000000211'`,
             )
             .pluck()
@@ -394,13 +397,16 @@ describe('Web source management', () => {
       try {
         const schedules = openSqliteDatabase({ dataRoot: root.path });
         try {
-          expect(schedules.client.prepare('SELECT count(*) FROM schedules').pluck().get()).toBe(
-            catalogCounts.sources + 1,
-          );
+          expect(
+            schedules.client
+              .prepare(`SELECT count(*) FROM ${periodicConfigProjection}`)
+              .pluck()
+              .get(),
+          ).toBe(catalogCounts.sources + 1);
           expect(
             schedules.client
               .prepare(
-                "SELECT count(*) FROM schedules WHERE task_type = 'source.sync' AND enabled = 1",
+                `SELECT count(*) FROM ${periodicConfigProjection} WHERE task_type = 'source.sync' AND enabled = 1`,
               )
               .pluck()
               .get(),
@@ -471,6 +477,7 @@ describe('Web source management', () => {
         expect(
           container.services.tasks
             .list()
+            .filter((task) => task.taskType !== 'source.scan')
             .map((task) => task.taskType)
             .sort(),
         ).toEqual(['source.health-check', 'source.sync']);
@@ -603,7 +610,9 @@ it('persists individual schedules across reconciliation and restart, then replac
       try {
         const read = (id: string): { payload_json: string; cron_expression: string } =>
           db.client
-            .prepare('SELECT payload_json, cron_expression FROM schedules WHERE schedule_key = ?')
+            .prepare(
+              `SELECT payload_json, cron_expression FROM ${periodicConfigProjection} WHERE schedule_key = ?`,
+            )
             .get(`source.sync:${id}`) as { payload_json: string; cron_expression: string };
         expect(JSON.parse(read(primary).payload_json)).toEqual({
           sourceId: primary,

@@ -178,20 +178,20 @@ export class SqliteSettingsStore {
         .run(channel, updatedAt);
       this.#client
         .prepare(
-          `UPDATE schedules
-           SET enabled = CASE WHEN EXISTS (
+          `UPDATE application_settings
+           SET value_json = json_set(value_json, '$.enabled', CASE WHEN EXISTS (
              SELECT 1 FROM job_sources source
              JOIN source_channels selected ON selected.id = source.channel_id
-             WHERE schedules.schedule_key = 'source.sync:' || source.id
+             WHERE application_settings.key = 'task.periodic:source.sync:' || source.id
                AND selected.channel = ?
                AND selected.enabled = 1
                AND source.enabled = 1
                AND source.support_status = 'supported'
-           ) THEN 1 ELSE 0 END,
+           ) THEN 1 ELSE 0 END, '$.updated_at', ?),
            updated_at = ?
-           WHERE task_type = 'source.sync'`,
+           WHERE key GLOB 'task.periodic:*' AND json_extract(value_json, '$.task_type') = 'source.sync'`,
         )
-        .run(channel, updatedAt);
+        .run(channel, updatedAt, updatedAt);
       this.#client
         .prepare(
           `UPDATE tasks
@@ -202,8 +202,8 @@ export class SqliteSettingsStore {
                SELECT 1 FROM job_sources source
                JOIN source_channels previous ON previous.id = source.channel_id
                WHERE (
-                 source.id = json_extract(tasks.payload_json, '$.sourceId')
-                 OR source.id IN (SELECT value FROM json_each(tasks.payload_json, '$.sourceIds'))
+                 source.id = json_extract(tasks.private_state, '$.sourceId')
+                 OR source.id IN (SELECT value FROM json_each(tasks.private_state, '$.sourceIds'))
                )
                  AND previous.channel != ?
              )`,

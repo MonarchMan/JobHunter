@@ -66,6 +66,8 @@ export interface MatchResultRecord {
 
 /** 应用层数据结构或端口契约。 */
 export interface MatchAdviceRecord {
+  /** 建议开始生成时绑定的评分输入，防止评分被覆盖后的旧建议回写。 */
+  readonly matchInputHash?: ContentHash;
   readonly id: MatchAdviceId;
   readonly matchResultId: MatchResultId;
   readonly agentRunId: string;
@@ -116,8 +118,6 @@ export interface MatchingRepository {
   getEnrichment(id: JobEnrichmentId): JobEnrichmentRecord | null;
   getLatestEnrichmentForRevision(jobRevisionId: JobRevisionId): JobEnrichmentRecord | null;
   saveEnrichment(record: JobEnrichmentRecord): JobEnrichmentRecord;
-  getActiveRuleset(): MatchRulesetRecord | null;
-  upsertRuleset(record: MatchRulesetRecord): MatchRulesetRecord;
   createOrGetMatch(record: MatchResultRecord): MatchResultRecord;
   getMatch(id: MatchResultId): MatchResultRecord | null;
   saveAdvice(record: MatchAdviceRecord): MatchAdviceRecord;

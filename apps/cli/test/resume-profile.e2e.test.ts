@@ -7,7 +7,7 @@ import type { CandidateProfileData } from '@jobhunter/user/domain';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { vi, describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -160,38 +160,9 @@ describe('resume and profile commands', () => {
           ])
         ).body,
       ).toMatchObject({ data: { version: { versionNo: 2 } } });
-      const locked = await command(dataRoot, [
-        'profile',
-        'lock',
-        result.data.profileId,
-        '/preferences/locations',
-      ]);
-      expect(locked.body).toMatchObject({
-        data: { version: { versionNo: 3, lockedPaths: ['/preferences/locations'] } },
-      });
       const history = await command(dataRoot, ['profile', 'history', result.data.profileId]);
-      const historyVersions = (
-        history.body as {
-          readonly data: {
-            readonly versions: readonly {
-              readonly version: {
-                readonly versionNo: number;
-                readonly lockedPaths: readonly string[];
-              };
-            }[];
-          };
-        }
-      ).data.versions;
-      expect(historyVersions.map((item) => item.version.versionNo)).toEqual([3, 2, 1]);
-      expect(historyVersions[0]?.version.lockedPaths).toEqual(['/preferences/locations']);
-      const unlocked = await command(dataRoot, [
-        'profile',
-        'unlock',
-        result.data.profileId,
-        '/preferences/locations',
-      ]);
-      expect(unlocked.body).toMatchObject({
-        data: { version: { versionNo: 4, lockedPaths: [] } },
+      expect(history.body).toMatchObject({
+        data: { versions: [{ version: { versionNo: 2 } }, { version: { versionNo: 1 } }] },
       });
 
       const missing = await command(dataRoot, [
@@ -206,3 +177,9 @@ describe('resume and profile commands', () => {
     }
   }, 30_000);
 });
+
+// 命令契约测试不启动网络执行器；中央服务真实生命周期由 embedded-tasks 覆盖。
+vi.mock(import('@jobhunter/common/task-service'), async (original) => ({
+  ...(await original()),
+  ensureConfiguredTaskService: vi.fn(() => Promise.resolve()),
+}));

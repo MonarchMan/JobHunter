@@ -1,3 +1,4 @@
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { SqliteRecruitmentCleanupParticipant } from '@jobhunter/recruitment/persistence/cleanup-participant';
 import { SqliteUserAgentReferenceReader } from '@jobhunter/user/persistence/agent-reference-reader';
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
@@ -67,7 +68,7 @@ it('connects, reads and saves into permanent jobs without official synchronizati
     const id = new SystemIdGenerator().generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
       )
       .run(id, id);
     return id;
@@ -99,7 +100,7 @@ it('connects, reads and saves into permanent jobs without official synchronizati
     );
     expect(second.jobId).toBe(first.jobId);
     expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(1);
-    expect(db.client.prepare('SELECT count(*) FROM job_revisions').pluck().get()).toBe(1);
+    expect(db.client.prepare(`SELECT count(*) FROM jobs`).pluck().get()).toBe(1);
     expect(
       db.client
         .prepare(
@@ -108,7 +109,7 @@ it('connects, reads and saves into permanent jobs without official synchronizati
         .pluck()
         .get(),
     ).toBe(3);
-    expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
+    expect(db.client.prepare(`SELECT count(*) FROM ${scanTaskProjection}`).pluck().get()).toBe(0);
     expect(db.client.prepare('SELECT missing_count FROM jobs').pluck().get()).toBe(0);
     // 2、取消、租约过期与重启均不能写入或复用内存会话。
     const cancelled = task();

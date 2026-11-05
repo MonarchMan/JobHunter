@@ -1,6 +1,6 @@
 import { webSettingsMutationSchema, webSettingsSchema } from '@jobhunter/recruitment/contracts/web';
 import { ZodError } from 'zod';
-import { getWebContainer } from '../../../src/server/container.js';
+import { getWebContainer, getWebMutationContainer } from '../../../src/server/container.js';
 import {
   badRequestResponse,
   dataResponse,
@@ -25,7 +25,7 @@ export async function PATCH(request: Request): Promise<Response> {
   try {
     const body = (await request.json()) as unknown;
     const mutation = webSettingsMutationSchema.parse(body);
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     const settings = container.services.settings.update(mutation);
     container.services.sourceSchedules.reconcile();
     return dataResponse(webSettingsSchema.parse(settings));

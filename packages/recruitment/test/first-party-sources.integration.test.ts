@@ -1,3 +1,4 @@
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { readFile } from 'node:fs/promises';
 import { JobSyncService } from '@jobhunter/recruitment/sync/job-sync-service';
 import { parseId, utcInstant, type Clock, type UtcInstant } from '@jobhunter/common/domain';
@@ -619,7 +620,7 @@ describe('first-party source seed and sync', () => {
       if (key === 'didi.intern') {
         // 3、排除计数随覆盖证据持久化，不影响 partial 的缺失保护。
         const evidence = handle.client
-          .prepare('SELECT coverage_evidence_json FROM sync_runs WHERE status = ?')
+          .prepare(`SELECT coverage_evidence_json FROM ${scanTaskProjection} WHERE status = ?`)
           .pluck()
           .get('partial') as string;
         expect(JSON.parse(evidence)).toMatchObject({

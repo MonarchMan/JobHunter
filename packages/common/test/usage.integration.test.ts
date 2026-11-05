@@ -46,6 +46,7 @@ function fixture(): {
       'utf8',
     ),
   );
+  db.exec('ALTER TABLE model_requests ADD COLUMN ai_message_id TEXT');
   const ledger = new SqliteModelRequestRepository(db);
   return {
     db,

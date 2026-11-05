@@ -12,7 +12,7 @@ import {
   forbiddenResponse,
   notFoundResponse,
 } from '../../../src/server/http.js';
-import { getWebContainer } from '../../../src/server/container.js';
+import { getWebContainer, getWebMutationContainer } from '../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../src/server/csrf.js';
 
 export const dynamic = 'force-dynamic';
@@ -43,7 +43,7 @@ export async function PATCH(request: Request): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {
     const mutation = webProfileMutationSchema.parse(await request.json());
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     return dataResponse(container.services.webProfiles.mutate(mutation));
   } catch (error) {
     if (error instanceof ProfileVersionConflictError) {

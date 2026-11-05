@@ -1,5 +1,5 @@
 import { webReplaceExperienceDraftSchema } from '@jobhunter/user/contracts/experience-web';
-import { getWebContainer } from '../../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../../src/server/container.js';
 import { dataResponse, forbiddenResponse } from '../../../../../../src/server/http.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
 import { interviewErrorResponse } from '../../../../../../src/server/interview-http.js';
@@ -15,7 +15,7 @@ export async function PUT(
   try {
     const body = webReplaceExperienceDraftSchema.parse(await request.json());
     return dataResponse(
-      (await getWebContainer()).services.experiences.replaceDraft({
+      (await getWebMutationContainer()).services.experiences.replaceDraft({
         documentId: (await context.params).id,
         ...body,
       }),

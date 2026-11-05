@@ -4,7 +4,7 @@ import {
   dataResponse,
   forbiddenResponse,
 } from '../../../../../src/server/http.js';
-import { getWebContainer } from '../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../src/server/csrf.js';
 import { interviewErrorResponse } from '../../../../../src/server/interview-http.js';
 
@@ -24,7 +24,7 @@ export async function POST(request: Request): Promise<Response> {
       return badRequestResponse('面经文件必须大于 0 且不超过 10 MiB。');
     }
     const result = await (
-      await getWebContainer()
+      await getWebMutationContainer()
     ).services.experiences.importFile({
       bytes: new Uint8Array(await file.arrayBuffer()),
       fileName: file.name,

@@ -1,4 +1,5 @@
 import type { EnqueueTaskResult, TaskRecord } from '@jobhunter/common/tasks';
+import { TaskServiceConnectionError } from '@jobhunter/common/task-service';
 import type {
   SourceChannelOverview,
   SourceOverview,
@@ -47,6 +48,32 @@ function container(get: () => Readonly<Record<string, string>> = () => ({ app: '
 }
 
 describe('CLI framework', () => {
+  it('renders an actionable central service configuration conflict', async () => {
+    const output = memoryIo();
+    const fixture: CliContainer = {
+      ...container().value,
+      taskService: {
+        status: () => Promise.resolve({ status: 'incompatible' }),
+        stop: () => Promise.resolve(),
+        restart: () => Promise.reject(new TaskServiceConnectionError('incompatible')),
+      },
+    };
+    expect(
+      await runCli({
+        argv: ['--json', 'task', 'service', 'restart'],
+        container: fixture,
+        io: output.io,
+      }),
+    ).toBe(cliExitCode.usage);
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+      ok: false,
+      error: {
+        code: 'TASK_SERVICE_INCOMPATIBLE',
+        message: '中央任务服务的配置与当前入口不一致，请执行 task service restart。',
+      },
+    });
+  });
+
   it('renders human output and closes the container', async () => {
     const output = memoryIo();
     const fixture = container();
@@ -123,7 +150,6 @@ describe('CLI framework', () => {
       priority: 0,
       idempotencyKey: 'sync-fixture',
       concurrencyKey: `source-sync:${sourceId}`,
-      scheduleId: null,
       retryOfTaskId: null,
       attemptCount: 1,
       maxAttempts: 3,
@@ -207,7 +233,6 @@ describe('CLI framework', () => {
       priority: 0,
       idempotencyKey: 'failed-fixture',
       concurrencyKey: `source-sync:${sourceId}`,
-      scheduleId: null,
       retryOfTaskId: null,
       attemptCount: 3,
       maxAttempts: 3,

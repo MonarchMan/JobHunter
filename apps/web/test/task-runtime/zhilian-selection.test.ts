@@ -1,3 +1,4 @@
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -175,7 +176,7 @@ it.each(['selection', 'recommendation'] as const)(
       expect(reads).toBe(mode === 'selection' ? 1 : 4);
       // 2、共享持久化不触发官网缺失标记，也不能污染 BOSS 的工作集。
       expect(db.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(1);
-      expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
+      expect(db.client.prepare(`SELECT count(*) FROM ${scanTaskProjection}`).pluck().get()).toBe(0);
       expect(db.client.prepare('SELECT missing_count FROM jobs').pluck().get()).toBe(0);
       expect(db.client.pragma('foreign_key_check')).toEqual([]);
       expect(
@@ -186,13 +187,7 @@ it.each(['selection', 'recommendation'] as const)(
         ).snapshot().batch,
       ).toBeNull();
       // 3、扫描本链路所有持久化表，令牌不得进入任务、职位或观察。
-      for (const table of [
-        'jobs',
-        'job_revisions',
-        'job_observations',
-        'tasks',
-        'platform_connections',
-      ])
+      for (const table of ['jobs', 'jobs', 'job_observations', 'tasks', 'platform_connections'])
         expect(JSON.stringify(db.client.prepare(`SELECT * FROM ${table}`).all())).not.toContain(
           'test-private-',
         );

@@ -1,3 +1,4 @@
+import { currentModelMessage } from '../agent/message-context.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import {
@@ -101,8 +102,8 @@ export class SqliteModelRequestRepository {
     // 2、SQL 参数仅绑定数据；列名来自静态映射。请求身份、所属运行和 Agent 快照不可覆写。
     this.client
       .prepare(
-        `INSERT INTO model_requests (id, agent_run_id, agent_key, state, ${columns.join(',')})
-      VALUES (?, ?, ?, ?, ${columns.map(() => '?').join(',')})
+        `INSERT INTO model_requests (id, agent_run_id, agent_key, state, ai_message_id, ${columns.join(',')})
+      VALUES (?, ?, ?, ?, ?, ${columns.map(() => '?').join(',')})
       ON CONFLICT(id) DO UPDATE SET state = excluded.state, ${columns.map((column) => `${column} = excluded.${column}`).join(',')}`,
       )
       .run(
@@ -110,6 +111,12 @@ export class SqliteModelRequestRepository {
         existing ? existing.agent_run_id : agentRunId,
         agentKey,
         record.state,
+        currentModelMessage() === null
+          ? null
+          : (this.client
+              .prepare('SELECT id FROM ai_messages WHERE id=?')
+              .pluck()
+              .get(currentModelMessage()) ?? null),
         ...values,
       );
   }

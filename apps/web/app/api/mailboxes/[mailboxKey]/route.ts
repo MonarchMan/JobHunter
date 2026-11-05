@@ -3,7 +3,7 @@ import {
   MailboxSettingsError,
 } from '@jobhunter/recruitment/mail-application';
 import { ZodError } from 'zod';
-import { getWebContainer } from '../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../src/server/container.js';
 import {
   badRequestResponse,
   dataResponse,
@@ -22,7 +22,9 @@ export async function PATCH(
   try {
     const { mailboxKey } = await context.params;
     const input = mailboxSettingsUpdateSchema.parse(await request.json());
-    const mailbox = await (await getWebContainer()).services.mailboxes.update(mailboxKey, input);
+    const mailbox = await (
+      await getWebMutationContainer()
+    ).services.mailboxes.update(mailboxKey, input);
     return dataResponse(mailbox);
   } catch (error) {
     if (error instanceof MailboxSettingsError && error.code === 'not_found')
@@ -41,7 +43,7 @@ export async function DELETE(
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {
     const { mailboxKey } = await context.params;
-    await (await getWebContainer()).services.mailboxes.disconnect(mailboxKey);
+    await (await getWebMutationContainer()).services.mailboxes.disconnect(mailboxKey);
     return dataResponse({ mailboxKey, disconnected: true });
   } catch (error) {
     if (error instanceof MailboxSettingsError && error.code === 'not_found')

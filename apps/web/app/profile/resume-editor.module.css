@@ -586,6 +586,7 @@
   .resume-editor-actions button {
     width: 100%;
     min-width: 0;
+    max-width: none;
   }
 
   .resume-preview-backdrop {

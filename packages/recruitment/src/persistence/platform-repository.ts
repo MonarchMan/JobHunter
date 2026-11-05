@@ -63,7 +63,7 @@ export class SqlitePlatformRepository implements PlatformRepository {
     const safe = platformProgressSchema.parse(progress);
     this.client
       .prepare(
-        `UPDATE tasks SET result_json=? WHERE id=? AND task_type=? AND status='running'
+        `UPDATE tasks SET public_state=? WHERE id=? AND task_type=? AND status='running'
       AND lease_expires_at>? AND EXISTS (SELECT 1 FROM platform_connections WHERE provider_key=? AND generation=?)`,
       )
       .run(
@@ -227,10 +227,10 @@ export class SqlitePlatformRepository implements PlatformRepository {
         // 4、与职位事务一起提交计数并清除当前身份，避免提交后退出仍标记该条未完成。
         this.client
           .prepare(
-            `UPDATE tasks SET result_json=json_set(json_remove(result_json,'$.progress.currentExternalJobId'),
-          '$.progress.saved',coalesce(json_extract(result_json,'$.progress.saved'),0)+1,
-          '$.progress.processed',coalesce(json_extract(result_json,'$.progress.processed'),0)+1)
-          WHERE id=? AND json_type(result_json,'$.progress')='object'`,
+            `UPDATE tasks SET public_state=json_set(json_remove(public_state,'$.progress.currentExternalJobId'),
+          '$.progress.saved',coalesce(json_extract(public_state,'$.progress.saved'),0)+1,
+          '$.progress.processed',coalesce(json_extract(public_state,'$.progress.processed'),0)+1)
+          WHERE id=? AND json_type(public_state,'$.progress')='object'`,
           )
           .run(taskId);
         this.setStatus(generation, 'available', now);

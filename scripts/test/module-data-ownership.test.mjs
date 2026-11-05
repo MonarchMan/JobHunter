@@ -29,7 +29,7 @@ describe('four-module data ownership', () => {
     await assertNoSql(
       'matching',
       'FROM|JOIN|UPDATE|INTO|DELETE FROM',
-      'jobs|job_revisions|companies|job_sources|candidate_profiles|profile_versions|agent_runs|tasks',
+      'jobs|companies|job_sources|candidate_profiles|profile_versions|agent_runs|tasks',
     );
   });
 
@@ -37,7 +37,7 @@ describe('four-module data ownership', () => {
     await assertNoSql(
       'common',
       'FROM|JOIN|UPDATE|INTO|DELETE FROM',
-      'jobs|job_revisions|job_observations|source_job_details|companies|job_sources|candidate_profiles|profile_versions|drill_turns|match_results|match_advices|job_enrichments',
+      'jobs|job_observations|source_job_details|companies|job_sources|candidate_profiles|profile_versions|drill_turns|job_metadata',
     );
   });
 
@@ -45,7 +45,7 @@ describe('four-module data ownership', () => {
     await assertNoSql(
       'user',
       'FROM|JOIN|UPDATE|INTO|DELETE FROM',
-      'jobs|job_revisions|companies|job_sources|match_results|match_advices|job_enrichments|agent_runs',
+      'jobs|companies|job_sources|job_metadata|agent_runs',
     );
   });
 
@@ -53,7 +53,7 @@ describe('four-module data ownership', () => {
     await assertNoSql(
       'recruitment',
       'FROM|JOIN|UPDATE|INTO|DELETE FROM',
-      'candidate_profiles|profile_versions|files|file_entity_mappings|project_dossiers|drill_sessions|match_results|match_advices|job_enrichments',
+      'candidate_profiles|profile_versions|files|file_entity_mappings|project_dossiers|drill_sessions|job_metadata',
     );
   });
 });

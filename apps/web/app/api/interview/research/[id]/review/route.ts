@@ -1,5 +1,5 @@
 import { webReviewExperienceResearchSchema } from '@jobhunter/user/contracts/research-web';
-import { getWebContainer } from '../../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../../../../src/server/http.js';
 import { interviewErrorResponse } from '../../../../../../src/server/interview-http.js';
@@ -12,7 +12,7 @@ export async function POST(
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {
     const input = webReviewExperienceResearchSchema.parse(await request.json());
-    const detail = (await getWebContainer()).services.research.review({
+    const detail = (await getWebMutationContainer()).services.research.review({
       requestId: (await context.params).id,
       ...input,
     });

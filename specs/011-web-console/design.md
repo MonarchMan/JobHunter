@@ -2,7 +2,9 @@
 
 浏览器回归定位通知时限定通知区域，定位公司时使用完整名称；简历制作使用专属画像种子，不依赖其他测试留下的可变画像状态。
 
-> 状态：Implemented
+> 状态：Ready
+
+> 中央调度服务已接入，实际数据迁移按整体三阶段计划执行，见 [ADR-0062](../../docs/adr/0062-central-task-scheduler.md)；验收记录见 003 规格的 tasks.md。
 
 职位详情在 matching 的建议读取边界直接使用当前严格契约，不转换旧引用或合并旧字段。建议 JSON 或结构无效时不展示内容，仅返回建议失败状态，不阻断职位正文。
 
@@ -38,9 +40,9 @@ apps/web/app/
 
 ## 运行时编排
 
-`apps/web/src/server/main.ts` 是本地 Web 宿主。它装配四模块任务能力，在自身进程启动 common 异步任务循环，并启动 Next.js 子进程；HTTP 页面与接口只查询或入队。任务循环失败时停止 Next，Next 退出时停止任务循环；SIGINT/SIGTERM 同时触发停止领取和页面服务关闭，等待在途工作与资源释放。父进程带 IPC 通道启动宿主时，宿主还接受 `shutdown` 消息触发同一停止流程（Windows 无法向子进程投递 POSIX 信号，父进程需经 IPC 请求优雅关闭）；IPC 通道在宿主内 unref，不阻碍自然退出。
+Web 宿主负责 Next 子进程和 common TaskClient，不承载任务循环。客户端连接或按统一协议启动中央服务；Web 退出仅回收 Next 和自身连接，后台任务继续运行。中央服务不可用时展示明确诊断，不联动停止 Next，不启动备用调度者。Windows 与 Unix 均通过平台适配器支持优雅关闭。
 
-开发宿主通过 Node development 条件与 tsx 加载四模块源码，生产宿主使用模块 dist。启动 Web 即可获得完整执行链路；CLI 等待命令按需装配相同任务运行时。不再提供独立 Worker 包、入口或命令。Next 子进程必须继承工作区根目录，确保配置与唯一历史迁移路径正确。
+开发内部宿主加载源码，生产加载 dist，均由 apps 组合根装配四模块；不恢复公开 Worker 包或命令。Next 和内部服务显式接收工作区根目录与数据目录，避免配置路径漂移。
 
 共享 DTO/Schema 位于 `packages/application/contracts`，不把领域实体直接序列化给 UI。
 

@@ -1,4 +1,4 @@
-import { objectiveRuleRows, ruleGaps } from './match-summary.js';
+import { ruleLabel } from './match-summary.js';
 import type { ReactElement } from 'react';
 import type { WebJobDetail } from '@jobhunter/matching/contracts/web';
 import styles from './page.module.css';
@@ -11,18 +11,19 @@ const names: Readonly<Record<string, string>> = {
   role: '岗位方向',
   industry: '行业',
   location: '地点',
+  qualification: '资格条件',
 };
 
 /** 规则与模型各用一张卡片，分项仅展示为行，缺口集中去重。 */
 export function MatchAnalysis({ match }: { readonly match: Match }): ReactElement {
   const rules = match.components.filter((item) => item.dimension !== 'model');
   const model = match.components.find((item) => item.dimension === 'model');
-  const gaps = ruleGaps(rules);
-  const objective = rules.some((item) => item.dimension === 'qualification');
-  const separateDimensions = rules.some(
-    (item) => item.dimension === 'role' || item.dimension === 'location',
-  );
-  const conditionRows = objective ? objectiveRuleRows(match.ruleOutcomes, separateDimensions) : [];
+  const gaps = match.ruleOutcomes
+    .filter((r) => r.status === 'fail')
+    .map((r) => ruleLabel(r.ruleId));
+  const unknown = match.ruleOutcomes
+    .filter((r) => r.status === 'unknown')
+    .map((r) => ruleLabel(r.ruleId));
   return (
     <div className={styles.scoreGrid}>
       <section className={styles.scoreCard} aria-label="规则评分">
@@ -33,34 +34,25 @@ export function MatchAnalysis({ match }: { readonly match: Match }): ReactElemen
           </strong>
         </div>
         <dl className={styles.scoreRows}>
-          {conditionRows.map((item) => (
-            <div key={item.key}>
-              <dt>{item.label}</dt>
+          {rules.map((item) => (
+            <div key={item.dimension}>
+              <dt>{names[item.dimension] ?? item.dimension}</dt>
               <dd>
                 {item.score.toFixed(1)} / {item.maximumScore.toFixed(1)}
               </dd>
             </div>
           ))}
-          {rules
-            .filter((item) => item.dimension !== 'qualification')
-            .map((item) => (
-              <div key={item.dimension}>
-                <dt>{names[item.dimension] ?? item.dimension}</dt>
-                <dd>
-                  {item.evidenceStatus === 'not_applicable'
-                    ? '不适用'
-                    : item.evidenceStatus === 'unknown' && !objective
-                      ? `待确认 / ${item.maximumScore.toFixed(1)}`
-                      : `${item.score.toFixed(1)} / ${item.maximumScore.toFixed(1)}`}
-                </dd>
-              </div>
-            ))}
         </dl>
         {gaps.length > 0 && (
           <div className={styles.gaps}>
-            <h4>{objective ? '不符合的条件' : '缺口'}</h4>
-            {!objective && <p className="muted">材料中尚未体现的证据</p>}
+            <h4>不符合的条件</h4>
             <p>{gaps.join('、')}</p>
+          </div>
+        )}
+        {unknown.length > 0 && (
+          <div className={styles.gaps}>
+            <h4>待确认的条件</h4>
+            <p>{unknown.join('、')}</p>
           </div>
         )}
       </section>

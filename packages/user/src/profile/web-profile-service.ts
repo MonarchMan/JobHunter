@@ -79,11 +79,13 @@ export class WebProfileService {
           mutation.expectedVersionId,
         );
         break;
-      case 'lock':
-        this.#management.lock(mutation.profileId, mutation.pointer, mutation.expectedVersionId);
-        break;
-      case 'unlock':
-        this.#management.unlock(mutation.profileId, mutation.pointer, mutation.expectedVersionId);
+      case 'confirm-extraction':
+        this.#profiles.confirmExtraction({
+          profileId: parseId(mutation.profileId, 'CandidateProfile'),
+          candidateVersionId: parseId(mutation.candidateVersionId, 'ProfileVersion'),
+          expectedCurrentVersionId: parseId(mutation.expectedVersionId, 'ProfileVersion'),
+          fields: mutation.fields,
+        });
         break;
       case 'preferences':
         this.#management.set(
@@ -105,9 +107,9 @@ export class WebProfileService {
       profileId: version.profileId,
       versionNumber: version.versionNo,
       resumeDocumentId: version.resumeDocumentId,
-      extracted: version.extracted,
       effective: version.effective,
-      lockedPaths: version.lockedPaths,
+      isCandidate: version.isCandidate,
+      baseVersionId: version.baseVersionId,
       createdAt: new Date(version.createdAt).toISOString(),
       extractionAgent: inspection.extractionAgent,
     });

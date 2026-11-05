@@ -8,7 +8,7 @@ import {
   forbiddenResponse,
   notFoundResponse,
 } from '../../../../src/server/http.js';
-import { getWebContainer } from '../../../../src/server/container.js';
+import { getWebContainer, getWebMutationContainer } from '../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../src/server/csrf.js';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +18,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {
     const input = webResumePolishRequestSchema.parse(await request.json());
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     return dataResponse(container.services.resumePolish.enqueue(input), { status: 202 });
   } catch (error) {
     if (error instanceof ResumePolishValidationError) return badRequestResponse(error.message);

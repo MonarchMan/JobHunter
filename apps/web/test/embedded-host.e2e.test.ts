@@ -1,4 +1,10 @@
 import { expect, it } from 'vitest';
+import { loadRuntimeAppConfig } from '@jobhunter/common/config/index';
+import {
+  requestTaskService,
+  stopTaskService,
+  taskServiceConfiguration,
+} from '@jobhunter/common/task-service';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
@@ -24,7 +30,7 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
-it('starts the actual Web host, consumes tasks without a worker entry and shuts down cleanly', async () => {
+it('shares a central service that survives Web shutdown and is explicitly stopped by test cleanup', async () => {
   const root = await createTemporaryDataRoot('jobhunter-web-host-');
   const port = await availablePort();
   const database = openSqliteDatabase({ dataRoot: root.path });
@@ -43,7 +49,6 @@ it('starts the actual Web host, consumes tasks without a worker entry and shuts 
     priority: 0,
     idempotencyKey: 'host-lifecycle',
     concurrencyKey: null,
-    scheduleId: null,
     retryOfTaskId: null,
     maxAttempts: 1,
     availableAt: utcInstant(1),
@@ -69,6 +74,20 @@ it('starts the actual Web host, consumes tasks without a worker entry and shuts 
       },
     },
   );
+  const serviceConfig = await loadRuntimeAppConfig({
+    workspaceRoot: path.resolve(import.meta.dirname, '../../..'),
+    environment: {
+      ...process.env,
+      DATA_ROOT: root.path,
+      API_KEY: '',
+      MODEL: '',
+      BASE_URL: 'https://api.openai.com/v1',
+    },
+  });
+  const serviceInput = {
+    dataRoot: root.path,
+    configuration: taskServiceConfiguration(serviceConfig),
+  };
   let output = '';
   child.stdout.on('data', (data: Buffer) => {
     output += data.toString();
@@ -101,13 +120,59 @@ it('starts the actual Web host, consumes tasks without a worker entry and shuts 
     }
     expect(ready, output).toBe(true);
     expect(queue.get(taskId)).toMatchObject({ status: 'failed', errorCategory: 'cancelled' });
-    // 3、只向测试创建的宿主请求关闭，等待 Next、维护进程和任务资源一起优雅退出。
+    // 服务崩溃不影响 Web 存活；下一次写操作应重新连接并恢复统一执行能力。
+    const original = (await requestTaskService({ ...serviceInput, method: 'ping' })) as {
+      pid: number;
+    };
+    process.kill(original.pid, 'SIGKILL');
+    await expect
+      .poll(async () => {
+        try {
+          await requestTaskService({ ...serviceInput, method: 'ping', timeoutMs: 100 });
+          return false;
+        } catch {
+          return true;
+        }
+      })
+      .toBe(true);
+    const origin = `http://127.0.0.1:${String(port)}`;
+    const csrfResponse = await fetch(`${origin}/api/csrf`);
+    const csrf = (await csrfResponse.json()) as { data: { token: string } };
+    const recovered = await fetch(`${origin}/api/tasks/${taskId}/cancel`, {
+      method: 'POST',
+      headers: {
+        origin,
+        'content-type': 'application/json',
+        'x-jobhunter-csrf': csrf.data.token,
+        cookie: `jobhunter_csrf=${csrf.data.token}`,
+      },
+      body: JSON.stringify({ idempotencyToken: 'host-crash-recovery' }),
+    });
+    expect(recovered.status, await recovered.text()).toBe(200);
+    const replacement = (await requestTaskService({ ...serviceInput, method: 'ping' })) as {
+      pid: number;
+    };
+    expect(replacement.pid).not.toBe(original.pid);
+    // 3、关闭页面入口后中央服务仍须存活；测试清理时再显式关闭自己的服务。
     // 经 IPC 通知而非信号：Windows 上 child.kill 直接终止进程，子进程无法执行清理。
     child.send('shutdown');
     expect(await closed, output).toBe(0);
+    await expect(requestTaskService({ ...serviceInput, method: 'ping' })).resolves.toBeDefined();
   } finally {
     if (child.exitCode === null && !child.killed) child.kill('SIGTERM');
     await closed;
+    await stopTaskService(serviceInput);
+    // 等待共享服务释放自己的资源后再删除临时数据目录。
+    await expect
+      .poll(async () => {
+        try {
+          await requestTaskService({ ...serviceInput, method: 'ping', timeoutMs: 100 });
+          return false;
+        } catch {
+          return true;
+        }
+      })
+      .toBe(true);
     database.close();
     await root.cleanup();
   }

@@ -6,7 +6,7 @@ import {
   errorResponse,
   forbiddenResponse,
 } from '../../../../src/server/http.js';
-import { getWebContainer } from '../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../src/server/csrf.js';
 
 /** 模块数据结构或契约。 */
@@ -21,7 +21,7 @@ export async function PATCH(request: Request, context: RouteContext): Promise<Re
     const { id } = await context.params;
     const body = (await request.json()) as Readonly<Record<string, unknown>>;
     const mutation = webSourceMutationSchema.parse({ ...body, sourceId: id });
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     return dataResponse(container.services.webSources.mutate(mutation));
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError)

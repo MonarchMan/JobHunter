@@ -10,10 +10,10 @@ export class SqliteUserAgentReferenceReader implements AgentReferenceReader {
     return Boolean(
       this.client
         .prepare(
-          'SELECT EXISTS(SELECT 1 FROM profile_versions WHERE agent_run_id=? UNION ALL SELECT 1 FROM drill_turns WHERE question_agent_run_id=? OR digest_agent_run_id=?)',
+          'SELECT EXISTS(SELECT 1 FROM profile_versions WHERE agent_run_id=? UNION ALL SELECT 1 FROM model_requests WHERE agent_run_id=? AND ai_message_id IS NOT NULL)',
         )
         .pluck()
-        .get(id, id, id),
+        .get(id, id),
     );
   }
 }

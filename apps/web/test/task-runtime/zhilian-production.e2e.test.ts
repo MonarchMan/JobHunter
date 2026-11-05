@@ -1,3 +1,6 @@
+import { startCentralTaskService, taskServiceConfiguration } from '@jobhunter/common/task-service';
+import { loadRuntimeAppConfig } from '@jobhunter/common/config/index';
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -31,7 +34,36 @@ async function execute(
   file: string,
   args: readonly string[],
 ): Promise<{ stdout: string; stderr: string }> {
-  return promisify(execFile)(file, [...args], { env: { ...process.env, BASE_URL: '' } });
+  const environment = { ...process.env, BASE_URL: '' };
+  const config = await loadRuntimeAppConfig({
+    cli: { dataRoot: args[args.indexOf('--data-root') + 1] },
+    environment,
+    workspaceRoot: path.resolve(import.meta.dirname, '../../../..'),
+  });
+  // 命令契约使用真实 IPC 但不消费任务；下面的生产处理器测试显式装配合成依赖。
+  const service = await startCentralTaskService({
+    dataRoot: config.bootstrap.dataRoot.value,
+    configuration: taskServiceConfiguration(config),
+    createRuntime: () => ({
+      run: (signal) =>
+        new Promise<void>((resolve) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+      request: () => null,
+      close: () => Promise.resolve(),
+    }),
+  });
+  try {
+    return await promisify(execFile)(file, [...args], { env: environment });
+  } finally {
+    await service?.close();
+  }
 }
 
 const searchFixture: {
@@ -312,13 +344,7 @@ it.each(['campus', 'search', '51job'] as const)(
       expect(connect).toHaveBeenCalledTimes(1);
       expect(fetcher).toHaveBeenCalledTimes(mode === '51job' ? 1 : 2);
       // 3、隔离、凭据与官网生命周期不变量必须同时成立。
-      for (const table of [
-        'jobs',
-        'job_revisions',
-        'job_observations',
-        'tasks',
-        'platform_connections',
-      ])
+      for (const table of ['jobs', 'jobs', 'job_observations', 'tasks', 'platform_connections'])
         for (const secret of [
           'fixture-secret',
           'fixture-at',
@@ -329,7 +355,7 @@ it.each(['campus', 'search', '51job'] as const)(
           expect(JSON.stringify(db.client.prepare(`SELECT * FROM ${table}`).all())).not.toContain(
             secret,
           );
-      expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
+      expect(db.client.prepare(`SELECT count(*) FROM ${scanTaskProjection}`).pluck().get()).toBe(0);
       expect(db.client.prepare('SELECT missing_count FROM jobs').pluck().get()).toBe(0);
       expect(db.client.pragma('foreign_key_check')).toEqual([]);
       await run(['disconnect', '--generation', String(generation)]);

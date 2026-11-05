@@ -12,7 +12,11 @@ import { buildMatchIdentity } from '../domain/index.js';
 import { composeMatchScore, scoreWeights } from '../score-composition.js';
 import { calculateDeterministicMatch } from '../scoring.js';
 import { currentMatchRuleset, defaultMatchRulesetId } from '../rulesets.js';
-import type { MatchingRepository, MatchResultRecord } from '../ports/matching.js';
+import type {
+  MatchingRepository,
+  MatchResultRecord,
+  MatchRulesetRecord,
+} from '../ports/matching.js';
 
 /** 匹配输入不满足约束。 */
 export class MatchingInputError extends Error {
@@ -40,15 +44,15 @@ export class DeterministicMatchingService {
     this.#ids = input.ids;
   }
 
-  /** 登记当前规则内容，不允许选择或重放历史算法。 */
-  public ensureRuleset(): ReturnType<MatchingRepository['upsertRuleset']> {
-    return this.#matching.upsertRuleset({
+  /** 读取代码中的当前规则配置，不进行数据库注册。 */
+  public ensureRuleset(): MatchRulesetRecord {
+    return {
       id: defaultMatchRulesetId,
       definition: currentMatchRuleset,
       definitionHash: contentHash(currentMatchRuleset),
       active: true,
       createdAt: this.#clock.now(),
-    });
+    };
   }
 
   /** 校验冻结输入、执行当前规则、合成模型评分并保存结果快照。 */
@@ -61,7 +65,8 @@ export class DeterministicMatchingService {
   }): { readonly match: MatchResultRecord; readonly created: boolean } {
     // 1、验证职位、画像和增强结果属于同一次输入。
     const profile = this.#profiles.getVersion(input.profileVersionId);
-    if (!profile) throw new MatchingInputError('Profile version does not exist.');
+    if (!profile || profile.isCandidate)
+      throw new MatchingInputError('Profile version does not exist.');
     const revision = this.#matching.getRevision(input.jobRevisionId);
     if (!revision) throw new MatchingInputError('Job revision does not exist.');
     const enrichment = input.jobEnrichmentId
@@ -122,7 +127,13 @@ export class DeterministicMatchingService {
       modelScore,
       components,
       ruleOutcomes: rules.ruleOutcomes,
-      inputHash: contentHash({ identity: identity.inputHash, rules }),
+      inputHash: contentHash({
+        identity: identity.inputHash,
+        rules,
+        modelScore,
+        modelReasons: input.modelReasons ?? [],
+        enrichmentHash: enrichment?.contentHash ?? null,
+      }),
       createdAt: this.#clock.now(),
     });
     return { match, created: match.id === candidateId };

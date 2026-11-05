@@ -34,7 +34,7 @@ export class SqliteRuntimeReferenceReader implements ResourceReferenceReader {
     return Boolean(
       this.client
         .prepare(
-          `SELECT EXISTS(SELECT 1 FROM tasks t WHERE t.status IN ('pending','running') AND (EXISTS(SELECT 1 FROM json_each(?) prefix WHERE t.task_type LIKE prefix.value||'%') OR EXISTS(SELECT 1 FROM json_tree(t.payload_json) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)))))`,
+          `SELECT EXISTS(SELECT 1 FROM tasks t WHERE t.status IN ('pending','running') AND (EXISTS(SELECT 1 FROM json_each(?) prefix WHERE t.task_type LIKE prefix.value||'%') OR EXISTS(SELECT 1 FROM json_tree(t.private_state) v WHERE CAST(v.atom AS TEXT) IN (SELECT value FROM json_each(?)))))`,
         )
         .pluck()
         .get(

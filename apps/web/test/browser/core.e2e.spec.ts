@@ -131,59 +131,18 @@ test.describe('校招实习管理台核心流程', () => {
       .toBe(true);
   });
 
-  test('creates a resume-project drill and synchronously returns a validated question', async ({
+  test('creates an interview session with an optional current project and remains usable on mobile', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/interview');
-
-    await expect(page.getByRole('heading', { name: '简历项目拷打' })).toBeVisible();
-    const projectSource = page.locator('[data-project-source]');
-    const dossierArchive = page.locator('[data-dossier-archive]');
-    const sourceBox = await projectSource.boundingBox();
-    const archiveBox = await dossierArchive.boundingBox();
-    expect(sourceBox).not.toBeNull();
-    expect(archiveBox).not.toBeNull();
-    if (sourceBox && archiveBox) {
-      expect(archiveBox.x).toBeGreaterThan(sourceBox.x + sourceBox.width);
-      expect(sourceBox.width).toBeGreaterThan(archiveBox.width);
-    }
-    const project = page.getByRole('article').filter({ hasText: '校招职位 Agent' });
-    await project.getByRole('button', { name: '建立准备档案' }).click();
-    await expect(page).toHaveURL(/\/interview\/projects\//);
-    await expect(page.getByText('浅档 · 尚未开始')).toBeVisible();
-
-    await page.getByRole('button', { name: '开始拷打' }).click();
-    await expect(
-      page
-        .getByRole('region', { name: '通知', exact: true })
-        .getByRole('status')
-        .filter({ hasText: '新一轮拷打已建立' }),
-    ).toBeVisible();
-    await expect(page.getByText('浅档 · resume-only@v1')).toBeVisible();
-    await page.getByRole('button', { name: '生成第一题' }).click();
-    await expect(page.getByRole('button', { name: '取消生成' })).toBeVisible();
-    await expect(page.getByRole('main').getByRole('status')).toContainText(
-      '模型正在选择最值得继续追问',
-    );
-    await page.getByRole('button', { name: '取消生成' }).click();
-    await expect(
-      page
-        .getByRole('region', { name: '通知', exact: true })
-        .getByRole('status')
-        .filter({ hasText: '已取消问题生成' }),
-    ).toBeVisible();
-    await expect(page.getByRole('button', { name: '生成第一题' })).toBeEnabled();
-    await page.getByRole('button', { name: '生成第一题' }).click();
-    await expect(page.getByText('这个项目最初要解决什么问题')).toBeVisible();
-    await expect(page.getByRole('link', { name: '查看任务状态' })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: '准备覆盖' })).toBeVisible();
-
+    await page.getByLabel('会话名称').fill('项目模拟面试');
+    await page.getByLabel('关联项目（可选）').selectOption({ index: 1 });
+    await page.getByRole('button', { name: '新建会话' }).click();
+    await expect(page.getByRole('heading', { name: '项目模拟面试' })).toBeVisible();
+    await page.getByRole('textbox', { name: '消息', exact: true }).fill('请开始面试');
+    await page.getByRole('button', { name: '发送', exact: true }).click();
+    await expect(page.getByText('请开始面试', { exact: true })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByRole('link', { name: '面试', exact: true })).toHaveAttribute(
-      'aria-current',
-      'page',
-    );
     await expect
       .poll(() =>
         page.evaluate(
@@ -191,24 +150,8 @@ test.describe('校招实习管理台核心流程', () => {
         ),
       )
       .toBe(true);
-
-    await page.goto('/interview');
-    await expect(page.locator('[data-active-session="true"]')).toHaveCount(1);
-    const narrowSourceBox = await page.locator('[data-project-source]').boundingBox();
-    const narrowArchiveBox = await page.locator('[data-dossier-archive]').boundingBox();
-    expect(narrowSourceBox).not.toBeNull();
-    expect(narrowArchiveBox).not.toBeNull();
-    if (narrowSourceBox && narrowArchiveBox) {
-      expect(Math.abs(narrowSourceBox.x - narrowArchiveBox.x)).toBeLessThanOrEqual(1);
-      expect(narrowArchiveBox.y).toBeGreaterThan(narrowSourceBox.y + narrowSourceBox.height);
-    }
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-        ),
-      )
-      .toBe(true);
+    await expect(page.getByRole('button', { name: '暂停' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '完成会话' })).toHaveCount(0);
   });
 
   test('filters internship jobs and links titles to official details', async ({ page }) => {
@@ -620,22 +563,16 @@ test.describe('校招实习管理台核心流程', () => {
   test('updates and locks an internship candidate profile version', async ({ page }) => {
     await page.goto('/profile');
     const advancedTools = page.locator('summary').filter({
-      hasText: '高级维护：字段锁定与 JSON 修正',
+      hasText: '高级维护：JSON 修正',
     });
     await advancedTools.click();
     await page.getByLabel('JSON Pointer').fill('/targetRoles');
     await page.getByLabel('JSON 值').fill('["Agent 实习生"]');
     await page.getByRole('button', { name: '创建修正版' }).click();
     await expect(page.getByRole('heading', { name: '版本 2' })).toBeVisible();
-    await expect(page.locator('pre').filter({ hasText: 'Agent 实习生' })).toHaveCount(2);
+    await expect(page.locator('pre').filter({ hasText: 'Agent 实习生' })).toHaveCount(1);
 
-    await advancedTools.click();
-    await page.getByLabel('JSON Pointer').fill('/targetRoles');
-    await page.getByRole('button', { name: '锁定字段' }).click();
-    await expect(page.getByRole('heading', { name: '版本 3' })).toBeVisible();
-    await advancedTools.click();
-    await expect(page.getByText('/targetRoles')).toBeVisible();
-    await expect(page.getByRole('button', { name: '解锁' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '锁定字段' })).toHaveCount(0);
   });
 
   test('keeps the resume section outline visible, current and responsive', async ({ page }) => {
@@ -1185,6 +1122,8 @@ test.describe('校招实习管理台核心流程', () => {
         } = (await response.json()) as {
           data: { detail: { current: { effective: { targetRoles: string[] } } } };
         };
+        // 已无意向的资料无需写入新版本，避免使其他流程的候选基线失效。
+        if (detail.current.effective.targetRoles.length === 0) continue;
         originals.push({ id: profile.id, targetRoles: detail.current.effective.targetRoles });
         await setRoles(profile.id, []);
       }
@@ -1276,7 +1215,7 @@ test.describe('校招实习管理台核心流程', () => {
     await page.getByRole('option', { name: '有', exact: true }).click();
     await expect(page.locator('input[name="managementExperience"]')).toHaveValue('true');
 
-    await page.locator('summary').filter({ hasText: '高级维护：字段锁定与 JSON 修正' }).click();
+    await page.locator('summary').filter({ hasText: '高级维护：JSON 修正' }).click();
     const maintenanceRemote = page.getByRole('combobox', { name: '接受远程' }).nth(1);
     await maintenanceRemote.click();
     await page.getByRole('option', { name: '是', exact: true }).click();

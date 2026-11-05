@@ -77,7 +77,7 @@ export function createJobUnderstandingTaskHandler(
       const profile = input.profiles.getVersion(
         parseId(payload.profileVersionId, 'ProfileVersion'),
       );
-      if (!profile) {
+      if (!profile || profile.isCandidate) {
         throw new TaskExecutionError('validation_failed', 'Profile version does not exist.');
       }
       const agentInput = {

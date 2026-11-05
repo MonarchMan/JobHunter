@@ -1,7 +1,7 @@
 import { ResumeDeletionNotFoundError } from '@jobhunter/user/profile';
 import { webResumeDeletionConfirmSchema } from '@jobhunter/user/contracts/web';
 import { ZodError } from 'zod';
-import { getWebContainer } from '../../../../../src/server/container.js';
+import { getWebContainer, getWebMutationContainer } from '../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../src/server/csrf.js';
 import {
   badRequestResponse,
@@ -37,7 +37,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     const { id } = await context.params;
     const body = (await request.json()) as Readonly<Record<string, unknown>>;
     const command = webResumeDeletionConfirmSchema.parse({ ...body, resumeDocumentId: id });
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     return dataResponse(container.services.resumeDeletion.confirm(command), { status: 202 });
   } catch (error) {
     if (error instanceof ResumeDeletionNotFoundError) return notFoundResponse('简历不存在。');

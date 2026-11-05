@@ -8,6 +8,8 @@ import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
+import { loadRuntimeConfig } from './runtime-config.js';
+import { ensureConfiguredTaskService } from '@jobhunter/common/task-service';
 /** 与应用观察端口共享平台键，不在入口复制平台身份定义。 */
 type PlatformProviderKey = Parameters<typeof observePlatformRound>[0]['provider'];
 
@@ -54,6 +56,15 @@ async function main(): Promise<void> {
     throw new Error('Outside observation window.');
   const database = openSqliteDatabase({ dataRoot: options.dataRoot, runMigrations: false });
   try {
+    const workspaceRoot = path.resolve(import.meta.dirname, '../../..');
+    const config = await loadRuntimeConfig({ argv: process.argv.slice(2), workspaceRoot });
+    await ensureConfiguredTaskService(config, {
+      entry: new URL(
+        import.meta.url.endsWith('.ts') ? './task-service-main.ts' : './task-service-main.js',
+        import.meta.url,
+      ),
+      workspaceRoot,
+    });
     const repository = new SqlitePlatformRepository(database.client, options.provider);
     const registry = new HandlerRegistry();
     registry.register(

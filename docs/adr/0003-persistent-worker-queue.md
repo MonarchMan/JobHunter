@@ -1,5 +1,7 @@
 # ADR-0003：独立 Worker 与 SQLite 持久化队列
 
+> 进程职责与多运行时领取方案由 [ADR-0062](./0062-central-task-scheduler.md) 的中央调度目标替代；本文件保留原决策历史，SQLite 持久队列与业务幂等原则仍适用。
+
 - 状态：Accepted
 - 日期：2026-08-19
 

@@ -9,3 +9,4 @@ export * from './schedule-service.js';
 export * from './task-service.js';
 export * from './worker-engine.js';
 export * from './relation-status.js';
+export { currentTaskExecution } from './execution-scope.js';

@@ -1,5 +1,5 @@
 import { ZodError } from 'zod';
-import { getWebContainer } from '../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../src/server/csrf.js';
 import {
   badRequestResponse,
@@ -17,7 +17,7 @@ export async function POST(
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {
     return dataResponse(
-      (await getWebContainer()).services.platformActivity.touch((await context.params).id),
+      (await getWebMutationContainer()).services.platformActivity.touch((await context.params).id),
     );
   } catch (error) {
     if (error instanceof ZodError) return badRequestResponse('职位标识无效。');

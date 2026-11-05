@@ -3,7 +3,7 @@
 - [总体架构](./overall-arch.md)：系统范围、模块、运行时和演进基线。
 - [招聘平台来源与按需浏览](./recruitment-platforms.md)：最小会话借用、HTTP 优先、统一正式职位库与差异化保留清理；支持状态以具体能力矩阵和验证结果为准。
 - [数据模型与 SQLite 表设计](./data-model.md)：表、约束、索引、事务、保留和迁移。
-- [Worker、任务队列与并发设计](./worker-and-concurrency.md)：任务状态、领取、租约、调度、重试和恢复。
+- [中央任务调度与并发设计](./worker-and-concurrency.md)：单实例服务、多进程执行、分派门控、周期、重试和恢复（目标待实现）。
 - [Agent、画像与匹配设计](./agent-and-matching.md)：Agent 协议、版本、缓存、画像合并、评分和评测。
 - [面试准备、简历项目拷打与面经知识库设计](./interview-preparation.md)：渐进式项目拷打、个人/网友面经、外部 Agent 委派和安全边界。
 - [UI 设计规范](./ui/DESIGN.md)：共享视觉令牌、排版、密度、形状和动效。

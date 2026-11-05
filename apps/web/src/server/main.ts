@@ -2,17 +2,22 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { loadRuntimeAppConfig } from '@jobhunter/common/config/index';
-import { createConfiguredTaskApplication } from './task-runtime.js';
+import { ensureConfiguredTaskService } from '@jobhunter/common/task-service';
 import { resolveWebChildEnvironment, resolveWebServerConfig } from './host.js';
 
-// 1、Web 宿主同时承载任务循环与 Next 生命周期，不启动独立 Worker 入口。
+// 1、Web 宿主只管理 Next；任务由独立生命周期的中央服务统一分派。
 const config = resolveWebServerConfig({
   ...process.env,
   ...(process.argv.includes('--production') ? { NODE_ENV: 'production' } : {}),
 });
 const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
 const runtimeConfig = await loadRuntimeAppConfig({ workspaceRoot });
-const application = createConfiguredTaskApplication(runtimeConfig);
+await ensureConfiguredTaskService(runtimeConfig, {
+  entry: new URL('./task-service-main.ts', import.meta.url),
+  workspaceRoot,
+}).catch((error: unknown) => {
+  console.error('中央任务服务不可用:', error);
+});
 const abort = new AbortController();
 const require = createRequire(import.meta.url);
 const next = spawn(
@@ -34,9 +39,9 @@ const next = spawn(
   },
 );
 
-/** 关闭请求同时停止任务领取和 Web，随后等待在途工作及资源释放。 */
+/** Web 关闭只停止 Next 和本机连接，不停止中央任务服务。 */
 function stop(): void {
-  // 1、取消公共循环；2、请求 Next 优雅退出，重复信号不重复发送。
+  // 1、标记入口关闭；2、请求 Next 优雅退出，重复信号不重复发送。
   abort.abort();
   if (!next.killed && next.exitCode === null) next.kill('SIGTERM');
 }
@@ -64,23 +69,11 @@ const exited = new Promise<void>((resolve) => {
     resolve();
   });
 });
-// 2、任务循环异常必须通知宿主并关闭 Web，不能让界面继续声称后台可用。
-const running = application.engine.run(abort.signal).catch((error: unknown) => {
-  console.error('任务运行时失败:', error);
-  process.exitCode = 1;
-  stop();
-});
 try {
   await exited;
-  await running;
 } finally {
-  // 3、回收所有模块资源后解除信号监听，内部维护子进程也必须结束。
   stop();
-  try {
-    await application.close();
-  } finally {
-    process.off('SIGINT', stop);
-    process.off('SIGTERM', stop);
-    process.off('message', onShutdownMessage);
-  }
+  process.off('SIGINT', stop);
+  process.off('SIGTERM', stop);
+  process.off('message', onShutdownMessage);
 }

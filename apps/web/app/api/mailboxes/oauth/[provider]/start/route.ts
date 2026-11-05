@@ -2,7 +2,7 @@ import {
   buildGmailAuthorizationUrl,
   buildMicrosoftGraphAuthorizationUrl,
 } from '@jobhunter/recruitment/mail-oauth';
-import { getWebContainer } from '../../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
 import {
   badRequestResponse,
@@ -23,7 +23,7 @@ export async function POST(
   const { provider: rawProvider } = await context.params;
   const provider = parseProvider(rawProvider);
   if (!provider) return badRequestResponse('不支持的邮箱类型。');
-  const container = await getWebContainer();
+  const container = await getWebMutationContainer();
   // 1、创建一次性 state 与 PKCE；2、生成最小只读权限地址；3、把 verifier 放入 HttpOnly Cookie。
   const attempt = createMailOAuthAttempt(provider, new URL(request.url).protocol === 'https:');
   let authorizationUrl: string;

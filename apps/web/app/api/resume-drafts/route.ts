@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { resumeTemplateKeySchema } from '@jobhunter/user/templates';
-import { getWebContainer } from '../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../src/server/http.js';
 import { resumeErrorResponse } from '../../../src/server/resume-http.js';
@@ -16,7 +16,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     // 2、解析画像与模板参数，再委托应用服务持久化草稿。
     const input = createSchema.parse(await request.json());
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     return dataResponse(
       await container.services.resumeTemplates.createOrResume(input.profileId, input.templateKey),
       { status: 201 },

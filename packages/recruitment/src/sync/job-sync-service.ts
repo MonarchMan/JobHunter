@@ -398,7 +398,6 @@ export class JobSyncService {
           priority: 0,
           idempotencyKey: `source.job-detail:${input.source.id}:${job.externalJobId}:${listContentHash}:${input.adapter.metadata.version}`,
           concurrencyKey: `source-detail:${input.source.id}:${job.externalJobId}`,
-          scheduleId: null,
           retryOfTaskId: null,
           maxAttempts: 3,
           availableAt: observedAt,

@@ -1,3 +1,5 @@
+import { matchMetadataValueSchema } from '../job-metadata.js';
+import { matchMetadataSql, enrichmentMetadataSql, adviceMetadataSql } from './metadata-sql.js';
 import type { MatchingJobReader } from '@jobhunter/recruitment/contracts/matching-jobs';
 import type { MatchingProfileIdentityReader } from '@jobhunter/user/contracts';
 import type { AgentRunReader } from '@jobhunter/common/agent';
@@ -9,10 +11,10 @@ import type {
   MatchingRepository,
   MatchingJobRevisionRecord,
   MatchResultRecord,
-  MatchRulesetRecord,
 } from '../ports/matching.js';
 import {
   canonicalJson,
+  contentHash,
   parseContentHash,
   parseId,
   utcInstant,
@@ -21,7 +23,7 @@ import {
 import { parseDeterministicMatchOutput } from '../model.js';
 import { parseStoredJobAdvice } from '../contracts/job-advice.js';
 import { parseJobUnderstanding } from '../job-understanding.js';
-import { parseMatchRuleset } from '../rulesets.js';
+import { currentMatchRuleset } from '../rulesets.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 
@@ -33,15 +35,6 @@ interface EnrichmentRow {
   readonly schema_version: string;
   readonly content_hash: string;
   readonly result_json: string;
-  readonly created_at: number;
-}
-
-/** 数据库查询结果对应的行结构。 */
-interface RulesetRow {
-  readonly id: string;
-  readonly definition_json: string;
-  readonly definition_hash: string;
-  readonly active: number;
   readonly created_at: number;
 }
 
@@ -119,17 +112,6 @@ function enrichment(row: EnrichmentRow): JobEnrichmentRecord {
 }
 
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
-function ruleset(row: RulesetRow): MatchRulesetRecord {
-  return {
-    id: parseId(row.id, 'MatchRuleset'),
-    definition: parseMatchRuleset(JSON.parse(row.definition_json) as unknown),
-    definitionHash: parseContentHash(row.definition_hash),
-    active: row.active === 1,
-    createdAt: utcInstant(row.created_at),
-  };
-}
-
-/** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function match(row: MatchRow): MatchResultRecord {
   const output = parseDeterministicMatchOutput({
     filterStatus: row.filter_status,
@@ -153,7 +135,6 @@ function match(row: MatchRow): MatchResultRecord {
 
 const enrichmentColumns =
   'id, job_revision_id, agent_run_id, schema_version, content_hash, result_json, created_at';
-const rulesetColumns = 'id, definition_json, definition_hash, active, created_at';
 const matchColumns = `id, profile_version_id, job_revision_id, job_enrichment_id, ruleset_id,
                       filter_status, total_score, model_score,
                       components_json, risks_json, input_hash, created_at`;
@@ -206,7 +187,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
   /** 执行数据库组件对外暴露的操作。 */
   public getEnrichment(id: JobEnrichmentRecord['id']): JobEnrichmentRecord | null {
     const row = this.#client
-      .prepare(`SELECT ${enrichmentColumns} FROM job_enrichments WHERE id = ?`)
+      .prepare(`SELECT ${enrichmentColumns} FROM ${enrichmentMetadataSql} WHERE id = ?`)
       .get(id) as EnrichmentRow | undefined;
     return row ? enrichment(row) : null;
   }
@@ -217,7 +198,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
   ): JobEnrichmentRecord | null {
     const row = this.#client
       .prepare(
-        `SELECT ${enrichmentColumns} FROM job_enrichments
+        `SELECT ${enrichmentColumns} FROM ${enrichmentMetadataSql}
          WHERE job_revision_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
       )
       .get(jobRevisionId) as EnrichmentRow | undefined;
@@ -226,139 +207,122 @@ export class SqliteMatchingRepository implements MatchingRepository {
 
   /** 执行数据库组件对外暴露的操作。 */
   public saveEnrichment(record: JobEnrichmentRecord): JobEnrichmentRecord {
-    this.#client
-      .prepare(
-        `INSERT INTO job_enrichments
-         (id, job_revision_id, agent_run_id, schema_version, content_hash, result_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(job_revision_id, agent_run_id) DO NOTHING`,
-      )
-      .run(
+    // 输入校验与覆盖写入共享短事务，拒绝另一连接并发更新后的旧结果。
+    return this.#client.transaction(() => {
+      const job = this.jobs.getRevision(record.jobRevisionId);
+      if (!job) throw new Error('Job content changed before enrichment completed.');
+      const id = this.saveMetadata(
         record.id,
-        record.jobRevisionId,
-        record.agentRunId,
-        record.schemaVersion,
-        record.contentHash,
-        canonicalJson(record.result),
+        job.jobId,
+        'enrichment',
+        {
+          content_id: job.id,
+          agent_run_id: record.agentRunId,
+          schema: record.schemaVersion,
+          content_hash: record.contentHash,
+          result: record.result,
+        },
         record.createdAt,
       );
-    const row = this.#client
-      .prepare(
-        `SELECT ${enrichmentColumns} FROM job_enrichments
-         WHERE job_revision_id = ? AND agent_run_id = ?`,
-      )
-      .get(record.jobRevisionId, record.agentRunId) as EnrichmentRow | undefined;
-    if (!row) throw new Error('Job enrichment persistence did not produce a row.');
-    return enrichment(row);
-  }
-
-  /** 执行数据库组件对外暴露的操作。 */
-  public getActiveRuleset(): MatchRulesetRecord | null {
-    const row = this.#client
-      .prepare(`SELECT ${rulesetColumns} FROM match_rulesets WHERE active = 1`)
-      .get() as RulesetRow | undefined;
-    return row ? ruleset(row) : null;
-  }
-
-  /** 执行数据库组件对外暴露的操作。 */
-  public upsertRuleset(record: MatchRulesetRecord): MatchRulesetRecord {
-    return this.#client.transaction(() => {
-      if (record.active) this.#client.prepare('UPDATE match_rulesets SET active = 0').run();
-      this.#client
-        .prepare(
-          `INSERT INTO match_rulesets
-           (id, definition_json, definition_hash, active, created_at)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET definition_json = excluded.definition_json,
-             definition_hash = excluded.definition_hash, active = excluded.active`,
-        )
-        .run(
-          record.id,
-          canonicalJson(record.definition),
-          record.definitionHash,
-          record.active ? 1 : 0,
-          record.createdAt,
-        );
-      const row = this.#client
-        .prepare(`SELECT ${rulesetColumns} FROM match_rulesets WHERE id = ?`)
-        .get(record.id) as RulesetRow | undefined;
-      if (!row) throw new Error('Match ruleset persistence did not produce a row.');
-      return ruleset(row);
+      const stored = this.getEnrichment(parseId(id, 'JobEnrichment'));
+      if (!stored) throw new Error('Metadata persistence did not produce a row.');
+      return stored;
     })();
   }
 
   /** 执行数据库组件对外暴露的操作。 */
   public createOrGetMatch(record: MatchResultRecord): MatchResultRecord {
-    this.#client
-      .prepare(
-        `INSERT INTO match_results
-         (id, profile_version_id, job_revision_id, job_enrichment_id, ruleset_id,
-          filter_status, total_score, model_score,
-          components_json, risks_json, input_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(input_hash) DO NOTHING`,
-      )
-      .run(
+    // 输入校验与覆盖写入共享短事务，拒绝另一连接并发更新后的旧结果。
+    return this.#client.transaction(() => {
+      const job = this.jobs.getRevision(record.jobRevisionId);
+      if (!job) throw new Error('Job content changed before scoring completed.');
+      if (!this.isCurrentProfile(record.profileVersionId))
+        throw new Error('Profile changed before scoring completed.');
+      const model = record.components.find((c) => c.dimension === 'model');
+      const id = this.saveMetadata(
         record.id,
-        record.profileVersionId,
-        record.jobRevisionId,
-        record.jobEnrichmentId,
-        record.rulesetId,
-        record.filterStatus,
-        record.totalScore,
-        record.modelScore,
-        canonicalJson(record.components),
-        canonicalJson(record.ruleOutcomes),
-        record.inputHash,
+        job.jobId,
+        'match_result',
+        {
+          content_id: job.id,
+          profile_version_id: record.profileVersionId,
+          enrichment_id: record.jobEnrichmentId,
+          rules_hash: contentHash(currentMatchRuleset),
+          filter_status: record.filterStatus,
+          total_score: record.totalScore,
+          input_hash: record.inputHash,
+          components: record.components
+            .filter((c) => c.dimension !== 'model')
+            .map((c) => ({ dimension: c.dimension, score: c.score, max_score: c.maximumScore })),
+          risk_results: [
+            ...new Set(record.ruleOutcomes.filter((r) => r.status === 'fail').map((r) => r.ruleId)),
+          ],
+          unknown_rules: [
+            ...new Set(
+              record.ruleOutcomes.filter((r) => r.status === 'unknown').map((r) => r.ruleId),
+            ),
+          ],
+          model:
+            record.modelScore === null
+              ? null
+              : {
+                  score: record.modelScore,
+                  reasons: model?.matchedEvidence.map((e) => e.summary) ?? [],
+                },
+        },
         record.createdAt,
       );
-    const row = this.#client
-      .prepare(`SELECT ${matchColumns} FROM match_results WHERE input_hash = ?`)
-      .get(record.inputHash) as MatchRow | undefined;
-    if (!row) throw new Error('Match result persistence did not produce a row.');
-    return match(row);
+      const stored = this.getMatch(parseId(id, 'MatchResult'));
+      if (!stored) throw new Error('Metadata persistence did not produce a row.');
+      return stored;
+    })();
   }
 
   /** 执行数据库组件对外暴露的操作。 */
   public getMatch(id: MatchResultRecord['id']): MatchResultRecord | null {
     const row = this.#client
-      .prepare(`SELECT ${matchColumns} FROM match_results WHERE id = ?`)
+      .prepare(`SELECT ${matchColumns} FROM ${matchMetadataSql} WHERE id = ?`)
       .get(id) as MatchRow | undefined;
     return row ? match(row) : null;
   }
 
   /** 执行数据库组件对外暴露的操作。 */
   public saveAdvice(record: MatchAdviceRecord): MatchAdviceRecord {
-    this.#client
-      .prepare(
-        `INSERT INTO match_advices
-         (id, match_result_id, agent_run_id, schema_version, content_hash, result_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(match_result_id, agent_run_id) DO NOTHING`,
+    // 输入校验与覆盖写入共享短事务，拒绝另一连接并发更新后的旧结果。
+    return this.#client.transaction(() => {
+      const match = this.getMatch(record.matchResultId);
+      if (
+        !match ||
+        record.matchInputHash !== match.inputHash ||
+        !this.isCurrentProfile(match.profileVersionId)
       )
-      .run(
+        throw new Error('Scoring changed before advice completed.');
+      const job = this.jobs.getRevision(match.jobRevisionId);
+      if (!job) throw new Error('Job content changed before advice completed.');
+      const id = this.saveMetadata(
         record.id,
-        record.matchResultId,
-        record.agentRunId,
-        record.schemaVersion,
-        record.contentHash,
-        canonicalJson(record.result),
+        job.jobId,
+        'match_advice',
+        {
+          match_result_id: match.id,
+          match_input_hash: match.inputHash,
+          agent_run_id: record.agentRunId,
+          schema: record.schemaVersion,
+          content_hash: record.contentHash,
+          result: record.result,
+        },
         record.createdAt,
       );
-    const row = this.#client
-      .prepare(
-        `SELECT ${adviceColumns} FROM match_advices
-         WHERE match_result_id = ? AND agent_run_id = ?`,
-      )
-      .get(record.matchResultId, record.agentRunId) as AdviceRow | undefined;
-    if (!row) throw new Error('Match advice persistence did not produce a row.');
-    return advice(row);
+      const stored = this.getAdvice(parseId(id, 'MatchAdvice'));
+      if (!stored) throw new Error('Metadata persistence did not produce a row.');
+      return stored;
+    })();
   }
 
   /** 执行数据库组件对外暴露的操作。 */
   public getAdvice(id: MatchAdviceRecord['id']): MatchAdviceRecord | null {
     const row = this.#client
-      .prepare(`SELECT ${adviceColumns} FROM match_advices WHERE id = ?`)
+      .prepare(`SELECT ${adviceColumns} FROM ${adviceMetadataSql} WHERE id = ?`)
       .get(id) as AdviceRow | undefined;
     return row ? advice(row) : null;
   }
@@ -371,7 +335,7 @@ export class SqliteMatchingRepository implements MatchingRepository {
     // 1、建议候选仅来自匹配表；Agent 运行身份由通用只读端口校验。
     const rows = this.#client
       .prepare(
-        'SELECT id, match_result_id, agent_run_id, schema_version, content_hash, result_json, created_at FROM match_advices WHERE match_result_id=? ORDER BY created_at DESC, id DESC',
+        `SELECT id, match_result_id, agent_run_id, schema_version, content_hash, result_json, created_at FROM ${adviceMetadataSql} WHERE match_result_id=? ORDER BY created_at DESC, id DESC`,
       )
       .all(matchResultId) as AdviceRow[];
     for (const row of rows) {
@@ -434,11 +398,11 @@ export class SqliteMatchingRepository implements MatchingRepository {
                   ROW_NUMBER() OVER (
                     PARTITION BY e.job_revision_id ORDER BY e.created_at DESC, e.id DESC
                   ) AS position
-           FROM job_enrichments e
+           FROM ${enrichmentMetadataSql} e
          ),
          candidates AS (
            SELECT mr.id, mr.profile_version_id, mr.job_revision_id, mr.job_enrichment_id,
-                  mr.ruleset_id, mr.filter_status, mr.total_score, mr.components_json,
+                  mr.ruleset_id, mr.filter_status, mr.total_score, mr.model_score, mr.components_json,
                   mr.risks_json, mr.input_hash, mr.created_at,
                   j.id AS job_id, j.title, j.status AS job_status,
                   j.published_at, j.last_seen_at,
@@ -448,14 +412,14 @@ export class SqliteMatchingRepository implements MatchingRepository {
                     ORDER BY CASE WHEN mr.job_enrichment_id = le.id THEN 0 ELSE 1 END,
                              mr.created_at DESC, mr.id DESC
                   ) AS preference
-           FROM match_results mr
+           FROM ${matchMetadataSql} mr
            JOIN current_profile cp ON cp.id = mr.profile_version_id
            JOIN latest_revisions lr ON lr.id = mr.job_revision_id AND lr.position = 1
            JOIN job_facts j ON j.id = lr.job_id
-           JOIN match_rulesets rs ON rs.id = mr.ruleset_id AND rs.active = 1
+
            LEFT JOIN latest_enrichments le
              ON le.job_revision_id = lr.id AND le.position = 1
-           WHERE (mr.job_enrichment_id = le.id OR mr.job_enrichment_id IS NULL)
+           WHERE mr.rules_hash = '${contentHash(currentMatchRuleset)}' AND (mr.job_enrichment_id = le.id OR mr.job_enrichment_id IS NULL)
          )
          SELECT * FROM candidates
          WHERE preference = 1
@@ -487,5 +451,39 @@ export class SqliteMatchingRepository implements MatchingRepository {
       items,
       nextCursor: rows.length > limit && last ? encodeCurrentMatchCursor(last) : null,
     };
+  }
+  /** 分页确认资料仍是当前输入，避免资料更新后的任务回写。 */
+  private isCurrentProfile(id: MatchResultRecord['profileVersionId']): boolean {
+    let afterId: string | null = null;
+    for (;;) {
+      const ids = this.profiles.currentVersionIdsPage({ afterId, limit: 500 });
+      if (ids.includes(id)) return true;
+      if (ids.length < 500) return false;
+      afterId = ids.at(-1) ?? null;
+    }
+  }
+  /** 同一职位同一类型只保留一份结果，更新保持身份和首次创建时间。 */
+  private saveMetadata(
+    id: string,
+    jobId: string,
+    name: string,
+    value: unknown,
+    now: number,
+  ): string {
+    const existing = this.#client
+      .prepare('SELECT id,value FROM job_metadata WHERE job_id=? AND name=?')
+      .get(jobId, name) as { id: string; value: string } | undefined;
+    const serialized = canonicalJson(
+      name === 'match_result' ? matchMetadataValueSchema.parse(value) : value,
+    );
+    if (existing?.value === serialized) return existing.id;
+    const row = this.#client
+      .prepare(
+        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at)
+      VALUES(?,?,?,?,?,?) ON CONFLICT(job_id,name) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at
+      RETURNING id`,
+      )
+      .get(id, jobId, name, serialized, now, now) as { id: string };
+    return row.id;
   }
 }

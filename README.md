@@ -75,7 +75,9 @@ pnpm --filter @jobhunter/web dev
 
 未配置可选模型时，`doctor` 会显示 `degraded` 并返回退出码 4；基础初始化仍已完成，可以继续启动 Web。
 
-然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。Web 启动器自动装配四模块任务运行时；不再提供独立 Worker 入口。CLI 等待命令按需执行任务，普通入队命令由运行中的 Web 消费。
+然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。CLI 初始化、提交任务或 Web 启动时按需连接同一中央任务服务，由独立执行进程消费任务；关闭 CLI/Web 不会停止后台任务。没有独立 Worker 入口。
+
+使用 `node apps/cli/dist/main.js task service status` 查看服务状态，`task service stop` 等待后台执行进程退出，`task service restart` 按当前配置重启服务。数据库恢复前应停止服务和 Web，并关闭其他数据库连接。
 
 Web 开发命令直接使用 workspace 源码，不再在启动前构建全仓。需要持续类型反馈时，在另一个终端运行 `pnpm typecheck:watch`（或 `pnpm --filter @jobhunter/web dev:typecheck`）；提交前仍执行一次 `pnpm typecheck`。正式构建与生产运行继续使用 `dist/`。
 
@@ -85,12 +87,12 @@ Web 开发命令直接使用 workspace 源码，不再在启动前构建全仓�
 
 视觉规范见 [设计规范](docs/arch/ui/DESIGN.md)，跨页面交互规则见 [UX 契约](docs/arch/ui/UX-CONTRACT.md)，设计验收记录统一存放在 `docs/reports/`。临时审计输出放入 `var/audits/`，不提交版本库。
 
-| 文档                                                   | 内容                             |
-| ------------------------------------------------------ | -------------------------------- |
-| [完整上手指南](docs/guide.md)                          | 安装、初始化、首次使用和常见问题 |
-| [CLI 指南](docs/cli.md)                                | 命令参数、JSON 输出、备份和恢复  |
-| [总体架构](docs/arch/overall-arch.md)                  | 进程职责、模块边界和数据流       |
-| [功能规格索引](specs/README.md)                        | 当前能力、依赖关系和实现状态     |
+| 文档                                                       | 内容                             |
+| ---------------------------------------------------------- | -------------------------------- |
+| [完整上手指南](docs/guide.md)                              | 安装、初始化、首次使用和常见问题 |
+| [CLI 指南](docs/cli.md)                                    | 命令参数、JSON 输出、备份和恢复  |
+| [总体架构](docs/arch/overall-arch.md)                      | 进程职责、模块边界和数据流       |
+| [功能规格索引](specs/README.md)                            | 当前能力、依赖关系和实现状态     |
 | [招聘来源支持矩阵](packages/recruitment/SUPPORT_MATRIX.md) | 各企业来源的覆盖范围与限制       |
 
 ## 清理本地生成文件

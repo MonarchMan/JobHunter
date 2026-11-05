@@ -1,3 +1,4 @@
+import { researchTaskSelect } from './research-task-sql.js';
 import type {
   CommunityExperienceFilter,
   CommunityExperienceSummary,
@@ -44,7 +45,7 @@ interface CommunityExperienceRow {
   readonly id: string;
   readonly file_id: string;
   readonly sequence_no: number;
-  readonly research_request_id: string;
+  readonly research_task_id: string | null;
   readonly review_status: string;
   readonly company: string | null;
   readonly role: string | null;
@@ -73,7 +74,7 @@ interface CommunityQuestionRow {
 const requestColumns = `id, brief_json, request_fingerprint, prompt_hash, schema_version,
   prompt_file_id, prompt_file_version_no, schema_file_id, schema_file_version_no, bundle_file_id,
   bundle_file_version_no, current_task_id, state, revision, created_at, updated_at`;
-const experienceColumns = `id, file_id, sequence_no, research_request_id, review_status, company,
+const experienceColumns = `id, file_id, sequence_no, research_task_id, review_status, company,
   role, stage, occurred_on, tags_json, notes, source_url, source_title, source_published_at,
   source_retrieved_at, verification_status`;
 const questionColumns = `id, experience_id, sequence_no, question, answer_excerpt, topics_json,
@@ -124,7 +125,10 @@ function experienceRecord(row: CommunityExperienceRow): CommunityInterviewExperi
     id: parseId(row.id, 'InterviewExperience'),
     fileId: row.file_id,
     sequenceNo: row.sequence_no,
-    researchRequestId: parseId(row.research_request_id, 'ExperienceResearchRequest'),
+    researchRequestId:
+      row.research_task_id === null
+        ? null
+        : parseId(row.research_task_id, 'ExperienceResearchRequest'),
     reviewStatus: row.review_status as CommunityInterviewExperienceRecord['reviewStatus'],
     company: row.company,
     role: row.role,
@@ -167,7 +171,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     fingerprint: ExperienceResearchRequestRecord['requestFingerprint'],
   ): ExperienceResearchDetail | null {
     const id = this.#client
-      .prepare('SELECT id FROM experience_research_requests WHERE request_fingerprint = ?')
+      .prepare(`SELECT id FROM (${researchTaskSelect}) WHERE request_fingerprint = ?`)
       .pluck()
       .get(fingerprint) as string | undefined;
     return id ? this.getRequest(parseId(id, 'ExperienceResearchRequest')) : null;
@@ -179,30 +183,39 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       .transaction(() => {
         const inserted = this.#client
           .prepare(
-            `INSERT INTO experience_research_requests
-           (${requestColumns}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(request_fingerprint) DO NOTHING`,
+            `INSERT INTO tasks
+          (id, task_type, private_state, public_state, status, idempotency_key, max_attempts, available_at, created_at)
+          VALUES (?, 'interview.experience-research', ?, '{"phase":"awaiting_result"}', 'pending', ?, 1, 253402300799000, ?)
+          ON CONFLICT(idempotency_key) DO NOTHING`,
           )
           .run(
             request.id,
-            JSON.stringify(request.brief),
-            request.requestFingerprint,
-            request.promptHash,
-            request.schemaVersion,
-            request.promptFileId,
-            request.promptFileVersionNo,
-            request.schemaFileId,
-            request.schemaFileVersionNo,
-            request.bundleFileId,
-            request.bundleFileVersionNo,
-            request.currentTaskId,
-            request.state,
-            request.revision,
+            JSON.stringify({
+              research: {
+                brief_json: request.brief,
+                request_fingerprint: request.requestFingerprint,
+                prompt_hash: request.promptHash,
+                schema_version: request.schemaVersion,
+                prompt_file_id: request.promptFileId,
+                prompt_file_version_no: request.promptFileVersionNo,
+                schema_file_id: request.schemaFileId,
+                schema_file_version_no: request.schemaFileVersionNo,
+                bundle_file_id: null,
+                bundle_file_version_no: null,
+                current_task_id: null,
+                state: 'ready',
+                revision: 0,
+                updated_at: request.updatedAt,
+                bundle_import_token: null,
+                bundle_import_claimed_at: null,
+                bundle_import_file_id: null,
+              },
+            }),
+            'research:' + request.requestFingerprint,
             request.createdAt,
-            request.updatedAt,
           );
         const storedId = this.#client
-          .prepare('SELECT id FROM experience_research_requests WHERE request_fingerprint = ?')
+          .prepare(`SELECT id FROM (${researchTaskSelect}) WHERE request_fingerprint = ?`)
           .pluck()
           .get(request.requestFingerprint) as string | undefined;
         if (!storedId) throw new TypeError('Research request insertion did not produce a row.');
@@ -227,7 +240,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     return (
       this.#client
         .prepare(
-          `SELECT ${requestColumns} FROM experience_research_requests ORDER BY updated_at DESC, id`,
+          `SELECT ${requestColumns} FROM (${researchTaskSelect}) ORDER BY updated_at DESC, id`,
         )
         .all() as RequestRow[]
     ).map(requestRecord);
@@ -236,14 +249,14 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
   /** 执行数据库组件对外暴露的操作。 */
   public getRequest(id: ExperienceResearchRequestId): ExperienceResearchDetail | null {
     const request = this.#client
-      .prepare(`SELECT ${requestColumns} FROM experience_research_requests WHERE id = ?`)
+      .prepare(`SELECT ${requestColumns} FROM (${researchTaskSelect}) WHERE id = ?`)
       .get(id) as RequestRow | undefined;
     if (!request) return null;
     const experiences = (
       this.#client
         .prepare(
           `SELECT ${experienceColumns} FROM interview_experiences
-           WHERE research_request_id = ? AND source_type = 'community' ORDER BY sequence_no, id`,
+           WHERE research_task_id = ? AND source_type = 'community' ORDER BY sequence_no, id`,
         )
         .all(id) as CommunityExperienceRow[]
     ).map(experienceRecord);
@@ -252,7 +265,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
         .prepare(
           `SELECT ${questionColumns} FROM interview_question_entries
            WHERE experience_id IN (
-             SELECT id FROM interview_experiences WHERE research_request_id = ?
+             SELECT id FROM interview_experiences WHERE research_task_id = ?
            ) ORDER BY experience_id, sequence_no`,
         )
         .all(id) as CommunityQuestionRow[]
@@ -274,7 +287,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       experiences,
       questions,
       warnings,
-      occurrenceCounts: this.#occurrenceCounts('e.research_request_id = ?', [id]),
+      occurrenceCounts: this.#occurrenceCounts('e.research_task_id = ?', [id]),
     };
   }
 
@@ -287,22 +300,22 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
   }): boolean {
     const changed = this.#client
       .prepare(
-        `UPDATE experience_research_requests
-           SET current_task_id = ?, state = 'ready', updated_at = ?
-           WHERE id = ? AND revision = ? AND bundle_import_token IS NULL
+        `UPDATE tasks SET status='pending', finished_at=NULL, cancel_requested_at=NULL, private_state = json_set(private_state, '$.research.current_task_id', ?,
+             '$.research.state', 'ready',
+             '$.research.updated_at', ?) WHERE task_type = 'interview.experience-research' AND id = ? AND json_extract(private_state, '$.research.revision') = ? AND json_extract(private_state, '$.research.bundle_import_token') IS NULL
              AND (
-               state = 'ready'
+               json_extract(private_state, '$.research.state') = 'ready'
                OR (
-                 state = 'completed'
-                 AND coalesce(bundle_file_version_no, 0) < 5
+                 json_extract(private_state, '$.research.state') = 'completed'
+                 AND coalesce(json_extract(private_state, '$.research.bundle_file_version_no'), 0) < 5
                  AND EXISTS (
                    SELECT 1 FROM interview_experiences e
-                   WHERE e.research_request_id = experience_research_requests.id
+                   WHERE e.research_task_id = tasks.id
                      AND e.source_type = 'community'
                  )
                  AND NOT EXISTS (
                    SELECT 1 FROM interview_experiences e
-                   WHERE e.research_request_id = experience_research_requests.id
+                   WHERE e.research_task_id = tasks.id
                      AND e.source_type = 'community' AND e.review_status <> 'rejected'
                  )
                )
@@ -313,7 +326,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
     return (
       this.#client
         .prepare(
-          `SELECT 1 FROM experience_research_requests
+          `SELECT 1 FROM (${researchTaskSelect}) research
            WHERE id = ? AND revision = ? AND current_task_id = ?
              AND bundle_import_token IS NULL
              AND (
@@ -323,12 +336,12 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
                  AND coalesce(bundle_file_version_no, 0) < 5
                  AND EXISTS (
                    SELECT 1 FROM interview_experiences e
-                   WHERE e.research_request_id = experience_research_requests.id
+                   WHERE e.research_task_id = research.id
                      AND e.source_type = 'community'
                  )
                  AND NOT EXISTS (
                    SELECT 1 FROM interview_experiences e
-                   WHERE e.research_request_id = experience_research_requests.id
+                   WHERE e.research_task_id = research.id
                      AND e.source_type = 'community' AND e.review_status <> 'rejected'
                  )
                )
@@ -351,11 +364,16 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
   }): boolean {
     return this.#client
       .transaction(() => {
+        const parent = this.#client
+          .prepare('SELECT status FROM tasks WHERE id=?')
+          .pluck()
+          .get(input.requestId);
+        if (parent === 'cancelled') return false;
         const request = this.#client
           .prepare(
             `SELECT revision, bundle_file_id, bundle_file_version_no, bundle_import_token,
                   bundle_import_claimed_at, bundle_import_file_id, current_task_id
-           FROM experience_research_requests WHERE id = ?`,
+           FROM (${researchTaskSelect}) WHERE id = ?`,
           )
           .get(input.requestId) as
           | {
@@ -383,11 +401,19 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
         ) {
           return false;
         }
+        if (
+          input.taskId === undefined &&
+          request.current_task_id &&
+          this.#client
+            .prepare("SELECT 1 FROM tasks WHERE id=? AND status IN ('pending','running')")
+            .get(request.current_task_id)
+        )
+          return false;
         const accepted = Number(
           this.#client
             .prepare(
               `SELECT count(*) FROM interview_experiences
-             WHERE research_request_id = ? AND review_status = 'accepted'`,
+             WHERE research_task_id = ? AND review_status = 'accepted'`,
             )
             .pluck()
             .get(input.requestId),
@@ -396,10 +422,10 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
 
         const changed = this.#client
           .prepare(
-            `UPDATE experience_research_requests
-           SET bundle_import_token = ?, bundle_import_claimed_at = ?, bundle_import_file_id = ?
-           WHERE id = ? AND revision = ?
-             AND (bundle_import_token IS NULL OR bundle_import_claimed_at <= ?)`,
+            `UPDATE tasks SET private_state = json_set(private_state, '$.research.bundle_import_token', ?,
+             '$.research.bundle_import_claimed_at', ?,
+             '$.research.bundle_import_file_id', ?) WHERE task_type = 'interview.experience-research' AND id = ? AND json_extract(private_state, '$.research.revision') = ?
+             AND (json_extract(private_state, '$.research.bundle_import_token') IS NULL OR json_extract(private_state, '$.research.bundle_import_claimed_at') <= ?)`,
           )
           .run(
             input.claimToken,
@@ -445,11 +471,18 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
   }): ExperienceResearchDetail | null {
     return this.#client
       .transaction(() => {
+        if (
+          this.#client
+            .prepare('SELECT status FROM tasks WHERE id=?')
+            .pluck()
+            .get(input.requestId) === 'cancelled'
+        )
+          return null;
         const state = this.#client
           .prepare(
             `SELECT state, revision, bundle_file_id, bundle_file_version_no, bundle_import_token,
                   bundle_import_file_id, current_task_id
-           FROM experience_research_requests WHERE id = ?`,
+           FROM (${researchTaskSelect}) WHERE id = ?`,
           )
           .get(input.requestId) as
           | {
@@ -466,7 +499,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
           this.#client
             .prepare(
               `SELECT count(*) FROM interview_experiences
-             WHERE research_request_id = ? AND review_status = 'accepted'`,
+             WHERE research_task_id = ? AND review_status = 'accepted'`,
             )
             .pluck()
             .get(input.requestId),
@@ -543,11 +576,11 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
             .run(input.bundleFileId, stagedEntityId, nextBundleVersion, input.now);
         }
         this.#client
-          .prepare('DELETE FROM interview_experiences WHERE research_request_id = ?')
+          .prepare('DELETE FROM interview_experiences WHERE research_task_id = ?')
           .run(input.requestId);
         const insertExperience = this.#client.prepare(
           `INSERT INTO interview_experiences
-         (id, file_id, sequence_no, source_type, review_status, research_request_id, company, role,
+         (id, file_id, sequence_no, source_type, review_status, research_task_id, company, role,
           stage, occurred_on, outcome, difficulty, tags_json, notes, source_url, source_title,
           source_published_at, source_retrieved_at, verification_status)
          VALUES (?, ?, ?, 'community', ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)`,
@@ -592,12 +625,14 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
         }
         const changed = this.#client
           .prepare(
-            `UPDATE experience_research_requests
-           SET bundle_file_id = ?, bundle_file_version_no = ?,
-               bundle_import_token = NULL, bundle_import_claimed_at = NULL,
-               bundle_import_file_id = NULL, state = 'needs_review',
-               revision = revision + 1, updated_at = ?
-           WHERE id = ? AND revision = ? AND bundle_import_token = ?`,
+            `UPDATE tasks SET private_state = json_set(private_state, '$.research.bundle_file_id', ?,
+             '$.research.bundle_file_version_no', ?,
+             '$.research.bundle_import_token', NULL,
+             '$.research.bundle_import_claimed_at', NULL,
+             '$.research.bundle_import_file_id', NULL,
+             '$.research.state', 'needs_review',
+             '$.research.revision', json_extract(private_state, '$.research.revision') + 1,
+             '$.research.updated_at', ?) WHERE task_type = 'interview.experience-research' AND id = ? AND json_extract(private_state, '$.research.revision') = ? AND json_extract(private_state, '$.research.bundle_import_token') = ?`,
           )
           .run(
             input.bundleFileId,
@@ -616,6 +651,13 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
              updated_at = ? WHERE id = ?`,
           )
           .run(input.requestId, JSON.stringify(input.warnings), input.now, input.bundleFileId);
+        this.#client
+          .prepare(
+            `UPDATE tasks SET status='succeeded', finished_at=?,
+          public_state=json_object('phase','imported','candidateCount',?), error_category=NULL, error_summary=NULL
+          WHERE id=?`,
+          )
+          .run(input.now, input.experiences.length, input.requestId);
         this.#deleteUnreferencedStagingFile(input.stagingFileId);
         return this.getRequest(input.requestId);
       })
@@ -632,10 +674,9 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       .transaction(() => {
         this.#client
           .prepare(
-            `UPDATE experience_research_requests
-           SET bundle_import_token = NULL, bundle_import_claimed_at = NULL,
-               bundle_import_file_id = NULL
-           WHERE id = ? AND bundle_import_token = ? AND bundle_import_file_id = ?`,
+            `UPDATE tasks SET private_state = json_set(private_state, '$.research.bundle_import_token', NULL,
+             '$.research.bundle_import_claimed_at', NULL,
+             '$.research.bundle_import_file_id', NULL) WHERE task_type = 'interview.experience-research' AND id = ? AND json_extract(private_state, '$.research.bundle_import_token') = ? AND json_extract(private_state, '$.research.bundle_import_file_id') = ?`,
           )
           .run(input.requestId, input.claimToken, input.stagingFileId);
         this.#deleteUnreferencedStagingFile(input.stagingFileId);
@@ -655,7 +696,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       const request = this.#client
         .prepare(
           `SELECT revision, bundle_import_token
-           FROM experience_research_requests WHERE id = ?`,
+           FROM (${researchTaskSelect}) WHERE id = ?`,
         )
         .get(input.requestId) as
         { readonly revision: number; readonly bundle_import_token: string | null } | undefined;
@@ -665,7 +706,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
       const changed = this.#client
         .prepare(
           `UPDATE interview_experiences SET review_status = ?
-           WHERE id = ? AND research_request_id = ? AND source_type = 'community'
+           WHERE id = ? AND research_task_id = ? AND source_type = 'community'
              AND review_status = 'needs_review'`,
         )
         .run(
@@ -678,15 +719,16 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
         this.#client
           .prepare(
             `SELECT count(*) FROM interview_experiences
-             WHERE research_request_id = ? AND review_status = 'needs_review'`,
+             WHERE research_task_id = ? AND review_status = 'needs_review'`,
           )
           .pluck()
           .get(input.requestId),
       );
       this.#client
         .prepare(
-          `UPDATE experience_research_requests SET state = ?, revision = revision + 1,
-             updated_at = ? WHERE id = ? AND revision = ? AND bundle_import_token IS NULL`,
+          `UPDATE tasks SET private_state = json_set(private_state, '$.research.state', ?,
+             '$.research.revision', json_extract(private_state, '$.research.revision') + 1,
+             '$.research.updated_at', ?) WHERE task_type = 'interview.experience-research' AND id = ? AND json_extract(private_state, '$.research.revision') = ? AND json_extract(private_state, '$.research.bundle_import_token') IS NULL`,
         )
         .run(
           pending === 0 ? 'completed' : 'needs_review',
@@ -748,7 +790,7 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
         `DELETE FROM files
          WHERE id = ? AND kind = 'interview_research'
            AND NOT EXISTS (
-             SELECT 1 FROM experience_research_requests request
+             SELECT 1 FROM (${researchTaskSelect}) request
              WHERE request.bundle_file_id = files.id
                 OR request.bundle_import_file_id = files.id
            )

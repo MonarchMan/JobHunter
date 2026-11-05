@@ -4,8 +4,6 @@ import type { ContentHash, UtcInstant } from '@jobhunter/common/domain';
 export type ArtifactKind =
   | 'resume'
   | 'interview_experience'
-  | 'project_material'
-  | 'project_notebook'
   | 'interview_research'
   | 'export'
   | 'resume_avatar'

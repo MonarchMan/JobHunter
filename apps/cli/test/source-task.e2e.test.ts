@@ -3,7 +3,7 @@ import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { parseId, utcInstant } from '@jobhunter/common/domain';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { vi, describe, expect, it } from 'vitest';
 import { runLocalCli, type CliIo } from '../src/index.js';
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -80,11 +80,11 @@ describe('source and task commands', () => {
           .run();
         database.client
           .prepare(
-            `INSERT INTO profile_versions
-             (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-              content_hash, is_current, created_at)
-             VALUES ('018f0000-0000-7000-8000-000000000402',
-                     '018f0000-0000-7000-8000-000000000401', 1, ?, ?, '[]', ?, 1, 1)`,
+            `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
+              content_hash, is_current, created_at) AS (VALUES ('018f0000-0000-7000-8000-000000000402',
+                     '018f0000-0000-7000-8000-000000000401', 1, ?, ?, '[]', ?, 1, 1))
+INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
           )
           .run(profile, profile, 'a'.repeat(64));
       } finally {
@@ -152,7 +152,6 @@ describe('source and task commands', () => {
           priority: 0,
           idempotencyKey: 'cli-research-retry-fixture',
           concurrencyKey: `experience-research:${requestId}`,
-          scheduleId: null,
           retryOfTaskId: null,
           maxAttempts: 2,
           availableAt: utcInstant(1),
@@ -180,14 +179,10 @@ describe('source and task commands', () => {
           );
         database.client
           .prepare(
-            `INSERT INTO experience_research_requests
-             (id, brief_json, request_fingerprint, prompt_hash, schema_version,
-              prompt_file_id, prompt_file_version_no, schema_file_id, schema_file_version_no,
-              bundle_file_id, bundle_file_version_no, current_task_id, state, revision,
-              created_at, updated_at)
-             VALUES (?, '{}', ?, ?,
-                     'community-research-bundle@v2', ?, 1, ?, 1,
-                     NULL, NULL, ?, 'ready', 0, 1, 1)`,
+            `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at)
+VALUES (?, 'interview.experience-research',json_object('research',json_object(
+'request_fingerprint',?,'prompt_hash',?,'prompt_file_id',?,'schema_file_id',?,'current_task_id',?,'state','ready','revision',0)),
+'pending','cli-research-parent',1,253402300799000,1)`,
           )
           .run(
             requestId,
@@ -222,7 +217,9 @@ describe('source and task commands', () => {
       try {
         expect(
           verificationDatabase.client
-            .prepare('SELECT current_task_id FROM experience_research_requests WHERE id = ?')
+            .prepare(
+              `SELECT json_extract(private_state,'$.research.current_task_id') FROM tasks WHERE id=?`,
+            )
             .pluck()
             .get(requestId),
         ).toBe(retryTaskId);
@@ -233,133 +230,10 @@ describe('source and task commands', () => {
       await root.cleanup();
     }
   });
-
-  it.each([
-    {
-      label: 'question',
-      taskType: 'interview.project-question',
-      turnStatus: 'question_pending',
-      taskReference: 'question' as const,
-    },
-    {
-      label: 'answer digest',
-      taskType: 'interview.project-answer-digest',
-      turnStatus: 'digest_pending',
-      taskReference: 'digest' as const,
-    },
-  ])('retries a deep-project $label task and relinks its turn', async (fixture) => {
-    const root = await createTemporaryDataRoot('jobhunter-cli-project-task-');
-    const dataRoot = path.join(root.path, fixture.label);
-    const taskId = parseId('018f0000-0000-7000-8000-00000000c301', 'Task');
-    const dossierId = '018f0000-0000-7000-8000-00000000c302';
-    const sessionId = '018f0000-0000-7000-8000-00000000c303';
-    const turnId = '018f0000-0000-7000-8000-00000000c304';
-    const answerRevisionId = '018f0000-0000-7000-8000-00000000c305';
-    try {
-      expect((await command(dataRoot, ['init'])).exitCode).toBe(0);
-      const database = openSqliteDatabase({ dataRoot });
-      try {
-        const payload =
-          fixture.taskReference === 'question'
-            ? {
-                dossierId,
-                sessionId,
-                turnId,
-                expectedContextRevision: 0,
-                contextHash: 'c'.repeat(64),
-              }
-            : { dossierId, sessionId, turnId, answerRevisionId };
-        new SqliteTaskRepository(database.client).enqueue({
-          id: taskId,
-          taskType: fixture.taskType,
-          payload,
-          priority: 0,
-          idempotencyKey: `cli-project-${fixture.taskReference}-retry-fixture`,
-          concurrencyKey: `interview-session:${sessionId}`,
-          scheduleId: null,
-          retryOfTaskId: null,
-          maxAttempts: 3,
-          availableAt: utcInstant(1),
-          createdAt: utcInstant(1),
-        });
-        database.client
-          .prepare(
-            `INSERT INTO project_dossiers
-          (id, snapshot_id, source_profile_id, source_profile_version_id, project_index, project_json, content_hash, snapshot_created_at, notebook_file_id, notebook_source_hash, revision, created_at, updated_at)
-          VALUES (?, '018f0000-0000-7000-8000-00000000c306', '018f0000-0000-7000-8000-00000000c307', '018f0000-0000-7000-8000-00000000c308', 0, '{}', ?, 1, NULL, NULL, 0, 1, 1)`,
-          )
-          .run(dossierId, 'd'.repeat(64));
-        database.client
-          .prepare(
-            `INSERT INTO drill_sessions
-             (id, dossier_id, profile_key, profile_version, profile_definition_hash,
-              capability_summary_json, material_bindings_json, status, context_revision,
-              created_at, updated_at, completed_at)
-             VALUES (?, ?, 'resume-only', 'v1', ?, ?, '[]', 'active', 0, 1, 1, NULL)`,
-          )
-          .run(
-            sessionId,
-            dossierId,
-            'e'.repeat(64),
-            JSON.stringify({
-              evidenceKinds: ['resume_project', 'user_answer', 'derived_claim'],
-              tools: [],
-            }),
-          );
-        database.client
-          .prepare(
-            `INSERT INTO drill_turns
-             (id, session_id, turn_no, status, context_hash, question, intent,
-              primary_dimension, guidance_slots_json, evidence_refs_json, question_task_id,
-              question_agent_run_id, digest_task_id, digest_agent_run_id, created_at, updated_at)
-             VALUES (?, ?, 1, ?, ?, NULL, NULL, NULL, '[]', '[]', ?, NULL, ?, NULL, 1, 1)`,
-          )
-          .run(
-            turnId,
-            sessionId,
-            fixture.turnStatus,
-            'c'.repeat(64),
-            fixture.taskReference === 'question' ? taskId : null,
-            fixture.taskReference === 'digest' ? taskId : null,
-          );
-        database.client
-          .prepare(
-            `UPDATE tasks SET status = 'failed', attempt_count = 1, finished_at = 2,
-             error_category = 'permanent', error_summary = 'fixture failure' WHERE id = ?`,
-          )
-          .run(taskId);
-      } finally {
-        database.close();
-      }
-
-      const retried = await command(dataRoot, ['task', 'retry', taskId]);
-      expect(retried).toMatchObject({
-        exitCode: 0,
-        body: {
-          ok: true,
-          data: {
-            kind: 'enqueued',
-            task: { taskType: fixture.taskType, retryOfTaskId: null },
-          },
-        },
-      });
-      const retryTaskId = (retried.body as { data: { task: { id: string } } }).data.task.id;
-      expect(retryTaskId).toBe(taskId);
-      const verificationDatabase = openSqliteDatabase({ dataRoot });
-      try {
-        const references = verificationDatabase.client
-          .prepare('SELECT question_task_id, digest_task_id FROM drill_turns WHERE id = ?')
-          .get(turnId) as { question_task_id: string | null; digest_task_id: string | null };
-        expect(
-          fixture.taskReference === 'question'
-            ? references.question_task_id
-            : references.digest_task_id,
-        ).toBe(retryTaskId);
-      } finally {
-        verificationDatabase.close();
-      }
-    } finally {
-      await root.cleanup();
-    }
-  });
 });
+
+// 命令契约测试不启动网络执行器；中央服务真实生命周期由 embedded-tasks 覆盖。
+vi.mock(import('@jobhunter/common/task-service'), async (original) => ({
+  ...(await original()),
+  ensureConfiguredTaskService: vi.fn(() => Promise.resolve()),
+}));

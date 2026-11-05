@@ -44,9 +44,9 @@ export const webProfileVersionSchema = z
     profileId: z.uuid(),
     versionNumber: z.number().int().positive(),
     resumeDocumentId: z.uuid().nullable(),
-    extracted: candidateProfileSchema,
     effective: candidateProfileSchema,
-    lockedPaths: z.array(z.string()),
+    isCandidate: z.boolean(),
+    baseVersionId: z.uuid().nullable(),
     createdAt: z.iso.datetime(),
     extractionAgent: z
       .object({
@@ -92,10 +92,11 @@ export const webProfileMutationSchema = z.discriminatedUnion('kind', [
     .strict(),
   z
     .object({
-      kind: z.enum(['lock', 'unlock']),
+      kind: z.literal('confirm-extraction'),
       profileId: z.uuid(),
       expectedVersionId: z.uuid(),
-      pointer: z.string().startsWith('/').max(500),
+      candidateVersionId: z.uuid(),
+      fields: z.array(candidateProfileSchema.unwrap().keyof()).min(1),
     })
     .strict(),
   z

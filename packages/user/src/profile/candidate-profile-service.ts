@@ -5,6 +5,7 @@ import {
 } from '@jobhunter/user/domain';
 import {
   parseId,
+  contentHash,
   type CandidateProfileId,
   type Clock,
   type IdGenerator,
@@ -90,22 +91,9 @@ export class CandidateProfileService {
     readonly agentRunId: string | null;
     readonly extracted: CandidateProfileData;
   }): ProfileVersionRecord {
-    // 1、读取当前版本并保留用户偏好，再合并提取事实和锁定字段。
+    // 1、首次提取创建当前画像；已有画像只生成候选，等待用户选择确认。
     const current = this.#repository.getCurrentVersion(input.profileId);
-    const extracted = current
-      ? parseCandidateProfile({
-          ...input.extracted,
-          preferences: current.effective.preferences,
-          // 1.a、具体意向由用户确认，重新提取简历事实不得清空或覆盖它。
-          intendedRoles: current.effective.intendedRoles,
-        })
-      : input.extracted;
-    const merge = mergeProfileVersion(
-      current?.effective ?? null,
-      extracted,
-      current?.lockedPaths ?? [],
-    );
-    // 2、在仓储的乐观并发边界内追加新版本，冲突时不覆盖用户最新修改。
+    const effective = this.#projectIdentity(input.extracted, current?.effective ?? null, false);
     return created(
       this.#repository.appendVersion({
         expectedCurrentVersionId: input.expectedCurrentVersionId,
@@ -114,31 +102,58 @@ export class CandidateProfileService {
           current,
           resumeDocumentId: input.resumeDocumentId,
           agentRunId: input.agentRunId,
-          extracted,
-          effective: merge.effective,
-          lockedPaths: merge.lockedPaths,
-          contentHash: merge.contentHash,
+          effective,
+          isCandidate: current !== null,
         }),
       }),
     );
   }
 
-  /** 执行应用组件对外暴露的操作。 */
+  /** 应用用户选中的候选一级字段；基线变化时拒绝覆盖较新的人工编辑。 */
+  public confirmExtraction(input: {
+    readonly profileId: CandidateProfileId;
+    readonly candidateVersionId: ProfileVersionId;
+    readonly expectedCurrentVersionId: ProfileVersionId;
+    readonly fields: readonly (keyof CandidateProfileData)[];
+  }): ProfileVersionRecord {
+    const current = this.#requiredCurrent(input.profileId);
+    const candidate = this.#repository.getVersion(input.candidateVersionId);
+    if (!candidate || !candidate.isCandidate || candidate.profileId !== input.profileId)
+      throw new TypeError('Profile extraction candidate not found.');
+    if (candidate.baseVersionId !== current.id || input.expectedCurrentVersionId !== current.id)
+      throw new ProfileVersionConflictError(current.id);
+    if (!input.fields.length || input.fields.some((key) => !(key in candidate.effective)))
+      throw new TypeError('Select valid profile fields to apply.');
+    const patch = Object.fromEntries(input.fields.map((key) => [key, candidate.effective[key]]));
+    const effective = this.#projectIdentity(
+      parseCandidateProfile({ ...current.effective, ...patch }),
+      current.effective,
+      true,
+    );
+    return created(
+      this.#repository.appendVersion({
+        expectedCurrentVersionId: current.id,
+        version: this.#version({
+          profileId: input.profileId,
+          current,
+          resumeDocumentId: candidate.resumeDocumentId,
+          agentRunId: candidate.agentRunId,
+          effective,
+          isCandidate: false,
+        }),
+      }),
+    );
+  }
+
+  /** 人工修正直接产生生效版本；不再维护锁定路径或提取副本。 */
   public applyManualCorrection(input: {
     readonly profileId: CandidateProfileId;
     readonly expectedCurrentVersionId: ProfileVersionId;
     readonly patch: Readonly<Record<string, unknown>>;
-    readonly lockedPaths?: readonly string[];
   }): ProfileVersionRecord {
-    // 1、先读取当前版本并应用人工补丁，再验证锁定路径仍然存在。
     const current = this.#requiredCurrent(input.profileId);
-    const merge = mergeProfileVersion(null, current.effective, [], input.patch);
-    const locks = input.lockedPaths ?? current.lockedPaths;
-    const lockValidation = mergeProfileVersion(merge.effective, merge.effective, locks);
-    if (lockValidation.ignoredLockedPaths.length > 0) {
-      throw new TypeError('One or more locked profile paths do not exist.');
-    }
-    // 2、通过同一版本追加入口保存修正，保持版本号和当前标记原子更新。
+    const merged = mergeProfileVersion(null, current.effective, [], input.patch).effective;
+    const effective = this.#projectIdentity(merged, current.effective, true);
     return created(
       this.#repository.appendVersion({
         expectedCurrentVersionId: input.expectedCurrentVersionId,
@@ -147,13 +162,38 @@ export class CandidateProfileService {
           current,
           resumeDocumentId: current.resumeDocumentId,
           agentRunId: current.agentRunId,
-          extracted: current.extracted,
-          effective: merge.effective,
-          lockedPaths: lockValidation.lockedPaths,
-          contentHash: merge.contentHash,
+          effective,
+          isCandidate: false,
         }),
       }),
     );
+  }
+
+  /** 系统分配项目身份，编辑按 ID 保留，提取按唯一名称对齐；不按数组位置误关联。 */
+  #projectIdentity(
+    profile: CandidateProfileData,
+    previous: CandidateProfileData | null,
+    manual: boolean,
+  ): CandidateProfileData {
+    const used = new Set<string>();
+    const projects = profile.projects.map((project) => {
+      const matches =
+        previous?.projects.filter((old) =>
+          manual && project.id ? old.id === project.id : old.name === project.name,
+        ) ?? [];
+      const existing = matches.length === 1 ? matches[0] : undefined;
+      const id = existing?.id && !used.has(existing.id) ? existing.id : this.#ids.generate();
+      used.add(id);
+      return {
+        ...project,
+        id,
+        local_path:
+          manual && Object.hasOwn(project, 'local_path')
+            ? (project.local_path ?? null)
+            : (existing?.local_path ?? null),
+      };
+    });
+    return parseCandidateProfile({ ...profile, projects });
   }
 
   /** 将用户求职偏好作为人工修正写入新画像版本。 */
@@ -176,28 +216,30 @@ export class CandidateProfileService {
     return current;
   }
 
-  /** 构造不可变画像版本记录并递增版本号。 */
+  /** 候选与已确认版本共用独立序号，候选不会更新当前指针。 */
   #version(input: {
     readonly profileId: CandidateProfileId;
     readonly current: ProfileVersionRecord | null;
     readonly resumeDocumentId: string | null;
     readonly agentRunId: string | null;
-    readonly extracted: CandidateProfileData;
     readonly effective: CandidateProfileData;
-    readonly lockedPaths: readonly string[];
-    readonly contentHash: ProfileVersionRecord['contentHash'];
+    readonly isCandidate: boolean;
   }): ProfileVersionRecord {
     return {
       id: parseId(this.#ids.generate(), 'ProfileVersion'),
       profileId: input.profileId,
-      versionNo: (input.current?.versionNo ?? 0) + 1,
+      versionNo:
+        Math.max(
+          0,
+          ...this.#repository.listVersions(input.profileId).map((version) => version.versionNo),
+        ) + 1,
       resumeDocumentId: input.resumeDocumentId,
       agentRunId: input.agentRunId,
-      extracted: input.extracted,
       effective: input.effective,
-      lockedPaths: [...input.lockedPaths],
-      contentHash: input.contentHash,
-      isCurrent: true,
+      contentHash: contentHash(input.effective),
+      isCurrent: !input.isCandidate,
+      isCandidate: input.isCandidate,
+      baseVersionId: input.isCandidate ? (input.current?.id ?? null) : null,
       createdAt: this.#clock.now(),
     };
   }

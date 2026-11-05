@@ -1,6 +1,6 @@
 import { webJobMatchMutationSchema } from '@jobhunter/matching/contracts/web';
 import { ZodError } from 'zod';
-import { getWebContainer } from '../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../src/server/container.js';
 import {
   badRequestResponse,
   dataResponse,
@@ -20,7 +20,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
   try {
     const { id } = await context.params;
     const body = webJobMatchMutationSchema.parse((await request.json()) as unknown);
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     return dataResponse(
       container.services.matches.runForJob({
         jobId: id,

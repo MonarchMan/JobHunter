@@ -25,10 +25,10 @@ function seedDiagnostics(dataRoot: string): void {
   try {
     const insertTask = database.client.prepare(
       `INSERT INTO tasks
-       (id, task_type, payload_json, status, priority, idempotency_key, concurrency_key,
-        schedule_id, retry_of_task_id, attempt_count, max_attempts, available_at,
+       (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
+        retry_of_task_id, attempt_count, max_attempts, available_at,
         error_category, error_summary, created_at, started_at, finished_at)
-       VALUES (?, 'source.health-check', ?, ?, 0, ?, NULL, NULL, NULL, ?, 3, 1, ?, ?, 1, ?, ?)`,
+       VALUES (?, 'source.health-check', ?, ?, 0, ?, NULL, NULL, ?, 3, 1, ?, ?, 1, ?, ?)`,
     );
     insertTask.run(
       failedTaskId,
@@ -179,7 +179,7 @@ describe('Web diagnostics', () => {
         database.client
           .prepare(
             `INSERT INTO tasks
-             (id, task_type, payload_json, status, priority, idempotency_key, concurrency_key,
+             (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
               attempt_count, max_attempts, available_at, created_at, started_at, finished_at)
              VALUES (?, 'source.sync', ?, 'succeeded', 0, 'sync-detail-task', ?, 2, 3, 100, 100, 200, 500)`,
           )
@@ -189,10 +189,8 @@ describe('Web diagnostics', () => {
             `source-sync:${sourceId}`,
           );
         const insertRun = database.client.prepare(
-          `INSERT INTO sync_runs
-           (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-            sync_policy_version, source_config_hash, stats_json, started_at, finished_at)
-           VALUES (?, ?, 'schedule', ?, ?, 'v1', 'v1', 'v1', 'hash', ?, ?, ?)`,
+          `WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
+            sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES (?, ?, 'schedule', ?, ?, 'v1', 'v1', 'v1', 'hash', ?, ?, ?)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture`,
         );
         insertRun.run(
           '018f0000-0000-7000-8000-000000000712',
@@ -257,7 +255,7 @@ describe('Web diagnostics', () => {
       try {
         const insert = database.client.prepare(
           `INSERT INTO tasks
-           (id, task_type, payload_json, status, priority, idempotency_key, concurrency_key,
+           (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
             attempt_count, max_attempts, available_at, created_at, started_at, finished_at)
            VALUES (?, 'source.job-detail', ?, ?, 0, ?, ?, 1, 3, 100, ?, ?, ?)`,
         );
@@ -300,7 +298,7 @@ describe('Web diagnostics', () => {
         database.client
           .prepare(
             `INSERT INTO tasks
-             (id, task_type, payload_json, status, priority, idempotency_key, concurrency_key,
+             (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
               retry_of_task_id, attempt_count, max_attempts, available_at, created_at,
               started_at, finished_at)
              VALUES (?, 'source.job-detail', ?, 'succeeded', 0, ?, ?, ?, 1, 3, 100, 202, 203, 204)`,
@@ -329,7 +327,7 @@ describe('Web diagnostics', () => {
         database.client
           .prepare(
             `INSERT INTO tasks
-             (id, task_type, payload_json, status, priority, idempotency_key,
+             (id, task_type, private_state, status, priority, idempotency_key,
               attempt_count, max_attempts, available_at, created_at)
              VALUES ('018f0000-0000-7000-8000-000000000736', 'source.health-check', '{}',
                      'pending', 0, 'health-alongside-batches', 0, 3, 100, 400)`,

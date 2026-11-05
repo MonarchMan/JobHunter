@@ -56,7 +56,7 @@ it('matches a formally saved platform job and protects its matching history from
       },
     });
     const revisionId = db.client
-      .prepare('SELECT id FROM job_revisions WHERE job_id=?')
+      .prepare(`SELECT content_id AS id FROM jobs WHERE id=?`)
       .pluck()
       .get(jobId) as string;
     const service = new DeterministicMatchingService({
@@ -90,7 +90,12 @@ it('matches a formally saved platform job and protects its matching history from
     if (!preview.confirmationToken) throw new Error('Missing token');
     repository.execute({ action: 'enable', confirmationToken: preview.confirmationToken }, now);
     expect(repository.execute({ action: 'run' }, now + interval).deleted).toBe(0);
-    expect(db.client.prepare('SELECT count(*) FROM match_results').pluck().get()).toBe(1);
+    expect(
+      db.client
+        .prepare(`SELECT count(*) FROM job_metadata WHERE name='match_result'`)
+        .pluck()
+        .get(),
+    ).toBe(1);
     expect(db.client.pragma('foreign_key_check')).toEqual([]);
   });
 });
@@ -108,7 +113,7 @@ it('protects file and revision references, analysis results and official jobs', 
       )
       .run(randomUUID(), JSON.stringify({ jobId: fileJob }));
     const revisionId = db.client
-      .prepare('SELECT id FROM job_revisions WHERE job_id=?')
+      .prepare(`SELECT content_id AS id FROM jobs WHERE id=?`)
       .pluck()
       .get(revisionJob) as string;
     db.client
@@ -117,7 +122,7 @@ it('protects file and revision references, analysis results and official jobs', 
       )
       .run(randomUUID(), revisionId);
     const analyzedRevision = db.client
-      .prepare('SELECT id FROM job_revisions WHERE job_id=?')
+      .prepare(`SELECT content_id AS id FROM jobs WHERE id=?`)
       .pluck()
       .get(analyzedJob) as string;
     const agentId = randomUUID();
@@ -128,7 +133,7 @@ it('protects file and revision references, analysis results and official jobs', 
       .run(agentId, 'a'.repeat(64), 'b'.repeat(64), agentId);
     db.client
       .prepare(
-        "INSERT INTO job_enrichments(id,job_revision_id,agent_run_id,schema_version,content_hash,result_json,created_at) VALUES (?,?,?,'1',?,'{}',1)",
+        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'enrichment',json_object('content_id',d.job_revision_id,'agent_run_id',d.agent_run_id,'schema',d.schema_version,'content_hash',d.content_hash,'result',json(d.result_json)),d.created_at,d.created_at FROM (SELECT ? AS id,? AS job_revision_id,? AS agent_run_id,'1' AS schema_version,? AS content_hash,'{}' AS result_json,1 AS created_at) d`,
       )
       .run(randomUUID(), analyzedRevision, agentId, 'c'.repeat(64));
     const companyId = db.client
@@ -177,7 +182,7 @@ async function withDatabase(
     const taskId = ids.generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
       )
       .run(taskId, taskId);
     const id = platform.save(
@@ -233,7 +238,7 @@ it('defaults to disabled, previews without deletion, consumes confirmation and w
     expect(repository.execute({ action: 'run' }, now + interval - 1).deleted).toBe(0);
     expect(repository.execute({ action: 'run' }, now + interval).deleted).toBe(1);
     expect(db.client.prepare('SELECT count(*) FROM job_observations').pluck().get()).toBe(0);
-    expect(db.client.prepare('SELECT count(*) FROM job_revisions').pluck().get()).toBe(0);
+    expect(db.client.prepare(`SELECT count(*) FROM jobs`).pluck().get()).toBe(0);
     expect(
       db.client.prepare("SELECT count(*) FROM events WHERE stream_type='job'").pluck().get(),
     ).toBe(0);
@@ -264,7 +269,7 @@ it('rechecks new business references, task references and user interaction after
     const taskId = new SystemIdGenerator().generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at) VALUES (?,'fixture',?,'pending',?,1,0,0)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at) VALUES (?,'fixture',?,'pending',?,1,0,0)",
       )
       .run(taskId, JSON.stringify({ nested: { jobId: active } }), taskId);
     repository.execute({ action: 'touch', jobId: touched }, now);
@@ -287,7 +292,7 @@ it('keeps numeric external identities protected across owner reference ports', a
     const taskId = new SystemIdGenerator().generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at) VALUES (?,'fixture',?,'pending',?,1,0,0)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at) VALUES (?,'fixture',?,'pending',?,1,0,0)",
       )
       .run(taskId, JSON.stringify({ nested: { externalJobId: 123 } }), taskId);
     const repository = new SqlitePlatformRetentionRepository(db.client, [

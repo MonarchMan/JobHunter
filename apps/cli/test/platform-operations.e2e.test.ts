@@ -1,3 +1,4 @@
+import { periodicConfigProjection } from '@jobhunter/common/persistence/periodic-config';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -9,13 +10,44 @@ import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
 import { parseId, SystemIdGenerator } from '@jobhunter/common/domain';
 import { platformRetentionResultSchema } from '@jobhunter/recruitment/platform-application/platform-retention';
+import { startCentralTaskService, taskServiceConfiguration } from '@jobhunter/common/task-service';
+import { loadRuntimeConfig } from '../src/runtime-config.js';
 
 /** 子进程不继承 Vitest 注入的相对 BASE_URL，确保 CLI 使用完整的模型默认地址。 */
 async function execute(
   file: string,
   args: readonly string[],
 ): Promise<{ stdout: string; stderr: string }> {
-  return promisify(execFile)(file, [...args], { env: { ...process.env, BASE_URL: '' } });
+  const environment = { ...process.env, BASE_URL: '' };
+  const config = await loadRuntimeConfig({
+    argv: args.slice(1),
+    environment,
+    workspaceRoot: path.resolve(import.meta.dirname, '../../..'),
+  });
+  // 命令契约使用真实 IPC 但不消费任务；下面的生产处理器测试显式装配合成依赖。
+  const service = await startCentralTaskService({
+    dataRoot: config.bootstrap.dataRoot.value,
+    configuration: taskServiceConfiguration(config),
+    createRuntime: () => ({
+      run: (signal) =>
+        new Promise<void>((resolve) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+      request: () => null,
+      close: () => Promise.resolve(),
+    }),
+  });
+  try {
+    return await promisify(execFile)(file, [...args], { env: environment });
+  } finally {
+    await service?.close();
+  }
 }
 
 it('BOSS 恢复 CLI 必须显式确认并保留原失败任务引用，其他平台不得发布', async () => {
@@ -69,7 +101,7 @@ it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一�
       const id = new SystemIdGenerator().generate();
       db.client
         .prepare(
-          `INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at,result_json)
+          `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,public_state)
         VALUES (?,?,?,'succeeded',?,1,0,0,?)`,
         )
         .run(
@@ -88,7 +120,7 @@ it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一�
     }
     db.client
       .prepare(
-        `INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,max_attempts,available_at,created_at)
+        `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at)
       VALUES (?,'platform.boss','{}','failed',?,1,0,1)`,
       )
       .run(new SystemIdGenerator().generate(), crypto.randomUUID());
@@ -155,7 +187,9 @@ it('publishes preview, confirms and disables retention through real CLI and prod
     expect((await run(['retention-disable'])).enabled).toBe(false);
     expect(
       db.client
-        .prepare("SELECT count(*) FROM schedules WHERE task_type='platform.retention'")
+        .prepare(
+          `SELECT count(*) FROM ${periodicConfigProjection} WHERE task_type='platform.retention'`,
+        )
         .pluck()
         .get(),
     ).toBe(1);

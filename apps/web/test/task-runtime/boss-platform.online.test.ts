@@ -1,3 +1,4 @@
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -95,7 +96,9 @@ it.skipIf(
           ).toBeTruthy();
         if (!batch.hasMore) break;
       }
-      expect(database.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
+      expect(
+        database.client.prepare(`SELECT count(*) FROM ${scanTaskProjection}`).pluck().get(),
+      ).toBe(0);
       expect(
         database.client.prepare('SELECT count(*) FROM jobs WHERE missing_count <> 0').pluck().get(),
       ).toBe(0);

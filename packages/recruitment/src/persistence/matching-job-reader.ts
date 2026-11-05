@@ -1,3 +1,4 @@
+import { currentJobContentSql } from './current-job-sql.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import { parseId, utcInstant, type JobId } from '@jobhunter/common/domain';
@@ -29,7 +30,7 @@ export class SqliteMatchingJobReader implements MatchingJobReader {
     const row = this.#client
       .prepare(
         `SELECT r.id, r.job_id, j.status, r.snapshot_json, r.created_at, j.last_seen_at
-         FROM job_revisions r JOIN jobs j ON j.id = r.job_id WHERE r.id = ?`,
+         FROM ${currentJobContentSql} r JOIN jobs j ON j.id = r.job_id WHERE r.id = ?`,
       )
       .get(id) as RevisionRow | undefined;
     return row
@@ -49,7 +50,7 @@ export class SqliteMatchingJobReader implements MatchingJobReader {
     const row = this.#client
       .prepare(
         `SELECT r.id, r.job_id, j.status, r.snapshot_json, r.created_at, j.last_seen_at
-         FROM job_revisions r JOIN jobs j ON j.id = r.job_id
+         FROM ${currentJobContentSql} r JOIN jobs j ON j.id = r.job_id
          WHERE r.job_id = ? ORDER BY r.revision_no DESC LIMIT 1`,
       )
       .get(jobId) as RevisionRow | undefined;
@@ -108,11 +109,11 @@ export class SqliteMatchingJobReader implements MatchingJobReader {
     const rows = this.#client
       .prepare(
         `SELECT r.id
-         FROM job_revisions r
+         FROM ${currentJobContentSql} r
          JOIN jobs j ON j.id = r.job_id
          WHERE j.status IN (${statusPlaceholders})
            AND NOT EXISTS (
-             SELECT 1 FROM job_revisions newer
+             SELECT 1 FROM ${currentJobContentSql} newer
              WHERE newer.job_id = r.job_id AND newer.revision_no > r.revision_no
            )
            ${targetRoleCondition}
@@ -148,7 +149,7 @@ export class SqliteMatchingJobReader implements MatchingJobReader {
       .parse(
         this.#client
           .prepare(
-            `SELECT j.id AS jobId, r.id AS revisionId, j.title, j.status, j.published_at AS publishedAt, j.last_seen_at AS lastSeenAt FROM jobs j JOIN job_revisions r ON r.id=(SELECT latest.id FROM job_revisions latest WHERE latest.job_id=j.id ORDER BY latest.revision_no DESC LIMIT 1)`,
+            `SELECT j.id AS jobId, r.id AS revisionId, j.title, j.status, j.published_at AS publishedAt, j.last_seen_at AS lastSeenAt FROM jobs j JOIN ${currentJobContentSql} r ON r.id=(SELECT latest.id FROM ${currentJobContentSql} latest WHERE latest.job_id=j.id ORDER BY latest.revision_no DESC LIMIT 1)`,
           )
           .all(),
       );

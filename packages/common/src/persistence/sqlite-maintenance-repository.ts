@@ -1,3 +1,4 @@
+import { periodicConfigProjection } from './periodic-config.js';
 import Database from 'better-sqlite3';
 import { chmod, mkdir, readdir, statfs, unlink, writeFile } from 'node:fs/promises';
 import { statSync } from 'node:fs';
@@ -147,7 +148,9 @@ export class SqliteMaintenanceRepository implements MaintenancePort {
           return false;
         if (
           this.#client
-            .prepare('SELECT 1 FROM schedules WHERE enabled = 1 AND next_run_at <= ? LIMIT 1')
+            .prepare(
+              `SELECT 1 FROM ${periodicConfigProjection} WHERE enabled = 1 AND next_run_at <= ? LIMIT 1`,
+            )
             .get(now + 60_000)
         )
           return false;
@@ -155,7 +158,7 @@ export class SqliteMaintenanceRepository implements MaintenancePort {
         this.#client
           .prepare(
             `INSERT INTO tasks
-        (id, task_type, payload_json, status, idempotency_key, attempt_count, max_attempts,
+        (id, task_type, private_state, status, idempotency_key, attempt_count, max_attempts,
          available_at, created_at, started_at, lease_owner, lease_expires_at)
         VALUES (?, 'maintenance.sqlite', '{}', 'running', ?, 1, 1, ?, ?, ?, ?, ?)`,
           )
@@ -285,7 +288,7 @@ export class SqliteMaintenanceRepository implements MaintenancePort {
             this.#client
               .prepare(
                 `UPDATE tasks SET status = ?, finished_at = ?, lease_owner = NULL,
-            lease_expires_at = NULL, error_category = ?, error_summary = ?, result_json = ?
+            lease_expires_at = NULL, error_category = ?, error_summary = ?, public_state = ?
             WHERE id = ?`,
               )
               .run(

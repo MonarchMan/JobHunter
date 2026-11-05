@@ -118,6 +118,11 @@
       "development": "./src/tasks/*.ts",
       "types": "./dist/tasks/*.d.ts",
       "import": "./dist/tasks/*.js"
+    },
+    "./ai/*": {
+      "development": "./src/ai/*.ts",
+      "types": "./dist/ai/*.d.ts",
+      "import": "./dist/ai/*.js"
     }
   },
   "files": [

@@ -81,6 +81,8 @@ export type RegisteredTaskHandler = TaskHandler<unknown, unknown>;
 
 /** 应用层数据结构或端口契约。 */
 export interface TaskRecord {
+  /** 内部阶段归属的主任务；只能通过主任务执行、重试或取消。 */
+  readonly parentTaskId?: TaskId | null;
   readonly id: TaskId;
   readonly taskType: string;
   readonly payload: unknown;
@@ -88,7 +90,6 @@ export interface TaskRecord {
   readonly priority: number;
   readonly idempotencyKey: string;
   readonly concurrencyKey: string | null;
-  readonly scheduleId: string | null;
   readonly retryOfTaskId: TaskId | null;
   /** 任务累计领取次数，手动重试不清零。 */
   readonly attemptCount: number;
@@ -115,7 +116,6 @@ export interface PersistedTaskInput {
   readonly priority: number;
   readonly idempotencyKey: string;
   readonly concurrencyKey: string | null;
-  readonly scheduleId: string | null;
   readonly retryOfTaskId: TaskId | null;
   readonly maxAttempts: number;
   readonly availableAt: UtcInstant;

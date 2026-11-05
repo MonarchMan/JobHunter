@@ -1,3 +1,4 @@
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { ProfilePlatformSearchProvider } from '@jobhunter/matching/profile-platform-search';
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
 import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
@@ -167,7 +168,7 @@ it.each(['boss', 'zhilian', '51job', 'liepin'] as const)(
       const query = new SqliteJobQueryRepository(db.client, new SqliteJobScoreReader(db.client));
       expect(query.query({ sourceKind: 'platform', providerKey: provider }).items).toHaveLength(5);
       expect(query.query({ sourceKind: 'official' }).items).toHaveLength(0);
-      expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
+      expect(db.client.prepare(`SELECT count(*) FROM ${scanTaskProjection}`).pluck().get()).toBe(0);
       expect(db.client.prepare('SELECT sum(missing_count) FROM jobs').pluck().get()).toBe(0);
       expect(db.client.pragma('foreign_key_check')).toEqual([]);
     } finally {

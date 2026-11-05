@@ -1,6 +1,8 @@
 # 032 四模块业务聚合设计
 
-> 状态：Implemented
+> 状态：Ready
+
+> 中央调度服务为已确认、待实现目标，见 [ADR-0062](../../docs/adr/0062-central-task-scheduler.md)；原有已完成项不代表新增目标已经验收。
 
 ## 权威架构
 
@@ -12,9 +14,9 @@ recruitment 和 user 按功能目录聚合领域模型、用例、Handler、Sche
 
 跨模块只导入公开 exports，包内不依赖根 barrel。业务领域仅依赖纯契约和纯基础抽象；业务用例声明仓储端口；同模块适配器实现端口，由 apps 装配。层级门禁应检查解析后的文件路径，不能因同处一包就允许应用用例导入 SQLite 实现。
 
-## 数据与运行时
+## 数据与运行时（中央调度待实现）
 
-保留单体、CLI/Web 两个入口和单一 SQLite。将 apps/worker 实现迁入四模块：common 创建通用任务循环，各业务模块返回处理器、周期计划和资源释放；入口显式注入跨模块端口。Web 自动运行，CLI 等待命令按需运行并关闭，不保留独立 Worker 命令。业务表、仓储和迁移的所有权随业务模块；common 自己拥有任务、调度与通用运行记录。模块迁移清单由入口汇总为一个有序执行计划，不能独立重复执行同一历史迁移。历史迁移混合多个业务表时先登记一次性 legacy 清单，其拆分或移除必须单独评审，不在移动目录时改写历史 SQL。
+保留单体、CLI/Web 两个入口和单一 SQLite。将 apps/worker 实现迁入四模块：common 提供 TaskClient、中央调度者与执行宿主，各业务模块返回处理器、周期配置查询与资源释放；apps 组合根显式注入跨模块端口。CLI/Web 共用独立生命周期的中央服务，执行进程只接受分派，不保留独立 Worker 命令。业务表、仓储和迁移的所有权随业务模块；common 自己拥有任务、调度与通用运行记录。模块迁移清单由入口汇总为一个有序执行计划，不能独立重复执行同一历史迁移。历史迁移混合多个业务表时先登记一次性 legacy 清单，其拆分或移除必须单独评审，不在移动目录时改写历史 SQL。
 
 matching 用自身输入端口隔离查询，apps 将 recruitment/contracts 和 user/contracts 的只读查询实现注入。持久化输入版本/哈希与算法版本，以便说明结果是否过期；不为了过期检测反向依赖 matching 或引入跨模块写表。
 
@@ -32,13 +34,13 @@ matching 用自身输入端口隔离查询，apps 将 recruitment/contracts 和 
 
 迁移前 workspace 有 16 个共享包；`domain` 与 `application` 分别被约 240 与 156 处源代码引用。原 `packages/db/src/schema/index.ts` 混合四类业务表，原 `packages/db/migrations/` 保存单一的历史迁移序列。此次迁移保持表名、列名、迁移编号和 SQLite 文件不变，没有重新初始化用户数据库或复制执行旧迁移。
 
-| 归属         | 当前主要表或记录                                                                                                                                              | 后续代码迁移要求                                                                   |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| recruitment  | companies、job_sources、sync_runs、jobs、job_revisions、job_observations、mail_message_refs、job_applications、application_events                             | 将来源、职位、邮箱和申请仓储归入招聘模块；邮箱凭据仍是独立加密文件，不能并入数据库 |
+| 归属         | 当前主要表或记录                                                                                                                    | 后续代码迁移要求                                                                   |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| recruitment  | companies、job_sources、sync_runs、jobs、job_revisions、job_observations、mail_message_refs、job_applications、application_events   | 将来源、职位、邮箱和申请仓储归入招聘模块；邮箱凭据仍是独立加密文件，不能并入数据库 |
 | user         | files、candidate_profiles、profile_versions、project_dossiers、drill_sessions、interview_experiences、interview_question_entries 等 | 文件存储机制可归 common，文件的简历语义和删除规则归 user；面试记录与画像同属 user  |
-| matching     | job_enrichments、match_rulesets、match_results、match_advices                                                                                                 | 保留输入版本和结果历史，不因目录调整重算或覆盖原结果                               |
-| common       | tasks、task_retry_logs、schedules、agent_runs、database_maintenance                                                                                           | 保留任务类型、任务 ID、累计尝试和租约语义；Worker Handler 注册顺序由入口明确管理   |
-| 待拆的共享表 | entities、events、file_entity_mappings、application_settings                                                                                                  | 逐字段确认业务所有者；现阶段不移动存储定义或改写历史迁移                           |
+| matching     | job_enrichments、match_rulesets、match_results、match_advices                                                                       | 保留输入版本和结果历史，不因目录调整重算或覆盖原结果                               |
+| common       | tasks、task_retry_logs、schedules、agent_runs、database_maintenance                                                                 | 保留任务类型、任务 ID、累计尝试和租约语义；Worker Handler 注册顺序由入口明确管理   |
+| 待拆的共享表 | entities、events、file_entity_mappings、application_settings                                                                        | 逐字段确认业务所有者；现阶段不移动存储定义或改写历史迁移                           |
 
 历史 SQL 继续作为唯一 legacy 序列，由 common 的迁移执行器加载。只有新增迁移才按模块登记，入口合并后按全局版本顺序运行。首次代码迁移前对当前数据库做只读检查，记录表、迁移和数据量；任何涉及真实数据结构或内容的修改都必须单独提交具体方案，取得用户意见后执行。
 

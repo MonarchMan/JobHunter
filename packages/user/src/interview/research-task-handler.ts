@@ -70,6 +70,23 @@ export function createExperienceResearchTaskHandler(
       }
       const requestId = parseId(payload.requestId, 'ExperienceResearchRequest');
       const detail = input.repository.getRequest(requestId);
+      // 导入事务成功后执行器可能崩溃；重试复用已提交结果，不再次调用模型或覆盖审核。
+      if (
+        context.taskId &&
+        detail?.request.currentTaskId === context.taskId &&
+        detail.request.requestFingerprint === payload.requestFingerprint &&
+        detail.request.state !== 'ready' &&
+        detail.request.bundleFileId &&
+        detail.request.bundleFileVersionNo
+      ) {
+        return {
+          requestId,
+          bundleFileId: detail.request.bundleFileId,
+          bundleFileVersionNo: detail.request.bundleFileVersionNo,
+          candidateCount: detail.experiences.length,
+          externalSessionId: null,
+        };
+      }
       const executor = executors.get(payload.executorKey);
       if (
         detail?.request.requestFingerprint !== payload.requestFingerprint ||
@@ -87,7 +104,7 @@ export function createExperienceResearchTaskHandler(
       }
       try {
         const [prompt, outputSchema] = await Promise.all([
-          input.service.prompt(requestId, context.signal),
+          input.service.prompt(requestId, context.signal, false),
           input.service.schema(requestId, context.signal),
         ]);
         const maximumSearches = Math.min(
@@ -120,10 +137,14 @@ export function createExperienceResearchTaskHandler(
           },
           context.signal,
         );
-        const imported = await input.service.importBundle({
+        context.signal.throwIfAborted();
+        await input.service.deliverResult(
+          payload.requestId,
+          new TextEncoder().encode(result.bundleText),
+        );
+        const imported = await input.service.checkResult({
           requestId,
           expectedRevision: payload.expectedRevision,
-          bytes: new TextEncoder().encode(result.bundleText),
           ...(context.taskId === undefined ? {} : { taskId: context.taskId }),
           signal: context.signal,
         });

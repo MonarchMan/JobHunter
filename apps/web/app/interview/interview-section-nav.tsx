@@ -5,7 +5,7 @@ import type { ReactElement } from 'react';
 import styles from './interview-section-nav.module.css';
 
 const sections = [
-  { href: '/interview', label: '项目拷打' },
+  { href: '/interview', label: 'AI 会话' },
   { href: '/interview/experiences', label: '历史面经' },
   { href: '/interview/research', label: '网友面经' },
 ] as const;

@@ -57,6 +57,10 @@ export function createConfiguredTaskHost(
   let closing: Promise<void> | undefined;
   return {
     engine: application.engine,
+    ...(application.request ? { request: application.request.bind(application) } : {}),
+    ...(application.executeAssigned
+      ? { executeAssigned: application.executeAssigned.bind(application) }
+      : {}),
     close() {
       // 2、任务与外部资源回收完成后才关闭日志，重复关闭复用同一结果。
       return (closing ??= application.close().finally(() => logger.close()));

@@ -98,11 +98,11 @@ class ImpactChangingRepository implements ResumeDeletionRepository {
       .run();
     this.#client
       .prepare(
-        `INSERT INTO profile_versions
-         (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
-          effective_json, locked_paths_json, content_hash, is_current, created_at)
-         VALUES ('version-three', 'profile-three', 1, 'document-one', 'shared-agent-run',
-                 '{}', '{}', '[]', 'profile-three-hash', 1, 1)`,
+        `WITH profile_fixture (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
+          effective_json, locked_paths_json, content_hash, is_current, created_at) AS (VALUES ('version-three', 'profile-three', 1, 'document-one', 'shared-agent-run',
+                 '{}', '{}', '[]', 'profile-three-hash', 1, 1))
+INSERT INTO profile_versions (id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
       )
       .run();
     this.#delegate.applyConfirmedDeletion(input);
@@ -220,10 +220,10 @@ async function setup(options: { readonly failFirstPurge?: boolean } = {}): Promi
       .run(profileId, profileId);
     handle.client
       .prepare(
-        `INSERT INTO profile_versions
-         (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
-          effective_json, locked_paths_json, content_hash, is_current, created_at)
-         VALUES (?, ?, ?, ?, 'shared-agent-run', '{}', '{}', '[]', ?, 1, 1)`,
+        `WITH profile_fixture (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
+          effective_json, locked_paths_json, content_hash, is_current, created_at) AS (VALUES (?, ?, ?, ?, 'shared-agent-run', '{}', '{}', '[]', ?, 1, 1))
+INSERT INTO profile_versions (id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
+SELECT id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
       )
       .run(versionId, profileId, versionNo, documentId, `${profileId}-hash`);
   }

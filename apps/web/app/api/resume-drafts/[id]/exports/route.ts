@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getWebContainer } from '../../../../../src/server/container.js';
+import { getWebMutationContainer } from '../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../src/server/csrf.js';
 import { dataResponse, forbiddenResponse } from '../../../../../src/server/http.js';
 import { resumeErrorResponse } from '../../../../../src/server/resume-http.js';
@@ -23,7 +23,7 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
   try {
     const { id } = await context.params;
     const input = exportSchema.parse(await request.json());
-    const container = await getWebContainer();
+    const container = await getWebMutationContainer();
     const exported = await container.services.resumeTemplates.export({ id, ...input });
     return dataResponse(exported, { status: input.format === 'pdf' ? 202 : 201 });
   } catch (error) {

@@ -1,3 +1,9 @@
+import { periodicConfigProjection } from '../src/persistence/periodic-config.js';
+import { SqliteBackupOperations } from '../src/persistence/backup-operations.js';
+import {
+  acquireTaskServiceLock,
+  withTaskServiceOwnership,
+} from '../src/persistence/task-service-lock.js';
 import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
@@ -14,10 +20,261 @@ import {
 const dataRoots: Awaited<ReturnType<typeof createTemporaryDataRoot>>[] = [];
 const handles: SqliteDatabaseHandle[] = [];
 
+it('expands profile fields and migrates only the latest answer into durable AI messages', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-ai-upgrade-');
+  dataRoots.push(root);
+  const folder = await migrationsBefore(root.path, 'before-ai-profile', 57);
+  const old = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+  handles.push(old);
+  old.client.exec(`
+    INSERT INTO candidate_profiles VALUES('profile','候选人',1,1);
+    INSERT INTO profile_versions(id,profile_id,version_no,extracted_json,effective_json,locked_paths_json,content_hash,is_current,created_at)
+    VALUES('version','profile',1,'{}','{"basicInfo":{"name":"测试"},"projects":[{"name":"项目"}],"professionalSkills":"TypeScript","yearsOfExperience":2,"managementExperience":false}','["/projects"]','${'a'.repeat(64)}',1,1);
+    INSERT INTO project_dossiers(id,snapshot_id,source_profile_id,source_profile_version_id,project_index,project_json,content_hash,snapshot_created_at,revision,created_at,updated_at)
+    VALUES('dossier','snapshot','profile','version',0,'{"name":"项目"}','${'b'.repeat(64)}',1,0,1,1);
+    INSERT INTO drill_sessions(id,dossier_id,profile_key,profile_version,profile_definition_hash,capability_summary_json,status,context_revision,created_at,updated_at)
+    VALUES('session','dossier','resume-only','v1','${'c'.repeat(64)}','{}','completed',2,1,5);
+    INSERT INTO drill_turns(id,session_id,turn_no,status,context_hash,question,created_at,updated_at)
+    VALUES('question','session',1,'ready','${'d'.repeat(64)}','介绍项目',1,4);
+    INSERT INTO drill_answer_revisions VALUES('answer-old','question',1,'旧回答','${'e'.repeat(64)}','first',2);
+    INSERT INTO drill_answer_revisions VALUES('answer-latest','question',2,'最新回答','${'f'.repeat(64)}','second',3);
+  `);
+  old.close();
+  const db = openSqliteDatabase({ dataRoot: root.path });
+  handles.push(db);
+  expect(
+    db.client.prepare('SELECT role,content,sequence FROM ai_messages ORDER BY sequence').all(),
+  ).toEqual([
+    { role: 'assistant', content: '介绍项目', sequence: 1 },
+    { role: 'user', content: '最新回答', sequence: 2 },
+  ]);
+  expect(db.client.prepare('SELECT type,title FROM ai_sessions').get()).toEqual({
+    type: 'interview',
+    title: '项目',
+  });
+  expect(
+    db.client
+      .prepare("SELECT value FROM ai_session_metadata WHERE name='project_id'")
+      .pluck()
+      .get(),
+  ).toBe('profile:project:0');
+  expect(
+    db.client
+      .prepare(
+        'SELECT professional_skills,years_of_experience,management_experience FROM profile_versions',
+      )
+      .get(),
+  ).toEqual({
+    professional_skills: 'TypeScript',
+    years_of_experience: 2,
+    management_experience: 0,
+  });
+  const columns = (db.client.pragma('table_info(profile_versions)') as { name: string }[]).map(
+    (row) => row.name,
+  );
+  for (const name of ['effective_json', 'extracted_json', 'locked_paths_json'])
+    expect(columns).not.toContain(name);
+  for (const name of [
+    'drill_sessions',
+    'drill_turns',
+    'drill_answer_revisions',
+    'project_knowledge_items',
+  ])
+    expect(
+      db.client.prepare('SELECT name FROM sqlite_master WHERE name=?').get(name),
+    ).toBeUndefined();
+  expect(
+    db.client.prepare("SELECT name FROM sqlite_master WHERE name='project_dossiers'").get(),
+  ).toBeUndefined();
+  expect(db.client.prepare('SELECT count(*) FROM ai_messages').pluck().get()).toBe(2);
+  expect(db.client.pragma('foreign_key_check')).toEqual([]);
+  expect(db.client.pragma('integrity_check')).toEqual([{ integrity_check: 'ok' }]);
+});
+
+it('migrates research checkpoints into tasks without coupling accepted experiences to task retention', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-research-upgrade-');
+  dataRoots.push(root);
+  const folder = await migrationsBefore(root.path, 'before-research-tasks', 60);
+  const old = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+  handles.push(old);
+  old.client.exec(`
+    INSERT INTO files(id,kind,name,state,revision,properties_json,created_at,updated_at)
+    VALUES('asset','interview_research','bundle.json','accepted',0,'{}',1,1);
+    INSERT INTO experience_research_requests(id,brief_json,request_fingerprint,prompt_hash,schema_version,
+      prompt_file_id,prompt_file_version_no,schema_file_id,schema_file_version_no,bundle_file_id,bundle_file_version_no,state,revision,created_at,updated_at)
+    VALUES('research','{}','${'a'.repeat(64)}','hash','v2','asset',1,'asset',1,'asset',1,'completed',2,1,3);
+    INSERT INTO interview_experiences(id,file_id,sequence_no,source_type,review_status,research_request_id,source_url,source_title,source_retrieved_at,verification_status)
+    VALUES('experience','asset',1,'community','accepted','research','https://example.com/interview','来源','2026-11-06T00:00:00Z','unverified');
+    INSERT INTO interview_question_entries(id,experience_id,sequence_no,question) VALUES('question','experience',1,'如何设计事务？');
+  `);
+  old.close();
+  const upgraded = openSqliteDatabase({ dataRoot: root.path });
+  handles.push(upgraded);
+  expect(
+    upgraded.client
+      .prepare(
+        "SELECT status,json_extract(private_state,'$.research.revision') AS revision FROM tasks WHERE id='research'",
+      )
+      .get(),
+  ).toEqual({ status: 'succeeded', revision: 2 });
+  expect(
+    upgraded.client
+      .prepare("SELECT name FROM sqlite_master WHERE name='experience_research_requests'")
+      .get(),
+  ).toBeUndefined();
+  upgraded.client.prepare("DELETE FROM tasks WHERE id='research'").run();
+  expect(
+    upgraded.client
+      .prepare(
+        "SELECT research_task_id,review_status FROM interview_experiences WHERE id='experience'",
+      )
+      .get(),
+  ).toEqual({ research_task_id: null, review_status: 'accepted' });
+  expect(
+    upgraded.client.prepare('SELECT count(*) FROM interview_question_entries').pluck().get(),
+  ).toBe(1);
+  expect(upgraded.client.pragma('foreign_key_check')).toEqual([]);
+});
+
+it('backs up a legacy database without applying pending migrations to the source or snapshot', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-before-upgrade-backup-');
+  dataRoots.push(root);
+  const dataRoot = path.join(root.path, 'data');
+  const folder = await migrationsBefore(root.path, 'legacy', 56);
+  openSqliteDatabase({ dataRoot, migrationsFolder: folder }).close();
+  const destination = path.join(root.path, 'backup');
+  await new SqliteBackupOperations(dataRoot).create(destination);
+  // 备份是升级前的回退依据，源库和快照都应保留旧表与旧迁移位置。
+  for (const directory of [dataRoot, destination]) {
+    const database = new Database(path.join(directory, 'jobhunter.sqlite'), { readonly: true });
+    try {
+      expect(
+        database.prepare("SELECT name FROM sqlite_master WHERE name='sync_runs'").pluck().get(),
+      ).toBe('sync_runs');
+      expect(database.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(56);
+      expect(database.pragma('integrity_check')).toEqual([{ integrity_check: 'ok' }]);
+    } finally {
+      database.close();
+    }
+  }
+});
+
+it('merges scans into task stages and preserves observation identity and parent cancellation', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-scan-task-upgrade-');
+  dataRoots.push(root);
+  const folder = await migrationsBefore(root.path, 'before-scans', 56);
+  const old = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+  handles.push(old);
+  old.client.exec(`
+    INSERT INTO companies(id,slug,name,aliases_json,enabled,created_at,updated_at) VALUES('company','company','Fixture','[]',1,1,1);
+    INSERT INTO source_channels(id,company_id,channel,slug,enabled,created_at,updated_at) VALUES('channel','company','social','fixture-social',1,1,1);
+    INSERT INTO job_sources(id,company_id,channel_id,slug,adapter_key,base_url,config_json,sync_policy_version,sync_policy_json,enabled,support_status,health_status,consecutive_failures,created_at,updated_at)
+      VALUES('source','company','channel','fixture','fixture','https://example.com','{}','v1','{}',1,'supported','healthy',0,1,1);
+    INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
+      VALUES('parent','source.sync','{"sourceId":"source","trigger":"manual"}','{"runId":"scan"}','succeeded','parent',3,5,1,1);
+    INSERT INTO sync_runs(id,source_id,trigger,status,coverage,adapter_version,normalizer_version,sync_policy_version,source_config_hash,stats_json,started_at,finished_at)
+      VALUES('scan','source','manual','partial','partial','v1','v1','v1','hash','{"discovered":2}',1,2);
+    INSERT INTO jobs(id,company_id,source_id,external_job_id,title,locations_json,description,detail_url,apply_url,status,missing_count,content_hash,first_seen_at,last_seen_at,created_at,updated_at)
+      VALUES('job','company','source','job','Fixture','[]','Fixture','https://example.com','https://example.com','active',0,'${'a'.repeat(64)}',1,1,1,1);
+    INSERT INTO job_observations(job_id,sync_run_id,observed_at) VALUES('job','scan',2);
+    INSERT INTO sync_seen_jobs(sync_run_id,job_id) VALUES('scan','job');
+  `);
+  old.close();
+  const db = openSqliteDatabase({ dataRoot: root.path });
+  handles.push(db);
+  expect(
+    db.client.prepare("SELECT name FROM sqlite_master WHERE name='sync_runs'").get(),
+  ).toBeUndefined();
+  expect(
+    db.client
+      .prepare(
+        "SELECT parent_task_id,status,json_extract(public_state,'$.status') AS scan_status,json_extract(public_state,'$.stats.discovered') AS discovered FROM tasks WHERE id='scan'",
+      )
+      .get(),
+  ).toEqual({
+    parent_task_id: 'parent',
+    status: 'succeeded',
+    scan_status: 'partial',
+    discovered: 2,
+  });
+  expect(db.client.prepare("SELECT attempt_count FROM tasks WHERE id='parent'").pluck().get()).toBe(
+    3,
+  );
+  expect(db.client.prepare('SELECT sync_run_id FROM job_observations').pluck().get()).toBe('scan');
+  expect(db.client.pragma('foreign_key_check')).toEqual([]);
+  db.client
+    .exec(`UPDATE tasks SET status='running',lease_owner='attempt-4',lease_expires_at=100 WHERE id='parent';
+    INSERT INTO tasks(id,task_type,parent_task_id,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
+      VALUES('next-scan','source.scan','parent','{"sourceId":"source","trigger":"retry"}','{}','running','next-scan',1,1,3,3);
+    UPDATE tasks SET status='pending',lease_owner=NULL,available_at=4 WHERE id='parent';`);
+  expect(
+    db.client.prepare("SELECT status,finished_at FROM tasks WHERE id='next-scan'").get(),
+  ).toEqual({ status: 'cancelled', finished_at: 4 });
+  expect(db.client.prepare("SELECT status FROM tasks WHERE id='scan'").pluck().get()).toBe(
+    'succeeded',
+  );
+  expect(db.client.pragma('integrity_check')).toEqual([{ integrity_check: 'ok' }]);
+});
+
 afterEach(async () => {
   vi.restoreAllMocks();
   for (const handle of handles.splice(0)) handle.close();
   await Promise.all(dataRoots.splice(0).map((root) => root.cleanup()));
+});
+
+it('moves periodic configuration into settings without losing due progress or queued tasks', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-periodic-settings-upgrade-');
+  dataRoots.push(root);
+  const folder = await migrationsBefore(root.path, 'before-periodic', 54);
+  const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+  handles.push(legacy);
+  legacy.client.exec(`
+    INSERT INTO schedules(id,schedule_key,task_type,payload_json,cron_expression,timezone,
+      enabled,next_run_at,last_enqueued_at,created_at,updated_at)
+    VALUES ('periodic-id','fixture.daily','fixture.task','{"sourceId":"fixture"}',
+      '0 9 * * *','Asia/Shanghai',1,2000,1000,10,20);
+    INSERT INTO tasks(id,task_type,payload_json,status,idempotency_key,schedule_id,
+      attempt_count,max_attempts,available_at,created_at)
+    VALUES('queued-task','fixture.task','{}','pending','schedule:fixture.daily:1000',
+      'periodic-id',2,5,1000,10);
+  `);
+  legacy.close();
+  const current = openSqliteDatabase({ dataRoot: root.path });
+  handles.push(current);
+  expect(
+    current.client.prepare("SELECT name FROM sqlite_master WHERE name = 'schedules'").get(),
+  ).toBeUndefined();
+  expect(
+    current.client
+      .prepare("SELECT name FROM pragma_table_info('tasks') WHERE name = 'schedule_id'")
+      .get(),
+  ).toBeUndefined();
+  expect(
+    current.client
+      .prepare(
+        `SELECT id, next_run_at, last_enqueued_at, timezone, payload_json FROM ${periodicConfigProjection}`,
+      )
+      .get(),
+  ).toEqual({
+    id: 'periodic-id',
+    next_run_at: 2000,
+    last_enqueued_at: 1000,
+    timezone: 'Asia/Shanghai',
+    payload_json: '{"sourceId":"fixture"}',
+  });
+  expect(
+    current.client
+      .prepare('SELECT id, status, attempt_count, max_attempts, idempotency_key FROM tasks')
+      .get(),
+  ).toEqual({
+    id: 'queued-task',
+    status: 'pending',
+    attempt_count: 2,
+    max_attempts: 5,
+    idempotency_key: 'schedule:fixture.daily:1000',
+  });
+  expect(current.client.pragma('foreign_key_check')).toEqual([]);
+  expect(current.client.pragma('integrity_check')).toEqual([{ integrity_check: 'ok' }]);
 });
 
 it('checks new databases and explicit verification but avoids full scans on ordinary reopen', async () => {
@@ -32,6 +289,94 @@ it('checks new databases and explicit verification but avoids full scans on ordi
   const checked = openSqliteDatabase({ dataRoot: first.dataRoot, checkIntegrity: true });
   handles.push(checked);
   expect(integrity).toHaveBeenCalledTimes(2);
+});
+
+it('blocks schema upgrades while a service owns the data root and permits its startup migration', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-migration-service-gate-');
+  dataRoots.push(root);
+  const folder = await migrationsBefore(root.path, 'before-task-states', 55);
+  const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+  handles.push(legacy);
+  legacy.close();
+  const release = acquireTaskServiceLock(root.path);
+  if (!release) throw new Error('Expected service ownership');
+  try {
+    expect(() => openSqliteDatabase({ dataRoot: root.path })).toThrow(
+      'Database upgrade requires stopping the central task service',
+    );
+    const unchanged = openSqliteDatabase({ dataRoot: root.path, runMigrations: false });
+    handles.push(unchanged);
+    expect(
+      unchanged.client
+        .prepare("SELECT name FROM pragma_table_info('tasks') WHERE name='payload_json'")
+        .get(),
+    ).toBeDefined();
+    unchanged.close();
+    const owned = withTaskServiceOwnership(root.path, () =>
+      openSqliteDatabase({ dataRoot: root.path }),
+    );
+    handles.push(owned);
+    expect(
+      owned.client
+        .prepare("SELECT name FROM pragma_table_info('tasks') WHERE name='private_state'")
+        .get(),
+    ).toBeDefined();
+    owned.close();
+    // 同版本普通客户端仍允许连接，不把日常查询误判为迁移。
+    const query = openSqliteDatabase({ dataRoot: root.path });
+    handles.push(query);
+    query.close();
+  } finally {
+    release();
+  }
+});
+
+it('preserves task input, checkpoints and indexed relations when renaming task states', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-task-states-upgrade-');
+  dataRoots.push(root);
+  const folder = await migrationsBefore(root.path, 'before-task-states', 55);
+  const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+  handles.push(legacy);
+  const payload = JSON.stringify({ sourceId: 'source', runId: 'scan', externalJobId: 'job' });
+  const checkpoint = JSON.stringify({ stage: 'scoring', saved: 4 });
+  legacy.client
+    .prepare(
+      `INSERT INTO tasks
+    (id,task_type,payload_json,result_json,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
+    VALUES('task','source.job-detail',?,?,'pending','task',2,5,1,1)`,
+    )
+    .run(payload, checkpoint);
+  legacy.close();
+  const current = openSqliteDatabase({ dataRoot: root.path });
+  handles.push(current);
+  expect(
+    current.client
+      .prepare('SELECT private_state,public_state,source_id,source_run_id,attempt_count FROM tasks')
+      .get(),
+  ).toEqual({
+    private_state: payload,
+    public_state: checkpoint,
+    source_id: 'source',
+    source_run_id: 'scan',
+    attempt_count: 2,
+  });
+  expect(
+    current.client
+      .prepare(
+        "SELECT name FROM pragma_table_info('tasks') WHERE name IN ('payload_json','result_json')",
+      )
+      .all(),
+  ).toEqual([]);
+  // 列重命名还必须更新既有 JSON 关系投影触发器，不能只迁移旧行。
+  current.client
+    .prepare('UPDATE tasks SET private_state = ? WHERE id = ?')
+    .run(JSON.stringify({ sourceId: 'next-source', runId: 'next-scan' }), 'task');
+  expect(current.client.prepare('SELECT source_id,source_run_id FROM tasks').get()).toEqual({
+    source_id: 'next-source',
+    source_run_id: 'next-scan',
+  });
+  expect(current.client.pragma('foreign_key_check')).toEqual([]);
+  expect(current.client.pragma('integrity_check')).toEqual([{ integrity_check: 'ok' }]);
 });
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -76,6 +421,74 @@ async function migrationsBefore(
 }
 
 describe('SQLite migrations and capabilities', () => {
+  it('migrates populated current job metadata and preserves independent IDs and model reasons', async () => {
+    const root = await createTemporaryDataRoot('job-metadata-migration-');
+    dataRoots.push(root);
+    const folder = await migrationsBefore(root.path, 'before-metadata', 53);
+    const legacy = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+    handles.push(legacy);
+    legacy.client.exec(`
+      INSERT INTO candidate_profiles(id,name,created_at,updated_at) VALUES('p','Fixture',1,1);
+      INSERT INTO profile_versions(id,profile_id,version_no,extracted_json,effective_json,content_hash,is_current,created_at) VALUES('pv','p',1,'{}','{}','hash',1,1);
+      INSERT INTO companies
+        (id, slug, name, aliases_json, enabled, created_at, updated_at)
+      VALUES ('retention-company', 'retention-company', 'Company', '[]', 1, 1, 1);
+      INSERT INTO source_channels
+        (id, company_id, channel, slug, enabled, created_at, updated_at)
+      VALUES ('retention-channel', 'retention-company', 'social', 'retention-channel', 1, 1, 1);
+      INSERT INTO job_sources
+        (id, company_id, channel_id, slug, adapter_key, coverage_role, base_url, config_json,
+         sync_policy_version, sync_policy_json, enabled, support_status, health_status,
+         consecutive_failures, created_at, updated_at)
+      VALUES ('retention-source', 'retention-company', 'retention-channel', 'retention-source',
+              'retention.source', 'required', 'https://example.com', '{}', 'v1', '{}', 1,
+              'supported', 'healthy', 0, 1, 1);
+      INSERT INTO jobs
+        (id, company_id, source_id, external_job_id, title, locations_json, description,
+         detail_url, apply_url, status, missing_count, content_hash, first_seen_at, last_seen_at,
+         created_at, updated_at)
+      VALUES ('retention-job', 'retention-company', 'retention-source', 'job', 'Engineer', '[]',
+              'Build systems', 'https://example.com/job', 'https://example.com/job', 'active', 0,
+              'job-hash', 1, 1, 1, 1);
+      INSERT INTO job_revisions
+        (id, job_id, revision_no, content_hash, normalizer_version, source_payload_hash,
+         source_url, snapshot_json, change_set_json, created_at)
+      VALUES ('retention-revision', 'retention-job', 1, 'revision-hash', 'v1',
+              '${'a'.repeat(64)}', 'https://example.com/job', '{}', '[]', 1);
+      INSERT INTO match_rulesets
+        (id, definition_json, definition_hash, active, created_at)
+      VALUES ('retention-ruleset', '{}', 'retention-rules-hash', 1, 1);
+
+      INSERT INTO agent_runs(id,agent_key,definition_hash,model_config_hash,input_hash,cache_key,status,output_json,started_at) VALUES('agent','test','definition','model','input','cache','succeeded','{}',1);
+      INSERT INTO job_enrichments(id,job_revision_id,agent_run_id,schema_version,content_hash,result_json,created_at) VALUES('enrich','retention-revision','agent','schema','hash','{}',2);
+      INSERT INTO match_results(id,profile_version_id,job_revision_id,job_enrichment_id,ruleset_id,filter_status,total_score,model_score,components_json,risks_json,input_hash,created_at)
+      VALUES('score','pv','retention-revision','enrich','retention-ruleset','uncertain',74,80,
+      '[{"dimension":"role","score":60,"maximumScore":100,"matchedEvidence":[],"missingEvidence":["未命中"],"uncertainties":[]},{"dimension":"model","score":56,"maximumScore":70,"modelScore":80,"matchedEvidence":[{"source":"enrichment","path":"/fitScore","summary":"项目经历匹配"}],"missingEvidence":[],"uncertainties":[]}]',
+      '[{"ruleId":"preference.role","status":"fail","evidence":[],"explanation":"未命中"},{"ruleId":"qualification.condition","status":"unknown","evidence":[],"explanation":"未设置"},{"ruleId":"preference.location","status":"pass","evidence":[],"explanation":"通过"}]','input',3);
+      INSERT INTO match_advices(id,match_result_id,agent_run_id,schema_version,content_hash,result_json,created_at) VALUES('advice','score','agent','schema','hash','{}',4);
+    `);
+    legacy.close();
+    const db = openSqliteDatabase({ dataRoot: root.path });
+    handles.push(db);
+    const rows = db.client
+      .prepare('SELECT id,name,value,created_at FROM job_metadata ORDER BY created_at')
+      .all() as { id: string; name: string; value: string; created_at: number }[];
+    expect(rows.map((r) => r.id)).toEqual(['enrich', 'score', 'advice']);
+    expect(JSON.parse(rows[1]?.value ?? '{}')).toMatchObject({
+      components: [{ dimension: 'role', score: 60, max_score: 100 }],
+      risk_results: ['preference.role'],
+      unknown_rules: ['qualification.condition'],
+      model: { score: 80, reasons: ['项目经历匹配'] },
+    });
+    expect(rows[1]?.value).not.toMatch(/未命中|未设置|matchedEvidence|explanation/);
+    expect(
+      db.client.prepare("SELECT content_id FROM jobs WHERE id='retention-job'").pluck().get(),
+    ).toBe('retention-revision');
+    expect(db.client.pragma('foreign_key_check')).toEqual([]);
+    db.client.prepare("DELETE FROM jobs WHERE id='retention-job'").run();
+    expect(db.client.prepare('SELECT count(*) FROM job_metadata').pluck().get()).toBe(0);
+  });
+
   it('merges populated interview storage without losing identities, evidence, children or cascade behavior', async () => {
     const root = await createTemporaryDataRoot('interview-storage-upgrade-');
     dataRoots.push(root);
@@ -105,7 +518,10 @@ describe('SQLite migrations and capabilities', () => {
     );
     legacy.close();
     // 2、升级只移动存储位置，快照证据 ID、修订号、材料绑定及子表内容均不变。
-    const upgraded = openSqliteDatabase({ dataRoot: root.path });
+    const upgraded = openSqliteDatabase({
+      dataRoot: root.path,
+      migrationsFolder: await migrationsBefore(root.path, 'through-compact', 50),
+    });
     handles.push(upgraded);
     expect(
       upgraded.client
@@ -145,7 +561,10 @@ describe('SQLite migrations and capabilities', () => {
     }
     expect(upgraded.client.pragma('foreign_key_check')).toEqual([]);
     // 3、再次打开不重复搬运；删除档案仍级联清理全部问答状态。
-    const reopened = openSqliteDatabase({ dataRoot: root.path });
+    const reopened = openSqliteDatabase({
+      dataRoot: root.path,
+      migrationsFolder: await migrationsBefore(root.path, 'through-compact-reopen', 50),
+    });
     handles.push(reopened);
     expect(reopened.client.prepare('SELECT coverage_json FROM drill_sessions').pluck().get()).toBe(
       JSON.stringify(coverage),
@@ -349,7 +768,9 @@ describe('SQLite migrations and capabilities', () => {
     const current = openSqliteDatabase({ dataRoot: root.path });
     expect(integrity).toHaveBeenCalledTimes(2);
     handles.push(current);
-    current.client.prepare(insert).run('retry-again', payload, 'retry-again', 'retry');
+    current.client
+      .prepare(insert.replace('payload_json', 'private_state'))
+      .run('retry-again', payload, 'retry-again', 'retry');
     expect(
       current.client
         .prepare('SELECT source_id, source_run_id, retry_root_task_id FROM tasks ORDER BY id')
@@ -373,30 +794,22 @@ describe('SQLite migrations and capabilities', () => {
       'companies',
       'source_channels',
       'job_sources',
-      'sync_runs',
       'files',
       'entities',
       'file_entity_mappings',
       'source_job_details',
       'events',
       'jobs',
-      'job_revisions',
+      'job_metadata',
       'job_observations',
       'candidate_profiles',
       'agent_runs',
       'profile_versions',
-      'job_enrichments',
-      'match_rulesets',
-      'match_results',
-      'match_advices',
-      'schedules',
       'tasks',
       'application_settings',
-      'project_dossiers',
-      'drill_sessions',
-      'drill_turns',
-      'drill_answer_revisions',
-      'project_knowledge_items',
+      'ai_sessions',
+      'ai_messages',
+      'ai_session_metadata',
       'interview_experiences',
       'interview_question_entries',
       'sync_seen_jobs',
@@ -404,6 +817,14 @@ describe('SQLite migrations and capabilities', () => {
       expect(names).toContain(required);
     }
     for (const removed of [
+      'project_dossiers',
+      'experience_research_requests',
+      'schedules',
+      'job_revisions',
+      'job_enrichments',
+      'match_rulesets',
+      'match_results',
+      'match_advices',
       'file_artifacts',
       'raw_job_records',
       'job_status_events',
@@ -457,7 +878,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      53,
+      61,
     );
   });
 
@@ -519,7 +940,7 @@ describe('SQLite migrations and capabilities', () => {
     handles.push(upgraded);
     const payload = upgraded.client
       .prepare(
-        "SELECT payload_json FROM schedules WHERE schedule_key = 'maintenance.cleanup:weekly'",
+        `SELECT payload_json FROM ${periodicConfigProjection} WHERE schedule_key = 'maintenance.cleanup:weekly'`,
       )
       .pluck()
       .get() as string;
@@ -571,7 +992,7 @@ describe('SQLite migrations and capabilities', () => {
     const upgraded = openSqliteDatabase({ dataRoot: dataRoot.path });
     handles.push(upgraded);
     const payload = upgraded.client
-      .prepare("SELECT stats_json FROM sync_runs WHERE id = 'stats-run'")
+      .prepare("SELECT json_extract(public_state,'$.stats') FROM tasks WHERE id = 'stats-run'")
       .pluck()
       .get() as string;
     expect(JSON.parse(payload)).toEqual({
@@ -589,7 +1010,9 @@ describe('SQLite migrations and capabilities', () => {
       followupEnqueued: 0,
     });
     const legacyPayload = upgraded.client
-      .prepare("SELECT stats_json FROM sync_runs WHERE id = 'stats-run-legacy'")
+      .prepare(
+        "SELECT json_extract(public_state,'$.stats') FROM tasks WHERE id = 'stats-run-legacy'",
+      )
       .pluck()
       .get() as string;
     expect(JSON.parse(legacyPayload)).toEqual({
@@ -685,14 +1108,18 @@ describe('SQLite migrations and capabilities', () => {
     ).toEqual([7, 6, 5, 4, 3]);
     expect(
       upgraded.client
-        .prepare("SELECT count(*) FROM match_results WHERE id = 'retention-match'")
+        .prepare("SELECT count(*) FROM job_metadata WHERE id = 'retention-match'")
         .pluck()
         .get(),
     ).toBe(0);
   });
 
   it('migrates existing sync work to one active recruitment channel', async () => {
-    const handle = await openTestDatabase();
+    const root = await createTemporaryDataRoot('jobhunter-legacy-channel-');
+    dataRoots.push(root);
+    const folder = await migrationsBefore(root.path, 'before-periodic-settings', 54);
+    const handle = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+    handles.push(handle);
     const companyId = '018f0000-0000-7000-8000-000000000901';
     const internChannelId = '018f0000-0000-7000-8200-000000010901';
     const socialChannelId = '018f0000-0000-7000-8200-000000010903';
@@ -957,7 +1384,7 @@ describe('SQLite migrations and capabilities', () => {
     expect(
       upgraded.client
         .prepare(
-          `SELECT file_id, source_type, review_status, research_request_id, verification_status
+          `SELECT file_id, source_type, review_status, research_task_id, verification_status
            FROM interview_experiences WHERE id = ?`,
         )
         .get('experience'),
@@ -965,7 +1392,7 @@ describe('SQLite migrations and capabilities', () => {
       file_id: 'experience-file',
       source_type: 'personal',
       review_status: 'accepted',
-      research_request_id: null,
+      research_task_id: null,
       verification_status: 'not_applicable',
     });
     expect(
@@ -990,7 +1417,7 @@ describe('SQLite migrations and capabilities', () => {
     ).toBe(false);
     expect(
       upgraded.client
-        .prepare(`SELECT source_payload_hash, source_url FROM job_revisions WHERE id = 'revision'`)
+        .prepare(`SELECT source_payload_hash, source_url FROM jobs WHERE content_id = 'revision'`)
         .get(),
     ).toEqual({
       source_payload_hash: 'e'.repeat(64),
@@ -998,10 +1425,10 @@ describe('SQLite migrations and capabilities', () => {
     });
     expect(
       upgraded.client
-        .prepare('SELECT job_revision_id FROM job_observations WHERE job_id = ?')
+        .prepare('SELECT job_id FROM job_observations WHERE job_id = ?')
         .pluck()
         .get('job'),
-    ).toBe('revision');
+    ).toBe('job');
     const eventPayload = upgraded.client
       .prepare("SELECT payload_json FROM events WHERE event_type = 'job.status.changed'")
       .pluck()

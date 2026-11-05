@@ -1,3 +1,5 @@
+import { scanTaskProjection } from './scan-task-sql.js';
+import { periodicConfigProjection } from '@jobhunter/common/persistence/periodic-config';
 import {
   webSourceSchema,
   type WebSource,
@@ -54,11 +56,11 @@ const selection = `
   FROM job_sources source
   JOIN companies company ON company.id = source.company_id
   JOIN source_channels channel ON channel.id = source.channel_id
-  LEFT JOIN sync_runs run ON run.id = (
-    SELECT latest.id FROM sync_runs latest WHERE latest.source_id = source.id
+  LEFT JOIN ${scanTaskProjection} run ON run.id = (
+    SELECT latest.id FROM ${scanTaskProjection} latest WHERE latest.source_id = source.id
     ORDER BY latest.started_at DESC, latest.id DESC LIMIT 1
   )
-  LEFT JOIN schedules schedule ON schedule.schedule_key = 'source.sync:' || source.id`;
+  LEFT JOIN ${periodicConfigProjection} schedule ON schedule.schedule_key = 'source.sync:' || source.id`;
 
 /** 数据库查询结果对应的行结构。 */
 function instant(value: number | null): string | null {

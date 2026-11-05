@@ -24,8 +24,13 @@ jh --data-root "D:\JobHunter 数据" doctor
 # 导入简历并得到画像提取 task ID
 jh resume import "docs/resumes/nowcoder_1787802316450.jpeg"
 
-# 启动 Web 自动消费任务；CLI 的 --wait 操作也会按需执行任务
+# CLI 提交时按需启动中央服务；Web 与 CLI 共享后台任务
 pnpm --filter @jobhunter/web dev
+
+# 查看、停止或按当前配置重启中央服务
+jh task service status
+jh task service stop
+jh task service restart
 
 # 同步官网并等待结果
 jh source sync tencent-social --wait
@@ -47,12 +52,11 @@ jh job export "exports/职位.csv" --format csv --bom
 
 ```powershell
 jh profile set <profileId> /preferences/locations '["北京","上海"]'
-jh profile lock <profileId> /preferences/locations
+jh profile confirm <profileId> <candidateVersionId> --expected-version <currentVersionId> --fields skills,projects
 jh profile history <profileId>
-jh profile unlock <profileId> /preferences/locations
 ```
 
-每次有效修正、锁定或解锁都会创建不可变新版本。
+每次有效修正或候选确认都会创建新版本。再次提取只生成待确认候选，可先用 `profile history` 查看，再用 `profile confirm` 选择一级字段；当前版本已变化时拒绝应用。
 
 ## 备份与危险恢复
 

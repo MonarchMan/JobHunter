@@ -1,3 +1,6 @@
+import { startCentralTaskService, taskServiceConfiguration } from '@jobhunter/common/task-service';
+import { loadRuntimeAppConfig } from '@jobhunter/common/config/index';
+import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
 import { randomUUID } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
@@ -29,34 +32,62 @@ import {
 } from '@jobhunter/recruitment/persistence/job-query-repository';
 import { SystemIdGenerator, utcInstant, parseId } from '@jobhunter/common/domain';
 
+/** 子进程不继承 Vitest 注入的相对 BASE_URL，确保 CLI 使用完整的模型默认地址。 */
+async function execute(
+  file: string,
+  args: readonly string[],
+): Promise<{ stdout: string; stderr: string }> {
+  const environment = { ...process.env, BASE_URL: '' };
+  const config = await loadRuntimeAppConfig({
+    cli: { dataRoot: args[args.indexOf('--data-root') + 1] },
+    environment,
+    workspaceRoot: path.resolve(import.meta.dirname, '../../../..'),
+  });
+  // 命令契约使用真实 IPC 但不消费任务；下面的生产处理器测试显式装配合成依赖。
+  // 合成宿主没有生产装配步骤，需在持有服务锁之前初始化测试库。
+  openSqliteDatabase({ dataRoot: config.bootstrap.dataRoot.value }).close();
+  const service = await startCentralTaskService({
+    dataRoot: config.bootstrap.dataRoot.value,
+    configuration: taskServiceConfiguration(config),
+    createRuntime: () => ({
+      run: (signal) =>
+        new Promise<void>((resolve) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        }),
+      request: () => null,
+      close: () => Promise.resolve(),
+    }),
+  });
+  try {
+    return await promisify(execFile)(file, [...args], { env: environment });
+  } finally {
+    await service?.close();
+  }
+}
+
 /** 上游采用合成协议，真实 Worker／隔离 SQLite／职位页查询覆盖正式生命周期。 */
 it('猎聘 HTTP 批次自动入库，官网和其他平台查询保持隔离', async () => {
   const dataRoot = await mkdtemp(path.join(tmpdir(), 'liepin-flow-'));
   const portFile = path.join(dataRoot, 'DevToolsActivePort');
   // 1、CLI 使用宿主平台临时绝对路径，并在进程内连接 SQLite 前完成任务发布。
-  // 1.a、Vitest 将 BASE_URL 用作内部路由；子进程覆盖为空闲模型配置，避免污染 CLI 配置边界。
-  const childEnvironment = {
-    ...process.env,
-    BASE_URL: 'https://api.openai.com/v1',
-    MODEL: '',
-    API_KEY: '',
-  };
-  const { stdout } = await promisify(execFile)(
-    process.execPath,
-    [
-      path.resolve('apps/cli/dist/platform-main.js'),
-      '--data-root',
-      dataRoot,
-      '--provider',
-      'liepin',
-      'connect',
-      '--port-file',
-      portFile,
-      '--target-id',
-      'fixture',
-    ],
-    { env: childEnvironment },
-  );
+  const { stdout } = await execute(process.execPath, [
+    path.resolve('apps/cli/dist/platform-main.js'),
+    '--data-root',
+    dataRoot,
+    '--provider',
+    'liepin',
+    'connect',
+    '--port-file',
+    portFile,
+    '--target-id',
+    'fixture',
+  ]);
   const submitted = JSON.parse(stdout) as { task: { id: string } };
   const db = openSqliteDatabase({ dataRoot });
   let now = 0;
@@ -160,17 +191,11 @@ it('猎聘 HTTP 批次自动入库，官网和其他平台查询保持隔离', a
         .total,
     ).toBe(0);
     expect(requests).toBe(2);
-    expect(db.client.prepare('SELECT count(*) FROM sync_runs').pluck().get()).toBe(0);
+    expect(db.client.prepare(`SELECT count(*) FROM ${scanTaskProjection}`).pluck().get()).toBe(0);
     expect(db.client.prepare('SELECT missing_count FROM jobs').pluck().get()).toBe(0);
     expect(db.client.pragma('foreign_key_check')).toEqual([]);
     // 3、认证数据不进入任务、连接、职位、修订或观察记录。
-    for (const table of [
-      'tasks',
-      'platform_connections',
-      'jobs',
-      'job_revisions',
-      'job_observations',
-    ])
+    for (const table of ['tasks', 'platform_connections', 'jobs', 'jobs', 'job_observations'])
       expect(JSON.stringify(db.client.prepare(`SELECT * FROM ${table}`).all())).not.toContain(
         'private-liepin-fixture',
       );

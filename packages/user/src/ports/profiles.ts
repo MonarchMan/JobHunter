@@ -21,9 +21,9 @@ export interface ProfileVersionRecord {
   readonly versionNo: number;
   readonly resumeDocumentId: string | null;
   readonly agentRunId: string | null;
-  readonly extracted: CandidateProfileData;
   readonly effective: CandidateProfileData;
-  readonly lockedPaths: readonly string[];
+  readonly isCandidate: boolean;
+  readonly baseVersionId: ProfileVersionId | null;
   readonly contentHash: ContentHash;
   readonly isCurrent: boolean;
   readonly createdAt: UtcInstant;

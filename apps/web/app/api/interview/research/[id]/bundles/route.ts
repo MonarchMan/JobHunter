@@ -1,40 +1,25 @@
-import { webImportExperienceResearchBundleSchema } from '@jobhunter/user/contracts/research-web';
-import { getWebContainer } from '../../../../../../src/server/container.js';
+import { z } from 'zod';
+import { getWebMutationContainer } from '../../../../../../src/server/container.js';
 import { verifyMutationRequest } from '../../../../../../src/server/csrf.js';
-import {
-  badRequestResponse,
-  dataResponse,
-  forbiddenResponse,
-} from '../../../../../../src/server/http.js';
+import { dataResponse, forbiddenResponse } from '../../../../../../src/server/http.js';
 import { interviewErrorResponse } from '../../../../../../src/server/interview-http.js';
 
-const maximumBundleBytes = 2 * 1024 * 1024;
-
-/** 处理 Web API 的 POST 请求，校验输入并提交业务操作。 */
+/** 只检查系统指定的本地结果，不接收上传文件或客户端指定路径。 */
 export async function POST(
   request: Request,
   context: { readonly params: Promise<{ readonly id: string }> },
 ): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {
-    const form = await request.formData();
-    const file = form.get('file');
-    if (!(file instanceof File)) return badRequestResponse('请选择 JSON 研究结果文件。');
-    if (!file.name.toLowerCase().endsWith('.json')) {
-      return badRequestResponse('研究结果必须是 JSON 文件。');
-    }
-    if (file.size < 1 || file.size > maximumBundleBytes) {
-      return badRequestResponse('研究结果必须大于 0 且不超过 2 MiB。');
-    }
-    const revision = webImportExperienceResearchBundleSchema.parse({
-      expectedRevision: form.get('expectedRevision'),
-    });
+    const input = z
+      .object({ expectedRevision: z.number().int().nonnegative() })
+      .strict()
+      .parse(await request.json());
     const detail = await (
-      await getWebContainer()
-    ).services.research.importBundle({
+      await getWebMutationContainer()
+    ).services.research.checkResult({
       requestId: (await context.params).id,
-      expectedRevision: revision.expectedRevision,
-      bytes: new Uint8Array(await file.arrayBuffer()),
+      expectedRevision: input.expectedRevision,
     });
     return dataResponse(detail);
   } catch (error) {

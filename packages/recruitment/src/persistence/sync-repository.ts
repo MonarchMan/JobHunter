@@ -1,3 +1,6 @@
+import { scanTaskProjection } from './scan-task-sql.js';
+import { currentTaskExecution } from '@jobhunter/common/tasks';
+import { currentJobContentSql } from './current-job-sql.js';
 import type {
   CachedSourceJobDetail,
   FinishSyncRunInput,
@@ -117,7 +120,7 @@ export class SqliteSyncRepository implements SyncRepository {
                 CASE WHEN s.enabled = 1 AND company.enabled = 1 AND channel.enabled = 1
                      THEN 1 ELSE 0 END AS enabled,
                 s.consecutive_failures,
-                (SELECT r.cursor_out_json FROM sync_runs r
+                (SELECT r.cursor_out_json FROM ${scanTaskProjection} r
                  WHERE r.source_id = s.id AND r.status = 'succeeded'
                    AND r.cursor_out_json IS NOT NULL
                  ORDER BY r.finished_at DESC LIMIT 1) AS cursor_out_json
@@ -143,43 +146,44 @@ export class SqliteSyncRepository implements SyncRepository {
 
   /** 执行数据库组件对外暴露的操作。 */
   public startRun(input: StartSyncRunInput): StartSyncRunResult {
+    // 1、阶段任务由当前主任务持有执行权；直接调用用于离线导入与测试。
     this.#client
       .prepare(
-        `UPDATE sync_runs
-         SET status = 'cancelled', coverage = CASE WHEN coverage = 'complete' THEN 'partial' ELSE coverage END,
-             error_category = 'orphaned_run',
-             error_summary = 'The worker stopped before this synchronization could finish.',
-             finished_at = ?
-         WHERE source_id = ? AND status = 'running' AND started_at <= ?`,
+        `UPDATE tasks SET status='cancelled',error_category='cancelled',
+      error_summary='Previous synchronization was interrupted.',finished_at=?
+      WHERE task_type='source.scan' AND source_id=? AND status='running' AND parent_task_id IS NULL AND started_at<=?`,
       )
       .run(input.startedAt, input.sourceId, input.startedAt - ORPHANED_RUN_RECOVERY_MS);
     try {
       this.#client
         .prepare(
-          `INSERT INTO sync_runs
-           (id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-            sync_policy_version, source_config_hash, cursor_in_json, cursor_out_json, stats_json,
-            error_category, error_summary, started_at, finished_at)
-           VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, ?, NULL)`,
+          `INSERT INTO tasks
+        (id,task_type,private_state,public_state,status,idempotency_key,parent_task_id,
+         attempt_count,max_attempts,available_at,created_at,started_at)
+        VALUES (?,'source.scan',?,?,'running',?,?,1,1,?,?,?)`,
         )
         .run(
           input.id,
-          input.sourceId,
-          input.trigger,
-          input.coverage,
-          input.adapterVersion,
-          input.normalizerVersion,
-          input.syncPolicyVersion,
-          input.sourceConfigHash,
-          input.cursorIn === null ? null : canonicalJson(input.cursorIn),
-          INITIAL_SYNC_RUN_STATS_JSON,
+          canonicalJson({ sourceId: input.sourceId, trigger: input.trigger }),
+          canonicalJson({
+            status: 'running',
+            coverage: input.coverage,
+            stats: JSON.parse(INITIAL_SYNC_RUN_STATS_JSON) as unknown,
+            coverageEvidence: {},
+          }),
+          'source.scan:' + input.id,
+          currentTaskExecution()?.taskId ?? null,
+          input.startedAt,
+          input.startedAt,
           input.startedAt,
         );
       return { kind: 'started', runId: input.id };
     } catch (error) {
       const running = this.#client
-        .prepare("SELECT id FROM sync_runs WHERE source_id = ? AND status = 'running'")
-        .get(input.sourceId) as { readonly id: string } | undefined;
+        .prepare(
+          "SELECT id FROM tasks WHERE task_type='source.scan' AND source_id=? AND status='running'",
+        )
+        .get(input.sourceId) as { id: string } | undefined;
       if (running) return { kind: 'conflict', runId: parseId(running.id, 'SyncRun') };
       throw error;
     }
@@ -332,8 +336,8 @@ export class SqliteSyncRepository implements SyncRepository {
         `SELECT j.id, r.id AS revision_id, j.source_id, j.external_job_id, j.status, j.missing_count,
                 j.last_seen_at, j.closed_at, r.revision_no, r.content_hash, r.snapshot_json
          FROM jobs j
-         JOIN job_revisions r ON r.job_id = j.id
-          AND r.revision_no = (SELECT MAX(r2.revision_no) FROM job_revisions r2 WHERE r2.job_id = j.id)
+         JOIN ${currentJobContentSql} r ON r.job_id = j.id
+          AND r.revision_no = (SELECT MAX(r2.revision_no) FROM ${currentJobContentSql} r2 WHERE r2.job_id = j.id)
          WHERE j.source_id = ?
            AND NOT EXISTS (SELECT 1 FROM sync_seen_jobs seen
                            WHERE seen.sync_run_id = ? AND seen.job_id = j.id)
@@ -356,18 +360,23 @@ export class SqliteSyncRepository implements SyncRepository {
   public finishRun(input: FinishSyncRunInput): boolean {
     const updated = this.#client
       .prepare(
-        `UPDATE sync_runs SET status = ?, coverage = ?, cursor_out_json = ?, stats_json = ?,
-           coverage_evidence_json = ?, error_category = ?, error_summary = ?, finished_at = ?
-         WHERE id = ? AND source_id = ? AND status = 'running'`,
+        `UPDATE tasks SET status = CASE WHEN ? = 'partial' THEN 'succeeded' ELSE ? END,
+           private_state=json_set(private_state,'$.cursorOut',json(?)),
+           public_state=?, error_category = ?, error_summary = ?, finished_at = ?
+         WHERE id = ? AND source_id = ? AND task_type='source.scan' AND status = 'running'`,
       )
       .run(
         input.status,
-        input.coverage,
+        input.status,
         input.status === 'succeeded' && input.cursorOut !== null
           ? canonicalJson(input.cursorOut)
           : null,
-        canonicalJson(input.stats),
-        canonicalJson(input.coverageEvidence),
+        canonicalJson({
+          status: input.status,
+          coverage: input.coverage,
+          stats: input.stats,
+          coverageEvidence: input.coverageEvidence,
+        }),
         input.errorCategory,
         input.errorSummary,
         input.finishedAt,
@@ -403,7 +412,9 @@ export class SqliteSyncRepository implements SyncRepository {
   /** 进度快照只更新活跃运行，避免迟到写入覆盖最终统计。 */
   public recordProgress(runId: SyncRunId, stats: SyncRunStats): void {
     this.#client
-      .prepare("UPDATE sync_runs SET stats_json = ? WHERE id = ? AND status = 'running'")
+      .prepare(
+        "UPDATE tasks SET public_state=json_set(public_state,'$.stats',json(?)) WHERE id = ? AND task_type='source.scan' AND status = 'running'",
+      )
       .run(canonicalJson(stats), runId);
   }
 }

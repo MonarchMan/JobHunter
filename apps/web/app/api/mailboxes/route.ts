@@ -3,7 +3,7 @@ import {
   MailboxSettingsError,
 } from '@jobhunter/recruitment/mail-application';
 import { ZodError } from 'zod';
-import { getWebContainer } from '../../../src/server/container.js';
+import { getWebContainer, getWebMutationContainer } from '../../../src/server/container.js';
 import {
   badRequestResponse,
   dataResponse,
@@ -26,7 +26,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!verifyMutationRequest(request)) return forbiddenResponse();
   try {
     const input = imapMailboxCreateSchema.parse(await request.json());
-    const mailbox = await (await getWebContainer()).services.mailboxes.createImap(input);
+    const mailbox = await (await getWebMutationContainer()).services.mailboxes.createImap(input);
     return dataResponse(mailbox, { status: 201 });
   } catch (error) {
     if (error instanceof ZodError || error instanceof MailboxSettingsError) {

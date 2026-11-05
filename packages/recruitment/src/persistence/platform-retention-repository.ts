@@ -33,9 +33,7 @@ export class SqlitePlatformRetentionRepository implements PlatformRetentionRepos
     return rows.map((row) => {
       const versionIds = z
         .array(z.string())
-        .parse(
-          this.client.prepare('SELECT id FROM job_revisions WHERE job_id=?').pluck().all(row.id),
-        );
+        .parse(this.client.prepare('SELECT content_id FROM jobs WHERE id=?').pluck().all(row.id));
       const subject = {
         id: row.id,
         aliases: [row.detail_url],
@@ -124,7 +122,6 @@ export class SqlitePlatformRetentionRepository implements PlatformRetentionRepos
                 "DELETE FROM events WHERE stream_type='job' AND stream_id=? AND event_type='job.status.changed' AND json_extract(payload_json,'$.reasonCode')='first_observed'",
               )
               .run(candidate.id);
-            this.client.prepare('DELETE FROM job_revisions WHERE job_id=?').run(candidate.id);
             deleted += this.client.prepare('DELETE FROM jobs WHERE id=?').run(candidate.id).changes;
           }
           state.lastRunAt = now;

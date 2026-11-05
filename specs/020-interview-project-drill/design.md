@@ -1,5 +1,7 @@
 # 020 简历项目浅档拷打设计
 
+> 后续调整以 [034 规格](../034-ai-sessions-and-projects/spec.md) 为准；下文已完成记录描述迁移前实现。画像自动合并锁定、项目档案快照、上传材料及人工上传研究包等冲突流程不再作为目标，替代实现及验收已在 034 完成。
+
 存储合并：project_dossiers 内置 source_profile_id、source_profile_version_id、project_index、project_json、content_hash、snapshot_created_at，snapshot_id 继续唯一且用于既有证据引用。drill_sessions.coverage_json 以维度为键，保存 status、evidenceItemIds、updatedAt；边界校验维度及状态，事务内按维度局部更新，避免覆盖并发状态。追加迁移重建档案表并聚合覆盖 JSON，保留所有 ID、外键及唯一约束；历史迁移不改写。升级后的进程必须使用新仓储实现。
 
 > 状态：Implemented
@@ -85,13 +87,13 @@ question_pending ──同步生成成功──► awaiting_answer ──提交�
 
 新增迁移 `0017_interview_project_drill.sql`：
 
-| 表                         | 关键约束                                                                |
-| -------------------------- | ----------------------------------------------------------------------- |
-| `project_dossiers`         | 内置不可变快照和快照 ID；来源版本＋项目下标＋哈希唯一；保存投影和修订号               |
-| `drill_sessions`           | 冻结 Profile 定义和 coverage_json；最多一个 active；context_revision 非负 |
-| `drill_turns`              | 会话内题序唯一；状态 CHECK；保存任务和 AgentRun 引用                    |
-| `drill_answer_revisions`   | 轮次内修订号与 idempotency key 唯一；正文和哈希不可变                   |
-| `project_knowledge_items`  | 类型、来源回答修订、偏移、状态和模型版本；状态 CHECK                    |
+| 表                        | 关键约束                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `project_dossiers`        | 内置不可变快照和快照 ID；来源版本＋项目下标＋哈希唯一；保存投影和修订号   |
+| `drill_sessions`          | 冻结 Profile 定义和 coverage_json；最多一个 active；context_revision 非负 |
+| `drill_turns`             | 会话内题序唯一；状态 CHECK；保存任务和 AgentRun 引用                      |
+| `drill_answer_revisions`  | 轮次内修订号与 idempotency key 唯一；正文和哈希不可变                     |
+| `project_knowledge_items` | 类型、来源回答修订、偏移、状态和模型版本；状态 CHECK                      |
 
 Markdown 投影复用 ArtifactStore 的 `export` 类型，并由 `project_dossiers` 的专用外键区分用途，避免为语义子类型重建已有 SQLite CHECK 表。Artifact 可因相同内容跨档案去重，因此档案删除只在无其他业务引用且通过现有隔离/清理协议时清理物理文件。
 

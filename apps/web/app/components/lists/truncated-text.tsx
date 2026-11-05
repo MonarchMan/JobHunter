@@ -11,6 +11,7 @@ export function TruncatedText({
     <span
       className={[styles.root, className].filter(Boolean).join(' ')}
       tabIndex={focusable ? 0 : undefined}
+      role="group"
       aria-label={value}
     >
       <span className={styles.value} aria-hidden="true">
