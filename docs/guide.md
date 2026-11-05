@@ -149,7 +149,7 @@ Anthropic 通用代理的地址应保留独立的 `anthropic` 主机标签或路
 JobHunter 会自动探测 Windows 和 macOS 常见位置中的 Edge 或 Chrome。Linux 默认使用 Playwright Chromium；其他平台在没有可用系统浏览器时也可以安装它：
 
 ```shell
-pnpm exec playwright install chromium
+pnpm --filter @jobhunter/web exec playwright install chromium
 ```
 
 浏览器安装在非标准位置时，在 `.env` 中指定：
@@ -197,7 +197,7 @@ pnpm test
 pnpm docs:check
 ```
 
-需要完整检查时执行 `pnpm check`。浏览器端到端测试和依赖边界等专项命令可从根目录 `package.json` 查询。
+需要完整检查时执行 `pnpm check`。浏览器端到端测试和依赖边界等专项命令可从根目录 `package.json` 查询。浏览器 E2E 依赖 Playwright 自带浏览器（含 WebKit，系统 Chrome 不能替代），首次运行前安装：`pnpm --filter @jobhunter/web exec playwright install chromium webkit`。
 
 ## 8. 继续了解项目
 

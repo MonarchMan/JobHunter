@@ -43,3 +43,4 @@ ADR 一经 Accepted 通常不直接改写历史结论；后续决策变更通过
 - [ADR-0058：以最低版本声明 Node 支持范围](./0058-node-minimum-version.md)
 - [ADR-0059：模型请求账本独立于 Agent 运行](./0059-model-request-ledger.md)
 - [ADR-0060：用内容身份替代业务版本选择](./0060-content-based-execution-identity.md)
+- [ADR-0061：同步任务分阶段合并自动评分](./0061-staged-sync-task-with-scoring-stage.md)

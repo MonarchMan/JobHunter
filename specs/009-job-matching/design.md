@@ -86,6 +86,8 @@ JobAdviceAgent 输入只包含有效画像必要字段、职位要求、分项�
 
 Web 和 CLI 统一提交 `match.score-job` 用户意图任务。规则模式直接以标准化职位字段计算；LLM 模式在同一可重试任务内顺序调用 JobUnderstanding（含模型分）、加权确定性匹配，求职建议开关启用时再调用 JobAdvice。自动评分开关开启即运行两阶段评分；建议开关只控制任务内的建议阶段，两者互不耦合。批量操作只是在应用边界为用户明确勾选的职位逐条入队，不引入全量扫描或后台自动触发。
 
+按 [ADR-0061](../../docs/adr/0061-staged-sync-task-with-scoring-stage.md)，同步后自动评分不再入队 `match.score-job`，而是由 matching 抽取的可复用逐职位评分服务在 `source.sync` 任务的阶段 B 内串行执行（理解 → 加权评分 → 建议），复用与 `match.score-batch` 相同的单职位处理器；差别是自动路径 `requireModelScore: false`，模型失败降级为规则分并计入 degradedCount，单项失败不中断其余职位，逐项结果由同步任务统一检查点。`SyncScoringStage` 端口由 recruitment 声明、matching 实现、apps 入口注入，保持模块单向依赖。
+
 ## 当前结果
 
 “当前匹配”由当前 ProfileVersion、Job 最新 Revision、活动 JobUnderstanding 配置对应的成功 enrichment（没有则 none）和 active Ruleset 共同确定，不使用可变 `is_current` 标记写入 MatchResult。查询优先 enrichment-aware 结果，不存在时回退基础结果；当前建议同样按活动 JobAdvice 配置选择成功 MatchAdvice。旧结果和旧建议按版本显式查询。

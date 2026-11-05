@@ -1,190 +1,49 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+仓库级工程规则。与 `AGENTS.md` 等效且互补；功能与数据要求以 `specs/` 中对应规格为准。
 
-## Project Overview
+## 1. 模块职责与依赖
 
-JobHunter is a personal job hunting workbench that syncs job postings from company career sites, imports resumes, generates candidate profiles, and provides job matching. It runs locally with SQLite storage and an optional AI model integration.
+共享代码按功能组织在四个模块中：
 
-**Tech Stack:** Node.js >=24, TypeScript (strict mode), pnpm >=11.0.0 workspace, SQLite, Next.js, Playwright
+- `recruitment`：招聘信息、接入与招聘流程。
+- `user`：个人资料、简历及面试准备。
+- `matching`：招聘与个人资料之间的匹配。
+- `common`：配置、日志、存储、任务和模型等通用运行能力。
 
-**Languages:** Chinese UI with English technical identifiers
+recruitment 和 user 只依赖 common；matching 依赖 common 及两者的纯公开查询契约；common 不依赖业务模块。跨包调用使用公开入口，契约入口不得加载重运行时实现。
 
-## Common Commands
+保持模块化单体和单向依赖：用例声明仓储等端口，适配器实现端口，用例不得反向导入适配器；纯领域规则不依赖数据库、浏览器、模型 SDK 或进程入口。业务 Schema、仓储和 Prompt 归所属业务模块。`pnpm boundaries` 强制执行上述规则。
 
-### Setup & Initialization
+## 2. 目录职责
 
-```bash
-pnpm install
-cp .env.example .env  # Edit to configure model provider if needed
-pnpm --filter @jobhunter/cli build
-node apps/cli/dist/main.js init
-node apps/cli/dist/main.js doctor
-```
+- `apps/cli`、`apps/web`：命令、页面、协议入口、生命周期与依赖装配。
+- `packages/`：四个模块的共享实现；业务模块提供任务处理器，common 提供任务运行时。
+- `scripts/`：构建、检查、清理和文档生成等工程工具。
+- `docs/arch`、`docs/adr`：总体设计与架构决策。
+- `specs/`：功能规格；相应测试模块的 `test/fixtures/` 存放合成样本。
+- `var/`：本地运行数据及历史样本，不提交版本库。
 
-### Development
+不要在根目录堆放实现或测试数据，也不要在同一文件混合入口、领域与基础设施职责。
 
-```bash
-# Start web console (auto-launches worker)
-pnpm --filter @jobhunter/web dev  # http://127.0.0.1:3210
+## 3. 按 SDD 推进变更
 
-# Build CLI only
-pnpm --filter @jobhunter/cli build
+新能力先建立或更新 `spec.md`、`design.md` 和 `tasks.md`，再实现代码与测试。影响依赖方向、数据所有权、进程职责或核心技术选型时，先更新总体架构并新增 ADR。实现、测试和文档使用一致的术语与验收标准。规格须进入 `Ready` 状态后方可实现；`pnpm docs:check` 校验规格完整性与需求-任务覆盖。
 
-# Build all packages
-pnpm build
-```
+## 4. 工程与数据约束
 
-### Testing & Validation
+使用 TypeScript 严格模式和 pnpm workspace。外部输入与模型输出必须在边界校验，持久化通过仓储端口访问；网络和模型调用不得发生在数据库事务内，耗时及可重试工作交给任务运行时。每项变更运行与风险相匹配的格式检查、类型检查和自动化测试。
 
-```bash
-pnpm typecheck           # Type check all packages
-pnpm test                # Unit tests
-pnpm test:integration    # Integration tests
-pnpm test:e2e            # Browser E2E tests
-pnpm boundaries          # Validate package dependencies
-pnpm docs:check          # Validate spec documents
-pnpm check               # Run all checks (format, lint, typecheck, test, boundaries, docs)
-```
+涉及旧数据兼容的修改默认按破坏性更新处理；修改重要数据前先征求用户意见。
 
-### CLI Operations
+## 5. 中文注释
 
-```bash
-# After building CLI
-node apps/cli/dist/main.js <command>
+函数、类、接口和类型应说明职责、关键输入输出及重要不变量。关键分支、数据转换、事务边界、外部调用和安全限制应解释业务语义与设计原因。
 
-# Common commands
-node apps/cli/dist/main.js source list
-node apps/cli/dist/main.js source sync tencent-social --wait
-node apps/cli/dist/main.js resume import "path/to/resume.pdf"
-node apps/cli/dist/main.js job list --limit 20
-node apps/cli/dist/main.js task list --status pending,running
-node apps/cli/dist/main.js worker start  # Only if not using web auto-launch
-```
+业务流程用“1、2、3……”标注主步骤，用“1.a、1.b……”标注分支或子步骤。避免逐行解释显而易见的语法，代码变更时同步更新注释。
 
-## Architecture
+## 6. Git 提交说明
 
-### Modular Monolith with Unidirectional Dependencies
+提交说明按独立目的和领域归纳，使用 Conventional Commits 格式 `<type>(<scope>): <description>`，描述使用简洁的中文动宾短语。同一次提交可以包含不同 scope 的条目，但同一 scope 只浓缩为一条，例如 `feat(recruitment)` 和 `fix(web)`。
 
-```
-apps/           - Entry points (CLI, Worker, Web)
-  cli/          - Command-line interface
-  worker/       - Background task executor
-  web/          - Next.js management console
-
-packages/       - Reusable capabilities
-  domain/       - Pure domain models, rules, domain-level abstractions (Clock, ID)
-  application/  - Use case orchestration, repository ports
-  db/           - SQLite persistence (implements repository ports)
-  source-core/  - Source adapter contract, HTTP & browser ports
-  sources/      - Company career site adapters
-  agent-core/   - Model adapter contract
-  llm/          - OpenAI/Anthropic model clients
-  matching/     - Job matching logic
-  resume/       - Resume parsing
-  observability/ - Logging and monitoring
-  testkit/      - Testing utilities
-
-specs/          - Specification-Driven Development (SDD) documents
-docs/           - Architecture decisions (ADR) and documentation
-var/            - Local runtime data (not committed)
-```
-
-**Dependency Rules (Enforced by `pnpm boundaries`):**
-
-1. `apps/` may import from `packages/` but not from other apps
-2. `domain/` has NO dependencies on application, db, browser, model SDKs, or any infrastructure
-3. `application/` declares ports (interfaces), never imports infrastructure implementations
-4. Infrastructure packages (db, llm, sources) implement ports but cannot be imported by application layer
-5. Cross-package imports must use public entry points only
-
-### Key Architectural Patterns
-
-- **Repository Pattern:** All data access through repository interfaces declared in `application/`, implemented in `db/`
-- **Adapter Pattern:** External systems (sources, models) accessed through ports/adapters
-- **Background Processing:** Long-running tasks (sync, OCR, matching) run in Worker with persistent task queue
-- **Model Integration:** Optional - only needed for resume profiling, job understanding, and match suggestions
-
-### Worker vs Web
-
-- **Worker:** Executes background tasks (job sync, resume parsing, matching). Runs as subprocess when web starts, or standalone via CLI.
-- **Web:** Next.js UI on port 3210. Auto-launches worker child process. Do not start a second worker manually.
-
-## Development Workflow
-
-### Specification-Driven Development (SDD)
-
-**Before implementing any feature:**
-
-1. Create or update `spec.md` in `specs/<feature-id>/` with requirements
-2. Create `design.md` with technical design
-3. Create `tasks.md` with implementation tasks
-4. For architectural changes, update `docs/arch/` and add ADR in `docs/adr/`
-5. Implement code and tests referencing the same terminology
-
-All specs must be in `Ready` state before implementation begins.
-
-### Testing Strategy
-
-- **Unit tests:** Test domain logic and use cases in isolation
-- **Integration tests:** Test repository implementations, adapters with real SQLite
-- **E2E tests:** Test web UI flows with Playwright
-- **Online tests:** Test real career site adapters (disabled by default, requires `JOBHUNTER_ONLINE_SOURCES=1`)
-
-### Code Quality Gates
-
-Every change must pass:
-
-- `pnpm format:check` - Prettier formatting
-- `pnpm lint` - ESLint
-- `pnpm typecheck` - TypeScript strict mode
-- `pnpm test` - Unit tests
-- `pnpm boundaries` - Dependency rules
-- `pnpm docs:check` - Spec document validation
-
-Run `pnpm check` to execute all gates.
-
-## Design System (docs/arch/ui/DESIGN.md)
-
-The web interface follows a restrained "档案工作台" (archive workbench) design:
-
-- **Colors:** Archive indigo (`primary`) for main actions, coral (`action`) for decision cursor (next-step highlights only)
-- **NO green brand colors** - Health status is the only exception with dedicated `health-*` tokens
-- **Typography:** 16px base for prose, 14px for dense tables. Chinese uses Inter + Noto Sans SC
-- **Motion:** Restrained - 120ms feedback, 180ms content changes, 260ms overlays
-- **Desktop-first:** 1280px+ primary, 390px+ mobile support
-
-Key components use specific variants detailed in docs/arch/ui/DESIGN.md (e.g., "准备档案工作台" for interview prep, "在线简历工作台" for profile editing).
-
-## Environment Configuration
-
-Copy `.env.example` to `.env` and configure:
-
-- `DATA_ROOT=./var` - Local data directory
-- `LOG_LEVEL=info` - Logging level
-- Model provider (optional, only for AI features):
-  - OpenAI-compatible: `BASE_URL`, `API_KEY`, `MODEL`
-  - Anthropic: set `BASE_URL` to `https://api.anthropic.com` (or retain an `anthropic` host/path segment), then use `API_KEY` and `MODEL`
-- Browser path (optional): `BROWSER_EXECUTABLE` - Auto-detects Chrome/Edge on macOS/Windows
-
-Install Playwright Chromium if system browser not available:
-
-```bash
-pnpm exec playwright install chromium
-```
-
-## Important Notes
-
-- **Data Safety:** `.env`, SQLite DB, resumes, and logs stay local in `var/`. Never commit them.
-- **Career Site Adapters:** Must respect site access policies. No login forgery or captcha bypass.
-- **Web Security:** Web binds to 127.0.0.1 only. Not for public exposure.
-- **Backup/Restore:** Stop worker and web before backup operations.
-- **Single Worker:** Never run multiple worker instances against the same database.
-
-## Debugging
-
-- Logs: `var/logs/jobhunter.log` (sanitized error chains)
-- Task status: Web `/tasks` page or `node apps/cli/dist/main.js task list`
-- Agent runs: Web `/agent-runs` page
-- Database: `var/data/jobhunter.db` (SQLite)
-- Health check: `node apps/cli/dist/main.js doctor`
+首行简洁概括整体目的，空一行后按上述格式分别列出各 scope 的主条目。确需说明原因、关键行为或兼容性时补充简短正文，不重复标题，不逐项罗列文件和配套工作。不兼容变更使用 `!` 并补充 `BREAKING CHANGE:`。提交末尾附加 `Co-Authored-By: Claude Code <noreply@anthropic.com>`。

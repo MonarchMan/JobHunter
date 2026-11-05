@@ -12,6 +12,8 @@
 
 - [x] 合并 Agent 待确认内容至准备建议，升级输出契约及提示词，覆盖历史建议读取。
 
+- [x] **MCH-T027** 按 ADR-0061 从批量评分处理器抽取可复用的逐职位评分服务并实现 recruitment 的 `SyncScoringStage` 端口：自动路径 `requireModelScore: false`（模型失败降级计入 degradedCount），单项失败续跑，建议开关逐项读取；删除 `auto-scoring.ts` 回调工厂。（MCH-012）
+
 - [x] **MCH-T023** 实现单批次任务、逐项检查点和失败恢复；Agent 原记录重试并保留累计用量，补充队列及任务回归。（MCH-026）
 
 - [x] **MCH-T021** 实现规则与模型两阶段加权评分：理解 Agent（2.0.0，Prompt v2）兼输出 0..100 fitScore 与理由，`composeMatchScore` 按 30/70 加权，模型缺失或最终失败降级为规则分并标记 scoringVersion；新增 match_results 的 model_score/scoring_version 列（迁移 0046），模型分不进身份哈希；理解输入新增画像快照但事实仍按职位存储。（MCH-001, MCH-024）
