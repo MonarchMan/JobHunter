@@ -22,6 +22,8 @@ const outputSchema = z
     mode: z.enum(['rules', 'llm']),
     matchResultId: z.string().trim().min(1),
     matchAdviceId: z.string().trim().min(1).nullable(),
+    /** 模型评分是否缺失（模型未配置或理解最终降级）；仅 rules 模式或恢复路径为 null。 */
+    modelScoreMissing: z.boolean().nullable(),
   })
   .strict();
 
@@ -95,6 +97,8 @@ export function createManualJobScoreTaskHandler(input: {
         }
       }
       // 2、评分阶段：规则引擎与模型分加权合成；模型阶段降级时退回规则口径。
+      const modelScoreMissing =
+        payload.mode === 'llm' ? (payload.resumeMatchResultId ? null : modelScore === null) : null;
       const matched =
         payload.mode === 'llm' && payload.resumeMatchResultId
           ? { matchResultId: payload.resumeMatchResultId }
@@ -107,7 +111,12 @@ export function createManualJobScoreTaskHandler(input: {
             });
       // 3、建议阶段只受求职建议开关控制；关闭时不创建建议运行。
       if (!input.adviceEnabled()) {
-        return { mode: payload.mode, matchResultId: matched.matchResultId, matchAdviceId: null };
+        return {
+          mode: payload.mode,
+          matchResultId: matched.matchResultId,
+          matchAdviceId: null,
+          modelScoreMissing,
+        };
       }
       // 4、建议失败不撤销评分；携带检查点让自动及手动重试只恢复建议。
       try {
@@ -120,6 +129,7 @@ export function createManualJobScoreTaskHandler(input: {
           mode: payload.mode,
           matchResultId: matched.matchResultId,
           matchAdviceId: advice.matchAdviceId,
+          modelScoreMissing,
         };
       } catch (error) {
         const classified = classifyTaskError(error);

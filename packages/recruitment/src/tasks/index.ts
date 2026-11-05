@@ -22,10 +22,8 @@ import {
   recruitmentMailPolicyVersion,
 } from '@jobhunter/recruitment/mail-application';
 import { JobDetailService } from '@jobhunter/recruitment/sync/job-detail-service';
-import {
-  JobSyncService,
-  type SyncCompletedCallback,
-} from '@jobhunter/recruitment/sync/job-sync-service';
+import { JobSyncService } from '@jobhunter/recruitment/sync/job-sync-service';
+import type { SyncScoringStage } from '@jobhunter/recruitment/contracts/sync-scoring';
 import { OnlineSourceHealthService } from '@jobhunter/recruitment/sync/online-source-health-service';
 import { SourceHealthCheckService } from '@jobhunter/recruitment/sync/source-health-service';
 import { SourceScheduleReconciliationService } from '@jobhunter/recruitment/sync/source-schedule-reconciliation-service';
@@ -172,8 +170,8 @@ export function createRecruitmentTasks(
     readonly jobIntakePolicy: JobIntakePolicy;
     readonly searchProvider: PlatformProfileSearchPlanProvider;
     readonly references: readonly ResourceReferenceReader[];
-    /** 同步提交后的自动评分回调，由入口注入以遵循 recruitment 不依赖 matching 的边界。 */
-    readonly onSyncCompleted?: SyncCompletedCallback;
+    /** 同步任务评分阶段端口，由入口注入以遵循 recruitment 不依赖 matching 的边界。 */
+    readonly syncScoringStage?: SyncScoringStage;
     readonly mail?: {
       readonly modelMode?: 'off' | 'configured';
       readonly mailboxConfigPath: string;
@@ -220,7 +218,6 @@ export function createRecruitmentTasks(
     jobIntakePolicy: input.jobIntakePolicy,
     options: {
       normalizerVersion: 'normalize-v1',
-      ...(input.onSyncCompleted ? { onSyncCompleted: input.onSyncCompleted } : {}),
     },
   });
   // 1、浏览器传输属于 Worker；平台和关键词只借用隔离的页面租约。
@@ -281,7 +278,12 @@ export function createRecruitmentTasks(
   zhilian.initialize();
   job51.initialize();
   liepin.initialize();
-  registry.register(createSourceSyncTaskHandler(sync));
+  registry.register(
+    createSourceSyncTaskHandler(
+      sync,
+      ...(input.syncScoringStage ? [{ scoringStage: input.syncScoringStage }] : []),
+    ),
+  );
   registry.register(
     createSourceJobDetailTaskHandler(
       new JobDetailService({

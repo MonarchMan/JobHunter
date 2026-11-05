@@ -58,26 +58,16 @@ export type JobSyncResult =
       readonly stats: SyncRunStats;
       readonly errorCategory: string | null;
       readonly errorSummary: string | null;
+      /** 本运行新增或内容修订的职位 ID 集合（去重、保持发现顺序），供同步任务评分阶段消费。 */
+      readonly scorableJobIds: readonly string[];
       /** 仅在当前进程内交给 Worker 判定基础设施暂态错误，不得持久化或序列化。 */
       readonly failureCause?: unknown;
     };
-
-/**
- * 同步运行提交后由入口注入的回调，用于按 WEB-016 自动评分策略补入匹配任务。
- * 在同步写事务外执行，抛出的异常不影响已提交的同步结果。
- */
-export type SyncCompletedCallback = (input: {
-  readonly status: 'succeeded' | 'partial' | 'failed' | 'cancelled';
-  /** 本运行新增或内容修订的职位 ID 集合（去重、保持发现顺序）。 */
-  readonly scorableJobIds: readonly string[];
-}) => void;
 
 /** 应用层数据结构或端口契约。 */
 export interface JobSyncServiceOptions {
   readonly normalizerVersion: string;
   readonly unseenBatchSize?: number;
-  /** 同步提交后的自动评分回调；未注入时不创建任何匹配任务。 */
-  readonly onSyncCompleted?: SyncCompletedCallback;
 }
 
 /** 创建空的同步统计累加器。 */
@@ -129,7 +119,6 @@ export class JobSyncService {
   readonly #normalizerVersion: string;
   readonly #unseenBatchSize: number;
   readonly #jobIntakePolicy: JobIntakePolicy | undefined;
-  readonly #onSyncCompleted: SyncCompletedCallback | undefined;
 
   /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
@@ -151,7 +140,6 @@ export class JobSyncService {
     this.#normalizerVersion = input.options.normalizerVersion;
     this.#unseenBatchSize = input.options.unseenBatchSize ?? 100;
     this.#jobIntakePolicy = input.jobIntakePolicy;
-    this.#onSyncCompleted = input.options.onSyncCompleted;
   }
 
   /** 处理应用类内部的辅助逻辑。 */
@@ -637,14 +625,7 @@ export class JobSyncService {
       if (!finished) throw new Error('Sync run could not be finalized.');
       sync.cleanupSeen(runId);
     });
-    // 运行已提交，回调在事务外按自动评分策略补入匹配任务；回调失败不回滚同步结果。
-    if (this.#onSyncCompleted && scorableJobIds.length > 0) {
-      try {
-        this.#onSyncCompleted({ status, scorableJobIds: [...new Set(scorableJobIds)] });
-      } catch {
-        // 自动评分派生失败不阻断同步结论；任务入队失败可在任务页重试。
-      }
-    }
+    // 运行已提交；新增/修订职位交由同步任务的评分阶段（阶段 B）在事务外消费。
     return {
       kind: 'completed',
       runId,
@@ -653,6 +634,7 @@ export class JobSyncService {
       stats: finalStats,
       errorCategory,
       errorSummary,
+      scorableJobIds: [...new Set(scorableJobIds)],
       ...(runError ? { failureCause: runError } : {}),
     };
   }
