@@ -246,6 +246,23 @@ export const webJobDetailBatchSchema = z
 /** 应用层使用的类型约束。 */
 export type WebJobDetailBatch = z.infer<typeof webJobDetailBatchSchema>;
 
+/** 同步任务评分阶段进度 Schema，与任务输出的 scoring 字段同构。 */
+export const webSyncScoringProgressSchema = z
+  .object({
+    items: z.array(
+      z
+        .object({
+          jobId: z.string().trim().min(1),
+          status: z.enum(['succeeded', 'failed']),
+          result: z.unknown(),
+          error: z.string().nullable(),
+        })
+        .strict(),
+    ),
+    degraded: z.number().int().nonnegative(),
+  })
+  .strict();
+
 /** 通用任务详情 Schema。 */
 export const webTaskSchema = z
   .object({
@@ -264,6 +281,8 @@ export const webTaskSchema = z
     finishedAt: z.iso.datetime().nullable(),
     sourceSync: webSourceSyncTaskDetailSchema.nullable(),
     jobDetailBatch: webJobDetailBatchSchema.nullable(),
+    /** 同步任务评分阶段进度；非同步任务或未执行评分阶段时为 null。 */
+    syncScoring: webSyncScoringProgressSchema.nullable(),
   })
   .strict();
 

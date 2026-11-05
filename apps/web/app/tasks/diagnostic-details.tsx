@@ -287,6 +287,34 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                 </dl>
               </section>
             ) : null}
+            {task.syncScoring ? (
+              <section aria-label="评分阶段进度">
+                <h3>评分阶段进度</h3>
+                <dl className={['facts', styles.sourceFacts].filter(Boolean).join(' ')}>
+                  <div>
+                    <dt>已完成 / 总数</dt>
+                    <dd>
+                      {String(
+                        task.syncScoring.items.filter((item) => item.status === 'succeeded').length,
+                      )}{' '}
+                      / {String(task.syncScoring.items.length)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>失败</dt>
+                    <dd>
+                      {String(
+                        task.syncScoring.items.filter((item) => item.status === 'failed').length,
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>降级（模型不可用）</dt>
+                    <dd>{String(task.syncScoring.degraded)}</dd>
+                  </div>
+                </dl>
+              </section>
+            ) : null}
             {task.status === 'failed' || presentation.warning ? (
               <section
                 className={presentation.warning ? styles.warningDetail : styles.failureDetail}

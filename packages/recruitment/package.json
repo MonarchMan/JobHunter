@@ -19,6 +19,11 @@
       "types": "./dist/contracts/matching-jobs.d.ts",
       "import": "./dist/contracts/matching-jobs.js"
     },
+    "./contracts/sync-scoring": {
+      "development": "./src/contracts/sync-scoring.ts",
+      "types": "./dist/contracts/sync-scoring.d.ts",
+      "import": "./dist/contracts/sync-scoring.js"
+    },
     "./contracts/dashboard": {
       "development": "./src/contracts/dashboard.ts",
       "types": "./dist/contracts/dashboard.d.ts",

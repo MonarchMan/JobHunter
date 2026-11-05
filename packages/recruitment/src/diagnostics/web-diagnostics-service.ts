@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   webAgentRunDetailSchema,
   webDiagnosticsSchema,
+  webSyncScoringProgressSchema,
   webTaskMutationSchema,
   webTaskSchema,
   type WebSourceSyncTaskDetail,
@@ -73,6 +74,17 @@ function instant(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
 }
 
+/** 从任务结果提取评分阶段进度；旧结果或形状不符时按未执行评分处理。 */
+function presentSyncScoring(task: TaskRecord): z.infer<typeof webSyncScoringProgressSchema> | null {
+  if (task.taskType !== 'source.sync' || !task.result || typeof task.result !== 'object') {
+    return null;
+  }
+  const scoring = (task.result as { readonly scoring?: unknown }).scoring;
+  if (scoring === undefined) return null;
+  const parsed = webSyncScoringProgressSchema.safeParse(scoring);
+  return parsed.success ? parsed.data : null;
+}
+
 /** 执行应用层的解析、转换或编排辅助逻辑。 */
 function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): WebTask {
   const sourceSyncPayload =
@@ -117,6 +129,7 @@ function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): We
           })
         : null,
     jobDetailBatch: null,
+    syncScoring: presentSyncScoring(task),
   });
 }
 
@@ -147,6 +160,7 @@ function presentTaskEntry(
     finishedAt: instant(entry.finishedAt),
     sourceSync: null,
     jobDetailBatch: entry.batch,
+    syncScoring: null,
   });
 }
 

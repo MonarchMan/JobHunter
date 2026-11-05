@@ -187,6 +187,9 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
         'startedAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.started_at / 1000.0, 'unixepoch'),
         'finishedAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.finished_at / 1000.0, 'unixepoch'),
         'jobDetailBatch', NULL,
+        'syncScoring', CASE WHEN task.task_type = 'source.sync' AND
+            json_type(task.result_json, '$.scoring') = 'object' THEN
+          json_extract(task.result_json, '$.scoring') ELSE NULL END,
         'sourceSync', CASE WHEN source.id IS NULL THEN NULL ELSE json_object(
           'companyName', company.name, 'channel', channel.channel,
           'sourceSlug', source.slug, 'adapterKey', source.adapter_key,
