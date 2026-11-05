@@ -42,6 +42,15 @@ function stop(): void {
 }
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
+// 2.a、Windows 无法向子进程投递 POSIX 信号（kill 直接终止进程），父进程改经 IPC 请求优雅关闭。
+// 注册 message 监听会重新引用 IPC 通道，随后 unref 以免清理完成后事件循环被通道挂住。
+const onShutdownMessage = (message: unknown): void => {
+  if (message === 'shutdown') stop();
+};
+if (process.send) {
+  process.on('message', onShutdownMessage);
+  process.channel?.unref();
+}
 const exited = new Promise<void>((resolve) => {
   next.once('error', (error) => {
     console.error('Web 启动失败:', error);
@@ -72,5 +81,6 @@ try {
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
+    process.off('message', onShutdownMessage);
   }
 }

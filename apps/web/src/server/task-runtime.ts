@@ -17,7 +17,6 @@ import { SqliteProfileIdentityReader } from '@jobhunter/user/persistence/profile
 import { SqliteUserResourceReferenceReader } from '@jobhunter/user/persistence/resource-reference-reader';
 import { SqliteUserAgentReferenceReader } from '@jobhunter/user/persistence/agent-reference-reader';
 import { createMatchingTasks } from '@jobhunter/matching/tasks';
-import { createAutoScoringOnSyncCompleted } from '@jobhunter/matching/application';
 import { ProfileJobIntakePolicy } from '@jobhunter/matching/profile-job-intake-policy';
 import { ProfilePlatformSearchProvider } from '@jobhunter/matching/profile-platform-search';
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
@@ -62,13 +61,6 @@ export function createProductionTaskApplication(
           identities: new SqliteProfileIdentityReader(client),
           profiles,
           adviceEnabled: () => settings.get().matchingAutomation.adviceEnabled,
-        });
-        const onSyncCompleted = createAutoScoringOnSyncCompleted({
-          matching: matching.matchingRepository,
-          profiles,
-          tasks: context.tasks,
-          ids: context.ids,
-          clock: context.clock,
           automation: {
             readMatchingAutomation: () => settings.get().matchingAutomation,
           },
@@ -82,7 +74,7 @@ export function createProductionTaskApplication(
             new SqliteUserResourceReferenceReader(client),
             new SqliteMatchingResourceReferenceReader(client),
           ],
-          onSyncCompleted,
+          syncScoringStage: matching.syncScoringStage,
         });
         // 两个能力共用同一运行时；以组合能力对外释放，保持与原有逐一登记一致的关闭顺序。
         return {
