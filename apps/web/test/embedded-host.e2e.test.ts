@@ -54,6 +54,8 @@ it('starts the actual Web host, consumes tasks without a worker entry and shuts 
     ['--conditions=development', '--import', 'tsx', 'src/server/main.ts'],
     {
       cwd: path.resolve(import.meta.dirname, '..'),
+      // IPC 通道用于跨平台请求优雅关闭：Windows 的 child.kill 直接终止进程，子进程收不到信号。
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
       env: {
         ...process.env,
         DATA_ROOT: root.path,
@@ -65,7 +67,6 @@ it('starts the actual Web host, consumes tasks without a worker entry and shuts 
         NODE_ENV: 'development',
         NEXT_DIST_DIR: `.next-host-test-${randomUUID()}`,
       },
-      stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
   let output = '';
@@ -100,8 +101,9 @@ it('starts the actual Web host, consumes tasks without a worker entry and shuts 
     }
     expect(ready, output).toBe(true);
     expect(queue.get(taskId)).toMatchObject({ status: 'failed', errorCategory: 'cancelled' });
-    // 3、只向测试创建的宿主发信号，等待 Next、维护进程和任务资源一起关闭。
-    child.kill('SIGTERM');
+    // 3、只向测试创建的宿主请求关闭，等待 Next、维护进程和任务资源一起优雅退出。
+    // 经 IPC 通知而非信号：Windows 上 child.kill 直接终止进程，子进程无法执行清理。
+    child.send('shutdown');
     expect(await closed, output).toBe(0);
   } finally {
     if (child.exitCode === null && !child.killed) child.kill('SIGTERM');

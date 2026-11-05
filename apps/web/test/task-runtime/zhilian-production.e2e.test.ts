@@ -353,5 +353,6 @@ it.each(['campus', 'search', '51job'] as const)(
       await rm(root.path, { recursive: true, force: true });
     }
   },
-  30_000,
+  // 每个用例串联多次真实 CLI 子进程；全量套件并行时 CPU 饥饿会拖过 30 秒，放宽到 90 秒。
+  90_000,
 );

@@ -84,28 +84,50 @@ const silentLogger = {
   },
 };
 
+/** 构造同步结果桩：补齐 completed 变体的全部字段，调用方按场景覆盖。 */
+function completedSyncResult(overrides: {
+  readonly runId: string;
+  readonly status: 'succeeded' | 'partial' | 'failed' | 'cancelled';
+  readonly coverage: 'complete' | 'partial' | 'unknown';
+  readonly errorCategory?: string | null;
+  readonly errorSummary?: string | null;
+  readonly failureCause?: unknown;
+  readonly scorableJobIds?: readonly string[];
+}): unknown {
+  return {
+    kind: 'completed',
+    runId: overrides.runId,
+    status: overrides.status,
+    coverage: overrides.coverage,
+    stats: {
+      discovered: 0,
+      created: 0,
+      unchanged: 0,
+      revised: 0,
+      restored: 0,
+      staled: 0,
+      closed: 0,
+      isolated: 0,
+      skippedNonDomestic: 0,
+      skippedUnknownRegion: 0,
+      skippedOutOfScope: 0,
+      followupEnqueued: 0,
+    },
+    errorCategory: overrides.errorCategory ?? null,
+    errorSummary: overrides.errorSummary ?? null,
+    scorableJobIds: overrides.scorableJobIds ?? [],
+    ...(overrides.failureCause === undefined ? {} : { failureCause: overrides.failureCause }),
+  };
+}
+
 describe('source.sync handler', () => {
   it('validates payloads and delegates a successful run', async () => {
     const sourceId = '018f0000-0000-7000-8000-000000000002';
     const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
     const run = vi.fn(() =>
-      Promise.resolve({
-        kind: 'completed' as const,
-        runId,
-        status: 'succeeded' as const,
-        coverage: 'complete' as const,
-        stats: {
-          discovered: 0,
-          created: 0,
-          unchanged: 0,
-          revised: 0,
-          restored: 0,
-          staled: 0,
-          closed: 0,
-          isolated: 0,
-          followupEnqueued: 0,
-        },
-      }),
+      Promise.resolve(
+        completedSyncResult({ runId, status: 'succeeded', coverage: 'complete' }) as never,
+      ),
     );
     const handler = createSourceSyncTaskHandler({ run });
     const payload = handler.payloadSchema.parse({ sourceId, trigger: 'manual' });
@@ -141,23 +163,9 @@ describe('source.sync handler', () => {
       const index = sourceIds.indexOf(sourceId);
       const runId = runIds[index];
       if (!runId) throw new Error('Unexpected source identity in test.');
-      return Promise.resolve({
-        kind: 'completed' as const,
-        runId,
-        status: 'succeeded' as const,
-        coverage: 'complete' as const,
-        stats: {
-          discovered: 0,
-          created: 0,
-          unchanged: 0,
-          revised: 0,
-          restored: 0,
-          staled: 0,
-          closed: 0,
-          isolated: 0,
-          followupEnqueued: 0,
-        },
-      });
+      return Promise.resolve(
+        completedSyncResult({ runId, status: 'succeeded', coverage: 'complete' }) as never,
+      );
     });
     const handler = createSourceSyncTaskHandler({ run });
     const payload = handler.payloadSchema.parse({ sourceIds, trigger: 'schedule' });
@@ -191,23 +199,13 @@ describe('source.sync handler', () => {
     const run = vi.fn(({ sourceId }: { readonly sourceId: string }) =>
       sourceId === sourceIds[0]
         ? Promise.reject(new Error('first source temporarily unavailable'))
-        : Promise.resolve({
-            kind: 'completed' as const,
-            runId: parseId('018f0000-0000-7000-8000-000000000015', 'SyncRun'),
-            status: 'succeeded' as const,
-            coverage: 'complete' as const,
-            stats: {
-              discovered: 0,
-              created: 0,
-              unchanged: 0,
-              revised: 0,
-              restored: 0,
-              staled: 0,
-              closed: 0,
-              isolated: 0,
-              followupEnqueued: 0,
-            },
-          }),
+        : Promise.resolve(
+            completedSyncResult({
+              runId: parseId('018f0000-0000-7000-8000-000000000015', 'SyncRun'),
+              status: 'succeeded',
+              coverage: 'complete',
+            }) as never,
+          ),
     );
     const handler = createSourceSyncTaskHandler({ run });
     await expect(
@@ -228,23 +226,13 @@ describe('source.sync handler', () => {
     const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
     const handler = createSourceSyncTaskHandler({
       run: () =>
-        Promise.resolve({
-          kind: 'completed',
-          runId,
-          status: 'failed',
-          coverage: 'unknown',
-          stats: {
-            discovered: 0,
-            created: 0,
-            unchanged: 0,
-            revised: 0,
-            restored: 0,
-            staled: 0,
-            closed: 0,
-            isolated: 0,
-            followupEnqueued: 0,
-          },
-        }),
+        Promise.resolve(
+          completedSyncResult({
+            runId,
+            status: 'failed',
+            coverage: 'unknown',
+          }) as never,
+        ),
     });
 
     await expect(
@@ -264,28 +252,15 @@ describe('source.sync handler', () => {
     const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
     const handler = createSourceSyncTaskHandler({
       run: () =>
-        Promise.resolve({
-          kind: 'completed',
-          runId,
-          status: 'partial',
-          coverage: 'partial',
-          stats: {
-            discovered: 1,
-            created: 1,
-            unchanged: 0,
-            revised: 0,
-            restored: 0,
-            staled: 0,
-            closed: 0,
-            isolated: 0,
-            skippedNonDomestic: 0,
-            skippedUnknownRegion: 0,
-            skippedOutOfScope: 0,
-            followupEnqueued: 0,
-          },
-          errorCategory: 'temporary',
-          errorSummary: 'Pagination total changed.',
-        }),
+        Promise.resolve(
+          completedSyncResult({
+            runId,
+            status: 'partial',
+            coverage: 'partial',
+            errorCategory: 'temporary',
+            errorSummary: 'Pagination total changed.',
+          }) as never,
+        ),
     });
 
     await expect(
@@ -301,35 +276,102 @@ describe('source.sync handler', () => {
     ).rejects.toMatchObject({ category: 'network_temporary' });
   });
 
-  it('preserves an internal synchronization cause for Worker infrastructure recovery', async () => {
+  it('executes scoring stage after discovery and carries its progress in output', async () => {
     const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
-    const cause = Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' });
-    const handler = createSourceSyncTaskHandler({
+    const run = vi.fn(() =>
+      Promise.resolve(
+        completedSyncResult({
+          runId,
+          status: 'succeeded',
+          coverage: 'complete',
+          scorableJobIds: ['job-a', 'job-b'],
+        }) as never,
+      ),
+    );
+    const checkpoint = vi.fn();
+    const scoringStage = {
+      run: vi.fn(() =>
+        Promise.resolve({
+          kind: 'completed' as const,
+          progress: {
+            items: [
+              {
+                jobId: 'job-a',
+                status: 'succeeded' as const,
+                result: { matchResultId: 'm-a', matchAdviceId: null, degraded: false },
+                error: null,
+              },
+              {
+                jobId: 'job-b',
+                status: 'succeeded' as const,
+                result: { matchResultId: 'm-b', matchAdviceId: null, degraded: true },
+                error: null,
+              },
+            ],
+            degraded: 1,
+          },
+        }),
+      ),
+    };
+    const handler = createSourceSyncTaskHandler({ run }, { scoringStage });
+
+    const output = await handler.execute(
+      {
+        signal: new AbortController().signal,
+        clock: { now: () => utcInstant(1) },
+        logger: silentLogger,
+        services: {},
+        checkpoint,
+      },
+      { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'manual' },
+    );
+    expect(run).toHaveBeenCalledOnce();
+    expect(scoringStage.run).toHaveBeenCalledOnce();
+    expect(checkpoint).toHaveBeenCalled();
+    expect(output).toMatchObject({
+      runId,
+      status: 'succeeded',
+      coverage: 'complete',
+      scoring: { degraded: 1 },
+    });
+  });
+
+  it('fails the task with progress summary when scoring stage exhausts retries', async () => {
+    const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
+    const run = vi.fn(() =>
+      Promise.resolve(
+        completedSyncResult({
+          runId,
+          status: 'succeeded',
+          coverage: 'complete',
+          scorableJobIds: ['job-a', 'job-b'],
+        }) as never,
+      ),
+    );
+    const scoringStage = {
       run: () =>
         Promise.resolve({
-          kind: 'completed',
-          runId,
-          status: 'partial',
-          coverage: 'partial',
-          stats: {
-            discovered: 1,
-            created: 0,
-            unchanged: 0,
-            revised: 0,
-            restored: 0,
-            staled: 0,
-            closed: 0,
-            isolated: 0,
-            skippedNonDomestic: 0,
-            skippedUnknownRegion: 0,
-            skippedOutOfScope: 0,
-            followupEnqueued: 0,
+          kind: 'completed' as const,
+          progress: {
+            items: [
+              {
+                jobId: 'job-a',
+                status: 'succeeded' as const,
+                result: null,
+                error: null,
+              },
+              {
+                jobId: 'job-b',
+                status: 'failed' as const,
+                result: null,
+                error: '评分失败。',
+              },
+            ],
+            degraded: 0,
           },
-          errorCategory: 'internal',
-          errorSummary: 'Sync pipeline failed.',
-          failureCause: cause,
         }),
-    });
+    };
+    const handler = createSourceSyncTaskHandler({ run }, { scoringStage });
 
     await expect(
       handler.execute(
@@ -339,9 +381,100 @@ describe('source.sync handler', () => {
           logger: silentLogger,
           services: {},
         },
-        { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'retry' },
+        { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'manual' },
       ),
-    ).rejects.toMatchObject({ cause });
+    ).rejects.toMatchObject({
+      category: 'network_temporary',
+      safeSummary: '同步已提交；评分 1/2 完成。',
+    });
+  });
+
+  it('skips scoring stage entirely when the stage port is not injected', async () => {
+    const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
+    const run = vi.fn(() =>
+      Promise.resolve(
+        completedSyncResult({
+          runId,
+          status: 'succeeded',
+          coverage: 'complete',
+          scorableJobIds: ['job-a'],
+        }) as never,
+      ),
+    );
+    const handler = createSourceSyncTaskHandler({ run });
+    const output = await handler.execute(
+      {
+        signal: new AbortController().signal,
+        clock: { now: () => utcInstant(1) },
+        logger: silentLogger,
+        services: {},
+      },
+      { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'manual' },
+    );
+    expect(output).toMatchObject({ runId, status: 'succeeded' });
+    expect('scoring' in output).toBe(false);
+  });
+
+  it('skips completed discovery runs and resumes from checkpoint', async () => {
+    const sourceIds = [
+      '018f0000-0000-7000-8000-000000000012',
+      '018f0000-0000-7000-8000-000000000014',
+    ];
+    const runIds = [
+      parseId('018f0000-0000-7000-8000-000000000015', 'SyncRun'),
+      parseId('018f0000-0000-7000-8000-000000000016', 'SyncRun'),
+    ];
+    const fallbackRunId = parseId('018f0000-0000-7000-8000-000000000017', 'SyncRun');
+    const run = vi.fn(({ sourceId }: { readonly sourceId: string }) => {
+      const index = sourceIds.indexOf(sourceId);
+      return Promise.resolve(
+        completedSyncResult({
+          runId: runIds[index] ?? fallbackRunId,
+          status: 'succeeded',
+          coverage: 'complete',
+          scorableJobIds: [sourceId === sourceIds[0] ? 'job-x' : 'job-y'],
+        }) as never,
+      );
+    });
+    const scoringStage = {
+      run: vi.fn(() =>
+        Promise.resolve({
+          kind: 'completed' as const,
+          progress: { items: [], degraded: 0 },
+        }),
+      ),
+    };
+    const handler = createSourceSyncTaskHandler({ run }, { scoringStage });
+    const resume = {
+      runs: [
+        {
+          sourceId: sourceIds[0] ?? '',
+          runId: runIds[0] ?? fallbackRunId,
+          status: 'succeeded' as const,
+          coverage: 'complete' as const,
+        },
+      ],
+      accJobIds: ['job-x'],
+    };
+    const output = await handler.execute(
+      {
+        signal: new AbortController().signal,
+        clock: { now: () => utcInstant(1) },
+        logger: silentLogger,
+        services: {},
+      },
+      { sourceIds, trigger: 'manual', resume },
+    );
+    // 1、恢复时跳过已完成来源，只补跑剩余来源；评分阶段收到累计职位并集。
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]?.[0]).toMatchObject({ sourceId: sourceIds[1] });
+    expect(scoringStage.run).toHaveBeenCalledOnce();
+    expect(output).toMatchObject({
+      runs: [
+        { sourceId: sourceIds[0], status: 'succeeded' },
+        { sourceId: sourceIds[1], status: 'succeeded' },
+      ],
+    });
   });
 });
 

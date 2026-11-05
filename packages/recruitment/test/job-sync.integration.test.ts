@@ -197,12 +197,6 @@ afterEach(async () => {
 });
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
-interface SyncCompletedCall {
-  readonly status: string;
-  readonly scorableJobIds: readonly string[];
-}
-
-/** 构造测试输入或执行断言的辅助逻辑。 */
 interface SyncFixture {
   readonly root: Awaited<ReturnType<typeof createTemporaryDataRoot>>;
   readonly handle: SqliteDatabaseHandle;
@@ -211,7 +205,6 @@ interface SyncFixture {
   readonly scenario: AdapterScenario;
   readonly service: JobSyncService;
   readonly uow: SqliteUnitOfWork;
-  readonly syncCompletedCalls: SyncCompletedCall[];
 }
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -220,8 +213,6 @@ async function setup(
     readonly rejectAllJobs?: boolean;
     readonly deferredDetails?: boolean;
     readonly requiredDetails?: boolean;
-    /** 注入同步完成回调；true 表示记录调用，便于断言自动评分派生输入。 */
-    readonly onSyncCompleted?: boolean;
   } = {},
 ): Promise<SyncFixture> {
   const root = await createTemporaryDataRoot('jobhunter-sync-');
@@ -278,7 +269,6 @@ async function setup(
   const registry = new AdapterRegistry();
   registry.register(fixtureAdapter(scenario, options.deferredDetails, options.requiredDetails));
   const uow = new SqliteUnitOfWork(handle.client);
-  const syncCompletedCalls: SyncCompletedCall[] = [];
   const service = new JobSyncService({
     uow,
     registry,
@@ -296,12 +286,9 @@ async function setup(
       : {}),
     options: {
       normalizerVersion: 'normalize-v1',
-      ...(options.onSyncCompleted
-        ? { onSyncCompleted: (call: SyncCompletedCall) => syncCompletedCalls.push(call) }
-        : {}),
     },
   });
-  return { root, handle, clock, ids, scenario, service, uow, syncCompletedCalls };
+  return { root, handle, clock, ids, scenario, service, uow };
 }
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -331,33 +318,30 @@ function count(handle: SqliteDatabaseHandle, table: string): number {
 }
 
 describe('JobSyncService', () => {
-  it('reports newly created job revisions to the sync-completed callback only for new content', async () => {
-    const fixture = await setup({ onSyncCompleted: true });
-    // 1、首次完整同步创建 3 个职位，回调收到全部 3 个新修订职位 ID。
-    await run(fixture);
-    expect(fixture.syncCompletedCalls).toHaveLength(1);
-    const first = fixture.syncCompletedCalls[0];
-    if (!first) throw new Error('Missing first sync-completed call.');
-    expect(first.status).toBe('succeeded');
+  it('exposes newly created job revision IDs in the completed result only for new content', async () => {
+    const fixture = await setup();
+    // 1、首次完整同步创建 3 个职位，结果携带全部 3 个新修订职位 ID。
+    const first = await run(fixture);
+    expect(first).toMatchObject({ status: 'succeeded' });
+    if (first.kind !== 'completed') throw new Error('Expected completed run.');
     expect(first.scorableJobIds).toHaveLength(3);
-    // 2、相同内容重放不创建新修订，回调不再触发。
-    await run(fixture);
-    expect(fixture.syncCompletedCalls).toHaveLength(1);
-    // 3、仅一条 JD 变化时，回调只收到该职位的新修订 ID。
+    // 2、相同内容重放不创建新修订，评分范围为空。
+    const replay = await run(fixture);
+    if (replay.kind !== 'completed') throw new Error('Expected completed run.');
+    expect(replay.scorableJobIds).toHaveLength(0);
+    // 3、仅一条 JD 变化时，结果只包含该职位的新修订 ID。
     const changed = fixture.scenario.jobs[0];
     if (!changed) throw new Error('Missing fixture job.');
     fixture.scenario.jobs[0] = { ...changed, description: 'Changed requirements.' };
-    await run(fixture);
-    expect(fixture.syncCompletedCalls).toHaveLength(2);
-    const second = fixture.syncCompletedCalls[1];
-    if (!second) throw new Error('Missing second sync-completed call.');
-    expect(second.scorableJobIds).toHaveLength(1);
+    const revised = await run(fixture);
+    if (revised.kind !== 'completed') throw new Error('Expected completed run.');
+    expect(revised.scorableJobIds).toHaveLength(1);
     const changedJobId = fixture.handle.client
       .prepare("SELECT id FROM jobs WHERE external_job_id = 'job-1'")
       .pluck()
       .get() as string;
-    expect(second.scorableJobIds).toEqual([changedJobId]);
-    // 4、自动评分派生不属于详情补全任务，followupEnqueued 保持为 0。
+    expect(revised.scorableJobIds).toEqual([changedJobId]);
+    // 4、评分阶段消费 scorableJobIds 但不入队新任务，followupEnqueued 保持为 0。
     const stats = fixture.handle.client
       .prepare('SELECT stats_json FROM sync_runs ORDER BY rowid DESC LIMIT 1')
       .pluck()
@@ -366,21 +350,14 @@ describe('JobSyncService', () => {
     expect(parsed.followupEnqueued).toBe(0);
   });
 
-  it('does not invoke the sync-completed callback when it is not injected', async () => {
+  it('exposes scorable job IDs for partial runs with completed discoveries', async () => {
     const fixture = await setup();
-    await run(fixture);
-    expect(fixture.syncCompletedCalls).toHaveLength(0);
-  });
-
-  it('skips the sync-completed callback for failed or cancelled runs', async () => {
-    const fixture = await setup({ onSyncCompleted: true });
     fixture.scenario.throwAfter = 1;
     const result = await run(fixture);
     expect(result).toMatchObject({ status: 'partial' });
-    // partial 运行已处理 1 条新修订，回调仍触发以便对可靠数据评分。
-    expect(fixture.syncCompletedCalls).toHaveLength(1);
-    expect(fixture.syncCompletedCalls[0]?.status).toBe('partial');
-    expect(fixture.syncCompletedCalls[0]?.scorableJobIds).toHaveLength(1);
+    // partial 运行已处理 1 条新修订，结果携带该职位 ID 供评分阶段在可靠数据上执行。
+    if (result.kind !== 'completed') throw new Error('Expected completed run.');
+    expect(result.scorableJobIds).toHaveLength(1);
   });
 
   it('repairs legacy content timestamps from revisions without changing source or observation data', async () => {
