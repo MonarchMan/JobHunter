@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { AsyncSemaphore } from '../concurrency/async-semaphore.js';
 import { TaskExecutionError, classifyTaskError } from '../scheduling/retry-policy.js';
 import { toThreadSchema, checkThreadMessageSize } from './thread-protocol.js';
+import { threadStorageFailure } from './thread-storage-error.js';
 import type { TaskApplication } from '../host/runtime.js';
 import type { TaskRecord } from '../contracts/model.js';
 
@@ -119,6 +120,7 @@ export async function serveTaskThread(
           id: data.id,
           category: classified.category,
           summary: classified.safeSummary,
+          storageFailure: threadStorageFailure(error),
           retryable: classified.retryable,
           retryAfterAt: classified.retryAfterAt,
           result: classified.result,

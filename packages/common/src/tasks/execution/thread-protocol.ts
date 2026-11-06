@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { threadStorageFailureSchema } from './thread-storage-error.js';
 
 /** 线程消息只传校验后的任务与关联身份；凭据和大型正文不进入诊断。 */
 export const toThreadSchema = z.discriminatedUnion('kind', [
@@ -59,6 +60,7 @@ export const fromThreadSchema = z.discriminatedUnion('kind', [
       'permanent',
     ]),
     summary: z.string().max(240),
+    storageFailure: threadStorageFailureSchema.optional(),
     retryable: z.boolean().nullable(),
     retryAfterAt: z.number().nullable(),
     result: z.unknown().optional(),

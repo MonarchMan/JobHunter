@@ -1,9 +1,81 @@
 import { expect, it } from 'vitest';
+import { Worker } from 'node:worker_threads';
 import { z } from 'zod';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { createTaskRuntime } from '@jobhunter/common/task-runtime';
 import { voidTaskOutputSchema } from '@jobhunter/common/tasks';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
+import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
+import { utcInstant } from '@jobhunter/common/domain';
+import { ThreadTaskExecutor } from '../../src/tasks/execution/thread-executor.js';
+import { AsyncSemaphore } from '../../src/tasks/concurrency/async-semaphore.js';
+
+it.each(['SQLITE_BUSY_SNAPSHOT', 'maintenance'])(
+  'recovers wrapped storage failures through the real pool instead of permanently failing: %s',
+  async (code) => {
+    const root = await createTemporaryDataRoot('jobhunter-thread-storage-recovery-');
+    const entry = new URL('../fixtures/task-executor.ts', import.meta.url).href;
+    const pool = new ThreadTaskExecutor(
+      () =>
+        new Worker(
+          `require('tsx/esm/api').tsImport(${JSON.stringify(entry)}, require('node:url').pathToFileURL(process.cwd()+'/').href)`,
+          { eval: true, execArgv: ['--conditions=development'] },
+        ),
+      new AsyncSemaphore(1),
+    );
+    const application = createTaskRuntime(
+      { dataRoot: root.path, executor: pool, periodicEnabled: false },
+      [
+        ({ registry }) => {
+          registry.register({
+            taskType: 'fixture.storage-error',
+            payloadSchema: z.object({ code: z.string() }),
+            outputSchema: z.unknown(),
+            defaultMaxAttempts: 2,
+            leaseDurationMs: 10_000,
+            execute: () => Promise.reject(new Error('Must execute in a worker thread')),
+          });
+          return { close: () => pool.close() };
+        },
+      ],
+    );
+    const database = openSqliteDatabase({ dataRoot: root.path });
+    try {
+      await pool.initialize();
+      const queued = application.request?.('enqueue', {
+        taskType: 'fixture.storage-error',
+        payload: { code },
+        idempotencyKey: 'storage-recovery',
+      }) as { taskId: string };
+      // 1、第一轮错误跨线程返回后停止续租，不写成业务永久失败。
+      expect(await application.engine.runOnce()).toBe(true);
+      expect(application.request?.('query', { taskId: queued.taskId })).toMatchObject({
+        status: 'running',
+        attemptCount: 1,
+        errorCategory: null,
+      });
+      // 2、仅推进合成任务的过期租约，验证既有恢复路径可以再次领取并成功。
+      database.client
+        .prepare('UPDATE tasks SET lease_expires_at = 0 WHERE id = ?')
+        .run(queued.taskId);
+      expect(
+        new SqliteTaskRepository(database.client).recoverExpired(utcInstant(Date.now())),
+      ).toEqual({
+        recovered: 1,
+        exhausted: 0,
+      });
+      expect(await application.engine.runOnce()).toBe(true);
+      expect(application.request?.('query', { taskId: queued.taskId })).toMatchObject({
+        status: 'succeeded',
+        attemptCount: 2,
+      });
+    } finally {
+      database.close();
+      await application.close();
+      await root.cleanup();
+    }
+  },
+);
 
 it('does not claim without pool capacity and follows only the selected workflow children', async () => {
   const root = await createTemporaryDataRoot('jobhunter-runtime-workflow-');

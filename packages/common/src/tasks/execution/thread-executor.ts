@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { AsyncSemaphore } from '../concurrency/async-semaphore.js';
 import { TaskExecutionError } from '../scheduling/retry-policy.js';
 import { fromThreadSchema, checkThreadMessageSize } from './thread-protocol.js';
+import { restoreThreadStorageFailure } from './thread-storage-error.js';
 import type { TaskHandlerContext, TaskRecord } from '../contracts/model.js';
 import type { TaskExecutionPort, TaskExecutionReservation } from '../scheduling/worker-engine.js';
 
@@ -409,6 +410,7 @@ export class ThreadTaskExecutor implements TaskExecutionPort {
     else
       request.reject(
         new TaskExecutionError(data.category, data.summary, {
+          cause: restoreThreadStorageFailure(data.storageFailure),
           ...(data.retryable === null ? {} : { retryable: data.retryable }),
           ...(data.retryAfterAt === null
             ? {}

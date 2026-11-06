@@ -8,6 +8,7 @@ import {
 } from '../../src/tasks/execution/thread-executor.js';
 import { AsyncSemaphore } from '../../src/tasks/concurrency/async-semaphore.js';
 import type { TaskRecord, TaskHandlerContext } from '../../src/tasks/contracts/model.js';
+import { isSqliteUnavailableError } from '../../src/persistence/busy-error.js';
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected available capacity');
@@ -82,6 +83,45 @@ async function until(check: () => boolean): Promise<void> {
 }
 
 describe('bounded task thread pool', () => {
+  it.each([
+    'SQLITE_BUSY_SNAPSHOT',
+    'SQLITE_LOCKED_SHAREDCACHE',
+    'maintenance',
+    'SQLITE_CONSTRAINT_UNIQUE',
+  ])(
+    'preserves storage failure classification across real threads without sending SQL: %s',
+    async (code) => {
+      const entry = new URL('../fixtures/task-executor.ts', import.meta.url).href;
+      const pool = new ThreadTaskExecutor(
+        () =>
+          new Worker(
+            `require('tsx/esm/api').tsImport(${JSON.stringify(entry)}, require('node:url').pathToFileURL(process.cwd()+'/').href)`,
+            { eval: true, execArgv: ['--conditions=development'] },
+          ),
+        new AsyncSemaphore(1),
+      );
+      pools.push(pool);
+      await pool.initialize();
+      const reservation = required(pool.reserve('fixture.storage-error'));
+      let failure: unknown;
+      try {
+        await reservation.execute(
+          { ...task(), taskType: 'fixture.storage-error', payload: { code } },
+          context(),
+        );
+      } catch (error) {
+        failure = error;
+      } finally {
+        reservation.release();
+      }
+      if (!(failure instanceof Error)) throw new Error('Expected a task execution error');
+      expect(failure.message).toBe('Sync pipeline failed.');
+      expect(failure.cause).toBeInstanceOf(Error);
+      expect(isSqliteUnavailableError(failure)).toBe(code !== 'SQLITE_CONSTRAINT_UNIQUE');
+      expect(String(failure.cause)).not.toContain('private SQL text');
+    },
+  );
+
   it('shares global network permits and source tokens across real application threads', async () => {
     const network = new AsyncSemaphore(1);
     const entry = new URL('../fixtures/task-executor.ts', import.meta.url).href;

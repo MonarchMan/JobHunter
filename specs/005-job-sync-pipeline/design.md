@@ -4,6 +4,8 @@
 
 ## 应用服务
 
+招聘 `UnitOfWork` 的同步短事务统一使用 `BEGIN IMMEDIATE`，在查询当前职位前预留写入权，避免宿主调度连接提交后出现 `SQLITE_BUSY_SNAPSHOT`。网络、浏览器和模型操作仍不得进入事务；遇到真正的锁忙或维护拒写时，底层分类跨工作线程保留，由任务宿主按现有租约恢复规则处理，不能记为业务永久失败。
+
 保留策略以 [ADR-0051](../../docs/adr/0051-current-job-content-only.md) 为准，覆盖下文旧时序历史描述：Revision ID 是当前内容代际而非保留历史。SQLite 内容插入触发器在同一事务中删除旧代际和推导结果、取消旧任务并重绑观察；禁止保留 change_set_json 中的旧内容。仅保留最新一条，不影响职位稳定 ID 和列表投影。
 
 `JobSyncService.run(command, signal)` 负责运行级编排：

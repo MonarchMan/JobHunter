@@ -15,7 +15,9 @@ export class SqliteUnitOfWork implements UnitOfWork {
       sync: new SqliteSyncRepository(client),
       tasks: new SqliteTaskRepository(client),
     };
-    this.#transaction = client.transaction((work: () => unknown) => work()) as <TResult>(
+    // 1、读取前预留写入权，避免调度连接提交后，旧 WAL 读快照升级写入时报 SQLITE_BUSY_SNAPSHOT。
+    const transaction = client.transaction((work: () => unknown) => work());
+    this.#transaction = ((work) => transaction.immediate(work)) as <TResult>(
       work: () => TResult,
     ) => TResult;
   }

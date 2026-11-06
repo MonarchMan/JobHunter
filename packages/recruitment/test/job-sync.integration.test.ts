@@ -324,6 +324,41 @@ function count(handle: SqliteDatabaseHandle, table: string): number {
 }
 
 describe('JobSyncService', () => {
+  it('reserves the writer before reading jobs so scheduler writes cannot invalidate the sync snapshot', async () => {
+    const fixture = await setup();
+    const scheduler = openSqliteDatabase({ dataRoot: fixture.root.path, busyTimeoutMs: 0 });
+    let competingWrite: unknown;
+    let attempted = false;
+    try {
+      // 1、在同一短事务的读取与写入之间模拟另一连接提交，稳定重现 WAL 快照升级竞争。
+      fixture.uow.run(({ jobs }) => {
+        const findCurrent = jobs.findCurrent.bind(jobs);
+        vi.spyOn(jobs, 'findCurrent').mockImplementation((identity) => {
+          const current = findCurrent(identity);
+          if (!attempted) {
+            attempted = true;
+            try {
+              scheduler.client.prepare('UPDATE companies SET updated_at = updated_at + 1').run();
+            } catch (error) {
+              competingWrite = error;
+            }
+          }
+          return current;
+        });
+      });
+      // 2、业务事务先取得写入权，竞争者退避；同步不应留下半截统计或通用失败。
+      expect(await run(fixture)).toMatchObject({
+        status: 'succeeded',
+        stats: { discovered: 3, created: 3 },
+      });
+      expect(attempted).toBe(true);
+      expect(competingWrite).toMatchObject({ code: 'SQLITE_BUSY' });
+      scheduler.client.prepare('UPDATE companies SET updated_at = updated_at + 1').run();
+    } finally {
+      scheduler.close();
+    }
+  });
+
   it('exposes newly created job revision IDs in the completed result only for new content', async () => {
     const fixture = await setup();
     // 1、首次完整同步创建 3 个职位，结果携带全部 3 个新修订职位 ID。
