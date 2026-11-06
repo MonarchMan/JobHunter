@@ -1,0 +1,98 @@
+.createForm {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) minmax(8rem, 0.6fr) minmax(12rem, 1fr) auto;
+  align-items: end;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.createForm > *,
+.sessionPicker > * {
+  min-width: 0;
+}
+
+.createForm label,
+.field,
+.sessionPicker,
+.messageForm label {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.createForm input,
+.messageForm textarea,
+.createForm :global([data-authored-select-trigger]),
+.sessionPicker :global([data-authored-select-trigger]) {
+  width: 100%;
+  max-width: 100%;
+}
+
+.sessionPicker {
+  max-width: 32rem;
+  margin: 1.5rem 0;
+}
+
+.messages {
+  display: grid;
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.messages li {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+
+.userMessage {
+  background: var(--canvas);
+}
+
+.assistantMessage {
+  background: var(--surface);
+}
+
+.messageText {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.7;
+}
+
+.messageForm {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.messageForm > button {
+  justify-self: start;
+}
+
+.messageForm textarea {
+  resize: vertical;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+@media (max-width: 1000px) {
+  .createForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .createForm > button {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 600px) {
+  .createForm {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

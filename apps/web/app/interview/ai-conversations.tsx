@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import type { AiSessionService } from '@jobhunter/user/ai/service';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import { SelectField } from '../components/forms/select-field.js';
+import styles from './ai-conversations.module.css';
 
 type Detail = ReturnType<AiSessionService['detail']>;
 /** 通用会话界面；回复任务独立执行，刷新只查询消息，不重复发布。 */
@@ -24,26 +26,37 @@ export function AiConversations({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [edited, setEdited] = useState('');
-  const load = async (id: string): Promise<void> => {
-    const response = await fetch(`/api/ai/sessions/${id}`);
+  const selection = useRef(selected);
+  const latestLoad = useRef(0);
+  /** 响应只写入当前会话，旧请求和已取消的轮询不能覆盖新消息。 */
+  const load = async (id: string, signal?: AbortSignal): Promise<void> => {
+    const request = ++latestLoad.current;
+    const response = await fetch(`/api/ai/sessions/${id}`, { signal: signal ?? null });
     const body = (await response.json()) as { data: Detail; error?: { message: string } };
     if (!response.ok) throw new Error(body.error?.message ?? '读取会话失败。');
-    setDetail(body.data);
+    if (request === latestLoad.current && selection.current === id && !signal?.aborted)
+      setDetail(body.data);
   };
   useEffect(() => {
     if (!selected) return;
-    let active = true;
-    const refresh = (): void => {
-      if (active)
-        void load(selected).catch(() => {
-          if (active) setError('读取会话失败。');
-        });
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // 每轮读取结束后再安排下次读取，避免慢请求堆积和响应顺序倒置。
+    const refresh = async (): Promise<void> => {
+      try {
+        await load(selected, controller.signal);
+      } catch {
+        if (!controller.signal.aborted) setError('读取会话失败。');
+      }
+      if (!controller.signal.aborted)
+        timer = setTimeout(() => {
+          void refresh();
+        }, 2000);
     };
-    refresh();
-    const timer = setInterval(refresh, 2000);
+    void refresh();
     return () => {
-      active = false;
-      clearInterval(timer);
+      controller.abort();
+      clearTimeout(timer);
     };
   }, [selected]);
   const mutate = async (url: string, method: string, value: unknown): Promise<unknown> => {
@@ -70,6 +83,7 @@ export function AiConversations({
   return (
     <section className="panel-block" aria-label="AI 会话">
       <form
+        className={styles.createForm}
         onSubmit={(event) => {
           event.preventDefault();
           action(async () => {
@@ -84,6 +98,10 @@ export function AiConversations({
                 : {}),
             })) as Detail['session'];
             setItems((previous) => [created, ...previous]);
+            selection.current = created.id;
+            setDetail(null);
+            setEditing(null);
+            setText('');
             setSelected(created.id);
           });
         }}
@@ -92,6 +110,7 @@ export function AiConversations({
           会话名称
           <input
             value={title}
+            disabled={busy}
             onChange={(event) => {
               setTitle(event.target.value);
             }}
@@ -99,66 +118,79 @@ export function AiConversations({
             maxLength={160}
           />
         </label>
-        <label>
-          会话类别
-          <select
+        <div className={styles.field}>
+          <span>会话类别</span>
+          <SelectField
+            name="sessionType"
+            label="会话类别"
             value={type}
-            onChange={(event) => {
-              setType(event.target.value as typeof type);
+            disabled={busy}
+            onValueChange={(value) => {
+              setType(value as typeof type);
             }}
-          >
-            <option value="interview">模拟面试</option>
-            <option value="chat">日常对话</option>
-          </select>
-        </label>
-        <label>
-          关联项目（可选）
-          <select
+            options={[
+              { value: 'interview', label: '模拟面试' },
+              { value: 'chat', label: '日常对话' },
+            ]}
+          />
+        </div>
+        <div className={styles.field}>
+          <span>关联项目（可选）</span>
+          <SelectField
+            name="project"
+            label="关联项目（可选）"
             value={project}
-            onChange={(event) => {
-              setProject(event.target.value);
-            }}
-          >
-            <option value="">不关联项目</option>
-            {projects.map((item) => (
-              <option
-                key={`${item.profileId}:${item.projectId}`}
-                value={`${item.profileId}:${item.projectId}`}
-              >
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button disabled={busy}>新建会话</button>
+            disabled={busy}
+            onValueChange={setProject}
+            options={[
+              { value: '', label: '不关联项目' },
+              ...projects.map((item) => ({
+                value: `${item.profileId}:${item.projectId}`,
+                label: item.name,
+              })),
+            ]}
+          />
+        </div>
+        <button className="button-primary" disabled={busy || !title.trim()}>
+          新建会话
+        </button>
       </form>
-      <label>
-        选择会话
-        <select
+      <div className={styles.sessionPicker}>
+        <span>选择会话</span>
+        <SelectField
+          name="session"
+          label="选择会话"
           value={selected}
-          onChange={(event) => {
+          disabled={busy || items.length === 0}
+          onValueChange={(id) => {
+            selection.current = id;
             setDetail(null);
-            setSelected(event.target.value);
+            setEditing(null);
+            setEdited('');
+            setText('');
+            setError('');
+            setSelected(id);
           }}
-        >
-          <option value="">请选择</option>
-          {items.map((session) => (
-            <option key={session.id} value={session.id}>
-              {session.title}
-            </option>
-          ))}
-        </select>
-      </label>
+          options={[
+            { value: '', label: items.length ? '请选择' : '暂无会话' },
+            ...items.map((session) => ({ value: session.id, label: session.title })),
+          ]}
+        />
+      </div>
       {error ? <p role="alert">{error}</p> : null}
       {detail?.session.id === selected ? (
         <>
           <h2>{detail.session.title}</h2>
-          <ol aria-label="对话消息" style={{ paddingInlineStart: '1.5rem' }}>
+          <ol aria-label="对话消息" className={styles.messages}>
             {detail.messages.map((message) => (
-              <li key={message.id}>
+              <li
+                key={message.id}
+                className={message.role === 'user' ? styles.userMessage : styles.assistantMessage}
+              >
                 <strong>{message.role === 'user' ? '你' : 'AI'}</strong>
                 {editing === message.id ? (
                   <form
+                    className={styles.messageForm}
                     onSubmit={(event) => {
                       event.preventDefault();
                       action(async () => {
@@ -176,24 +208,33 @@ export function AiConversations({
                       修改回答
                       <textarea
                         value={edited}
+                        disabled={busy}
                         onChange={(event) => {
                           setEdited(event.target.value);
                         }}
                         required
+                        maxLength={20000}
+                        rows={4}
                       />
                     </label>
-                    <button disabled={busy}>保存回答</button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditing(null);
-                      }}
-                    >
-                      取消修改
-                    </button>
+                    <div className={styles.actions}>
+                      <button className="button-primary" disabled={busy || !edited.trim()}>
+                        保存回答
+                      </button>
+                      <button
+                        type="button"
+                        className="button-secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          setEditing(null);
+                        }}
+                      >
+                        取消修改
+                      </button>
+                    </div>
                   </form>
                 ) : (
-                  <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  <p className={styles.messageText}>
                     {message.content ||
                       {
                         pending: '正在生成…',
@@ -206,6 +247,8 @@ export function AiConversations({
                 {message.role === 'user' && editing !== message.id ? (
                   <button
                     type="button"
+                    className="button-secondary"
+                    disabled={busy}
                     onClick={() => {
                       setEditing(message.id);
                       setEdited(message.content);
@@ -218,6 +261,7 @@ export function AiConversations({
             ))}
           </ol>
           <form
+            className={styles.messageForm}
             onSubmit={(event) => {
               event.preventDefault();
               action(async () => {
@@ -231,23 +275,30 @@ export function AiConversations({
               消息
               <textarea
                 value={text}
+                disabled={busy}
                 onChange={(event) => {
                   setText(event.target.value);
                 }}
                 maxLength={20000}
                 required
+                rows={4}
               />
             </label>
             <button
-              disabled={busy || detail.messages.some((message) => message.status === 'pending')}
+              className="button-primary"
+              disabled={
+                busy ||
+                !text.trim() ||
+                detail.messages.some((message) => message.status === 'pending')
+              }
             >
               发送
             </button>
           </form>
         </>
-      ) : (
-        <p>创建或选择一个会话即可开始。</p>
-      )}
+      ) : !error ? (
+        <p className="muted">{selected ? '正在读取会话…' : '创建或选择一个会话即可开始。'}</p>
+      ) : null}
     </section>
   );
 }

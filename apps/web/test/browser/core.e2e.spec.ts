@@ -136,7 +136,8 @@ test.describe('校招实习管理台核心流程', () => {
   }) => {
     await page.goto('/interview');
     await page.getByLabel('会话名称').fill('项目模拟面试');
-    await page.getByLabel('关联项目（可选）').selectOption({ index: 1 });
+    await page.getByRole('combobox', { name: '关联项目（可选）' }).click();
+    await page.getByRole('option').nth(1).click();
     await page.getByRole('button', { name: '新建会话' }).click();
     await expect(page.getByRole('heading', { name: '项目模拟面试' })).toBeVisible();
     await page.getByRole('textbox', { name: '消息', exact: true }).fill('请开始面试');
