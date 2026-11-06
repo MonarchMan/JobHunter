@@ -44,6 +44,13 @@ recruitment 和 user 只依赖 common；matching 依赖 common 及两者的纯�
 
 ## 6. Git 提交说明
 
-提交说明按独立目的和领域归纳，使用 Conventional Commits 格式 `<type>(<scope>): <description>`，描述使用简洁的中文动宾短语。同一次提交可以包含不同 scope 的条目，但同一 scope 只浓缩为一条，例如 `feat(recruitment)` 和 `fix(web)`。
+提交说明按独立目的和领域归纳，使用 Conventional Commits 格式 `<type>(<scope>): <description>`，描述使用简洁的中文动宾短语。同一次提交可以包含不同scope的条目，但同一scope只浓缩为一条，例如 `feat(recruitment)` 和 `fix(web)`。
 
-首行简洁概括整体目的，空一行后按上述格式分别列出各 scope 的主条目。确需说明原因、关键行为或兼容性时补充简短正文，不重复标题，不逐项罗列文件和配套工作。不兼容变更使用 `!` 并补充 `BREAKING CHANGE:`。提交末尾附加 `Co-Authored-By: Claude Code <noreply@anthropic.com>`。
+首行简洁概括整体目的，空一行后按上述格式分别列出各scope的主条目。确需说明原因、关键行为或兼容性时补充简短正文，不重复标题，不逐项罗列文件和配套工作。不兼容变更使用 `!` 并补充 `BREAKING CHANGE:`。
+
+示例：“
+修复模型协商重复请求并提升 Agent 输出预算与错误诊断
+
+fix(common): 模型客户端按实例缓存结构化输出协商结果避免重复请求
+feat(matching): 提升 JobUnderstanding/JobAdvice 输出预算与超时避免证据截断
+”

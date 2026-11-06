@@ -1,5 +1,4 @@
 import type { EnqueueTaskResult, TaskRecord } from '@jobhunter/common/tasks';
-import { TaskServiceConnectionError } from '@jobhunter/common/task-service';
 import type {
   SourceChannelOverview,
   SourceOverview,
@@ -48,30 +47,16 @@ function container(get: () => Readonly<Record<string, string>> = () => ({ app: '
 }
 
 describe('CLI framework', () => {
-  it('renders an actionable central service configuration conflict', async () => {
+  it('rejects removed background service commands', async () => {
     const output = memoryIo();
-    const fixture: CliContainer = {
-      ...container().value,
-      taskService: {
-        status: () => Promise.resolve({ status: 'incompatible' }),
-        stop: () => Promise.resolve(),
-        restart: () => Promise.reject(new TaskServiceConnectionError('incompatible')),
-      },
-    };
     expect(
       await runCli({
         argv: ['--json', 'task', 'service', 'restart'],
-        container: fixture,
+        container: container().value,
         io: output.io,
       }),
     ).toBe(cliExitCode.usage);
-    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
-      ok: false,
-      error: {
-        code: 'TASK_SERVICE_INCOMPATIBLE',
-        message: '中央任务服务的配置与当前入口不一致，请执行 task service restart。',
-      },
-    });
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({ ok: false });
   });
 
   it('renders human output and closes the container', async () => {

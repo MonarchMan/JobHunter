@@ -1,8 +1,8 @@
-import { startCentralTaskService } from '../../src/tasks/service-host.js';
+import { startTaskHostBridge } from '../../src/tasks/host-bridge.js';
 
 const dataRoot = process.argv[2];
 if (!dataRoot) throw new Error('Missing fixture data root');
-const service = await startCentralTaskService({
+const service = await startTaskHostBridge({
   dataRoot,
   configuration: 'process-fixture',
   createRuntime: () => ({
@@ -16,5 +16,8 @@ const service = await startCentralTaskService({
   }),
 });
 process.send?.({ ready: service !== null, pid: process.pid });
+process.on('message', (message) => {
+  if (message === 'shutdown') void service?.close();
+});
 if (service) await service.finished;
 if (process.connected) process.disconnect();

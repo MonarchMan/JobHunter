@@ -75,9 +75,11 @@ pnpm --filter @jobhunter/web dev
 
 未配置可选模型时，`doctor` 会显示 `degraded` 并返回退出码 4；基础初始化仍已完成，可以继续启动 Web。
 
-然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。CLI 初始化、提交任务或 Web 启动时按需连接同一中央任务服务，由独立执行进程消费任务；关闭 CLI/Web 不会停止后台任务。没有独立 Worker 入口。
+然后打开 [http://127.0.0.1:3210/](http://127.0.0.1:3210/)。每个数据目录只允许一个 Web/CLI 宿主。主线程调度，有界动态 Worker 线程池执行任务，线程内异步并发；关闭入口即停止任务，下次启动依检查点恢复。CLI 执行型命令默认等待目标工作流，不在后台继续执行。
 
-使用 `node apps/cli/dist/main.js task service status` 查看服务状态，`task service stop` 等待后台执行进程退出，`task service restart` 按当前配置重启服务。数据库恢复前应停止服务和 Web，并关闭其他数据库连接。
+Web 运行期间请在页面中操作任务；运行 CLI 前先关闭 Web。同一目录已有旧独立任务服务时，新宿主拒绝启动，请先停止旧版本服务。数据库恢复前关闭所有应用入口及其他数据库连接。
+
+线程池可通过 `TASK_THREAD_POOL` JSON 配置；默认线程数 1～4、每线程最多 4 个活动任务、全局最多 8 个活动任务。网络与任务类型并发沿用各自配置，不随线程数放大。平台会话只在当前宿主生命周期内有效，连续多步浏览使用 Web，跨 CLI 调用需重新连接。详见 `.env.example` 和 [任务设计](specs/003-task-worker/design.md)。
 
 Web 开发命令直接使用 workspace 源码，不再在启动前构建全仓。需要持续类型反馈时，在另一个终端运行 `pnpm typecheck:watch`（或 `pnpm --filter @jobhunter/web dev:typecheck`）；提交前仍执行一次 `pnpm typecheck`。正式构建与生产运行继续使用 `dist/`。
 

@@ -169,15 +169,20 @@
       "types": "./dist/persistence/usage-repository.d.ts",
       "import": "./dist/persistence/usage-repository.js"
     },
-    "./task-service": {
-      "development": "./src/tasks/service-entry.ts",
-      "types": "./dist/tasks/service-entry.d.ts",
-      "import": "./dist/tasks/service-entry.js"
-    },
     "./persistence/periodic-config": {
       "development": "./src/persistence/periodic-config.ts",
       "types": "./dist/persistence/periodic-config.d.ts",
       "import": "./dist/persistence/periodic-config.js"
+    },
+    "./source-rate-limit": {
+      "development": "./src/tasks/source-token-bucket.ts",
+      "types": "./dist/tasks/source-token-bucket.d.ts",
+      "import": "./dist/tasks/source-token-bucket.js"
+    },
+    "./task-host-runtime": {
+      "development": "./src/tasks/host-entry.ts",
+      "types": "./dist/tasks/host-entry.d.ts",
+      "import": "./dist/tasks/host-entry.js"
     }
   },
   "files": [

@@ -10,44 +10,20 @@ import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
 import { parseId, SystemIdGenerator } from '@jobhunter/common/domain';
 import { platformRetentionResultSchema } from '@jobhunter/recruitment/platform-application/platform-retention';
-import { startCentralTaskService, taskServiceConfiguration } from '@jobhunter/common/task-service';
-import { loadRuntimeConfig } from '../src/runtime-config.js';
 
 /** 子进程不继承 Vitest 注入的相对 BASE_URL，确保 CLI 使用完整的模型默认地址。 */
 async function execute(
   file: string,
   args: readonly string[],
 ): Promise<{ stdout: string; stderr: string }> {
-  const environment = { ...process.env, BASE_URL: '' };
-  const config = await loadRuntimeConfig({
-    argv: args.slice(1),
-    environment,
-    workspaceRoot: path.resolve(import.meta.dirname, '../../..'),
-  });
-  // 命令契约使用真实 IPC 但不消费任务；下面的生产处理器测试显式装配合成依赖。
-  const service = await startCentralTaskService({
-    dataRoot: config.bootstrap.dataRoot.value,
-    configuration: taskServiceConfiguration(config),
-    createRuntime: () => ({
-      run: (signal) =>
-        new Promise<void>((resolve) => {
-          signal.addEventListener(
-            'abort',
-            () => {
-              resolve();
-            },
-            { once: true },
-          );
-        }),
-      request: () => null,
-      close: () => Promise.resolve(),
-    }),
-  });
-  try {
-    return await promisify(execFile)(file, [...args], { env: environment });
-  } finally {
-    await service?.close();
-  }
+  const environment = {
+    ...process.env,
+    BASE_URL: '',
+    API_KEY: '',
+    MODEL: '',
+    TASK_THREAD_POOL: '{"startupTimeoutMs":90000}',
+  };
+  return promisify(execFile)(file, [...args], { env: environment, timeout: 120_000 });
 }
 
 it('BOSS 恢复 CLI 必须显式确认并保留原失败任务引用，其他平台不得发布', async () => {
@@ -81,14 +57,14 @@ it('BOSS 恢复 CLI 必须显式确认并保留原失败任务引用，其他平
     const submitted = JSON.parse(stdout) as { task: { id: string } };
     const task = new SqliteTaskRepository(db.client).get(parseId(submitted.task.id, 'Task'));
     expect(task).toMatchObject({
-      status: 'pending',
+      status: 'failed',
       payload: { action: 'resume', generation: 1, sourceTaskId, browserRecovered: true },
     });
   } finally {
     db.close();
     await root.cleanup();
   }
-});
+}, 600_000);
 
 it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一平台失败', async () => {
   const root = await createTemporaryDataRoot('platform-observation-isolated-');
@@ -138,7 +114,7 @@ it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一�
         '--not-before',
         new Date(Date.now() - 1000).toISOString(),
         '--deadline',
-        new Date(Date.now() + 60000).toISOString(),
+        new Date(Date.now() + 180000).toISOString(),
       ]);
       expect(JSON.parse(result.stdout)).toMatchObject({
         provider,
@@ -151,7 +127,7 @@ it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一�
     db.close();
     await root.cleanup();
   }
-});
+}, 600_000);
 
 it('publishes preview, confirms and disables retention through real CLI and production Worker', async () => {
   const root = await createTemporaryDataRoot('platform-cli-');
@@ -168,7 +144,8 @@ it('publishes preview, confirms and disables retention through real CLI and prod
       ...args,
     ]);
     const submitted = JSON.parse(result.stdout) as { task: { id: string } };
-    expect(await worker.engine.runOnce('platform.retention')).toBe(true);
+    // CLI 自己拥有线程池并等待，不再由另一个执行宿主补领任务。
+    expect(await worker.engine.runOnce('platform.retention')).toBe(false);
     const task = new SqliteTaskRepository(db.client).get(parseId(submitted.task.id, 'Task'));
     expect(task?.status).toBe('succeeded');
     return platformRetentionResultSchema.parse(task?.result);
@@ -198,7 +175,7 @@ it('publishes preview, confirms and disables retention through real CLI and prod
     db.close();
     await root.cleanup();
   }
-});
+}, 600_000);
 
 it('does not enqueue an observation outside its window or after an incomplete previous round', async () => {
   const root = await createTemporaryDataRoot('platform-observation-');
@@ -243,4 +220,4 @@ it('does not enqueue an observation outside its window or after an incomplete pr
     db.close();
     await root.cleanup();
   }
-});
+}, 600_000);

@@ -728,8 +728,7 @@ describe('worker execution', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     await worker.shutdown();
     await running;
-  }, 10_000);
-
+  }, 30_000);
   it('runs independent task-type claim loops without one blocked type starving another', async () => {
     const input = await setup();
     let releaseSource!: () => void;

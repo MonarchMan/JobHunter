@@ -5,6 +5,78 @@ import { createTaskRuntime } from '@jobhunter/common/task-runtime';
 import { voidTaskOutputSchema } from '@jobhunter/common/tasks';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 
+it('does not claim without pool capacity and follows only the selected workflow children', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-runtime-workflow-');
+  let allowed: string[] = [];
+  let capacity = false;
+  let enqueue!: (kind: string, key: string) => string;
+  let childId = '';
+  const application = createTaskRuntime(
+    {
+      dataRoot: root.path,
+      periodicEnabled: false,
+      rootTaskIds: () => allowed,
+      executor: {
+        reserve() {
+          return capacity
+            ? {
+                execute: (_task, context) => {
+                  if (_task.taskType === 'fixture.parent')
+                    childId = enqueue('fixture.child', 'child');
+                  context.signal.throwIfAborted();
+                  return Promise.resolve();
+                },
+                release() {
+                  /* synthetic reservation */
+                },
+              }
+            : undefined;
+        },
+        execute: () => Promise.reject(new Error('Unreserved execution')),
+      },
+    },
+    [
+      (context) => {
+        enqueue = (kind, key) =>
+          context.tasks.enqueue({ taskType: kind, payload: {}, idempotencyKey: key }).task.id;
+        for (const taskType of ['fixture.parent', 'fixture.child'])
+          context.registry.register({
+            taskType,
+            payloadSchema: z.object({}),
+            outputSchema: voidTaskOutputSchema,
+            defaultMaxAttempts: 1,
+            leaseDurationMs: 10_000,
+            execute: () => Promise.resolve(),
+          });
+        return { close: () => Promise.resolve() };
+      },
+    ],
+  );
+  try {
+    const selected = enqueue('fixture.parent', 'selected');
+    const unrelated = enqueue('fixture.parent', 'unrelated');
+    allowed = [selected];
+    expect(await application.engine.runOnce('fixture.parent')).toBe(false);
+    expect(application.request?.('query', { taskId: selected })).toMatchObject({
+      status: 'pending',
+      attemptCount: 0,
+    });
+    capacity = true;
+    expect(await application.engine.runOnce('fixture.parent')).toBe(true);
+    expect(childId).not.toBe('');
+    expect(await application.engine.runOnce('fixture.child')).toBe(true);
+    expect(await application.engine.runOnce('fixture.parent')).toBe(false);
+    expect(application.request?.('workflow', [selected])).toHaveLength(2);
+    expect(application.request?.('query', { taskId: unrelated })).toMatchObject({
+      status: 'pending',
+      attemptCount: 0,
+    });
+  } finally {
+    await application.close();
+    await root.cleanup();
+  }
+});
+
 it('registers every module before schedules initialize and closes modules in reverse order', async () => {
   const root = await createTemporaryDataRoot('jobhunter-runtime-modules-');
   const events: string[] = [];

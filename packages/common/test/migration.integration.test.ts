@@ -302,7 +302,7 @@ it('blocks schema upgrades while a service owns the data root and permits its st
   if (!release) throw new Error('Expected service ownership');
   try {
     expect(() => openSqliteDatabase({ dataRoot: root.path })).toThrow(
-      'Database upgrade requires stopping the central task service',
+      'Database upgrade requires stopping the current Web/CLI host',
     );
     const unchanged = openSqliteDatabase({ dataRoot: root.path, runMigrations: false });
     handles.push(unchanged);

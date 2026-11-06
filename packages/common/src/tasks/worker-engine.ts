@@ -20,7 +20,17 @@ export interface WorkerDelay {
 }
 
 /** 中央引擎将已领取任务交给执行宿主；宿主不能自行领取或推进定时计划。 */
+/** 领取前预留的执行容量，所有结束路径必须释放且只释放一次。 */
+export interface TaskExecutionReservation {
+  execute(task: TaskRecord, context: TaskHandlerContext): Promise<unknown>;
+  release(): void;
+}
+
 export interface TaskExecutionPort {
+  metrics?(): Readonly<Record<string, unknown>>;
+  deferExpansion?(milliseconds: number): void;
+  reserve?(taskType: string, affinity?: string): TaskExecutionReservation | undefined;
+  releaseAffinity?(key: string): void;
   execute(task: TaskRecord, context: TaskHandlerContext): Promise<unknown>;
 }
 
@@ -33,6 +43,8 @@ export const nativeWorkerDelay: WorkerDelay = {
 
 /** 应用层数据结构或端口契约。 */
 export interface WorkerEngineOptions {
+  readonly periodicEnabled?: boolean;
+  readonly rootTaskIds?: () => readonly string[] | undefined;
   readonly workerId: string;
   readonly heartbeatIntervalMs?: number;
   readonly emptyPollMinimumMs?: number;
@@ -111,6 +123,8 @@ export class WorkerEngine implements TaskCancellationNotifier {
     this.#isQueueBusy = input.isQueueBusy ?? (() => false);
     this.#executor = input.executor;
     this.#options = {
+      periodicEnabled: input.options.periodicEnabled ?? true,
+      rootTaskIds: input.options.rootTaskIds ?? (() => undefined),
       workerId: input.options.workerId,
       heartbeatIntervalMs: input.options.heartbeatIntervalMs ?? 30_000,
       emptyPollMinimumMs: input.options.emptyPollMinimumMs ?? 1_000,
@@ -135,22 +149,39 @@ export class WorkerEngine implements TaskCancellationNotifier {
     const queues = taskType ? [taskType] : this.#registry.taskTypes();
     // 1、按任务类型领取一个租约；2. 执行完成后再返回给轮询器。
     for (const queueType of queues) {
-      const task = this.#queue.claim({
-        taskType: queueType,
-        workerId: `${this.#options.workerId}:${randomUUID()}`,
-        now: this.#clock.now(),
-        leaseDurationMsFor: (claimedType) =>
-          this.#registry.has(claimedType)
-            ? this.#registry.get(claimedType).leaseDurationMs
-            : 120_000,
-      });
-      if (!task) continue;
-      const execution = this.#execute(task);
+      const affinity = this.#registry.has(queueType)
+        ? this.#registry.get(queueType).executionAffinity
+        : undefined;
+      const reservation = this.#executor?.reserve?.(queueType, affinity);
+      if (this.#executor?.reserve && !reservation) continue;
+      const roots = this.#options.rootTaskIds();
+      let task: TaskRecord | null;
+      try {
+        task = this.#queue.claim({
+          ...(roots ? { rootTaskIds: roots } : {}),
+          taskType: queueType,
+          workerId: `${this.#options.workerId}:${randomUUID()}`,
+          now: this.#clock.now(),
+          leaseDurationMsFor: (claimedType) =>
+            this.#registry.has(claimedType)
+              ? this.#registry.get(claimedType).leaseDurationMs
+              : 120_000,
+        });
+      } catch (error) {
+        reservation?.release();
+        throw error;
+      }
+      if (!task) {
+        reservation?.release();
+        continue;
+      }
+      const execution = this.#execute(task, reservation);
       this.#inFlight.add(execution);
       try {
         await execution;
       } finally {
         this.#inFlight.delete(execution);
+        reservation?.release();
       }
       return true;
     }
@@ -158,7 +189,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
   }
 
   /** 执行单个任务并协调心跳、取消、成功提交和失败重试。 */
-  async #execute(task: TaskRecord): Promise<void> {
+  async #execute(task: TaskRecord, reservation?: TaskExecutionReservation): Promise<void> {
     const handler = this.#registry.has(task.taskType) ? this.#registry.get(task.taskType) : null;
     const controller = new AbortController();
     this.#controllers.set(task.id, controller);
@@ -213,7 +244,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
             services: this.#options.services,
           };
           if (this.#executor)
-            return this.#executor
+            return (reservation ?? this.#executor)
               .execute(task, context)
               .then((output) => handler.outputSchema.parse(output));
           return this.#registry.execute(
@@ -223,6 +254,8 @@ export class WorkerEngine implements TaskCancellationNotifier {
           );
         },
       );
+      if (handler.executionAffinity && handler.releasesExecutionAffinity?.(output))
+        this.#executor?.releaseAffinity?.(handler.executionAffinity);
       const lateCancellationPolicy =
         typeof handler.lateCancellationPolicy === 'function'
           ? handler.lateCancellationPolicy(output)
@@ -405,17 +438,20 @@ export class WorkerEngine implements TaskCancellationNotifier {
     };
     signal?.addEventListener('abort', shutdown, { once: true });
     if (signal?.aborted) await this.shutdown();
-    this.#periodicLoop = this.#periodicWork ? this.#runPeriodicLoop() : undefined;
+    this.#periodicLoop =
+      this.#periodicWork && this.#options.periodicEnabled ? this.#runPeriodicLoop() : undefined;
     const loops = [
       ...(this.#periodicLoop ? [this.#periodicLoop] : []),
       this.#runSchedulerLoop(),
-      ...this.#registry
-        .taskTypes()
-        .flatMap((taskType) =>
-          Array.from({ length: this.#options.taskTypeConcurrency[taskType] ?? 1 }, () =>
-            this.#runClaimLoop(taskType),
-          ),
-        ),
+      ...(this.#executor?.reserve
+        ? [this.#runPooledClaimLoop()]
+        : this.#registry
+            .taskTypes()
+            .flatMap((taskType) =>
+              Array.from({ length: this.#options.taskTypeConcurrency[taskType] ?? 1 }, () =>
+                this.#runClaimLoop(taskType),
+              ),
+            )),
     ];
     try {
       await Promise.all(loops);
@@ -424,6 +460,51 @@ export class WorkerEngine implements TaskCancellationNotifier {
       // 3、异常退出也先取消各循环，等待子进程退出后才能关闭数据库连接。
       await this.shutdown();
       await Promise.allSettled(loops);
+    }
+  }
+
+  /** 池模式统一轮转类型，领取前预留容量，避免热点类型抢占全部槽位。 */
+  async #runPooledClaimLoop(): Promise<void> {
+    const types = this.#registry.taskTypes();
+    const counts = new Map<string, number>();
+    let cursor = 0;
+    let failure: Error | undefined;
+    let emptyDelay = this.#options.emptyPollMinimumMs;
+    while (!this.#stopping) {
+      if (failure) throw failure;
+      let claimedAny = false;
+      for (let index = 0; index < types.length; index++) {
+        const taskType = types[(cursor + index) % types.length];
+        if (!taskType) continue;
+        if ((counts.get(taskType) ?? 0) >= (this.#options.taskTypeConcurrency[taskType] ?? 1))
+          continue;
+        const previous = this.#inFlight.size;
+        const execution = this.runOnce(taskType);
+        const claimed = this.#inFlight.size > previous;
+        claimedAny ||= claimed;
+        if (claimed) counts.set(taskType, (counts.get(taskType) ?? 0) + 1);
+        void execution
+          .catch((error: unknown) => {
+            if (this.#isQueueBusy(error)) this.#executor?.deferExpansion?.(5_000);
+            if (!this.#isQueueBusy(error))
+              failure = error instanceof Error ? error : new Error('Task scheduling failed');
+          })
+          .finally(() => {
+            if (claimed) counts.set(taskType, (counts.get(taskType) ?? 1) - 1);
+          });
+      }
+      cursor = types.length ? (cursor + 1) % types.length : 0;
+      try {
+        await this.#delay.wait(
+          this.#inFlight.size ? Math.min(this.#options.emptyPollMinimumMs, 100) : emptyDelay,
+          this.#lifecycle.signal,
+        );
+        emptyDelay = claimedAny
+          ? this.#options.emptyPollMinimumMs
+          : Math.min(this.#options.emptyPollMaximumMs, emptyDelay * 2);
+      } catch {
+        return;
+      }
     }
   }
 
@@ -483,7 +564,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
           this.#logger.warn('worker.expired_leases_recovered', recovery);
         }
         // 2、同一调度循环推进到期计划，减少重复轮询数据库。
-        this.#scheduleService.enqueueDue();
+        if (this.#options.periodicEnabled) this.#scheduleService.enqueueDue();
       } catch (error) {
         if (!this.#isQueueBusy(error)) throw error;
         this.#logger.warn('worker.queue_busy', { phase: 'recovery_or_schedule' });

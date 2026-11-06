@@ -151,7 +151,7 @@ describe('backup commands', () => {
 });
 
 // 命令契约测试不启动网络执行器；中央服务真实生命周期由 embedded-tasks 覆盖。
-vi.mock(import('@jobhunter/common/task-service'), async (original) => ({
+vi.mock(import('@jobhunter/common/task-host-runtime'), async (original) => ({
   ...(await original()),
-  ensureConfiguredTaskService: vi.fn(() => Promise.resolve()),
+  ensureConfiguredTaskHost: vi.fn(() => Promise.resolve()),
 }));

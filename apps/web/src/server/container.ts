@@ -107,7 +107,11 @@ import { mailConnectorMetadata } from '@jobhunter/recruitment/mail-metadata';
 import path from 'node:path';
 import { createRetryableSingleton } from './retryable-singleton.js';
 import { browserFixtureIdentity } from './browser-test-isolation.js';
-import { ensureConfiguredTaskService } from '@jobhunter/common/task-service';
+import {
+  ensureConfiguredTaskHost,
+  requestTaskService,
+  taskHostConfiguration,
+} from '@jobhunter/common/task-host-runtime';
 import { pathToFileURL } from 'node:url';
 
 /** 模块数据结构或契约。 */
@@ -266,7 +270,18 @@ export function createLocalWebContainer(
     const tasks = new TaskService(
       { queue, clock, ids },
       registry,
-      null,
+      process.env.TASK_HOST_TOKEN
+        ? {
+            notifyCancellation: (taskId) => {
+              void requestTaskService({
+                dataRoot: config.bootstrap.dataRoot.value,
+                configuration: taskHostConfiguration(config),
+                method: 'cancel',
+                value: { taskId },
+              }).catch(() => undefined);
+            },
+          }
+        : null,
       new SqliteInterviewTaskRetryCoordinator(database.client, queue),
     );
     const interviewTaskPublisher = new SqliteInterviewTaskPublisher({
@@ -506,11 +521,12 @@ export async function getWebMutationContainer(): Promise<WebApplicationContainer
   const container = await getWebContainer();
   // 独立临时浏览器夹具提供合成执行器，不能连接用户模型、邮箱或浏览器会话。
   if (!browserFixtureIdentity(process.env)) {
+    if (!process.env.TASK_HOST_TOKEN)
+      throw new Error('请通过 Web 启动器运行，页面进程不能创建任务宿主。');
     const workspaceRoot = process.env.JOBHUNTER_WORKSPACE_ROOT ?? process.cwd();
     const config = await loadRuntimeAppConfig({ workspaceRoot });
-    await ensureConfiguredTaskService(config, {
-      entry: pathToFileURL(path.join(workspaceRoot, 'apps/web/src/server/task-service-main.ts')),
-      workspaceRoot,
+    await ensureConfiguredTaskHost(config, {
+      entry: pathToFileURL(path.join(workspaceRoot, 'apps/web/src/server/task-thread-main.ts')),
     });
   }
   return container;

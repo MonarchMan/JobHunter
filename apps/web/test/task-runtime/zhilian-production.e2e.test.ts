@@ -1,9 +1,5 @@
-import { startCentralTaskService, taskServiceConfiguration } from '@jobhunter/common/task-service';
-import { loadRuntimeAppConfig } from '@jobhunter/common/config/index';
 import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
 import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-reader';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import path from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -28,43 +24,6 @@ import { HandlerRegistry, TaskService } from '@jobhunter/common/tasks';
 import { WebPlatformService } from '@jobhunter/recruitment/platform-application/web-platforms';
 import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
 import { createProductionTaskApplication } from '../../src/server/task-runtime.js';
-
-/** 子进程不继承 Vitest 注入的相对 BASE_URL，确保 CLI 使用完整的模型默认地址。 */
-async function execute(
-  file: string,
-  args: readonly string[],
-): Promise<{ stdout: string; stderr: string }> {
-  const environment = { ...process.env, BASE_URL: '' };
-  const config = await loadRuntimeAppConfig({
-    cli: { dataRoot: args[args.indexOf('--data-root') + 1] },
-    environment,
-    workspaceRoot: path.resolve(import.meta.dirname, '../../../..'),
-  });
-  // 命令契约使用真实 IPC 但不消费任务；下面的生产处理器测试显式装配合成依赖。
-  const service = await startCentralTaskService({
-    dataRoot: config.bootstrap.dataRoot.value,
-    configuration: taskServiceConfiguration(config),
-    createRuntime: () => ({
-      run: (signal) =>
-        new Promise<void>((resolve) => {
-          signal.addEventListener(
-            'abort',
-            () => {
-              resolve();
-            },
-            { once: true },
-          );
-        }),
-      request: () => null,
-      close: () => Promise.resolve(),
-    }),
-  });
-  try {
-    return await promisify(execFile)(file, [...args], { env: environment });
-  } finally {
-    await service?.close();
-  }
-}
 
 const searchFixture: {
   readonly templates: ZhilianSearchTemplates;
@@ -128,9 +87,9 @@ const searchFixture: {
   },
 };
 
-/** CLI 真子进程、生产装配和隔离 SQLite；只有浏览器借用及上游响应为合成数据。 */
+/** 生产任务装配和隔离 SQLite；浏览器借用及上游响应采用合成数据。 */
 it.each(['campus', 'search', '51job'] as const)(
-  'runs Zhilian %s CLI through production Worker, unified jobs and provider-bound Web projection',
+  'runs Zhilian %s tasks through production handlers, unified jobs and provider-bound Web projection',
   async (mode) => {
     const provider = mode === '51job' ? '51job' : 'zhilian';
     const externalId = mode === '51job' ? '100' : mode === 'search' ? 'TEST_JOB' : 'CC_TEST';
@@ -274,7 +233,7 @@ it.each(['campus', 'search', '51job'] as const)(
     const db = openSqliteDatabase({ dataRoot: root.path });
     const queue = new SqliteTaskRepository(db.client);
     const registry = new HandlerRegistry();
-    for (const key of ['boss', 'zhilian', '51job'] as const)
+    for (const key of ['boss', 'zhilian', '51job', 'liepin'] as const)
       registry.register(
         createPlatformTaskHandler(key, {
           execute: () => Promise.reject(new Error('Publisher only')),
@@ -290,28 +249,32 @@ it.each(['campus', 'search', '51job'] as const)(
       provider,
     );
     const boss = new WebPlatformService(new SqlitePlatformRepository(db.client), tasks);
-    const cli = (
+    /** 同一合成宿主内发布任务，CLI 互斥及线程生命周期由专门端到端测试覆盖。 */
+    const publish = (
       args: string[],
-      selectedProvider = provider as string,
-    ): Promise<{ stdout: string; stderr: string }> =>
-      execute(process.execPath, [
-        path.resolve(import.meta.dirname, '../../../cli/dist/platform-main.js'),
-        '--data-root',
-        root.path,
-        '--provider',
-        selectedProvider,
-        ...args,
-      ]);
+      selectedProvider: string = provider,
+    ): ReturnType<TaskService['enqueue']> => {
+      const action = args[0];
+      const payload =
+        action === 'connect'
+          ? {
+              action,
+              portFile: args[args.indexOf('--port-file') + 1],
+              targetId: args[args.indexOf('--target-id') + 1],
+            }
+          : { action, generation: Number(args[args.indexOf('--generation') + 1]) };
+      return tasks.enqueue({
+        taskType: `platform.${selectedProvider}`,
+        payload,
+        idempotencyKey: new SystemIdGenerator().generate(),
+      });
+    };
     /** 发布和消费同一真实任务，不直接写入业务职位。 */
     const run = async (args: string[]): Promise<ReturnType<typeof bossResultSchema.parse>> => {
-      const submitted = JSON.parse((await cli(args)).stdout) as { task: { id: string } };
+      const submitted = publish(args);
       expect(await worker.engine.runOnce(`platform.${provider}`)).toBe(true);
       const task = queue.get(parseId(submitted.task.id, 'Task'));
       expect(task?.status).toBe('succeeded');
-      expect(
-        (JSON.parse((await cli(['result', submitted.task.id])).stdout) as { id: string }).id,
-      ).toBe(submitted.task.id);
-      await expect(cli(['result', submitted.task.id], 'boss')).rejects.toThrow();
       return bossResultSchema.parse(task?.result);
     };
     try {
@@ -362,11 +325,7 @@ it.each(['campus', 'search', '51job'] as const)(
       expect(web.snapshot().connection?.status).toBe('disconnected');
       expect(boss.snapshot()).toEqual(beforeBoss);
       // 3.a、猎聘已受支持；跨渠道命令只能进入猎聘队列，不得改变当前渠道或 BOSS 状态。
-      const liepinTask = JSON.parse(
-        (await cli(['next', '--generation', '1'], 'liepin')).stdout,
-      ) as {
-        task: { id: string };
-      };
+      const liepinTask = publish(['next', '--generation', '1'], 'liepin');
       expect(queue.list({ taskType: 'platform.liepin', limit: 10 }).map((task) => task.id)).toEqual(
         [parseId(liepinTask.task.id, 'Task')],
       );
@@ -379,6 +338,6 @@ it.each(['campus', 'search', '51job'] as const)(
       await rm(root.path, { recursive: true, force: true });
     }
   },
-  // 每个用例串联多次真实 CLI 子进程；全量套件并行时 CPU 饥饿会拖过 30 秒，放宽到 90 秒。
+  // 每个用例覆盖完整的连接、读取和断开流程，保留有界验收时间。
   90_000,
 );

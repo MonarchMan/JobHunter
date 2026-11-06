@@ -59,6 +59,8 @@ export function createSqliteMaintenanceTick(
       killSignal: 'SIGKILL',
       maxBuffer: 64 * 1024,
       signal: combinedSignal,
+      // 1、Windows 上子进程默认新建控制台窗口；维护进程周期运行，必须隐藏避免定时弹窗。
+      windowsHide: true,
     });
     // 3、AbortError 可能先于 close 事件到达；必须等子进程回收后才允许主库连接关闭。
     const closed = new Promise<void>((resolve) =>

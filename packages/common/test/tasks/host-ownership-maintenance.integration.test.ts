@@ -5,15 +5,15 @@ import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { openSqliteDatabase } from '../../src/persistence/connection.js';
 import { createBackup, planRestoreBackup, restoreBackup } from '../../src/persistence/backup.js';
 import { acquireTaskServiceLock } from '../../src/persistence/task-service-lock.js';
-import { startCentralTaskService } from '../../src/tasks/service-host.js';
+import { startTaskHostBridge } from '../../src/tasks/host-bridge.js';
 
 it('keeps service startup excluded throughout restore, including the directory replacement gap', async () => {
   const root = await createTemporaryDataRoot('jobhunter-restore-service-');
   const source = openSqliteDatabase({ dataRoot: path.join(root.path, 'source') });
   const target = path.join(root.path, 'target');
   const backup = path.join(root.path, 'backup');
-  const start = (): ReturnType<typeof startCentralTaskService> =>
-    startCentralTaskService({
+  const start = (): ReturnType<typeof startTaskHostBridge> =>
+    startTaskHostBridge({
       dataRoot: target,
       configuration: 'fixture',
       createRuntime: () => ({
@@ -42,10 +42,10 @@ it('keeps service startup excluded throughout restore, including the directory r
     const plan = await planRestoreBackup(backup, target);
     service = await start();
     await expect(planRestoreBackup(backup, target)).rejects.toThrow(
-      'stopping the central task service',
+      'stopping the current Web/CLI host',
     );
     await expect(restoreBackup(backup, target, plan.confirmationToken)).rejects.toThrow(
-      'stopping the central task service',
+      'stopping the current Web/CLI host',
     );
     await service?.close();
     const release = acquireTaskServiceLock(target);

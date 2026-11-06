@@ -1,3 +1,4 @@
+import { threadPoolOptionsSchema, type ThreadPoolOptions } from '../tasks/thread-pool-options.js';
 import { isDomesticModelApi, resolveCatalogPricing } from '../models/pricing-catalog.js';
 import { resolveLegacyPricing } from '../models/legacy-pricing.js';
 import { resolveLegacyDomesticPricing } from '../models/legacy-domestic-pricing.js';
@@ -63,6 +64,7 @@ export interface AppConfig {
     >;
   };
   readonly worker: {
+    readonly threadPool?: SourcedValue<ThreadPoolOptions>;
     readonly pollIntervalMs: SourcedValue<number>;
     readonly maxConcurrentNetworkTasks: SourcedValue<number>;
     readonly taskTypeConcurrency: SourcedValue<Readonly<Record<string, number>>>;
@@ -408,6 +410,12 @@ export function resolveAppConfig(input: {
       requestIntervalMsByProvider,
     },
     worker: {
+      threadPool: {
+        source: environment.TASK_THREAD_POOL ? 'environment' : 'default',
+        value: threadPoolOptionsSchema.parse(
+          environment.TASK_THREAD_POOL ? JSON.parse(environment.TASK_THREAD_POOL) : {},
+        ),
+      },
       pollIntervalMs: {
         ...pollIntervalMs,
         value: z.number().int().min(100).max(60_000).parse(pollIntervalMs.value),

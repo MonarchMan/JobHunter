@@ -81,12 +81,11 @@ import { createConfiguredModelClient } from '@jobhunter/common/models';
 import { jobAdviceAgentDefinition } from '@jobhunter/matching';
 import { firstPartySourceCatalog } from '@jobhunter/recruitment';
 import {
-  ensureConfiguredTaskService,
-  requestTaskService,
-  stopTaskService,
-  taskServiceConfiguration,
-  TaskServiceConnectionError,
-} from '@jobhunter/common/task-service';
+  ensureConfiguredTaskHost,
+  allowConfiguredTask,
+  finishConfiguredTaskHost,
+  notifyConfiguredTaskCancellation,
+} from '@jobhunter/common/task-host-runtime';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
@@ -109,11 +108,6 @@ export interface CliContainer {
     retry(taskId: string): EnqueueTaskResult | Promise<EnqueueTaskResult>;
     cancel(taskId: string): ReturnType<TaskService['cancel']>;
     wait(taskId: string, signal: AbortSignal): Promise<TaskRecord | null>;
-  };
-  readonly taskService?: {
-    status(): Promise<{ readonly status: 'ready' | 'unavailable' | 'incompatible' }>;
-    stop(): Promise<void>;
-    restart(): Promise<void>;
   };
   readonly job?: {
     list(input: Parameters<JobQueryService['list']>[0]): ReturnType<JobQueryService['list']>;
@@ -236,7 +230,11 @@ export function createLocalCliContainer(
     const tasks = new TaskService(
       { queue, clock: { now: () => utcInstant(Date.now()) }, ids },
       registry,
-      null,
+      {
+        notifyCancellation: (id) => {
+          void notifyConfiguredTaskCancellation(config, id).catch(() => undefined);
+        },
+      },
       new SqliteInterviewTaskRetryCoordinator(database.client, queue),
     );
     const schedules = new ScheduleService(
@@ -360,21 +358,21 @@ export function createLocalCliContainer(
     };
     return services;
   };
-  /** 提交和等待均确认中央服务可用，命令退出不停止后台执行。 */
+  /** 提交前创建本进程任务宿主，执行完成或中断后统一关闭。 */
   async function ensureService(signal?: AbortSignal): Promise<void> {
     operational();
-    await ensureConfiguredTaskService(config, {
+    await ensureConfiguredTaskHost(config, {
       entry: new URL(
-        import.meta.url.endsWith('.ts') ? './task-service-main.ts' : './task-service-main.js',
+        import.meta.url.endsWith('.ts') ? './task-thread-main.ts' : './task-thread-main.js',
         import.meta.url,
       ),
-      workspaceRoot,
       ...(signal ? { signal } : {}),
     });
   }
-  /** 等待只连接共享中央服务，不在 CLI 内领取任务。 */
+  /** 登记目标工作流后等待，调度器只领取目标及子任务。 */
   async function waitForTask(taskId: string, signal: AbortSignal): Promise<TaskRecord | null> {
     await ensureService(signal);
+    await allowConfiguredTask(config, taskId);
     return operational().wait.wait(parseId(taskId, 'Task'), signal);
   }
   return {
@@ -463,6 +461,8 @@ export function createLocalCliContainer(
           enabled: true,
         });
         await ensureService();
+        if (defaultResumeTaskId) await allowConfiguredTask(config, defaultResumeTaskId);
+        for (const item of sourceSyncTasks) await allowConfiguredTask(config, item.task.id);
         return {
           ...initialized,
           bootstrap: {
@@ -516,41 +516,12 @@ export function createLocalCliContainer(
       get: (taskId) => operational().tasks.get(parseId(taskId, 'Task')),
       retry: async (taskId) => {
         await ensureService();
-        return operational().tasks.retryFailed(parseId(taskId, 'Task'), ids.generate());
+        const result = operational().tasks.retryFailed(parseId(taskId, 'Task'), ids.generate());
+        await allowConfiguredTask(config, result.task.id);
+        return result;
       },
       cancel: (taskId) => operational().tasks.cancel(parseId(taskId, 'Task')),
       wait: (taskId, signal) => waitForTask(taskId, signal),
-    },
-    taskService: {
-      async status() {
-        try {
-          await requestTaskService({
-            dataRoot: config.bootstrap.dataRoot.value,
-            configuration: taskServiceConfiguration(config),
-            method: 'ping',
-          });
-          return { status: 'ready' };
-        } catch (error) {
-          if (
-            error instanceof TaskServiceConnectionError &&
-            (error.code === 'unavailable' || error.code === 'incompatible')
-          )
-            return { status: error.code };
-          throw error;
-        }
-      },
-      stop: () =>
-        stopTaskService({
-          dataRoot: config.bootstrap.dataRoot.value,
-          configuration: taskServiceConfiguration(config),
-        }),
-      async restart() {
-        await stopTaskService({
-          dataRoot: config.bootstrap.dataRoot.value,
-          configuration: taskServiceConfiguration(config),
-        });
-        await ensureService();
-      },
     },
     job: {
       list: (input) => operational().jobs.list(input),
@@ -590,10 +561,12 @@ export function createLocalCliContainer(
           ...(input.confirmationToken ? { confirmationToken: input.confirmationToken } : {}),
         }),
     },
-    close: () => {
-      // 客户端只关闭自己的查询连接，后台服务独立存活。
-      database?.close();
-      return Promise.resolve();
+    close: async () => {
+      try {
+        await finishConfiguredTaskHost(config);
+      } finally {
+        database?.close();
+      }
     },
   };
 }

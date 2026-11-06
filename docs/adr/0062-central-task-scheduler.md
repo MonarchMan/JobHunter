@@ -1,6 +1,6 @@
 # ADR-0062：CLI 与 Web 共用中央任务调度服务
 
-- 状态：Accepted
+- 状态：Superseded（运行生命周期与进程执行由 [ADR-0065](0065-single-host-dynamic-thread-pool.md) 替代；提交门控等规则保留）
 - 日期：2026-11-05
 - 实施：中央服务、多进程执行、扫描阶段任务和维护门控已实现；实际数据迁移仍遵循三阶段实施顺序，验收见 specs/003-task-worker/tasks.md。
 

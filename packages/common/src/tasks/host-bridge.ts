@@ -3,37 +3,39 @@ import { chmod, rm, mkdir } from 'node:fs/promises';
 import {
   acquireTaskServiceLock,
   withTaskServiceOwnership,
+  hasTaskServiceOwnership,
 } from '../persistence/task-service-lock.js';
-import { taskServiceAddress } from './service-address.js';
+import { taskServiceAddress } from './host-bridge-address.js';
 import {
   taskServiceMaximumMessageBytes,
   taskServiceRequestSchema,
   type TaskServiceRequest,
-} from './service-protocol.js';
+} from './host-bridge-protocol.js';
 
 /** 组合根注入实际队列和生命周期；common 不导入招聘、画像或匹配业务。 */
-export interface CentralTaskRuntime {
+export interface TaskHostRuntime {
   run(signal: AbortSignal): Promise<void>;
-  request(
-    method: Exclude<TaskServiceRequest['method'], 'ping' | 'shutdown'>,
-    input: unknown,
-  ): unknown;
+  request(method: Exclude<TaskServiceRequest['method'], 'ping'>, input: unknown): unknown;
   close(): Promise<void>;
 }
 
-/** 启动同数据目录唯一服务；竞争失败返回 null，绝不装配第二套运行时。 */
-export async function startCentralTaskService(input: {
+/** 在调用者当前进程内装配调度运行时与 Next 命令桥；不创建独立调度进程。 */
+export async function startTaskHostBridge(input: {
   readonly dataRoot: string;
   readonly configuration: string;
-  readonly createRuntime: () => CentralTaskRuntime | Promise<CentralTaskRuntime>;
+  readonly token?: string;
+  readonly ownerKind?: 'web' | 'cli';
+  readonly createRuntime: () => TaskHostRuntime | Promise<TaskHostRuntime>;
 }): Promise<{ readonly finished: Promise<void>; close(): Promise<void> } | null> {
   const address = await taskServiceAddress(input.dataRoot);
-  const release = acquireTaskServiceLock(address.dataRoot);
+  const release = hasTaskServiceOwnership(address.dataRoot)
+    ? () => undefined
+    : acquireTaskServiceLock(address.dataRoot, input.ownerKind);
   if (!release) return null;
   const releaseLock = release;
   const sockets = new Set<Socket>();
   const abort = new AbortController();
-  let runtime: CentralTaskRuntime | undefined;
+  let runtime: TaskHostRuntime | undefined;
   let closing: Promise<void> | undefined;
   let running: Promise<void> = Promise.resolve();
   // 1、仅持有排他锁的进程可以清理崩溃遗留的 socket。
@@ -63,8 +65,11 @@ export async function startCentralTaskService(input: {
           socket.destroy();
           return;
         }
-        // 本机用户显式停止旧配置实例是维护操作；其他操作仍严格匹配配置。
-        if (request.configuration !== input.configuration && request.method !== 'shutdown') {
+        // 桥只接受当前宿主的配置与凭证，生命周期仅由宿主本地控制。
+        if (
+          (input.token && request.token !== input.token) ||
+          request.configuration !== input.configuration
+        ) {
           socket.end(JSON.stringify({ id: request.id, ok: false, code: 'incompatible' }) + '\n');
           return;
         }
@@ -72,14 +77,11 @@ export async function startCentralTaskService(input: {
           const value =
             request.method === 'ping'
               ? { pid: process.pid }
-              : request.method === 'shutdown'
-                ? null
-                : await requireRuntime().request(request.method, request.input);
+              : await requireRuntime().request(request.method, request.input);
           const response = JSON.stringify({ id: request.id, ok: true, value }) + '\n';
           if (Buffer.byteLength(response) > taskServiceMaximumMessageBytes)
             throw new Error('Response too large');
           socket.end(response);
-          if (request.method === 'shutdown') void close().catch(() => undefined);
         } catch {
           socket.end(
             JSON.stringify({ id: request.id, ok: false, code: 'operation_failed' }) + '\n',
@@ -89,7 +91,7 @@ export async function startCentralTaskService(input: {
     });
   });
   /** 接收请求前必须完成运行时装配。 */
-  function requireRuntime(): CentralTaskRuntime {
+  function requireRuntime(): TaskHostRuntime {
     if (!runtime) throw new Error('Task service is not ready');
     return runtime;
   }

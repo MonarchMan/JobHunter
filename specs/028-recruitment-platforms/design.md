@@ -288,3 +288,5 @@ pnpm boss disconnect --generation GENERATION
 BossHunter 本地参考提交 99f7486 提供 CDP、分页防重、字段质量和平台能力分离经验；其智联 API 默认关闭且映射待真实校准。只参考设计经验，独立实现；直接移植代码前另行审查 PolyForm Noncommercial 许可。
 
 离线覆盖平台类型迁移、详情质量、幂等修订、观察任务 FK、连接代次、取消、跨域凭据隔离及清理竞态。真实 smoke 最多三批列表和两条详情，明确记录传输与结果；不运行全量在线门禁、不自动退出用户账号来测试失效。认证与验证码异常优先用脱敏夹具测试。
+
+任务运行边界采用 [ADR-0065](../../docs/adr/0065-single-host-dynamic-thread-pool.md)：会话固定所属工作线程并阻止空闲缩容，随宿主退出失效。Web/CLI 按数据目录互斥，跨 CLI 命令不能继承上一次已退出宿主的内存会话。

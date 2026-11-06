@@ -55,6 +55,10 @@ export interface TaskHandlerContext {
 
 /** 应用层数据结构或端口契约。 */
 export interface TaskHandler<TPayload, TOutput> {
+  /** 有状态处理器声明固定执行域；同域会话始终归属同一线程。 */
+  readonly executionAffinity?: string;
+  /** 结果确认内存会话已释放时允许线程缩容。 */
+  readonly releasesExecutionAffinity?: (output: TOutput) => boolean;
   readonly taskType: string;
   readonly payloadSchema: RuntimeSchema<TPayload>;
   readonly outputSchema: RuntimeSchema<TOutput>;
@@ -110,6 +114,8 @@ export interface TaskRecord {
 
 /** 应用层数据结构或端口契约。 */
 export interface PersistedTaskInput {
+  /** 异步子任务继承当前执行任务，供 CLI 精确推进工作流。 */
+  readonly parentTaskId?: TaskId | null;
   readonly id: TaskId;
   readonly taskType: string;
   readonly payload: unknown;
@@ -222,6 +228,7 @@ export interface TaskQueue {
   count(filter: Omit<TaskListFilter, 'limit' | 'offset'>): number;
   summary(now: UtcInstant): TaskQueueSummary;
   claim(input: {
+    readonly rootTaskIds?: readonly string[];
     readonly taskType: string;
     readonly workerId: string;
     readonly now: UtcInstant;

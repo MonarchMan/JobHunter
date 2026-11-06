@@ -130,7 +130,7 @@ export function openSqliteDatabase(options: OpenDatabaseOptions): SqliteDatabase
         if (!release)
           throw new PersistenceError(
             'DATABASE_UPGRADE_REQUIRES_STOP',
-            'Database upgrade requires stopping the central task service first (task service stop).',
+            'Database upgrade requires stopping the current Web/CLI host first.',
           );
         releaseMigrationLock = release;
       }

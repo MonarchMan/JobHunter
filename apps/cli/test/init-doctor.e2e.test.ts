@@ -3,6 +3,33 @@ import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { vi, describe, expect, it } from 'vitest';
+import { acquireTaskServiceLock } from '@jobhunter/common/task-host-runtime';
+
+it('does not let an argument named version bypass the host lock', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-cli-owner-');
+  const release = acquireTaskServiceLock(root.path, 'web');
+  if (!release) throw new Error('Expected owner lock');
+  try {
+    const output = memoryIo();
+    expect(
+      await runLocalCli({
+        argv: ['--json', '--data-root', root.path, 'source', 'sync', 'version'],
+        io: output.io,
+        environment: {},
+        workspaceRoot: root.path,
+      }),
+    ).toBe(2);
+    expect(JSON.parse(output.stdout.join(''))).toMatchObject({
+      error: {
+        code: 'HOST_ALREADY_RUNNING',
+        details: { owner: { kind: 'web', pid: process.pid } },
+      },
+    });
+  } finally {
+    release();
+    await root.cleanup();
+  }
+});
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 function memoryIo(): { readonly io: CliIo; readonly stdout: string[]; readonly stderr: string[] } {
@@ -140,7 +167,31 @@ describe('init and doctor commands', () => {
 });
 
 // 命令契约测试不启动网络执行器；中央服务真实生命周期由 embedded-tasks 覆盖。
-vi.mock(import('@jobhunter/common/task-service'), async (original) => ({
+vi.mock(import('@jobhunter/common/task-host-runtime'), async (original) => ({
   ...(await original()),
-  ensureConfiguredTaskService: vi.fn(() => Promise.resolve()),
+  ensureConfiguredTaskHost: vi.fn(() => Promise.resolve()),
+  allowConfiguredTask: vi.fn(() => Promise.resolve()),
 }));
+
+// 命令契约使用合成等待投影，不领取或执行持久任务；真实等待及线程生命周期由 embedded-tasks 覆盖。
+vi.mock(import('@jobhunter/recruitment/source-management-service'), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    TaskWaitService: class extends actual.TaskWaitService {
+      readonly projection: ConstructorParameters<typeof actual.TaskWaitService>[0];
+      constructor(...args: ConstructorParameters<typeof actual.TaskWaitService>) {
+        super(...args);
+        this.projection = args[0];
+      }
+      override wait(
+        taskId: Parameters<InstanceType<typeof actual.TaskWaitService>['wait']>[0],
+        signal: AbortSignal,
+      ): ReturnType<InstanceType<typeof actual.TaskWaitService>['wait']> {
+        signal.throwIfAborted();
+        const task = this.projection.get(taskId);
+        return Promise.resolve(task ? { ...task, status: 'succeeded' as const } : null);
+      }
+    },
+  };
+});

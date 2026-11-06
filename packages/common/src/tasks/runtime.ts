@@ -6,7 +6,7 @@ import {
   type IdGenerator,
 } from '../domain/index.js';
 import { z } from 'zod';
-import type { CentralTaskRuntime } from './service-host.js';
+import type { TaskHostRuntime } from './host-bridge.js';
 import { AgentRunner, ModelClientError, type ModelClient } from '../agent/index.js';
 import { createConfiguredModelClient } from '../models/index.js';
 import { SqliteAgentRunStore } from '../persistence/agent-run-store.js';
@@ -55,6 +55,8 @@ export interface TaskRuntimeContext {
 
 /** 宿主创建任务运行时所需的通用配置，业务选项由模块自行声明。 */
 export interface TaskRuntimeOptions {
+  readonly periodicEnabled?: boolean;
+  readonly rootTaskIds?: () => readonly string[] | undefined;
   readonly executor?: TaskExecutionPort;
   readonly executionOnly?: boolean;
   /** 仅允许已经持有中央服务排他锁的组合根启用。 */
@@ -72,7 +74,7 @@ export interface TaskRuntimeOptions {
 /** CLI/Web 共用任务应用；关闭必须先停止任务，再释放模块资源与数据库。 */
 export interface TaskApplication {
   readonly engine: WorkerEngine;
-  readonly request?: CentralTaskRuntime['request'];
+  readonly request?: TaskHostRuntime['request'];
   /** 内部执行宿主专用：只运行给定分派，不领取任务或启动调度。 */
   executeAssigned?(task: TaskRecord, signal: AbortSignal): Promise<unknown>;
   close(): Promise<void>;
@@ -165,6 +167,8 @@ export function createTaskRuntime(
       eventLoopDelay?.enable();
       metrics = setInterval(() => {
         input.logger?.info('worker.runtime', {
+          executionRole: input.executionOnly ? 'thread' : 'scheduler',
+          ...input.executor?.metrics?.(),
           networkActive: networkSemaphore.activeCount,
           networkQueued: networkSemaphore.queuedCount,
           eventLoopDelayP95Ms: Number(
@@ -186,6 +190,8 @@ export function createTaskRuntime(
       isQueueBusy: isSqliteUnavailableError,
       ...(input.executor ? { executor: input.executor } : {}),
       options: {
+        ...(input.periodicEnabled === undefined ? {} : { periodicEnabled: input.periodicEnabled }),
+        ...(input.rootTaskIds ? { rootTaskIds: input.rootTaskIds } : {}),
         workerId: input.workerId ?? `tasks-${String(process.pid)}`,
         emptyPollMinimumMs: input.pollIntervalMs ?? 1_000,
         emptyPollMaximumMs: Math.max(input.pollIntervalMs ?? 1_000, 10_000),
@@ -199,6 +205,10 @@ export function createTaskRuntime(
       engine,
       request(method, value) {
         // 1、所有 IPC 入参在通用边界校验，具体 payload 继续由处理器 Schema 校验。
+        if (method === 'workflow') {
+          const roots = z.array(z.uuid()).max(1000).parse(value);
+          return queue.workflow(roots).map((task) => ({ id: task.id, status: task.status }));
+        }
         if (method === 'enqueue') {
           const command = z
             .object({

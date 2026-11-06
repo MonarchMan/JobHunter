@@ -22,18 +22,20 @@ import {
   type SqliteDatabaseHandle,
 } from './connection.js';
 import { PersistenceError } from '@jobhunter/common/persistence/errors';
-import { acquireTaskServiceLock } from './task-service-lock.js';
+import { acquireTaskServiceLock, hasTaskServiceOwnership } from './task-service-lock.js';
 
 /** 恢复检查和目录替换共用中央服务排他锁，禁止校验后或重命名窗口内重新启动执行器。 */
 async function withStoppedTaskService<T>(
   dataRoot: string,
   operation: () => Promise<T>,
 ): Promise<T> {
-  const release = acquireTaskServiceLock(dataRoot);
+  const release = hasTaskServiceOwnership(dataRoot)
+    ? () => undefined
+    : acquireTaskServiceLock(dataRoot);
   if (!release)
     throw new PersistenceError(
       'DATABASE_UPGRADE_REQUIRES_STOP',
-      'Restore requires stopping the central task service first (task service stop).',
+      'Restore requires stopping the current Web/CLI host first.',
     );
   try {
     return await operation();

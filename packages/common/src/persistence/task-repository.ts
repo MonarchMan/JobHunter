@@ -157,6 +157,7 @@ const SCHEDULE_COLUMNS = `
 export class SqliteTaskRepository implements TaskQueue {
   readonly #client: Database.Database;
   readonly #claimTransaction: (input: {
+    readonly rootTaskIds?: readonly string[];
     readonly taskType: string;
     readonly workerId: string;
     readonly now: UtcInstant;
@@ -196,6 +197,17 @@ export class SqliteTaskRepository implements TaskQueue {
       this.#commitScheduleOccurrenceInside(input),
     );
     this.#scheduleTransaction = (input) => scheduleTransaction.immediate(input);
+  }
+
+  /** 查询目标及递归子任务，供短生命周期宿主等待完整工作流。 */
+  public workflow(rootIds: readonly string[]): readonly TaskRecord[] {
+    return (
+      this.#client
+        .prepare(
+          `WITH RECURSIVE workflow(id) AS (SELECT value FROM json_each(?) UNION SELECT t.id FROM tasks t JOIN workflow w ON t.parent_task_id = w.id) SELECT ${TASK_COLUMNS} FROM tasks WHERE id IN (SELECT id FROM workflow)`,
+        )
+        .all(JSON.stringify(rootIds)) as TaskRow[]
+    ).map(taskFromRow);
   }
 
   /** 手动重试在同一事务记录失败日志、校验并发并重置执行状态。 */
@@ -250,16 +262,17 @@ export class SqliteTaskRepository implements TaskQueue {
     const row = this.#client
       .prepare(
         `INSERT INTO tasks
-         (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
+         (id, parent_task_id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
           retry_of_task_id, attempt_count, max_attempts, available_at,
           lease_owner, lease_expires_at, last_heartbeat_at, cancel_requested_at,
           error_category, error_summary, public_state, created_at, started_at, finished_at)
-         VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL,
+         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL,
                  NULL, NULL, NULL, ?, NULL, NULL)
          RETURNING ${TASK_COLUMNS}`,
       )
       .get(
         input.id,
+        input.parentTaskId ?? null,
         input.taskType,
         canonicalJson(input.payload),
         input.priority,
@@ -473,6 +486,7 @@ export class SqliteTaskRepository implements TaskQueue {
 
   /** 处理数据库类内部的辅助逻辑。 */
   #claimInside(input: {
+    readonly rootTaskIds?: readonly string[];
     readonly taskType: string;
     readonly workerId: string;
     readonly now: UtcInstant;
@@ -485,10 +499,15 @@ export class SqliteTaskRepository implements TaskQueue {
       .prepare(
         `SELECT id, task_type FROM tasks
          WHERE task_type = ? AND status = 'pending' AND available_at <= ?
+         AND (? IS NULL OR id IN (WITH RECURSIVE workflow(id) AS (SELECT value FROM json_each(?) UNION SELECT t.id FROM tasks t JOIN workflow w ON t.parent_task_id = w.id) SELECT id FROM workflow))
          ORDER BY priority DESC, available_at ASC, created_at ASC, id ASC LIMIT 1`,
       )
-      .get(input.taskType, input.now) as
-      { readonly id: string; readonly task_type: string } | undefined;
+      .get(
+        input.taskType,
+        input.now,
+        input.rootTaskIds ? JSON.stringify(input.rootTaskIds) : null,
+        input.rootTaskIds ? JSON.stringify(input.rootTaskIds) : null,
+      ) as { readonly id: string; readonly task_type: string } | undefined;
     if (!candidate) return null;
     const leaseDurationMs = input.leaseDurationMsFor(candidate.task_type);
     if (!Number.isSafeInteger(leaseDurationMs) || leaseDurationMs < 1_000) {
@@ -509,6 +528,7 @@ export class SqliteTaskRepository implements TaskQueue {
 
   /** 执行数据库组件对外暴露的操作。 */
   public claim(input: {
+    readonly rootTaskIds?: readonly string[];
     readonly taskType: string;
     readonly workerId: string;
     readonly now: UtcInstant;

@@ -30,11 +30,14 @@ async function command(
   readonly stderr: string;
 }> {
   const output = memoryIo();
-  const exitCode = await runLocalCli({
-    argv: ['--json', '--data-root', dataRoot, ...argv],
-    io: output.io,
-    environment: {},
-  });
+  const exitCode = await runLocalCli(
+    {
+      argv: ['--json', '--data-root', dataRoot, ...argv],
+      io: output.io,
+      environment: {},
+    },
+    90_000,
+  );
   return {
     exitCode,
     body: JSON.parse(output.stdout.join('')) as Record<string, unknown>,
@@ -129,7 +132,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     } finally {
       await root.cleanup();
     }
-  });
+  }, 90_000);
 
   it('retries research tasks through the CLI unavailable handler registration', async () => {
     const root = await createTemporaryDataRoot('jobhunter-cli-research-task-');
@@ -205,7 +208,7 @@ VALUES (?, 'interview.experience-research',json_object('research',json_object(
             kind: 'enqueued',
             task: {
               taskType: 'interview.experience-research.execute',
-              status: 'pending',
+              status: 'succeeded',
               retryOfTaskId: null,
             },
           },
@@ -229,11 +232,35 @@ VALUES (?, 'interview.experience-research',json_object('research',json_object(
     } finally {
       await root.cleanup();
     }
-  });
+  }, 90_000);
 });
 
 // 命令契约测试不启动网络执行器；中央服务真实生命周期由 embedded-tasks 覆盖。
-vi.mock(import('@jobhunter/common/task-service'), async (original) => ({
+vi.mock(import('@jobhunter/common/task-host-runtime'), async (original) => ({
   ...(await original()),
-  ensureConfiguredTaskService: vi.fn(() => Promise.resolve()),
+  ensureConfiguredTaskHost: vi.fn(() => Promise.resolve()),
+  allowConfiguredTask: vi.fn(() => Promise.resolve()),
 }));
+
+// 命令契约使用合成等待投影，不领取或执行持久任务；真实等待及线程生命周期由 embedded-tasks 覆盖。
+vi.mock(import('@jobhunter/recruitment/source-management-service'), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    TaskWaitService: class extends actual.TaskWaitService {
+      readonly projection: ConstructorParameters<typeof actual.TaskWaitService>[0];
+      constructor(...args: ConstructorParameters<typeof actual.TaskWaitService>) {
+        super(...args);
+        this.projection = args[0];
+      }
+      override wait(
+        taskId: Parameters<InstanceType<typeof actual.TaskWaitService>['wait']>[0],
+        signal: AbortSignal,
+      ): ReturnType<InstanceType<typeof actual.TaskWaitService>['wait']> {
+        signal.throwIfAborted();
+        const task = this.projection.get(taskId);
+        return Promise.resolve(task ? { ...task, status: 'succeeded' as const } : null);
+      }
+    },
+  };
+});

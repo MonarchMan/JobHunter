@@ -19,3 +19,15 @@ export function withTaskExecution<T>(identity: TaskExecutionIdentity, operation:
 export function currentTaskExecution(): TaskExecutionIdentity | undefined {
   return execution.getStore();
 }
+
+/** 主线程宿主观察入口发布的根任务；工作线程的子任务通过 parentTaskId 关联。 */
+const enqueueObservers = new Set<(taskId: string) => void>();
+export function observeTaskEnqueues(observer: (taskId: string) => void): () => void {
+  enqueueObservers.add(observer);
+  return () => {
+    enqueueObservers.delete(observer);
+  };
+}
+export function notifyTaskEnqueued(taskId: string): void {
+  if (!currentTaskExecution()) for (const observer of enqueueObservers) observer(taskId);
+}

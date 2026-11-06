@@ -15,7 +15,12 @@ import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { SystemIdGenerator, utcInstant, parseId } from '@jobhunter/common/domain';
 import { loadRuntimeConfig } from './runtime-config.js';
-import { ensureConfiguredTaskService } from '@jobhunter/common/task-service';
+import {
+  ensureConfiguredTaskHost,
+  finishConfiguredTaskHost,
+  acquireTaskServiceLock,
+  withTaskServiceOwnership,
+} from '@jobhunter/common/task-host-runtime';
 
 /** CLI 仅提交动作或读取脱敏结果；凭据读取与网络执行始终由 Worker 完成。 */
 async function run(): Promise<void> {
@@ -42,12 +47,11 @@ async function run(): Promise<void> {
     });
     const database = openSqliteDatabase({ dataRoot: config.bootstrap.dataRoot.value });
     try {
-      await ensureConfiguredTaskService(config, {
+      await ensureConfiguredTaskHost(config, {
         entry: new URL(
-          import.meta.url.endsWith('.ts') ? './task-service-main.ts' : './task-service-main.js',
+          import.meta.url.endsWith('.ts') ? './task-thread-main.ts' : './task-thread-main.js',
           import.meta.url,
         ),
-        workspaceRoot: path.resolve(import.meta.dirname, '../../..'),
       });
       // 2、复用相同任务定义；CLI 不允许执行处理器。
       const registry = new HandlerRegistry();
@@ -212,7 +216,27 @@ async function run(): Promise<void> {
       database.close();
     }
   });
-  await program.parseAsync();
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    await program.parseAsync();
+    return;
+  }
+  const hostConfig = await loadRuntimeConfig({
+    argv: process.argv.slice(2),
+    workspaceRoot: path.resolve(import.meta.dirname, '../../..'),
+  });
+  const release = acquireTaskServiceLock(hostConfig.bootstrap.dataRoot.value, 'cli');
+  if (!release) throw new Error('同一数据目录已有运行宿主。');
+  try {
+    await withTaskServiceOwnership(hostConfig.bootstrap.dataRoot.value, async () => {
+      try {
+        await program.parseAsync();
+      } finally {
+        await finishConfiguredTaskHost(hostConfig);
+      }
+    });
+  } finally {
+    release();
+  }
 }
 // 3、错误不输出可能含凭据的底层异常或输入值。
 await run().catch(() => {

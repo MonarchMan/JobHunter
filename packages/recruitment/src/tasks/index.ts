@@ -199,7 +199,23 @@ export function createRecruitmentTasks(
     clock,
   });
   const uow = new SqliteUnitOfWork(database.client);
-  const sourceRateLimit = new TokenBucketSourceRateLimitGate(firstPartyRateLimits());
+  const sourcePolicies = firstPartyRateLimits();
+  const localRateLimit = new TokenBucketSourceRateLimitGate(sourcePolicies);
+  const sourceRateLimit: SourceRateLimitGate = {
+    async beforeRequest(request) {
+      const policy = sourcePolicies.get(request.sourceKey);
+      if (
+        policy &&
+        (await context.networkSemaphore.beforeSourceRequest(
+          request.sourceKey,
+          policy,
+          request.signal,
+        ))
+      )
+        return;
+      await localRateLimit.beforeRequest(request);
+    },
+  };
   const sourceHttp = limitSourceHttp(
     new FetchSourceHttpClient(),
     networkSemaphore,

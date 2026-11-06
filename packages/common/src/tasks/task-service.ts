@@ -1,3 +1,4 @@
+import { currentTaskExecution, notifyTaskEnqueued } from './execution-scope.js';
 import { parseId, type TaskId, type UtcInstant } from '@jobhunter/common/domain';
 import type { HandlerRegistry } from './handler-registry.js';
 import type {
@@ -70,8 +71,10 @@ export class TaskService {
       throw new TypeError('Task concurrency key must not be empty.');
     }
     const now = this.#dependencies.clock.now();
+    const execution = currentTaskExecution();
     const input: PersistedTaskInput = {
       id: parseId(this.#dependencies.ids.generate(), 'Task'),
+      ...(execution ? { parentTaskId: parseId(execution.taskId, 'Task') } : {}),
       taskType: command.taskType,
       payload,
       priority,
@@ -83,7 +86,9 @@ export class TaskService {
       createdAt: now,
     };
     // 2、在队列端口内执行幂等和并发约束。
-    return this.#queue.enqueue(input);
+    const result = this.#queue.enqueue(input);
+    notifyTaskEnqueued(result.task.id);
+    return result;
   }
 
   /** 查询单个任务。 */
@@ -145,6 +150,9 @@ export class TaskService {
       availableAt: now,
       createdAt: now,
     };
-    return this.#retryCoordinator?.enqueueRetry({ source, retry }) ?? this.#queue.retry(retry);
+    const result =
+      this.#retryCoordinator?.enqueueRetry({ source, retry }) ?? this.#queue.retry(retry);
+    notifyTaskEnqueued(result.task.id);
+    return result;
   }
 }

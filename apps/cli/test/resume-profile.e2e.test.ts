@@ -120,7 +120,7 @@ describe('resume and profile commands', () => {
       expect((await command(dataRoot, ['init'])).exitCode).toBe(0);
       const imported = await command(dataRoot, ['resume', 'import', resumePath]);
       expect(imported.exitCode).toBe(4);
-      expect(imported.stderr).toBe('');
+      expect(imported.stderr).toContain('等待任务');
       const serialized = JSON.stringify(imported.body);
       expect(serialized).not.toContain('extractedText');
       expect(serialized).not.toContain(resumePath);
@@ -175,11 +175,35 @@ describe('resume and profile commands', () => {
     } finally {
       await root.cleanup();
     }
-  }, 30_000);
+  }, 90_000);
 });
 
 // 命令契约测试不启动网络执行器；中央服务真实生命周期由 embedded-tasks 覆盖。
-vi.mock(import('@jobhunter/common/task-service'), async (original) => ({
+vi.mock(import('@jobhunter/common/task-host-runtime'), async (original) => ({
   ...(await original()),
-  ensureConfiguredTaskService: vi.fn(() => Promise.resolve()),
+  ensureConfiguredTaskHost: vi.fn(() => Promise.resolve()),
+  allowConfiguredTask: vi.fn(() => Promise.resolve()),
 }));
+
+// 命令契约使用合成等待投影，不领取或执行持久任务；真实等待及线程生命周期由 embedded-tasks 覆盖。
+vi.mock(import('@jobhunter/recruitment/source-management-service'), async (original) => {
+  const actual = await original();
+  return {
+    ...actual,
+    TaskWaitService: class extends actual.TaskWaitService {
+      readonly projection: ConstructorParameters<typeof actual.TaskWaitService>[0];
+      constructor(...args: ConstructorParameters<typeof actual.TaskWaitService>) {
+        super(...args);
+        this.projection = args[0];
+      }
+      override wait(
+        taskId: Parameters<InstanceType<typeof actual.TaskWaitService>['wait']>[0],
+        signal: AbortSignal,
+      ): ReturnType<InstanceType<typeof actual.TaskWaitService>['wait']> {
+        signal.throwIfAborted();
+        const task = this.projection.get(taskId);
+        return Promise.resolve(task ? { ...task, status: 'succeeded' as const } : null);
+      }
+    },
+  };
+});

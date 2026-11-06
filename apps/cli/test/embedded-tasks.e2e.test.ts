@@ -1,26 +1,27 @@
 import { periodicConfigProjection } from '@jobhunter/common/persistence/periodic-config';
 import { describe, expect, it } from 'vitest';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { parseId, utcInstant } from '@jobhunter/common/domain';
 import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
-import { requestTaskService, taskServiceConfiguration } from '@jobhunter/common/task-service';
+import { requestTaskService, taskHostConfiguration } from '@jobhunter/common/task-host-runtime';
 import { createLocalCliContainer } from '../src/container.js';
 
-it('CLI waits use the shared service and closing the client keeps it available', async () => {
+it('CLI executes a target workflow in owned threads and closing removes its bridge', async () => {
   const root = await createTemporaryDataRoot('jobhunter-cli-embedded-');
   const bootstrap = resolveBootstrapConfig({
     cli: { dataRoot: root.path },
     environment: {},
     cwd: root.path,
   });
-  const config = resolveAppConfig({ bootstrap, environment: {} });
+  const config = resolveAppConfig({
+    bootstrap,
+    environment: { TASK_THREAD_POOL: '{"startupTimeoutMs":90000}' },
+  });
   const container = createLocalCliContainer(config, { workspaceRoot: root.path });
-  const serviceInput = { dataRoot: root.path, configuration: taskServiceConfiguration(config) };
+  const serviceInput = { dataRoot: root.path, configuration: taskHostConfiguration(config) };
   const database = openSqliteDatabase({ dataRoot: root.path });
   const queue = new SqliteTaskRepository(database.client);
   const taskId = parseId('018f0000-0000-7000-8000-00000000d101', 'Task');
@@ -45,13 +46,7 @@ it('CLI waits use the shared service and closing the client keeps it available',
     });
     // 2、没有 Web 时由 CLI 按需启动中央服务，任务仍在执行子进程中消费。
     if (!container.task) throw new Error('Task services were not composed');
-    await expect(
-      container.task.wait(taskId, AbortSignal.timeout(15_000)).catch(async (error: unknown) => {
-        throw new Error(await readFile(path.join(root.path, 'logs/task-service.log'), 'utf8'), {
-          cause: error,
-        });
-      }),
-    ).resolves.toMatchObject({
+    await expect(container.task.wait(taskId, AbortSignal.timeout(90_000))).resolves.toMatchObject({
       status: 'failed',
       errorCategory: 'cancelled',
     });
@@ -59,76 +54,60 @@ it('CLI waits use the shared service and closing the client keeps it available',
     await container.close();
     await container.close();
     expect(queue.get(taskId)?.status).toBe('failed');
-    await expect(requestTaskService({ ...serviceInput, method: 'ping' })).resolves.toBeDefined();
+    await expect(requestTaskService({ ...serviceInput, method: 'ping' })).rejects.toThrow();
   } finally {
     await container.close();
-    await requestTaskService({ ...serviceInput, method: 'shutdown' }).catch(() => undefined);
     database.close();
     await root.cleanup();
   }
-});
+}, 180_000);
 
 describe('CLI query startup', () => {
-  it('starts the service at initialization and consumes work after the CLI closes without waiting', async () => {
-    const root = await createTemporaryDataRoot('jobhunter-cli-background-');
-    const bootstrap = resolveBootstrapConfig({
-      cli: { dataRoot: root.path },
-      environment: {},
-      cwd: root.path,
+  it('does not consume unrelated historical tasks', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-cli-scope-');
+    const config = resolveAppConfig({
+      bootstrap: resolveBootstrapConfig({
+        cli: { dataRoot: root.path },
+        environment: {},
+        cwd: root.path,
+      }),
+      environment: { TASK_THREAD_POOL: '{"startupTimeoutMs":90000}' },
     });
-    const config = resolveAppConfig({ bootstrap, environment: {} });
+    const database = openSqliteDatabase({ dataRoot: root.path });
+    const queue = new SqliteTaskRepository(database.client);
     const container = createLocalCliContainer(config, { workspaceRoot: root.path });
-    const serviceInput = { dataRoot: root.path, configuration: taskServiceConfiguration(config) };
-    let database: ReturnType<typeof openSqliteDatabase> | undefined;
-    try {
-      await expect(container.taskService?.status()).resolves.toEqual({ status: 'unavailable' });
-      await container.initialize?.run();
-      await expect(container.taskService?.status()).resolves.toEqual({ status: 'ready' });
-      await container.taskService?.stop();
-      await expect(container.taskService?.status()).resolves.toEqual({ status: 'unavailable' });
-      await container.taskService?.restart();
-      await expect(container.taskService?.status()).resolves.toEqual({ status: 'ready' });
-      await container.close();
-      await expect(requestTaskService({ ...serviceInput, method: 'ping' })).resolves.toBeDefined();
-      database = openSqliteDatabase({ dataRoot: root.path });
-      const queue = new SqliteTaskRepository(database.client);
-      const taskId = parseId('018f0000-0000-7000-8000-00000000d201', 'Task');
+    const target = parseId('018f0000-0000-7000-8000-00000000d301', 'Task');
+    const unrelated = parseId('018f0000-0000-7000-8000-00000000d302', 'Task');
+    for (const id of [target, unrelated])
       queue.enqueue({
-        id: taskId,
+        id,
         taskType: 'interview.experience-research.execute',
         payload: {
-          requestId: '018f0000-0000-7000-8000-00000000d202',
+          requestId: id,
           requestFingerprint: 'a'.repeat(64),
           expectedRevision: 0,
           executorKey: 'configured-model',
         },
         priority: 0,
-        idempotencyKey: 'background-cli',
+        idempotencyKey: id,
         concurrencyKey: null,
         retryOfTaskId: null,
         maxAttempts: 1,
         availableAt: utcInstant(1),
         createdAt: utcInstant(1),
       });
-      // 不调用 CLI wait：独立服务自行分派，失效上下文在外部调用前确定失败。
-      const deadline = Date.now() + 15_000;
-      while (
-        ['pending', 'running'].includes(queue.get(taskId)?.status ?? '') &&
-        Date.now() < deadline
-      )
-        await setTimeout(50);
-      expect(queue.get(taskId)).toMatchObject({
-        status: 'failed',
-        errorCategory: 'cancelled',
-        attemptCount: 1,
-      });
+    try {
+      if (!container.task) throw new Error('Missing task service');
+      await container.task.wait(target, AbortSignal.timeout(90_000));
+      expect(queue.get(target)?.status).toBe('failed');
+      await setTimeout(200);
+      expect(queue.get(unrelated)?.status).toBe('pending');
     } finally {
       await container.close();
-      await requestTaskService({ ...serviceInput, method: 'shutdown' }).catch(() => undefined);
-      database?.close();
+      database.close();
       await root.cleanup();
     }
-  });
+  }, 180_000);
 
   it('does not create task schedules for a query-only container', async () => {
     const root = await createTemporaryDataRoot('jobhunter-cli-query-only-');

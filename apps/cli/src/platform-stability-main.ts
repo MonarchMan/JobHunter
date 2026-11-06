@@ -9,7 +9,12 @@ import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { SqlitePlatformRepository } from '@jobhunter/recruitment/persistence/platform-repository';
 import { SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
 import { loadRuntimeConfig } from './runtime-config.js';
-import { ensureConfiguredTaskService } from '@jobhunter/common/task-service';
+import {
+  ensureConfiguredTaskHost,
+  finishConfiguredTaskHost,
+  acquireTaskServiceLock,
+  withTaskServiceOwnership,
+} from '@jobhunter/common/task-host-runtime';
 /** 与应用观察端口共享平台键，不在入口复制平台身份定义。 */
 type PlatformProviderKey = Parameters<typeof observePlatformRound>[0]['provider'];
 
@@ -54,51 +59,68 @@ async function main(): Promise<void> {
     throw new Error('Invalid observation bounds.');
   if (Date.now() < notBefore || Date.now() >= deadline)
     throw new Error('Outside observation window.');
-  const database = openSqliteDatabase({ dataRoot: options.dataRoot, runMigrations: false });
+  const hostConfig = await loadRuntimeConfig({
+    argv: process.argv.slice(2),
+    workspaceRoot: path.resolve(import.meta.dirname, '../../..'),
+  });
+  const release = acquireTaskServiceLock(hostConfig.bootstrap.dataRoot.value, 'cli');
+  if (!release) throw new Error('同一数据目录已有运行宿主。');
   try {
-    const workspaceRoot = path.resolve(import.meta.dirname, '../../..');
-    const config = await loadRuntimeConfig({ argv: process.argv.slice(2), workspaceRoot });
-    await ensureConfiguredTaskService(config, {
-      entry: new URL(
-        import.meta.url.endsWith('.ts') ? './task-service-main.ts' : './task-service-main.js',
-        import.meta.url,
-      ),
-      workspaceRoot,
+    await withTaskServiceOwnership(hostConfig.bootstrap.dataRoot.value, async () => {
+      const database = openSqliteDatabase({ dataRoot: options.dataRoot, runMigrations: false });
+      try {
+        const workspaceRoot = path.resolve(import.meta.dirname, '../../..');
+        const config = await loadRuntimeConfig({ argv: process.argv.slice(2), workspaceRoot });
+        await ensureConfiguredTaskHost(config, {
+          entry: new URL(
+            import.meta.url.endsWith('.ts') ? './task-thread-main.ts' : './task-thread-main.js',
+            import.meta.url,
+          ),
+        });
+        const repository = new SqlitePlatformRepository(database.client, options.provider);
+        const registry = new HandlerRegistry();
+        registry.register(
+          createPlatformTaskHandler(options.provider, {
+            execute: () => Promise.reject(new Error('Worker required.')),
+          }),
+        );
+        const tasks = new TaskService(
+          {
+            queue: new SqliteTaskRepository(database.client),
+            clock: { now: () => utcInstant(Date.now()) },
+            ids: new SystemIdGenerator(),
+          },
+          registry,
+        );
+        // 2、只检验本轮已提交事实，不补发详情，不将其他平台／官网记录作为本轮失败。
+        const result = await observePlatformRound({
+          provider: options.provider,
+          generation,
+          round,
+          deadline,
+          tasks,
+          connection: () => repository.snapshot(),
+          verifySaved: (batch, task) => {
+            if (
+              batch.savedCount === undefined ||
+              !repository.verifyObservedBatch(task.id, batch.savedCount)
+            )
+              throw new Error('Persistence invariant failed.');
+          },
+        });
+        console.log(
+          JSON.stringify({ ...result, generation, observedAt: new Date().toISOString() }),
+        );
+      } finally {
+        try {
+          await finishConfiguredTaskHost(hostConfig);
+        } finally {
+          database.close();
+        }
+      }
     });
-    const repository = new SqlitePlatformRepository(database.client, options.provider);
-    const registry = new HandlerRegistry();
-    registry.register(
-      createPlatformTaskHandler(options.provider, {
-        execute: () => Promise.reject(new Error('Worker required.')),
-      }),
-    );
-    const tasks = new TaskService(
-      {
-        queue: new SqliteTaskRepository(database.client),
-        clock: { now: () => utcInstant(Date.now()) },
-        ids: new SystemIdGenerator(),
-      },
-      registry,
-    );
-    // 2、只检验本轮已提交事实，不补发详情，不将其他平台／官网记录作为本轮失败。
-    const result = await observePlatformRound({
-      provider: options.provider,
-      generation,
-      round,
-      deadline,
-      tasks,
-      connection: () => repository.snapshot(),
-      verifySaved: (batch, task) => {
-        if (
-          batch.savedCount === undefined ||
-          !repository.verifyObservedBatch(task.id, batch.savedCount)
-        )
-          throw new Error('Persistence invariant failed.');
-      },
-    });
-    console.log(JSON.stringify({ ...result, generation, observedAt: new Date().toISOString() }));
   } finally {
-    database.close();
+    release();
   }
 }
 

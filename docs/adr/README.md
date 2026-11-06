@@ -44,3 +44,8 @@ ADR 一经 Accepted 通常不直接改写历史结论；后续决策变更通过
 - [ADR-0059：模型请求账本独立于 Agent 运行](./0059-model-request-ledger.md)
 - [ADR-0060：用内容身份替代业务版本选择](./0060-content-based-execution-identity.md)
 - [ADR-0061：同步任务分阶段合并自动评分](./0061-staged-sync-task-with-scoring-stage.md)
+- [ADR-0062：CLI 与 Web 共用中央任务调度服务](./0062-central-task-scheduler.md)
+- [ADR-0063：通用 AI 会话与本地项目](./0063-ai-sessions-and-local-projects.md)
+- [ADR-0064：Web 停止级联停止中央任务服务](./0064-web-stop-cascades-to-task-service.md)
+
+- [ADR-0065：单宿主与有界动态任务线程池](./0065-single-host-dynamic-thread-pool.md)

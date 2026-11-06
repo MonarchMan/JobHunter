@@ -594,6 +594,9 @@ export function createPlatformTaskHandler(
   service: Pick<PlatformBrowsingService, 'execute'>,
 ): TaskHandler<BossCommand, BossResult> {
   return {
+    executionAffinity: `platform:${providerKey}`,
+    releasesExecutionAffinity: (output) =>
+      output.status === 'disconnected' || output.status === 'selection_required',
     taskType: `platform.${providerKey}`,
     payloadSchema: bossCommandSchema,
     outputSchema: bossResultSchema,

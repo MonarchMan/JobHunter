@@ -18,7 +18,7 @@
 - **CLI-004**：`jh job list|show|export` 必须支持关键词、公司、状态、地点、细分职位类别、最低分和稳定分页。
 - **CLI-005**：`jh resume import`、`jh profile show|history|set|confirm` 必须覆盖导入、画像查看和人工维护。
 - **CLI-006**：`jh match score|list|show` 必须支持单个具体职位评分、任务状态、分项证据和建议；不得提供全量批量匹配入口。
-- **CLI-007**：`jh task list|show|retry|cancel` 必须提供任务运维能力；`jh task service status|stop|restart` 提供中央服务探测和显式维护，停止完成须等待执行器回收与单实例锁释放。配置冲突只允许显式停止或重启，不自动替换服务。
+- **CLI-007**：`jh task list|show|retry|cancel` 提供任务运维；移除独立后台服务命令。同目录已有宿主时拒绝启动，执行命令默认等待目标工作流，Ctrl+C 停止宿主并保留恢复资格。
 - **CLI-008**：`jh doctor` 和 `jh backup create|verify|restore` 必须暴露开发/运行自检与备份流程。
 - **CLI-009**：所有读命令必须支持 `--json`，stdout 只输出机器结果，日志和进度写 stderr。
 - **CLI-010**：危险删除/恢复命令必须先 dry-run；真正执行要求显式 `--confirm`，不得交互式误触。
@@ -45,3 +45,7 @@
 ## 未解决问题
 
 无。
+
+## 单宿主运行约束（ADR-0065）
+
+同一数据目录 Web/CLI 互斥；主线程统一调度，业务 Handler 由有界动态线程池执行。Web 启动器拥有运行时，Next 只使用受限命令桥。CLI 不启动周期或消费无关历史任务，执行命令等待目标工作流；关闭宿主停止执行，强杀后由下次启动恢复。此约定替代原独立后台服务和退出继续运行的描述。详见 [003 设计](../003-task-worker/design.md)。

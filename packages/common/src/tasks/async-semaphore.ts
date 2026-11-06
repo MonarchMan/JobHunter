@@ -27,6 +27,23 @@ export class AsyncSemaphore {
     this.#capacity = capacity;
   }
 
+  /** 来源节流扩展端口；普通本地执行返回 false，由业务模块使用本地令牌桶。 */
+  public beforeSourceRequest(
+    sourceKey: string,
+    policy: { requestsPerMinute: number; burst: number },
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    void sourceKey;
+    void policy;
+    signal.throwIfAborted();
+    return Promise.resolve(false);
+  }
+
+  /** 池扩容判断使用饱和状态，不能通过新增线程放大外部请求预算。 */
+  public get saturated(): boolean {
+    return this.#active >= this.#capacity;
+  }
+
   public get activeCount(): number {
     return this.#active;
   }

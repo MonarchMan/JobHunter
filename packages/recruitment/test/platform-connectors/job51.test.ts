@@ -89,15 +89,19 @@ it('reads observed first and last pages with a configured gap and no invented si
       ),
     )
     .mockResolvedValueOnce(response([row('140'), row('141')], 42));
-  const s = new Job51HttpSession({ fetch: fetcher, requestIntervalMs: 50 });
+  const requestTimes: number[] = [];
+  const timedFetch: typeof fetch = (...args) => {
+    requestTimes.push(performance.now());
+    return fetcher(...args);
+  };
+  const s = new Job51HttpSession({ fetch: timedFetch, requestIntervalMs: 50 });
   s.offer(template());
   expect((await s.readNext(new AbortController().signal)).hasMore).toBe(true);
   s.offer(template(3));
-  const started = Date.now();
   const pending = s.readNext(new AbortController().signal);
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect((await pending).hasMore).toBe(false);
-  expect(Date.now() - started).toBeGreaterThanOrEqual(40);
+  expect((requestTimes[1] ?? 0) - (requestTimes[0] ?? 0)).toBeGreaterThanOrEqual(40);
   expect(fetcher.mock.calls[1]?.[0]).toBe(template(3).url);
 }, 10_000);
 

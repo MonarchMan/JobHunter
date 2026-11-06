@@ -1,5 +1,5 @@
 import type { TaskRecord, TaskStatus } from '@jobhunter/common/tasks';
-import { TaskServiceConnectionError } from '@jobhunter/common/task-service';
+import { HostBridgeConnectionError } from '@jobhunter/common/task-host-runtime';
 import { Command, CommanderError, Option } from 'commander';
 import type { CliContainer } from './container.js';
 import type { CliIo } from './io.js';
@@ -176,13 +176,13 @@ function addJobFilterOptions(command: Command, includePagination = true): Comman
 /** 将任意异常转换为稳定 CLI 错误。 */
 function errorFrom(value: unknown): CliError {
   if (value instanceof CliError) return value;
-  if (value instanceof TaskServiceConnectionError) {
+  if (value instanceof HostBridgeConnectionError) {
     return new CliError({
       code: `TASK_SERVICE_${value.code.toUpperCase()}`,
       message:
         value.code === 'incompatible'
-          ? '中央任务服务的配置与当前入口不一致，请执行 task service restart。'
-          : '中央任务服务未能完成请求，请检查数据目录下的 logs/task-service.log；停止未完成时请勿迁移或恢复数据。',
+          ? '任务宿主配置与当前入口不一致，请先关闭原 Web/CLI 后重启。'
+          : '任务宿主未能完成请求，请检查运行日志；停止未完成时请勿迁移或恢复数据。',
       exitCode: value.code === 'incompatible' ? cliExitCode.usage : cliExitCode.internal,
     });
   }
@@ -193,7 +193,7 @@ function errorFrom(value: unknown): CliError {
   ) {
     return new CliError({
       code: value.code,
-      message: '数据库需要升级，请先执行 task service stop 并关闭 Web 和其他数据库连接。',
+      message: '数据库需要升级，请先关闭当前 Web/CLI 宿主及其他数据库连接。',
       exitCode: cliExitCode.usage,
     });
   }
@@ -287,7 +287,7 @@ async function waitForTask(input: {
   };
   process.once('SIGINT', stop);
   process.once('SIGTERM', stop);
-  input.io.stderr.write(`等待任务 ${input.taskId}；Ctrl+C 仅停止等待，不取消任务。\n`);
+  input.io.stderr.write(`等待任务 ${input.taskId}；Ctrl+C 停止当前宿主，未完成任务下次可恢复。\n`);
   try {
     return { task: await input.wait(input.taskId, abort.signal), interrupted: false };
   } catch (error) {
@@ -382,7 +382,7 @@ export function createProgram(input: {
         .description('入队单个或全部已启用来源同步')
         .argument('[source]')
         .option('--all', '同步全部已启用来源')
-        .option('--wait', '等待任务结束；Ctrl+C 不取消任务')
+        .option('--wait', '兼容选项，默认等待任务结束；Ctrl+C 停止本次执行，下次启动可恢复')
         .action(
           async (selector: string | undefined, options: { all?: boolean; wait?: boolean }) => {
             if (!input.container.source)
@@ -400,7 +400,7 @@ export function createProgram(input: {
               });
             const queued = await sourceService.sync(options.all ? 'all' : (selector ?? ''));
             const waits = [];
-            if (options.wait) {
+            {
               for (const item of queued)
                 waits.push(
                   await waitForTask({
@@ -446,29 +446,6 @@ export function createProgram(input: {
     );
 
   const task = program.command('task').description('查看和维护后台任务');
-  const taskService = task.command('service').description('查看、停止或重启中央任务服务');
-  for (const operation of ['status', 'stop', 'restart'] as const) {
-    taskService
-      .command(operation)
-      .description(
-        {
-          status: '探测服务状态',
-          stop: '停止服务并等待执行进程退出',
-          restart: '按当前配置重启服务',
-        }[operation],
-      )
-      .action(async () => {
-        if (!input.container.taskService)
-          throw new CliError({
-            code: 'CONFIGURATION_ERROR',
-            message: '中央任务服务未装配。',
-            exitCode: cliExitCode.usage,
-          });
-        const result = await input.container.taskService[operation]();
-        const status = result?.status ?? (operation === 'stop' ? 'stopped' : 'ready');
-        input.onResult({ data: { status }, human: `中央任务服务：${status}` });
-      });
-  }
   task
     .command('list')
     .description('列出任务')
@@ -544,7 +521,22 @@ export function createProgram(input: {
           exitCode: cliExitCode.notFound,
         });
       const result = await input.container.task.retry(taskId);
-      input.onResult({ data: result, human: `已创建重试任务：${result.task.id}` });
+      const taskService = input.container.task;
+      const waited = await waitForTask({
+        wait: (id, signal) => taskService.wait(id, signal),
+        taskId: result.task.id,
+        io: input.io,
+      });
+      const finalTask = waited.task ?? result.task;
+      input.onResult({
+        data: { ...result, task: finalTask, wait: waited },
+        human: `重试任务：${finalTask.id}（${finalTask.status}）`,
+        ...(waited.interrupted
+          ? { exitCode: cliExitCode.partial }
+          : ['failed', 'cancelled'].includes(finalTask.status)
+            ? { exitCode: cliExitCode.taskFailed }
+            : {}),
+      });
     });
   task
     .command('cancel')
@@ -601,7 +593,7 @@ export function createProgram(input: {
         .argument('<path>')
         .option('--profile <profileId>', '更新已有候选人画像')
         .option('--name <name>', '首次导入时创建的画像名称', '默认候选人画像')
-        .option('--wait', '等待画像提取任务结束；Ctrl+C 不取消任务')
+        .option('--wait', '兼容选项，默认等待画像提取任务结束；Ctrl+C 停止本次执行，下次启动可恢复')
         .action(
           async (
             resumePath: string,
@@ -620,7 +612,7 @@ export function createProgram(input: {
               signal: new AbortController().signal,
             });
             let waited: Awaited<ReturnType<typeof waitForTask>> | null = null;
-            if (options.wait && result.task) {
+            if (result.task) {
               if (!input.container.task)
                 throw new CliError({
                   code: 'CONFIGURATION_ERROR',
@@ -774,7 +766,7 @@ export function createProgram(input: {
     .description('仅为一个具体职位提交匹配评分任务')
     .argument('<jobId>')
     .option('--profile <profileVersionId>', '指定画像版本；默认当前画像版本')
-    .option('--wait', '等待任务结束；Ctrl+C 不取消后台任务')
+    .option('--wait', '兼容选项，默认等待任务结束；Ctrl+C 停止本次执行，下次启动可恢复')
     .action(async (jobId: string, options: { profile?: string; wait?: boolean }) => {
       if (!input.container.match)
         throw new CliError({
@@ -787,20 +779,18 @@ export function createProgram(input: {
         jobId,
         ...(options.profile ? { profileVersionId: options.profile } : {}),
       });
-      const waited = options.wait
-        ? await waitForTask({
-            wait: (taskId, signal) => matchService.wait(taskId, signal),
-            taskId: queued.task.id,
-            io: input.io,
-          })
-        : null;
-      const failed = waited?.task ? ['failed', 'cancelled'].includes(waited.task.status) : false;
+      const waited = await waitForTask({
+        wait: (taskId, signal) => matchService.wait(taskId, signal),
+        taskId: queued.task.id,
+        io: input.io,
+      });
+      const failed = waited.task ? ['failed', 'cancelled'].includes(waited.task.status) : false;
       input.onResult({
         data: { task: queued.task, wait: waited },
         human: `匹配任务：${queued.task.id}（${queued.task.status}）`,
         ...(failed
           ? { exitCode: cliExitCode.taskFailed }
-          : waited?.interrupted
+          : waited.interrupted
             ? { exitCode: cliExitCode.partial }
             : {}),
       });

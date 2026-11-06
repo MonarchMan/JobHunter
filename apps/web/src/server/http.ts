@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server.js';
 import { isSqliteMaintenanceError } from '@jobhunter/common/persistence/maintenance';
-import { TaskServiceConnectionError } from '@jobhunter/common/task-service';
+import { HostBridgeConnectionError } from '@jobhunter/common/task-host-runtime';
 
 /** 写锁等待可能先于维护触发器超时，统一返回可重试响应而非内部错误。 */
 function isDatabaseBusy(error: unknown): boolean {
@@ -27,15 +27,13 @@ export function errorResponse(error: unknown): NextResponse {
     'code' in error &&
     error.code === 'DATABASE_UPGRADE_REQUIRES_STOP'
   ) {
-    return serviceUnavailableResponse(
-      '数据库升级需要先停止中央任务服务和 Web，请执行 task service stop。',
-    );
+    return serviceUnavailableResponse('数据库升级需要先关闭当前 Web/CLI 宿主及其他数据库连接。');
   }
-  if (error instanceof TaskServiceConnectionError) {
+  if (error instanceof HostBridgeConnectionError) {
     return serviceUnavailableResponse(
       error.code === 'incompatible'
-        ? '中央任务服务配置已变化，请执行 task service restart 后重试。'
-        : '中央任务服务暂不可用，请稍后重试或查看数据目录中的任务服务日志。',
+        ? '任务宿主配置已变化，请关闭并重新启动 Web 后重试。'
+        : '任务宿主暂不可用，请稍后重试或查看运行日志。',
     );
   }
   // 1、维护写保护是暂时不可用，保留客户端草稿并允许稍后重试。

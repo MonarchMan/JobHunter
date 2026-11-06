@@ -1,19 +1,35 @@
+import { taskServiceRequestSchema } from '../../src/tasks/host-bridge-protocol.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fork, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { startCentralTaskService } from '../../src/tasks/service-host.js';
-import {
-  ensureTaskService,
-  requestTaskService,
-  stopTaskService,
-} from '../../src/tasks/service-client.js';
+import { startTaskHostBridge } from '../../src/tasks/host-bridge.js';
+import { requestTaskService } from '../../src/tasks/host-bridge-client.js';
 import { setTimeout as delay } from 'node:timers/promises';
+import {
+  acquireTaskServiceLock,
+  readTaskHostOwner,
+} from '../../src/persistence/task-service-lock.js';
 
 const roots: string[] = [];
 const services: { close(): Promise<void>; finished: Promise<void> }[] = [];
+it('keeps owner diagnostics separate from the authoritative process lock', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'jh-owner-'));
+  roots.push(root);
+  const release = acquireTaskServiceLock(root, 'web');
+  if (!release) throw new Error('Expected exclusive owner');
+  try {
+    expect(readTaskHostOwner(root)).toMatchObject({ kind: 'web', pid: process.pid });
+    const duplicate = acquireTaskServiceLock(root, 'cli');
+    duplicate?.();
+    expect(duplicate).toBeNull();
+  } finally {
+    release();
+  }
+  expect(readTaskHostOwner(root)).toBeNull();
+});
 afterEach(async () => {
   await Promise.all(
     services.splice(0).map(async (service) => {
@@ -27,7 +43,7 @@ afterEach(async () => {
 /** 服务夹具只等待生命周期信号，不启动业务采集或模型调用。 */
 async function fixture(): Promise<{
   input: { dataRoot: string; configuration: string };
-  start: () => Promise<Awaited<ReturnType<typeof startCentralTaskService>>>;
+  start: () => Promise<Awaited<ReturnType<typeof startTaskHostBridge>>>;
   assembled: () => number;
   closed: () => number;
 }> {
@@ -36,8 +52,8 @@ async function fixture(): Promise<{
   const input = { dataRoot: root, configuration: 'fixture-v1' };
   let assembled = 0;
   let closed = 0;
-  const start = async (): Promise<Awaited<ReturnType<typeof startCentralTaskService>>> => {
-    const service = await startCentralTaskService({
+  const start = async (): Promise<Awaited<ReturnType<typeof startTaskHostBridge>>> => {
+    const service = await startTaskHostBridge({
       ...input,
       createRuntime: () => {
         assembled++;
@@ -68,7 +84,7 @@ async function fixture(): Promise<{
   return { input, start, assembled: () => assembled, closed: () => closed };
 }
 
-describe('central task service lifecycle', () => {
+describe('host command bridge lifecycle', () => {
   it('allows explicit configuration replacement only after executor cleanup releases ownership', async () => {
     const f = await fixture();
     let releaseCleanup: () => void = () => undefined;
@@ -79,7 +95,7 @@ describe('central task service lifecycle', () => {
     const started = new Promise<void>((resolve) => {
       cleanupStarted = resolve;
     });
-    const service = await startCentralTaskService({
+    const service = await startTaskHostBridge({
       ...f.input,
       createRuntime: () => ({
         run: (signal) =>
@@ -102,7 +118,7 @@ describe('central task service lifecycle', () => {
     if (!service) throw new Error('Expected service');
     services.push(service);
     let stopped = false;
-    const stopping = stopTaskService({ ...f.input, configuration: 'changed-config' }).then(() => {
+    const stopping = service.close().then(() => {
       stopped = true;
     });
     try {
@@ -125,7 +141,7 @@ describe('central task service lifecycle', () => {
     const launch = (): Promise<{ child: ChildProcess; ready: boolean }> =>
       new Promise((resolve, reject) => {
         const child = fork(
-          fileURLToPath(new URL('../fixtures/task-service-process.ts', import.meta.url)),
+          fileURLToPath(new URL('../fixtures/host-bridge-process.ts', import.meta.url)),
           [f.input.dataRoot],
           {
             execArgv: ['--import', 'tsx', '--conditions=development'],
@@ -171,7 +187,7 @@ describe('central task service lifecycle', () => {
       await expect(requestTaskService({ ...input, method: 'ping' })).resolves.toEqual({
         pid: replacement.child.pid,
       });
-      await requestTaskService({ ...input, method: 'shutdown' });
+      replacement.child.send('shutdown');
       await Promise.all(exits);
     } finally {
       for (const child of children)
@@ -199,17 +215,9 @@ describe('central task service lifecycle', () => {
     await expect(
       requestTaskService({ ...f.input, dataRoot: alias, method: 'ping' }),
     ).resolves.toMatchObject({ pid: process.pid });
-    let restarted = false;
     await expect(
-      ensureTaskService({
-        ...f.input,
-        configuration: 'different',
-        start: () => {
-          restarted = true;
-        },
-      }),
+      requestTaskService({ ...f.input, configuration: 'different', method: 'ping' }),
     ).rejects.toMatchObject({ code: 'incompatible' });
-    expect(restarted).toBe(false);
   });
 
   it('does not stop the service when a client aborts and can restart after explicit shutdown', async () => {
@@ -219,7 +227,7 @@ describe('central task service lifecycle', () => {
       requestTaskService({ ...f.input, method: 'ping', signal: AbortSignal.abort() }),
     ).rejects.toBeDefined();
     await expect(requestTaskService({ ...f.input, method: 'ping' })).resolves.toBeDefined();
-    await requestTaskService({ ...f.input, method: 'shutdown' });
+    await service?.close();
     if (!service) throw new Error('Service failed to start');
     await service.finished;
     expect(f.closed()).toBe(1);
@@ -230,13 +238,19 @@ describe('central task service lifecycle', () => {
     const first = await fixture();
     const second = await fixture();
     await Promise.all([first.start(), second.start()]);
-    await ensureTaskService({
-      ...first.input,
-      start: () => {
-        throw new Error('Must not restart');
-      },
-    });
+    await expect(requestTaskService({ ...first.input, method: 'ping' })).resolves.toBeDefined();
     expect(first.assembled()).toBe(1);
     expect(second.assembled()).toBe(1);
   });
+});
+
+it('rejects the removed remote daemon shutdown command', () => {
+  expect(
+    taskServiceRequestSchema.safeParse({
+      protocol: 3,
+      id: '018f0000-0000-7000-8000-000000000001',
+      configuration: 'fixture',
+      method: 'shutdown',
+    }).success,
+  ).toBe(false);
 });

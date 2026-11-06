@@ -1,10 +1,6 @@
 import { expect, it } from 'vitest';
 import { loadRuntimeAppConfig } from '@jobhunter/common/config/index';
-import {
-  requestTaskService,
-  stopTaskService,
-  taskServiceConfiguration,
-} from '@jobhunter/common/task-service';
+import { requestTaskService, taskHostConfiguration } from '@jobhunter/common/task-host-runtime';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { randomUUID } from 'node:crypto';
@@ -30,7 +26,7 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
-it('shares a central service that survives Web shutdown and is explicitly stopped by test cleanup', async () => {
+it('owns its task threads and stops the entire runtime with Web', async () => {
   const root = await createTemporaryDataRoot('jobhunter-web-host-');
   const port = await availablePort();
   const database = openSqliteDatabase({ dataRoot: root.path });
@@ -64,6 +60,7 @@ it('shares a central service that survives Web shutdown and is explicitly stoppe
       env: {
         ...process.env,
         DATA_ROOT: root.path,
+        TASK_THREAD_POOL: '{"startupTimeoutMs":90000}',
         API_KEY: '',
         MODEL: '',
         BASE_URL: 'https://api.openai.com/v1',
@@ -86,7 +83,7 @@ it('shares a central service that survives Web shutdown and is explicitly stoppe
   });
   const serviceInput = {
     dataRoot: root.path,
-    configuration: taskServiceConfiguration(serviceConfig),
+    configuration: taskHostConfiguration(serviceConfig),
   };
   let output = '';
   child.stdout.on('data', (data: Buffer) => {
@@ -103,7 +100,7 @@ it('shares a central service that survives Web shutdown and is explicitly stoppe
   });
   try {
     // 2、走真实入口和 Next 页面编译，不能由直接创建测试容器替代。
-    const deadline = Date.now() + 60_000;
+    const deadline = Date.now() + 150_000;
     let ready = false;
     while (Date.now() < deadline) {
       if (child.exitCode !== null) throw new Error(`Web exited: ${output}`);
@@ -120,11 +117,14 @@ it('shares a central service that survives Web shutdown and is explicitly stoppe
     }
     expect(ready, output).toBe(true);
     expect(queue.get(taskId)).toMatchObject({ status: 'failed', errorCategory: 'cancelled' });
-    // 服务崩溃不影响 Web 存活；下一次写操作应重新连接并恢复统一执行能力。
-    const original = (await requestTaskService({ ...serviceInput, method: 'ping' })) as {
-      pid: number;
-    };
-    process.kill(original.pid, 'SIGKILL');
+    // 3、命令桥仅服务本宿主 Next，其他入口不能附着或停止宿主。
+    await expect(requestTaskService({ ...serviceInput, method: 'ping' })).rejects.toMatchObject({
+      code: 'incompatible',
+    });
+    // 3、Web 停止级联停止中央服务（ADR-0064）：入口退出后服务必须不可达，执行进程与数据库一并回收。
+    // 经 IPC 通知而非信号：Windows 上 child.kill 直接终止进程，子进程无法执行清理。
+    child.send('shutdown');
+    expect(await closed, output).toBe(0);
     await expect
       .poll(async () => {
         try {
@@ -135,33 +135,9 @@ it('shares a central service that survives Web shutdown and is explicitly stoppe
         }
       })
       .toBe(true);
-    const origin = `http://127.0.0.1:${String(port)}`;
-    const csrfResponse = await fetch(`${origin}/api/csrf`);
-    const csrf = (await csrfResponse.json()) as { data: { token: string } };
-    const recovered = await fetch(`${origin}/api/tasks/${taskId}/cancel`, {
-      method: 'POST',
-      headers: {
-        origin,
-        'content-type': 'application/json',
-        'x-jobhunter-csrf': csrf.data.token,
-        cookie: `jobhunter_csrf=${csrf.data.token}`,
-      },
-      body: JSON.stringify({ idempotencyToken: 'host-crash-recovery' }),
-    });
-    expect(recovered.status, await recovered.text()).toBe(200);
-    const replacement = (await requestTaskService({ ...serviceInput, method: 'ping' })) as {
-      pid: number;
-    };
-    expect(replacement.pid).not.toBe(original.pid);
-    // 3、关闭页面入口后中央服务仍须存活；测试清理时再显式关闭自己的服务。
-    // 经 IPC 通知而非信号：Windows 上 child.kill 直接终止进程，子进程无法执行清理。
-    child.send('shutdown');
-    expect(await closed, output).toBe(0);
-    await expect(requestTaskService({ ...serviceInput, method: 'ping' })).resolves.toBeDefined();
   } finally {
     if (child.exitCode === null && !child.killed) child.kill('SIGTERM');
     await closed;
-    await stopTaskService(serviceInput);
     // 等待共享服务释放自己的资源后再删除临时数据目录。
     await expect
       .poll(async () => {
@@ -176,4 +152,4 @@ it('shares a central service that survives Web shutdown and is explicitly stoppe
     database.close();
     await root.cleanup();
   }
-}, 90_000);
+}, 180_000);

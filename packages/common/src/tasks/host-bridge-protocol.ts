@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
 /** 本机任务服务协议版本；不兼容版本必须拒绝连接，不能另启第二套调度。 */
-export const taskServiceProtocol = 1;
+export const taskServiceProtocol = 3;
 export const taskServiceRequestSchema = z
   .object({
     protocol: z.literal(taskServiceProtocol),
+    token: z.string().min(32).max(256).optional(),
     id: z.uuid(),
     configuration: z.string().min(1).max(256),
-    method: z.enum(['ping', 'query', 'enqueue', 'cancel', 'retry', 'shutdown']),
+    method: z.enum(['ping', 'query', 'enqueue', 'cancel', 'retry', 'workflow']),
     input: z.unknown().optional(),
   })
   .strict();

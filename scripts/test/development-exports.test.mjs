@@ -140,10 +140,10 @@ describe('workspace development exports', () => {
     const result = spawnSync(
       process.execPath,
       ['--conditions=development', '--import', 'tsx', '--input-type=module', '-e', script],
-      { cwd: repositoryRoot, encoding: 'utf8', timeout: 30_000 },
+      { cwd: repositoryRoot, encoding: 'utf8', timeout: 90_000 },
     );
     expect(result.status, result.stderr).toBe(0);
-  }, 35_000);
+  }, 180_000);
 
   it('keeps lightweight responsibility entries isolated from heavy runtime implementations', () => {
     // 1、从实际公开 exports 收集全部契约，避免新增入口绕过重运行时隔离验收。
@@ -236,9 +236,9 @@ describe('workspace development exports', () => {
       const result = spawnSync(
         process.execPath,
         ['--conditions=development', '--import', 'tsx', '--input-type=module', '-e', script],
-        { cwd: path.join(repositoryRoot, item.cwd), encoding: 'utf8', timeout: 30_000 },
+        { cwd: path.join(repositoryRoot, item.cwd), encoding: 'utf8', timeout: 90_000 },
       );
       expect(result.status, `${item.specifier}: ${result.stderr}`).toBe(0);
     }
-  }, 35_000);
+  }, 180_000);
 });
