@@ -31,7 +31,7 @@ import { z } from 'zod';
 interface EnrichmentRow {
   readonly id: string;
   readonly job_revision_id: string;
-  readonly agent_run_id: string;
+  readonly agent_run_id: string | null;
   readonly schema_version: string;
   readonly content_hash: string;
   readonly result_json: string;
@@ -58,7 +58,7 @@ interface MatchRow {
 interface AdviceRow {
   readonly id: string;
   readonly match_result_id: string;
-  readonly agent_run_id: string;
+  readonly agent_run_id: string | null;
   readonly schema_version: string;
   readonly content_hash: string;
   readonly result_json: string;
@@ -339,6 +339,8 @@ export class SqliteMatchingRepository implements MatchingRepository {
       )
       .all(matchResultId) as AdviceRow[];
     for (const row of rows) {
+      // 诊断已由用户清理的建议仍可展示正文，但不能验证为当前 Agent 的新结果。
+      if (row.agent_run_id === null) continue;
       const run = this.agentRuns.get(row.agent_run_id);
       if (
         run?.status === 'succeeded' &&

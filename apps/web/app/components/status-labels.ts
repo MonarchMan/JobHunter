@@ -61,9 +61,9 @@ const agentKeyLabels: Readonly<Record<string, string>> = {
   'recruitment-mail.classify': '招聘邮件分析',
 };
 
-/** 每个 Agent 都应登记中文名；遗漏登记时明确提示，由覆盖测试阻止遗漏进入交付。 */
+/** 已登记 Agent 展示业务名称，历史或未识别类型统一显示“未知”。 */
 export function labelAgentKey(value: string): string {
-  return agentKeyLabels[value] ?? '未登记的 Agent 类型';
+  return agentKeyLabels[value] ?? '未知';
 }
 
 const agentErrorCategoryLabels: Readonly<Record<string, string>> = {

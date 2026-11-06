@@ -31,7 +31,8 @@ export interface MatchingJobRevisionRecord {
 export interface JobEnrichmentRecord {
   readonly id: JobEnrichmentId;
   readonly jobRevisionId: JobRevisionId;
-  readonly agentRunId: string;
+  /** 删除运行诊断时解除关联，保留职位事实。 */
+  readonly agentRunId: string | null;
   readonly schemaVersion: string;
   readonly contentHash: ContentHash;
   readonly result: JobUnderstanding;
@@ -70,7 +71,8 @@ export interface MatchAdviceRecord {
   readonly matchInputHash?: ContentHash;
   readonly id: MatchAdviceId;
   readonly matchResultId: MatchResultId;
-  readonly agentRunId: string;
+  /** 删除运行诊断时解除关联，保留建议正文。 */
+  readonly agentRunId: string | null;
   readonly schemaVersion: string;
   readonly contentHash: ContentHash;
   readonly result: JobAdvice;

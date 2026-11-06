@@ -586,6 +586,66 @@ describe('matching persistence pipeline', () => {
     save.mockRestore();
   });
 
+  it('keeps business facts and advice readable after their run association is cleared', async () => {
+    const fixture = await setup();
+    const facts = {
+      requiredSkills: [],
+      preferredSkills: [],
+      minimumYearsExperience: null,
+      seniority: null,
+      domains: [],
+    };
+    const enrichment = fixture.matching.saveEnrichment({
+      id: parseId(fixture.ids.generate(), 'JobEnrichment'),
+      jobRevisionId: revisionId,
+      agentRunId: null,
+      schemaVersion: 'test',
+      contentHash: contentHash(facts),
+      result: facts,
+      createdAt: fixture.clock.now(),
+    });
+    expect(fixture.matching.getEnrichment(enrichment.id)).toMatchObject({
+      agentRunId: null,
+      result: facts,
+    });
+    const match = new DeterministicMatchingService(fixture).compute({
+      jobRevisionId: revisionId,
+      profileVersionId,
+      jobEnrichmentId: enrichment.id,
+    }).match;
+    const result = { highlights: [], gaps: [], preparation: ['保留建议正文'] };
+    fixture.matching.saveAdvice({
+      id: parseId(fixture.ids.generate(), 'MatchAdvice'),
+      matchResultId: match.id,
+      agentRunId: null,
+      matchInputHash: match.inputHash,
+      schemaVersion: 'test',
+      contentHash: contentHash(result),
+      result,
+      createdAt: fixture.clock.now(),
+    });
+    expect(
+      fixture.matching.getCurrentAdvice(match.id, {
+        agentKey: 'job-analysis',
+        definitionHash: 'test',
+        modelConfigHash: 'test',
+      }),
+    ).toBeNull();
+    expect(
+      JSON.parse(
+        String(
+          fixture.handle.client
+            .prepare(
+              "SELECT json_extract(value,'$.result') FROM job_metadata WHERE name='match_advice'",
+            )
+            .pluck()
+            .get(),
+        ),
+      ),
+    ).toEqual(result);
+    expect(fixture.handle.client.pragma('foreign_key_check')).toEqual([]);
+  });
+
   it('scores only the explicitly selected profile and job revision', async () => {
     const fixture = await setup();
     const service = new DeterministicMatchingService(fixture);
