@@ -2,7 +2,7 @@
 
 > 状态：Implemented
 > 依赖：004, 005
-> 调研证据：[research.md](./research.md)，范围例外：[scope-exceptions.md](./scope-exceptions.md)
+> 来源能力与支持范围见[来源支持矩阵](../../packages/recruitment/SUPPORT_MATRIX.md)。
 
 ## 目标
 
