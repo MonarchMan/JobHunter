@@ -1,10 +1,6 @@
 export * from './scoring/evaluation.js';
-export * from './agents/job-advice-agent.js';
 export * from './agents/job-understanding.js';
-export * from './agents/job-understanding-agent.js';
-export * from './prompts/job-understanding.js';
 export * from './scoring/score-composition.js';
-export * from './prompts/job-advice.js';
 export * from './model.js';
 export * from './query.js';
 export * from './scoring/rules.js';
@@ -12,3 +8,6 @@ export * from './scoring/rulesets.js';
 export * from './scoring/scoring.js';
 export * from './scoring/recruitment-scoring.js';
 export * from './scoring/recruitment-requirements.js';
+export * from './agents/job-analysis-agent.js';
+export * from './contracts/job-advice.js';
+export * from './prompts/job-analysis.js';

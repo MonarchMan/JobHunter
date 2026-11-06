@@ -35,15 +35,6 @@ export const jobUnderstandingSchema = z
   })
   .strict();
 
-/** v2 Agent 输出必须带拟合分与理由；存储 Schema 才对历史记录宽松。 */
-export const jobUnderstandingAgentOutputSchema = z
-  .object({
-    ...jobUnderstandingFacts,
-    fitScore: z.number().int().min(0).max(100),
-    reasons: z.array(text.max(300)).min(1).max(5),
-  })
-  .strict();
-
 /** 模块使用的类型约束。 */
 export type JobUnderstanding = z.infer<typeof jobUnderstandingSchema>;
 

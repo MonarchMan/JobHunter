@@ -7,8 +7,7 @@ import type {
   CandidateProfileReader,
 } from '@jobhunter/user/contracts';
 import {
-  createJobAdviceTaskHandler,
-  createJobUnderstandingTaskHandler,
+  createJobAnalysis,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createBatchJobScoreTaskHandler,
@@ -63,22 +62,14 @@ export function createMatchingTasks(
   const matchingHandler = createMatchRevisionTaskHandler(batches);
   registry.register(matchingHandler);
   // 2、模型可选，但所有任务类型始终注册，以提供明确的配置错误。
-  const understandingHandler = createJobUnderstandingTaskHandler(
+  const analysis = createJobAnalysis(
     runner
       ? { runner, matching: matchingRepository, profiles: profileRepository, clock, ids }
       : { unavailable: true },
   );
-  const adviceHandler = createJobAdviceTaskHandler(
-    runner
-      ? { runner, matching: matchingRepository, profiles: profileRepository, clock, ids }
-      : { unavailable: true },
-  );
-  registry.register(understandingHandler);
-  registry.register(adviceHandler);
   const singleScoring = createManualJobScoreTaskHandler({
-    understanding: understandingHandler,
+    analysis,
     matching: matchingHandler,
-    advice: adviceHandler,
     adviceEnabled: input.adviceEnabled,
   });
   registry.register(singleScoring);

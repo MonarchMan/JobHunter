@@ -189,8 +189,8 @@ describe('Web diagnostics', () => {
             `source-sync:${sourceId}`,
           );
         const insertRun = database.client.prepare(
-          `WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-            sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES (?, ?, 'schedule', ?, ?, 'v1', 'v1', 'v1', 'hash', ?, ?, ?)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture`,
+          `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES (?, ?, 'schedule', ?, ?, ?, ?, ?))
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
         );
         insertRun.run(
           '018f0000-0000-7000-8000-000000000712',

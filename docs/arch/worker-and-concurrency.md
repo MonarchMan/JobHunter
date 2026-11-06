@@ -59,7 +59,7 @@ stateDiagram-v2
 
 ```text
 source.sync:{sourceId}:{requestedWindowOrManualToken}
-job.enrich:{jobRevisionId}:{agentVersion}:{promptVersion}:{modelConfigHash}
+match-score:{jobRevisionId}:{profileVersionId}
 match.compute:{profileVersionId}:{jobRevisionId}:{jobEnrichmentIdOrNone}:{rulesetVersion}
 ```
 

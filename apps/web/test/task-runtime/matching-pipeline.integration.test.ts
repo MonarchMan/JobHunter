@@ -1,20 +1,12 @@
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
 import { SqliteMatchingJobReader } from '@jobhunter/recruitment/persistence/matching-job-reader';
 import { SqliteProfileIdentityReader } from '@jobhunter/user/persistence/profile-identity-reader';
-import {
-  AgentRunner,
-  agentDefinitionHash,
-  hashCanonical,
-  ModelClientError,
-  type ModelRequest,
-} from '@jobhunter/common/agent';
+import { AgentRunner, type ModelRequest } from '@jobhunter/common/agent';
 import {
   CurrentMatchQueryService,
   DeterministicMatchingService,
-  MatchAdviceQueryService,
   MatchingBatchService,
-  createJobAdviceTaskHandler,
-  createJobUnderstandingTaskHandler,
+  createJobAnalysis,
   createMatchRevisionTaskHandler,
   createBatchJobScoreTaskHandler,
   createManualJobScoreTaskHandler,
@@ -35,9 +27,8 @@ import {
 import { normalizedJobContentHash, parseNormalizedJob } from '@jobhunter/recruitment/domain';
 import { parseCandidateProfile } from '@jobhunter/user/domain';
 import { FakeModelClient } from '@jobhunter/common/models';
-import { jobAdviceAgentDefinition } from '@jobhunter/matching';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   openSqliteDatabase,
   type SqliteDatabaseHandle,
@@ -141,7 +132,7 @@ const profile = parseCandidateProfile({
 
 function understandingOutput(request: ModelRequest): unknown {
   // 1. Agent 输入包含职位正文与画像快照，快照只含匹配判断所需最小事实。
-  expect(request.input).toEqual({
+  expect(request.input).toMatchObject({
     title: normalizedJob.title,
     description: normalizedJob.description,
     experienceText: normalizedJob.experienceText,
@@ -223,10 +214,10 @@ async function setup(): Promise<{
     .run(sourceId, companyId, channelId);
   handle.client
     .prepare(
-      `WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-        sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES ('sync-match', ?, 'manual', 'succeeded', 'complete', '1', '1', 'v1', ?, '{}', 1, 2)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture`,
+      `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES ('sync-match', ?, 'manual', 'succeeded', 'complete', '{}', 1, 2))
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
     )
-    .run(sourceId, 'a'.repeat(64));
+    .run(sourceId);
   handle.client
     .prepare(
       `INSERT INTO jobs
@@ -257,15 +248,9 @@ async function setup(): Promise<{
     );
   handle.client
     .prepare(
-      `UPDATE jobs SET content_id=d.id,content_hash=d.content_hash,source_payload_hash=d.source_payload_hash,source_url=d.source_url FROM (SELECT ? AS id, ? AS job_id, 1 AS revision_no, ? AS content_hash, '1' AS normalizer_version, ? AS source_payload_hash, 'https://careers.example.com/jobs/agent-job' AS source_url, ? AS snapshot_json, '[]' AS change_set_json, 1 AS created_at) d WHERE jobs.id=d.job_id`,
+      `UPDATE jobs SET content_id=?,content_hash=?,source_payload_hash=?,source_url='https://careers.example.com/jobs/agent-job'  WHERE jobs.id=?`,
     )
-    .run(
-      revisionId,
-      jobId,
-      normalizedJobContentHash(normalizedJob),
-      'b'.repeat(64),
-      canonicalJson(normalizedJob),
-    );
+    .run(revisionId, normalizedJobContentHash(normalizedJob), 'b'.repeat(64), jobId);
   handle.client
     .prepare(
       `INSERT INTO candidate_profiles (id, name, created_at, updated_at)
@@ -274,18 +259,11 @@ async function setup(): Promise<{
     .run(profileId);
   handle.client
     .prepare(
-      `WITH profile_fixture (id, profile_id, version_no, resume_file_id, agent_run_id, extracted_json,
-        effective_json, locked_paths_json, content_hash, is_current, created_at) AS (VALUES (?, ?, 1, NULL, NULL, ?, ?, '[]', ?, 1, 1))
+      `WITH profile_input (id, profile_id, version_no, resume_file_id, agent_run_id, profile_json, content_hash, is_current, created_at) AS (VALUES (?, ?, 1, NULL, NULL, ?, ?, 1, 1))
 INSERT INTO profile_versions (id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
-SELECT id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
+SELECT id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_current,created_at,COALESCE(json_extract(profile_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(profile_json,'$.basicInfo'),'{}'),COALESCE(json_extract(profile_json,'$.targetRoles'),'[]'),COALESCE(json_extract(profile_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(profile_json,'$.preferences'),'{}'),COALESCE(json_extract(profile_json,'$.education'),'[]'),COALESCE(json_extract(profile_json,'$.workExperience'),'[]'),COALESCE(json_extract(profile_json,'$.projects'),'[]'),COALESCE(json_extract(profile_json,'$.works'),'[]'),COALESCE(json_extract(profile_json,'$.competitions'),'[]'),COALESCE(json_extract(profile_json,'$.certificates'),'[]'),COALESCE(json_extract(profile_json,'$.languages'),'[]'),json_extract(profile_json,'$.professionalSkills'),json_extract(profile_json,'$.selfEvaluation'),COALESCE(json_extract(profile_json,'$.skills'),'[]'),COALESCE(json_extract(profile_json,'$.domains'),'[]'),json_extract(profile_json,'$.yearsOfExperience'),json_extract(profile_json,'$.managementExperience') FROM profile_input`,
     )
-    .run(
-      profileVersionId,
-      profileId,
-      canonicalJson(profile),
-      canonicalJson(profile),
-      'c'.repeat(64),
-    );
+    .run(profileVersionId, profileId, canonicalJson(profile), 'c'.repeat(64));
   return {
     handle,
     clock,
@@ -316,9 +294,8 @@ describe('matching persistence pipeline', () => {
     registry.register(
       createBatchJobScoreTaskHandler(
         createManualJobScoreTaskHandler({
-          understanding: createJobUnderstandingTaskHandler({ unavailable: true }),
+          analysis: createJobAnalysis({ unavailable: true }),
           matching: createMatchRevisionTaskHandler(null),
-          advice: createJobAdviceTaskHandler({ unavailable: true }),
           adviceEnabled: () => false,
         }),
       ),
@@ -443,19 +420,101 @@ describe('matching persistence pipeline', () => {
     ).toBe(1);
   });
 
-  it('regenerates model scores and advice for identical inputs without reusing successful runs', async () => {
+  it('calls one analysis Agent per score and stores advice with the same run', async () => {
+    const fixture = await setup();
+    const model = new FakeModelClient(
+      [90, 70].map((score) => (request: ModelRequest) => {
+        const {
+          fitScore: _score,
+          reasons: _reasons,
+          ...facts
+        } = understandingOutput(request) as Record<string, unknown>;
+        void _score;
+        void _reasons;
+        return {
+          kind: 'output' as const,
+          output: {
+            understanding: facts,
+            match: { score, reasons: ['技能与方向高度重合'] },
+            advice: { highlights: [], gaps: [], preparation: ['准备项目案例'] },
+          },
+          usage: { inputTokens: 50, outputTokens: 30, estimatedCostMicros: 10 },
+        };
+      }),
+    );
+    const runner = new AgentRunner({
+      store: new SqliteAgentRunStore(fixture.handle.client),
+      model,
+      createId: () => fixture.ids.generate(),
+      now: () => fixture.clock.now(),
+    });
+    const analysis = createJobAnalysis({ ...fixture, runner });
+    const payload = { jobRevisionId: revisionId, profileVersionId, score: true, advice: true };
+    const service = new DeterministicMatchingService(fixture);
+    for (const expected of [90, 70]) {
+      const result = await analysis.analyze(fixture.context, payload);
+      const match = service.compute({
+        jobRevisionId: revisionId,
+        profileVersionId,
+        jobEnrichmentId: result.jobEnrichmentId
+          ? parseId(result.jobEnrichmentId, 'JobEnrichment')
+          : null,
+        modelScore: result.fitScore,
+      }).match;
+      expect(match.modelScore).toBe(expected);
+      analysis.storeAdvice(match.id, result);
+      const rows = fixture.handle.client
+        .prepare(
+          "SELECT name,json_extract(value,'$.agent_run_id') run FROM job_metadata WHERE name IN ('enrichment','match_advice')",
+        )
+        .all();
+      expect(rows).toHaveLength(2);
+      expect(rows.every((row: unknown) => (row as { run: string }).run === result.agentRunId)).toBe(
+        true,
+      );
+    }
+    expect(model.requests).toHaveLength(2);
+    expect(fixture.handle.client.prepare('SELECT count(*) FROM agent_runs').pluck().get()).toBe(2);
+    const current = fixture.matching.getLatestRevisionForJob(jobId);
+    expect(current).not.toBeNull();
+    const latestMatch = fixture.handle.client
+      .prepare("SELECT id FROM job_metadata WHERE name='match_result'")
+      .pluck()
+      .get() as string;
+    fixture.handle.client
+      .prepare(
+        "UPDATE job_metadata SET value=json_set(value,'$.profile_version_id',?,'$.input_hash',lower(hex(zeroblob(32)))) WHERE id=?",
+      )
+      .run('018f0000-0000-7000-8000-00000000ffff', latestMatch);
+    expect(() =>
+      analysis.storeAdvice(latestMatch, {
+        inputIdentity: { jobRevisionId: revisionId, profileVersionId },
+        jobEnrichmentId: null,
+        fitScore: 70,
+        fitReasons: [],
+        advice: { highlights: [], gaps: [], preparation: ['旧建议'] },
+        agentRunId: '018f0000-0000-7000-8000-00000000fffe',
+      }),
+    ).toThrow('评分输入已变化');
+  });
+
+  it('corrects invalid enabled sections within one logical run and skips model work for disabled sections', async () => {
     const fixture = await setup();
     const model = new FakeModelClient([
-      ...[90, 70].map((fitScore) => (request: ModelRequest) => ({
-        kind: 'output' as const,
-        output: { ...(understandingOutput(request) as Record<string, unknown>), fitScore },
-        usage: { inputTokens: 50, outputTokens: 30, estimatedCostMicros: 10 },
-      })),
-      ...['准备第一个案例', '准备新的案例'].map((action) => ({
-        kind: 'output' as const,
-        output: { highlights: [], gaps: [], preparation: [action] },
+      {
+        kind: 'output',
+        output: { understanding: null, match: null, advice: null },
         usage: { inputTokens: 20, outputTokens: 10, estimatedCostMicros: 5 },
-      })),
+      },
+      {
+        kind: 'output',
+        output: {
+          understanding: null,
+          match: null,
+          advice: { highlights: [], gaps: [], preparation: ['核对岗位要求'] },
+        },
+        usage: { inputTokens: 20, outputTokens: 10, estimatedCostMicros: 5 },
+      },
     ]);
     const runner = new AgentRunner({
       store: new SqliteAgentRunStore(fixture.handle.client),
@@ -463,195 +522,68 @@ describe('matching persistence pipeline', () => {
       createId: () => fixture.ids.generate(),
       now: () => fixture.clock.now(),
     });
-    const understanding = createJobUnderstandingTaskHandler({ ...fixture, runner });
-    const service = new DeterministicMatchingService(fixture);
-    const payload = { jobRevisionId: revisionId, profileVersionId };
-    // 同一任务作用域也不能将已成功运行当作新执行的缓存。
-    const context = { ...fixture.context, taskId: 'regenerate-task' };
-    const first = await understanding.execute(context, payload);
-    const second = await understanding.execute(context, payload);
-    expect(first.cacheHit).toBe(false);
-    expect(second.cacheHit).toBe(false);
-    expect(second.agentRunId).not.toBe(first.agentRunId);
-    expect(second.jobEnrichmentId).toBe(first.jobEnrichmentId);
-    const firstMatch = service.compute({
-      ...payload,
-      jobEnrichmentId: parseId(first.jobEnrichmentId, 'JobEnrichment'),
-      modelScore: first.fitScore,
-    }).match;
-    const secondMatch = service.compute({
-      ...payload,
-      jobEnrichmentId: parseId(second.jobEnrichmentId, 'JobEnrichment'),
-      modelScore: second.fitScore,
-    }).match;
-    expect(secondMatch.id).toBe(firstMatch.id);
-    expect(firstMatch.modelScore).toBe(90);
-    expect(secondMatch.modelScore).toBe(70);
-    const advice = createJobAdviceTaskHandler({ ...fixture, runner });
-    const firstAdvice = await advice.execute(context, { matchResultId: secondMatch.id });
-    const secondAdvice = await advice.execute(context, { matchResultId: secondMatch.id });
-    expect(secondAdvice.cacheHit).toBe(false);
-    expect(secondAdvice.agentRunId).not.toBe(firstAdvice.agentRunId);
-    expect(secondAdvice.matchAdviceId).toBe(firstAdvice.matchAdviceId);
-    expect(model.requests).toHaveLength(4);
-    expect(fixture.handle.client.prepare('SELECT count(*) FROM agent_runs').pluck().get()).toBe(4);
+    const analysis = createJobAnalysis({ ...fixture, runner });
+    const result = await analysis.analyze(fixture.context, {
+      jobRevisionId: revisionId,
+      profileVersionId,
+      score: false,
+      advice: true,
+    });
+    expect(result).toMatchObject({
+      jobEnrichmentId: null,
+      fitScore: null,
+      advice: { preparation: ['核对岗位要求'] },
+    });
+    expect(model.requests).toHaveLength(2);
+    expect(model.requests[0]?.input).toMatchObject({
+      outputs: { understanding: false, match: false, advice: true },
+    });
+    expect(fixture.handle.client.prepare('SELECT count(*) FROM agent_runs').pluck().get()).toBe(1);
+    expect(fixture.handle.client.prepare('SELECT status FROM agent_runs').pluck().get()).toBe(
+      'succeeded',
+    );
+    await analysis.analyze(fixture.context, {
+      jobRevisionId: revisionId,
+      profileVersionId,
+      score: false,
+      advice: false,
+    });
+    expect(model.requests).toHaveLength(2);
   });
 
-  it('persists evidence-validated understanding and replaces the base match with the enriched match', async () => {
+  it('does not disguise persistence failure as model degradation on the final attempt', async () => {
     const fixture = await setup();
-    const service = new DeterministicMatchingService(fixture);
-    service.ensureRuleset();
-    const base = service.compute({
-      profileVersionId,
-      jobRevisionId: revisionId,
-      jobEnrichmentId: null,
-    });
     const model = new FakeModelClient([
-      (request) => ({
-        kind: 'output',
-        output: understandingOutput(request),
-        usage: { inputTokens: 50, outputTokens: 30, estimatedCostMicros: 10 },
-      }),
-    ]);
-    const storedEnrichments: string[] = [];
-    const handler = createJobUnderstandingTaskHandler({
-      runner: new AgentRunner({
-        store: new SqliteAgentRunStore(fixture.handle.client),
-        model,
-        createId: () => fixture.ids.generate(),
-        now: () => fixture.clock.now(),
-      }),
-      matching: fixture.matching,
-      profiles: fixture.profiles,
-      clock: fixture.clock,
-      ids: fixture.ids,
-      onEnrichmentStored: (enrichment) => {
-        storedEnrichments.push(enrichment.id);
-      },
-    });
-    const enrichmentResult = await handler.execute(fixture.context, {
-      jobRevisionId: revisionId,
-      profileVersionId,
-    });
-    // 2. 理解阶段返回拟合分与理由，事实按职位存储且不含判断字段。
-    expect(enrichmentResult.fitScore).toBe(90);
-    expect(enrichmentResult.fitReasons).toEqual(['技能与方向高度重合']);
-    const currentMatches = new CurrentMatchQueryService(fixture.matching);
-    expect(currentMatches.list({ profileId }).items).toMatchObject([
-      { match: { id: base.match.id, jobEnrichmentId: null }, jobStatus: 'active' },
-    ]);
-    const enriched = service.compute({
-      profileVersionId,
-      jobRevisionId: revisionId,
-      jobEnrichmentId: parseId(enrichmentResult.jobEnrichmentId, 'JobEnrichment'),
-    });
-
-    expect(storedEnrichments).toEqual([enrichmentResult.jobEnrichmentId]);
-    expect(enriched.match.id).toBe(base.match.id);
-    expect(enriched.match.inputHash).not.toBe(base.match.inputHash);
-    expect(enriched.match.totalScore).toBe(base.match.totalScore);
-    // 3. 未传模型分时按规则口径降级，模型分与评分版本随结果持久化。
-    expect(enriched.match.modelScore).toBeNull();
-    expect(enriched.match).not.toHaveProperty('scoringVersion');
-    expect(base.match).not.toHaveProperty('scoringVersion');
-    expect(
-      fixture.handle.client
-        .prepare(`SELECT count(*) FROM job_metadata WHERE name='match_result'`)
-        .pluck()
-        .get(),
-    ).toBe(1);
-    expect(
-      fixture.handle.client
-        .prepare(`SELECT count(*) FROM job_metadata WHERE name='enrichment'`)
-        .pluck()
-        .get(),
-    ).toBe(1);
-    expect(currentMatches.list({ profileId }).items).toMatchObject([
-      {
-        match: { id: enriched.match.id, jobEnrichmentId: enrichmentResult.jobEnrichmentId },
-        jobStatus: 'active',
+      (request: ModelRequest) => {
+        const { fitScore, reasons, ...facts } = understandingOutput(request) as Record<
+          string,
+          unknown
+        >;
+        void fitScore;
+        void reasons;
+        return {
+          kind: 'output' as const,
+          output: { understanding: facts, match: { score: 80, reasons: ['匹配'] }, advice: null },
+          usage: { inputTokens: 20, outputTokens: 10, estimatedCostMicros: 5 },
+        };
       },
     ]);
-
-    expect(
-      enriched.match.components.every((component) => component.matchedEvidence.length === 0),
-    ).toBe(true);
-    const adviceOutput = {
-      highlights: [
-        {
-          text: 'TypeScript 与 Agent 岗位要求匹配。',
-        },
-      ],
-      gaps: [],
-      preparation: ['准备 Agent 架构设计案例。'],
-    } as const;
-    const adviceModel = new FakeModelClient([
-      new ModelClientError('temporary', 'provider unavailable'),
-      {
-        kind: 'output',
-        output: {
-          ...adviceOutput,
-          highlights: adviceOutput.highlights,
-        },
-        usage: { inputTokens: 80, outputTokens: 40, estimatedCostMicros: 20 },
-      },
-    ]);
-    const adviceHandler = createJobAdviceTaskHandler({
-      runner: new AgentRunner({
-        store: new SqliteAgentRunStore(fixture.handle.client),
-        model: adviceModel,
-        createId: () => fixture.ids.generate(),
-        now: () => fixture.clock.now(),
-      }),
-      matching: fixture.matching,
-      profiles: fixture.profiles,
-      clock: fixture.clock,
-      ids: fixture.ids,
+    const runner = new AgentRunner({
+      store: new SqliteAgentRunStore(fixture.handle.client),
+      model,
+      createId: () => fixture.ids.generate(),
+      now: () => fixture.clock.now(),
     });
-    const advicePayload = {
-      matchResultId: enriched.match.id,
-    };
-    await expect(adviceHandler.execute(fixture.context, advicePayload)).rejects.toMatchObject({
-      category: 'network_temporary',
+    const save = vi.spyOn(fixture.matching, 'saveEnrichment').mockImplementation(() => {
+      throw new Error('storage unavailable');
     });
-    expect(
-      fixture.handle.client
-        .prepare(`SELECT count(*) FROM job_metadata WHERE name='match_advice'`)
-        .pluck()
-        .get(),
-    ).toBe(0);
-    expect(fixture.matching.getMatch(enriched.match.id)).toEqual(enriched.match);
-
-    const adviceResult = await adviceHandler.execute(fixture.context, advicePayload);
-    const adviceQuery = new MatchAdviceQueryService({
-      matching: fixture.matching,
-      selector: {
-        agentKey: jobAdviceAgentDefinition.key,
-        definitionHash: agentDefinitionHash(jobAdviceAgentDefinition),
-        modelConfigHash: hashCanonical(adviceModel.metadata),
-      },
-    });
-    expect(adviceQuery.current(enriched.match.id)).toMatchObject({
-      id: adviceResult.matchAdviceId,
-      result: adviceOutput,
-    });
-    expect(
-      new MatchAdviceQueryService({
-        matching: fixture.matching,
-        selector: {
-          agentKey: jobAdviceAgentDefinition.key,
-          definitionHash: 'obsolete',
-          modelConfigHash: hashCanonical(adviceModel.metadata),
-        },
-      }).current(enriched.match.id),
-    ).toBeNull();
-
-    fixture.handle.client.prepare("UPDATE jobs SET status = 'stale' WHERE id = ?").run(jobId);
-    expect(currentMatches.list({ profileId }).items).toEqual([]);
-    expect(currentMatches.list({ profileId, includeStale: true }).items).toHaveLength(1);
-    fixture.handle.client.prepare("UPDATE jobs SET status = 'closed' WHERE id = ?").run(jobId);
-    expect(currentMatches.list({ profileId, includeStale: true }).items).toEqual([]);
-    expect(currentMatches.list({ profileId, includeClosed: true }).items).toHaveLength(1);
+    await expect(
+      createJobAnalysis({ ...fixture, runner }).analyze(
+        { ...fixture.context, attempt: 3 },
+        { jobRevisionId: revisionId, profileVersionId, score: true, advice: false },
+      ),
+    ).rejects.toThrow('storage unavailable');
+    save.mockRestore();
   });
 
   it('scores only the explicitly selected profile and job revision', async () => {

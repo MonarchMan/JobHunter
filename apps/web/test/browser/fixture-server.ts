@@ -13,7 +13,7 @@ import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteRecruitmentMailRepository } from '@jobhunter/recruitment/persistence/sqlite-recruitment-mail-repository';
 import { seedPlatformJobs } from '../fixtures/platform-jobs.js';
 import { browserFixtureAddress } from '../../src/server/browser-test-isolation.js';
-import { calculateDeterministicMatch, currentMatchRuleset } from '@jobhunter/matching';
+import { calculateDeterministicMatch } from '@jobhunter/matching';
 import { contentHash, utcInstant } from '@jobhunter/common/domain';
 import { parseNormalizedJob, type NormalizedJob } from '@jobhunter/recruitment/domain';
 import type { CandidateProfileData } from '@jobhunter/user/domain';
@@ -28,8 +28,8 @@ const ids = {
   closedJob: '018f0000-0000-7000-8000-000000000403',
   activeRaw: '018f0000-0000-7000-8000-000000000501',
   staleRaw: '018f0000-0000-7000-8000-000000000502',
-  activeRevision: '018f0000-0000-7000-8000-000000000503',
-  staleRevision: '018f0000-0000-7000-8000-000000000504',
+  activeContent: '018f0000-0000-7000-8000-000000000503',
+  staleContent: '018f0000-0000-7000-8000-000000000504',
   profile: '018f0000-0000-7000-8000-000000000601',
   profileVersion: '018f0000-0000-7000-8000-000000000602',
   interviewProfile: '018f0000-0000-7000-8000-000000000611',
@@ -43,7 +43,6 @@ const ids = {
   deepMaterialChunk: '018f0000-0000-7000-8000-000000000905',
   deepSession: '018f0000-0000-7000-8000-000000000906',
   deepTurn: '018f0000-0000-7000-8000-000000000907',
-  ruleset: '018f0000-0000-7000-8000-000000000603',
   match: '018f0000-0000-7000-8000-000000000604',
   task: '018f0000-0000-7000-8000-000000000701',
   agentRun: '018f0000-0000-7000-8000-000000000801',
@@ -161,7 +160,7 @@ function insertJob(
   input: {
     readonly id: string;
     readonly status: 'active' | 'stale' | 'closed';
-    readonly revisionId: string;
+    readonly contentId: string;
     readonly updatedAt: number;
   },
 ): void {
@@ -198,18 +197,9 @@ function insertJob(
     );
   database.client
     .prepare(
-      `UPDATE jobs SET content_id=d.id,content_hash=d.content_hash,source_payload_hash=d.source_payload_hash,source_url=d.source_url FROM (SELECT ? AS id, ? AS job_id, 1 AS revision_no, ? AS content_hash, 'fake-campus-v1' AS normalizer_version, ? AS source_payload_hash, ? AS source_url, ? AS snapshot_json, ? AS change_set_json, ? AS created_at) d WHERE jobs.id=d.job_id`,
+      `UPDATE jobs SET content_id=?,content_hash=?,source_payload_hash=?,source_url=?  WHERE jobs.id=?`,
     )
-    .run(
-      input.revisionId,
-      input.id,
-      'c'.repeat(64),
-      'b'.repeat(64),
-      job.detailUrl,
-      JSON.stringify(job),
-      JSON.stringify([]),
-      input.updatedAt,
-    );
+    .run(input.contentId, 'c'.repeat(64), 'b'.repeat(64), job.detailUrl, input.id);
 }
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
@@ -276,10 +266,8 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run(ids.source, ids.company, ids.channel);
     database.client
       .prepare(
-        `WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-          sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES (?, ?, 'manual', 'succeeded', 'complete', 'fake-campus-v1',
-          'fake-campus-v1', 'fake-v1', 'fake-source-hash',
-          '{"discovered":3,"created":3}', 1, 2)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture`,
+        `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES (?, ?, 'manual', 'succeeded', 'complete', '{"discovered":3,"created":3}', 1, 2))
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
       )
       .run(ids.syncRun, ids.source);
 
@@ -407,19 +395,19 @@ async function seedFixture(dataRoot: string): Promise<void> {
     insertJob(database, activeJob, {
       id: ids.activeJob,
       status: 'active',
-      revisionId: ids.activeRevision,
+      contentId: ids.activeContent,
       updatedAt: 3,
     });
     insertJob(database, staleJob, {
       id: ids.staleJob,
       status: 'stale',
-      revisionId: ids.staleRevision,
+      contentId: ids.staleContent,
       updatedAt: 2,
     });
     insertJob(database, closedJob, {
       id: ids.closedJob,
       status: 'closed',
-      revisionId: '018f0000-0000-7000-8000-000000000506',
+      contentId: '018f0000-0000-7000-8000-000000000506',
       updatedAt: 1,
     });
 
@@ -431,18 +419,11 @@ async function seedFixture(dataRoot: string): Promise<void> {
       .run(ids.profile);
     database.client
       .prepare(
-        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 1))
+        `WITH profile_input (id, profile_id, version_no, profile_json, content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, 1, 1))
 INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
-SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(profile_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(profile_json,'$.basicInfo'),'{}'),COALESCE(json_extract(profile_json,'$.targetRoles'),'[]'),COALESCE(json_extract(profile_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(profile_json,'$.preferences'),'{}'),COALESCE(json_extract(profile_json,'$.education'),'[]'),COALESCE(json_extract(profile_json,'$.workExperience'),'[]'),COALESCE(json_extract(profile_json,'$.projects'),'[]'),COALESCE(json_extract(profile_json,'$.works'),'[]'),COALESCE(json_extract(profile_json,'$.competitions'),'[]'),COALESCE(json_extract(profile_json,'$.certificates'),'[]'),COALESCE(json_extract(profile_json,'$.languages'),'[]'),json_extract(profile_json,'$.professionalSkills'),json_extract(profile_json,'$.selfEvaluation'),COALESCE(json_extract(profile_json,'$.skills'),'[]'),COALESCE(json_extract(profile_json,'$.domains'),'[]'),json_extract(profile_json,'$.yearsOfExperience'),json_extract(profile_json,'$.managementExperience') FROM profile_input`,
       )
-      .run(
-        ids.profileVersion,
-        ids.profile,
-        JSON.stringify(profile),
-        JSON.stringify(profile),
-        'd'.repeat(64),
-      );
+      .run(ids.profileVersion, ids.profile, JSON.stringify(profile), 'd'.repeat(64));
     database.client
       .prepare(
         `INSERT INTO candidate_profiles (id, name, created_at, updated_at)
@@ -451,15 +432,13 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       .run(ids.interviewProfile);
     database.client
       .prepare(
-        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 2))
+        `WITH profile_input (id, profile_id, version_no, profile_json, content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, 1, 2))
 INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
-SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(profile_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(profile_json,'$.basicInfo'),'{}'),COALESCE(json_extract(profile_json,'$.targetRoles'),'[]'),COALESCE(json_extract(profile_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(profile_json,'$.preferences'),'{}'),COALESCE(json_extract(profile_json,'$.education'),'[]'),COALESCE(json_extract(profile_json,'$.workExperience'),'[]'),COALESCE(json_extract(profile_json,'$.projects'),'[]'),COALESCE(json_extract(profile_json,'$.works'),'[]'),COALESCE(json_extract(profile_json,'$.competitions'),'[]'),COALESCE(json_extract(profile_json,'$.certificates'),'[]'),COALESCE(json_extract(profile_json,'$.languages'),'[]'),json_extract(profile_json,'$.professionalSkills'),json_extract(profile_json,'$.selfEvaluation'),COALESCE(json_extract(profile_json,'$.skills'),'[]'),COALESCE(json_extract(profile_json,'$.domains'),'[]'),json_extract(profile_json,'$.yearsOfExperience'),json_extract(profile_json,'$.managementExperience') FROM profile_input`,
       )
       .run(
         ids.interviewProfileVersion,
         ids.interviewProfile,
-        JSON.stringify(interviewProfile),
         JSON.stringify(interviewProfile),
         '9'.repeat(64),
       );
@@ -473,15 +452,13 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       .run(ids.studioProfile);
     database.client
       .prepare(
-        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, '[]', ?, 1, 3))
+        `WITH profile_input (id, profile_id, version_no, profile_json, content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, 1, 3))
 INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
-SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(profile_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(profile_json,'$.basicInfo'),'{}'),COALESCE(json_extract(profile_json,'$.targetRoles'),'[]'),COALESCE(json_extract(profile_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(profile_json,'$.preferences'),'{}'),COALESCE(json_extract(profile_json,'$.education'),'[]'),COALESCE(json_extract(profile_json,'$.workExperience'),'[]'),COALESCE(json_extract(profile_json,'$.projects'),'[]'),COALESCE(json_extract(profile_json,'$.works'),'[]'),COALESCE(json_extract(profile_json,'$.competitions'),'[]'),COALESCE(json_extract(profile_json,'$.certificates'),'[]'),COALESCE(json_extract(profile_json,'$.languages'),'[]'),json_extract(profile_json,'$.professionalSkills'),json_extract(profile_json,'$.selfEvaluation'),COALESCE(json_extract(profile_json,'$.skills'),'[]'),COALESCE(json_extract(profile_json,'$.domains'),'[]'),json_extract(profile_json,'$.yearsOfExperience'),json_extract(profile_json,'$.managementExperience') FROM profile_input`,
       )
       .run(
         ids.studioProfileVersion,
         ids.studioProfile,
-        JSON.stringify(profile),
         JSON.stringify(profile),
         createHash('sha256').update(JSON.stringify(profile)).digest('hex'),
       );
@@ -494,14 +471,13 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       .run('018f0000-0000-7000-8000-000000000631');
     database.client
       .prepare(
-        `WITH profile_fixture (id,profile_id,version_no,extracted_json,effective_json,locked_paths_json,content_hash,is_current,created_at) AS (VALUES (?,?,1,?,?,'[]',?,1,4))
+        `WITH profile_input (id, profile_id, version_no, profile_json, content_hash, is_current, created_at) AS (VALUES (?, ?, 1, ?, ?, 1, 4))
 INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
-SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(profile_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(profile_json,'$.basicInfo'),'{}'),COALESCE(json_extract(profile_json,'$.targetRoles'),'[]'),COALESCE(json_extract(profile_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(profile_json,'$.preferences'),'{}'),COALESCE(json_extract(profile_json,'$.education'),'[]'),COALESCE(json_extract(profile_json,'$.workExperience'),'[]'),COALESCE(json_extract(profile_json,'$.projects'),'[]'),COALESCE(json_extract(profile_json,'$.works'),'[]'),COALESCE(json_extract(profile_json,'$.competitions'),'[]'),COALESCE(json_extract(profile_json,'$.certificates'),'[]'),COALESCE(json_extract(profile_json,'$.languages'),'[]'),json_extract(profile_json,'$.professionalSkills'),json_extract(profile_json,'$.selfEvaluation'),COALESCE(json_extract(profile_json,'$.skills'),'[]'),COALESCE(json_extract(profile_json,'$.domains'),'[]'),json_extract(profile_json,'$.yearsOfExperience'),json_extract(profile_json,'$.managementExperience') FROM profile_input`,
       )
       .run(
         '018f0000-0000-7000-8000-000000000632',
         '018f0000-0000-7000-8000-000000000631',
-        JSON.stringify(profile),
         JSON.stringify(profile),
         createHash('sha256').update(JSON.stringify(profile)).digest('hex'),
       );
@@ -521,20 +497,17 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
           '为什么把模型调用放在事务提交之后，失败时如何保持任务可重试？',
         );
     })();
+
     database.client
       .prepare(
-        `SELECT * FROM (SELECT ? AS id, '{}' AS definition_json, ? AS definition_hash, 1 AS active, 1 AS created_at) d`,
-      )
-      .run(ids.ruleset, 'e'.repeat(64));
-    database.client
-      .prepare(
-        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'match_result',json_object('content_id',d.job_revision_id,'profile_version_id',d.profile_version_id,'enrichment_id',NULL,'rules_hash','fixture','filter_status',d.filter_status,'total_score',d.total_score,'input_hash',d.input_hash,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(d.components_json) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),d.created_at,d.created_at FROM (SELECT ? AS id, ? AS profile_version_id, ? AS job_revision_id, ? AS ruleset_id, 'eligible' AS filter_status, 86.5 AS total_score, ? AS components_json, ? AS risks_json, ? AS input_hash, 3 AS created_at) d`,
+        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) VALUES ( ?,(SELECT id FROM jobs WHERE content_id=?),'match_result',json_object('content_id',?,'profile_version_id',?,'enrichment_id',NULL,'rules_hash','fixture','filter_status','eligible','total_score',86.5,'input_hash',?,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(?) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(?) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(?) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),3,3 )`,
       )
       .run(
         ids.match,
+        ids.activeContent,
+        ids.activeContent,
         ids.profileVersion,
-        ids.activeRevision,
-        ids.ruleset,
+        'f'.repeat(64),
         JSON.stringify([
           {
             dimension: 'skills',
@@ -565,7 +538,14 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
             explanation: '学历要求与校招实习画像匹配',
           },
         ]),
-        'f'.repeat(64),
+        JSON.stringify([
+          {
+            ruleId: 'campus-education',
+            status: 'pass',
+            evidence: [{ source: 'profile', path: '/education/0', summary: '本科在读' }],
+            explanation: '学历要求与校招实习画像匹配',
+          },
+        ]),
       );
     // 分型详情夹具使用真实纯规则引擎，不改变活动列表的旧评分基线。
     const recruitmentMatch = calculateDeterministicMatch({
@@ -574,29 +554,22 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       company: { sizeCategory: 'large', industry: null },
       understanding: null,
     });
+
     database.client
       .prepare(
-        `SELECT * FROM (SELECT ? AS id, ? AS definition_json, ? AS definition_hash, 0 AS active, 1 AS created_at) d`,
-      )
-      .run(
-        '018f0000-0000-7000-8000-000000000631',
-        JSON.stringify(currentMatchRuleset),
-        contentHash(currentMatchRuleset),
-      );
-    database.client
-      .prepare(
-        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'match_result',json_object('content_id',d.job_revision_id,'profile_version_id',d.profile_version_id,'enrichment_id',NULL,'rules_hash','fixture','filter_status',d.filter_status,'total_score',d.total_score,'input_hash',d.input_hash,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(d.components_json) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),d.created_at,d.created_at FROM (SELECT ? AS id, ? AS profile_version_id, ? AS job_revision_id, ? AS ruleset_id, ? AS filter_status, ? AS total_score, ? AS components_json, ? AS risks_json, ? AS input_hash, 3 AS created_at) d`,
+        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) VALUES ( ?,(SELECT id FROM jobs WHERE content_id=?),'match_result',json_object('content_id',?,'profile_version_id',?,'enrichment_id',NULL,'rules_hash','fixture','filter_status',?,'total_score',?,'input_hash',?,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(?) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(?) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(?) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),3,3 )`,
       )
       .run(
         '018f0000-0000-7000-8000-000000000632',
+        ids.staleContent,
+        ids.staleContent,
         ids.interviewProfileVersion,
-        ids.staleRevision,
-        '018f0000-0000-7000-8000-000000000631',
         recruitmentMatch.filterStatus,
         recruitmentMatch.totalScore,
+        contentHash(recruitmentMatch),
         JSON.stringify(recruitmentMatch.components),
         JSON.stringify(recruitmentMatch.ruleOutcomes),
-        contentHash(recruitmentMatch),
+        JSON.stringify(recruitmentMatch.ruleOutcomes),
       );
     database.client
       .prepare(
@@ -618,8 +591,8 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
          (id, agent_key, definition_hash, model_config_hash, input_hash,
           cache_key, status, output_json, input_tokens, output_tokens, estimated_cost_micros,
           cost_currency, pricing_version, started_at, finished_at)
-         VALUES (?, 'job-understanding', 'fake-definition', 'fake-config',
-          'fake-input', 'fake-cache', 'succeeded', '{"summary":"脱敏校招实习职位理解"}',
+         VALUES (?, 'job-analysis', 'fake-definition', 'fake-config',
+          'fake-input', 'fake-cache', 'succeeded', '{"summary":"脱敏校招实习职位分析"}',
           120, 80, 1000, 'USD', 'fake-price-v1', 2, 3)`,
       )
       .run(ids.agentRun);

@@ -2,11 +2,7 @@ import { candidateProfileSchema, type CandidateProfileData } from '@jobhunter/us
 import { normalizedJobSchema, type NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { z } from 'zod';
 import { jobUnderstandingSchema, type JobUnderstanding } from '../agents/job-understanding.js';
-import {
-  jobAdviceSchema,
-  parseJobAdviceAgentOutput,
-  type JobAdvice,
-} from '../agents/job-advice-agent.js';
+import { jobAdviceSchema, parseJobAdviceOutput, type JobAdvice } from '../contracts/job-advice.js';
 import { calculateDeterministicMatch } from './scoring.js';
 
 const goldenJobSchema = z
@@ -106,7 +102,7 @@ export function evaluateMatchingGoldenCase(
     const target = evaluated.find(({ item }) => item.job.externalJobId === sample.externalJobId);
     if (!target) throw new TypeError(`Advice sample job does not exist: ${sample.externalJobId}.`);
     try {
-      parseJobAdviceAgentOutput(sample.output);
+      parseJobAdviceOutput(sample.output);
       // 无引用建议无法仅凭 Schema 判断事实，必须使用独立人工标注。
       if (sample.factConsistent) factConsistentAdvice += 1;
     } catch {

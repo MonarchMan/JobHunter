@@ -20,8 +20,7 @@ import {
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createBatchJobScoreTaskHandler,
-  createJobUnderstandingTaskHandler,
-  createJobAdviceTaskHandler,
+  createJobAnalysis,
   MatchWorkflowService,
 } from '@jobhunter/matching/application';
 import { dataRootCheck, nodeRuntimeCheck } from '@jobhunter/common/operations/offline-checks';
@@ -78,7 +77,7 @@ import { SqliteSystemInitializer } from './initializer.js';
 import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
 import { hashCanonical } from '@jobhunter/common/agent';
 import { createConfiguredModelClient } from '@jobhunter/common/models';
-import { jobAdviceAgentDefinition } from '@jobhunter/matching';
+import { jobAnalysisAgentDefinition } from '@jobhunter/matching';
 import { firstPartySourceCatalog } from '@jobhunter/recruitment';
 import {
   ensureConfiguredTaskHost,
@@ -214,15 +213,10 @@ export function createLocalCliContainer(
     registry.register(createExperienceResearchTaskHandler({ unavailable: true }));
     registry.register(createAiReplyHandler({}));
     const matchingHandler = createMatchRevisionTaskHandler(null);
-    const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
-    const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
     registry.register(matchingHandler);
-    registry.register(understandingHandler);
-    registry.register(adviceHandler);
     const singleScoring = createManualJobScoreTaskHandler({
-      understanding: understandingHandler,
+      analysis: createJobAnalysis({ unavailable: true }),
       matching: matchingHandler,
-      advice: adviceHandler,
       adviceEnabled: () => systemSettings.get().matchingAutomation.adviceEnabled,
     });
     registry.register(singleScoring);
@@ -344,8 +338,8 @@ export function createLocalCliContainer(
         ...(modelMetadata
           ? {
               adviceSelector: {
-                agentKey: jobAdviceAgentDefinition.key,
-                definitionHash: agentDefinitionHash(jobAdviceAgentDefinition),
+                agentKey: jobAnalysisAgentDefinition.key,
+                definitionHash: agentDefinitionHash(jobAnalysisAgentDefinition),
                 modelConfigHash: hashCanonical(modelMetadata),
               },
             }

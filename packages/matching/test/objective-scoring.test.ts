@@ -5,10 +5,10 @@ import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import {
   buildProfileSnapshot,
   calculateDeterministicMatch,
-  jobUnderstandingInputSchema,
+  jobAnalysisFactsInputSchema,
   matchEvidenceCoverage,
-  jobUnderstandingAgentDefinition,
-  jobUnderstandingPrompt,
+  jobAnalysisAgentDefinition,
+  jobAnalysisPrompt,
   parseDeterministicMatchOutput,
 } from '../src/index.js';
 
@@ -87,10 +87,10 @@ describe('v5 overlapping rule and model dimensions', () => {
     expect(snapshot.preferences).toEqual(profile.preferences);
     expect(snapshot.education).toEqual(profile.education);
     expect(snapshot).not.toHaveProperty('basicInfo');
-    expect(jobUnderstandingAgentDefinition.systemPrompt).toBe(jobUnderstandingPrompt.text);
-    expect(jobUnderstandingAgentDefinition).not.toHaveProperty('version');
-    expect(jobUnderstandingPrompt.text).toContain('综合岗位方向、工作地点');
-    expect(jobUnderstandingPrompt.text).not.toContain('不得在 fitScore 重复扣分');
+    expect(jobAnalysisAgentDefinition.systemPrompt).toBe(jobAnalysisPrompt);
+    expect(jobAnalysisAgentDefinition).not.toHaveProperty('version');
+    expect(jobAnalysisPrompt).toContain('综合岗位方向、工作地点');
+    expect(jobAnalysisPrompt).not.toContain('不得在 fitScore 重复扣分');
     const input = {
       title: job.title,
       description: job.description,
@@ -102,10 +102,10 @@ describe('v5 overlapping rule and model dimensions', () => {
       company: { sizeCategory: null, industry: null },
       profile: snapshot,
     };
-    expect(jobUnderstandingInputSchema.parse(input)).toEqual(input);
+    expect(jobAnalysisFactsInputSchema.parse(input)).toEqual(input);
     expect(
       hashCanonical(
-        jobUnderstandingInputSchema.parse({
+        jobAnalysisFactsInputSchema.parse({
           ...input,
           profile: buildProfileSnapshot({
             ...profile,
@@ -113,7 +113,7 @@ describe('v5 overlapping rule and model dimensions', () => {
           }),
         }),
       ),
-    ).not.toBe(hashCanonical(jobUnderstandingInputSchema.parse(input)));
+    ).not.toBe(hashCanonical(jobAnalysisFactsInputSchema.parse(input)));
   });
 });
 const job = parseNormalizedJob({
@@ -212,7 +212,7 @@ describe('v4 objective scoring', () => {
     expect(snapshot.workExperience).toEqual(candidate.workExperience);
     expect(snapshot).not.toHaveProperty('basicInfo');
     expect(
-      jobUnderstandingInputSchema.safeParse({
+      jobAnalysisFactsInputSchema.safeParse({
         title: job.title,
         description: job.description,
         experienceText: null,

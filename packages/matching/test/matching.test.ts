@@ -1,22 +1,15 @@
 import { parseCandidateProfile } from '@jobhunter/user/contracts';
 import { parseId, utcInstant } from '@jobhunter/common/domain';
 import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
-import { assertPromptMatchesDefinition } from '@jobhunter/common/agent';
 import { describe, expect, it } from 'vitest';
 import {
   calculateDeterministicMatch,
   evaluateMatchingGoldenCase,
   filterCurrentRecommendations,
-  jobAdviceAgentDefinition,
-  jobAdvicePrompt,
   parseStoredJobAdvice,
-  jobUnderstandingAgentDefinition,
-  jobUnderstandingPrompt,
-  buildProfileSnapshot,
   currentMatchRuleset,
   parseJobUnderstanding,
-  parseJobUnderstandingAgentOutput,
-  parseJobAdviceAgentOutput,
+  parseJobAdviceOutput,
   parseMatchRuleset,
   sortMatches,
   type DeterministicMatchInput,
@@ -85,49 +78,6 @@ function input(overrides: Partial<DeterministicMatchInput> = {}): DeterministicM
 }
 
 describe('eligibility and deterministic scoring', () => {
-  it('keeps JobUnderstanding prompt versions aligned and rejects fabricated evidence', () => {
-    expect(() => {
-      assertPromptMatchesDefinition(jobUnderstandingPrompt, jobUnderstandingAgentDefinition);
-    }).not.toThrow();
-    const agentInput = {
-      title: job.title,
-      description: job.description,
-      experienceText: job.experienceText,
-      educationText: job.educationText,
-      recruitmentCategory: 'social' as const,
-      profile: buildProfileSnapshot(profile),
-    };
-    expect(() =>
-      parseJobUnderstandingAgentOutput(
-        {
-          requiredSkills: [
-            { value: 'Python', evidence: [{ field: 'description', quote: '不存在的 Python' }] },
-          ],
-          preferredSkills: [],
-          minimumYearsExperience: null,
-          seniority: null,
-          domains: [],
-          fitScore: 50,
-          reasons: ['证据缺失'],
-        },
-        agentInput,
-      ),
-    ).toThrow(/evidence is not present/);
-    // 拟合分与理由是 v2 的必填输出，缺失即拒绝。
-    expect(() =>
-      parseJobUnderstandingAgentOutput(
-        {
-          requiredSkills: [],
-          preferredSkills: [],
-          minimumYearsExperience: null,
-          seniority: null,
-          domains: [],
-        },
-        agentInput,
-      ),
-    ).toThrow();
-  });
-
   it('uses only current deterministic conditions and no keyword ability score', () => {
     const result = calculateDeterministicMatch(input());
     expect(result.filterStatus).toBe('uncertain');
@@ -230,7 +180,7 @@ describe('job advice Agent', () => {
       }),
     ).toThrow();
     expect(() =>
-      parseJobAdviceAgentOutput({
+      parseJobAdviceOutput({
         highlights: [],
         gaps: [],
         preparation: Array.from({ length: 6 }, () => '准备案例'),
@@ -243,22 +193,19 @@ describe('job advice Agent', () => {
     preparation: ['准备架构案例。'],
   };
   it('uses the versioned reference-free schema', () => {
-    expect(() => {
-      assertPromptMatchesDefinition(jobAdvicePrompt, jobAdviceAgentDefinition);
-    }).not.toThrow();
-    expect(parseJobAdviceAgentOutput(output)).toEqual(output);
+    expect(parseJobAdviceOutput(output)).toEqual(output);
   });
   it('rejects stored references, resume emphasis and inline reference IDs', () => {
-    expect(() => parseJobAdviceAgentOutput({ ...output, uncertainties: [] })).toThrow();
-    expect(() => parseJobAdviceAgentOutput({ ...output, resumeEmphasis: [] })).toThrow();
+    expect(() => parseJobAdviceOutput({ ...output, uncertainties: [] })).toThrow();
+    expect(() => parseJobAdviceOutput({ ...output, resumeEmphasis: [] })).toThrow();
     expect(() =>
-      parseJobAdviceAgentOutput({
+      parseJobAdviceOutput({
         ...output,
         highlights: [{ text: '匹配', references: ['ref-1'] }],
       }),
     ).toThrow();
     expect(() =>
-      parseJobAdviceAgentOutput({ ...output, gaps: [{ text: '待补充（ref-1）' }] }),
+      parseJobAdviceOutput({ ...output, gaps: [{ text: '待补充（ref-1）' }] }),
     ).toThrow();
   });
 });

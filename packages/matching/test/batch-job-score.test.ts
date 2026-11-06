@@ -3,8 +3,7 @@ import { utcInstant } from '@jobhunter/common/domain';
 import { TaskExecutionError, type TaskHandlerContext } from '@jobhunter/common/tasks';
 import { createBatchJobScoreTaskHandler } from '../src/application/batch-job-score-handler.js';
 import { createManualJobScoreTaskHandler } from '../src/application/manual-job-score-handler.js';
-import { createJobUnderstandingTaskHandler } from '../src/application/job-understanding-handler.js';
-import { createJobAdviceTaskHandler } from '../src/application/job-advice-handler.js';
+import { createJobAnalysis } from '../src/application/job-analysis.js';
 import { createMatchRevisionTaskHandler } from '../src/application/matching-handlers.js';
 
 const first = '018f0000-0000-7000-8000-000000000001';
@@ -25,7 +24,6 @@ function fixture(): {
   advice: { execute: ReturnType<typeof vi.fn> };
 } {
   const understanding = {
-    ...createJobUnderstandingTaskHandler({ unavailable: true }),
     execute: vi.fn().mockResolvedValue({
       jobEnrichmentId: null,
       fitScore: 80,
@@ -34,6 +32,15 @@ function fixture(): {
       cacheHit: false,
     }),
   };
+  understanding.execute
+    .mockResolvedValueOnce({
+      jobEnrichmentId: null,
+      fitScore: 80,
+      fitReasons: [],
+      advice: null,
+      agentRunId: null,
+    })
+    .mockRejectedValueOnce(new TaskExecutionError('validation_failed', '职位分析失败'));
   const matching = {
     ...createMatchRevisionTaskHandler(null),
     execute: vi
@@ -42,17 +49,15 @@ function fixture(): {
       .mockResolvedValue({ matchResultId: second }),
   };
   const advice = {
-    ...createJobAdviceTaskHandler({ unavailable: true }),
-    execute: vi
-      .fn()
-      .mockResolvedValueOnce({ matchAdviceId: first })
-      .mockRejectedValueOnce(new TaskExecutionError('validation_failed', '建议生成失败'))
-      .mockResolvedValue({ matchAdviceId: second }),
+    execute: vi.fn().mockReturnValueOnce(first).mockReturnValue(second),
   };
   const single = createManualJobScoreTaskHandler({
-    understanding,
+    analysis: {
+      ...createJobAnalysis({ unavailable: true }),
+      analyze: understanding.execute,
+      storeAdvice: advice.execute,
+    },
     matching,
-    advice,
     adviceEnabled: () => true,
   });
   const handler = createBatchJobScoreTaskHandler(single);
@@ -67,7 +72,7 @@ function fixture(): {
 }
 
 describe('batch scoring checkpoints', () => {
-  it('skips successful jobs and retries only advice after its failure', async () => {
+  it('skips successful jobs and retries unified analysis only for failed jobs', async () => {
     const { handler, context, understanding, matching, advice } = fixture();
     const error: unknown = await handler.execute(context, payload).catch((cause: unknown) => cause);
     expect(error).toBeInstanceOf(TaskExecutionError);
@@ -76,9 +81,9 @@ describe('batch scoring checkpoints', () => {
     const retry = handler.payloadSchema.parse(handler.retryPayload?.(payload, error.result));
     const result = await handler.execute(context, retry);
     expect(result.items.map((item) => item.status)).toEqual(['succeeded', 'succeeded']);
-    expect(understanding.execute).toHaveBeenCalledTimes(2);
+    expect(understanding.execute).toHaveBeenCalledTimes(3);
     expect(matching.execute).toHaveBeenCalledTimes(2);
-    expect(advice.execute).toHaveBeenCalledTimes(3);
+    expect(advice.execute).toHaveBeenCalledTimes(2);
   });
 
   it('resumes saved progress after interruption without repeating successful jobs', async () => {
@@ -95,7 +100,7 @@ describe('batch scoring checkpoints', () => {
 
   it('does not mark a model failure as completed rules-only scoring', async () => {
     const { handler, context, understanding, matching } = fixture();
-    understanding.execute.mockResolvedValue({
+    understanding.execute.mockReset().mockResolvedValue({
       jobEnrichmentId: null,
       fitScore: null,
       fitReasons: [],

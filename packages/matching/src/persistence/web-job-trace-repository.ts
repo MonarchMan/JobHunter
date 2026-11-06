@@ -4,7 +4,7 @@ import type { CandidateProfileReader } from '@jobhunter/user/contracts';
 import type { TaskRelationStatusReader } from '@jobhunter/common/tasks';
 import type { WebJobDetail } from '@jobhunter/matching/contracts/web';
 import type { WebJobTrace, WebJobTraceRepository } from '../application/web-job-detail-service.js';
-import { parseStoredJobAdvice } from '../agents/job-advice-agent.js';
+import { parseStoredJobAdvice } from '../contracts/job-advice.js';
 import { ruleOutcomeSchema, scoreComponentSchema } from '../model.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
@@ -94,7 +94,11 @@ export class SqliteWebJobTraceRepository implements WebJobTraceRepository {
         createdAt: new Date(row.created_at).toISOString(),
         advice: advice({
           ...row,
-          advice_task_status: this.taskStatus.latest('match.advise', 'matchResultId', row.id),
+          advice_task_status: this.taskStatus.latest(
+            'match.score-job',
+            'jobRevisionId',
+            revisions[0]?.id ?? '',
+          ),
         }),
       })),
     };

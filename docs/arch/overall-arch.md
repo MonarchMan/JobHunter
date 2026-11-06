@@ -237,7 +237,7 @@ JobHunter/
 职责较多的目录进一步按以下结构组织；公开包入口保持稳定，不为保留旧内部路径添加转发文件：
 
 - `common/src/tasks/`：`contracts/` 保存任务契约，`scheduling/` 保存队列与调度用例，`execution/` 保存线程执行，`host/` 保存宿主装配和命令桥，`concurrency/` 保存并发与限流，`maintenance/` 保存维护能力；根目录只保留 `index.ts`。
-- `matching/src/`：`scoring/` 保存确定性评分与资格规则，`agents/` 保存职位理解和建议 Agent，继续由既有 `application/` 编排。
+- `matching/src/`：`scoring/` 保存确定性评分与资格规则，`agents/` 保存统一职位分析 Agent，继续由既有 `application/` 编排。
 - `recruitment/src/platform/connectors/`：`boss/`、`job51/`、`liepin/`、`zhilian/` 保存平台实现，`browser/` 保存 CDP、Cookie、浏览器发现与请求节奏能力；根目录只保留公开聚合入口。
 
 仓储、公开契约和端口等目录已经围绕单一职责组织，不按文件数量机械拆分。

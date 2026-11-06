@@ -25,3 +25,10 @@ export type JobAdvice = z.infer<typeof jobAdviceSchema>;
 export function parseStoredJobAdvice(value: unknown): JobAdvice {
   return jobAdviceSchema.parse(value);
 }
+
+/** 分析 Agent 的建议块最多五项行动，统一用于边界与评测。 */
+export function parseJobAdviceOutput(value: unknown): JobAdvice {
+  return jobAdviceSchema
+    .extend({ preparation: jobAdviceSchema.shape.preparation.max(5) })
+    .parse(value);
+}

@@ -133,9 +133,9 @@ it('protects file and revision references, analysis results and official jobs', 
       .run(agentId, 'a'.repeat(64), 'b'.repeat(64), agentId);
     db.client
       .prepare(
-        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'enrichment',json_object('content_id',d.job_revision_id,'agent_run_id',d.agent_run_id,'schema',d.schema_version,'content_hash',d.content_hash,'result',json(d.result_json)),d.created_at,d.created_at FROM (SELECT ? AS id,? AS job_revision_id,? AS agent_run_id,'1' AS schema_version,? AS content_hash,'{}' AS result_json,1 AS created_at) d`,
+        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) VALUES ( ?,(SELECT id FROM jobs WHERE content_id=?),'enrichment',json_object('content_id',?,'agent_run_id',?,'schema','1','content_hash',?,'result',json('{}')),1,1 )`,
       )
-      .run(randomUUID(), analyzedRevision, agentId, 'c'.repeat(64));
+      .run(randomUUID(), analyzedRevision, analyzedRevision, agentId, 'c'.repeat(64));
     const companyId = db.client
       .prepare('SELECT company_id FROM jobs WHERE id=?')
       .pluck()

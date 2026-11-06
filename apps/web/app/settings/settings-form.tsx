@@ -156,7 +156,7 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
           />
           <span>
             <strong>同步后自动评分</strong>
-            <small>为新职位运行规则与模型两阶段评分</small>
+            <small>为新职位运行一次模型分析并汇总规则评分</small>
           </span>
         </label>
         <label className={styles.settingsToggle}>
@@ -169,7 +169,7 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
           />
           <span>
             <strong>自动生成求职建议</strong>
-            <small>评分完成后生成求职建议，需要已经配置 AI 模型</small>
+            <small>在同一次职位分析中生成求职建议，需要已经配置 AI 模型</small>
           </span>
         </label>
       </fieldset>

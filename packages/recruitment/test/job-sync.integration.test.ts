@@ -1,5 +1,4 @@
 import { scanTaskProjection } from '@jobhunter/recruitment/persistence/scan-task-sql';
-import { currentJobContentSql } from '../src/persistence/current-job-sql.js';
 import {
   JobDetailService,
   type JobDetailCommand,
@@ -307,7 +306,7 @@ async function run(
 function count(handle: SqliteDatabaseHandle, table: string): number {
   const allowed = new Set([
     'jobs',
-    currentJobContentSql,
+    'jobs',
     'job_observations',
     'tasks',
     'entities',
@@ -454,28 +453,28 @@ describe('JobSyncService', () => {
     const db = fixture.handle.client;
     await run(fixture);
     const old = db
-      .prepare(`SELECT id, job_id FROM ${currentJobContentSql} ORDER BY id LIMIT 1`)
+      .prepare('SELECT content_id AS id, id AS job_id FROM jobs ORDER BY content_id LIMIT 1')
       .get() as {
       id: string;
       job_id: string;
     };
     db.exec(`
       INSERT INTO candidate_profiles (id, name, created_at, updated_at) VALUES ('p', 'Fixture', 1, 1);
-      WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json, content_hash, is_current, created_at) AS (VALUES ('pv', 'p', 1, '{}', '{}', '[]', 'profile-hash', 1, 1))
+      WITH profile_input (id, profile_id, version_no, profile_json, content_hash, is_current, created_at) AS (VALUES ('pv', 'p', 1, '{}', 'profile-hash', 1, 1))
 INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
-SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture;
-      SELECT * FROM (SELECT 'rules' AS id, '{}' AS definition_json, 'rules-hash' AS definition_hash, 1 AS active, 1 AS created_at) d;
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(profile_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(profile_json,'$.basicInfo'),'{}'),COALESCE(json_extract(profile_json,'$.targetRoles'),'[]'),COALESCE(json_extract(profile_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(profile_json,'$.preferences'),'{}'),COALESCE(json_extract(profile_json,'$.education'),'[]'),COALESCE(json_extract(profile_json,'$.workExperience'),'[]'),COALESCE(json_extract(profile_json,'$.projects'),'[]'),COALESCE(json_extract(profile_json,'$.works'),'[]'),COALESCE(json_extract(profile_json,'$.competitions'),'[]'),COALESCE(json_extract(profile_json,'$.certificates'),'[]'),COALESCE(json_extract(profile_json,'$.languages'),'[]'),json_extract(profile_json,'$.professionalSkills'),json_extract(profile_json,'$.selfEvaluation'),COALESCE(json_extract(profile_json,'$.skills'),'[]'),COALESCE(json_extract(profile_json,'$.domains'),'[]'),json_extract(profile_json,'$.yearsOfExperience'),json_extract(profile_json,'$.managementExperience') FROM profile_input;
+
       INSERT INTO agent_runs (id, agent_key, definition_hash, model_config_hash, input_hash, cache_key, status, output_json, started_at)
         VALUES ('agent', 'fixture', 'definition', 'config', 'input', 'cache', 'succeeded', '{}', 1);
     `);
     db.prepare(
-      `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'enrichment',json_object('content_id',d.job_revision_id,'agent_run_id',d.agent_run_id,'schema',d.schema_version,'content_hash',d.content_hash,'result',json(d.result_json)),d.created_at,d.created_at FROM (SELECT 'enrichment' AS id, ? AS job_revision_id, 'agent' AS agent_run_id, '1' AS schema_version, 'enrichment-hash' AS content_hash, '{}' AS result_json, 1 AS created_at) d`,
-    ).run(old.id);
+      `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) VALUES ( 'enrichment',(SELECT id FROM jobs WHERE content_id=?),'enrichment',json_object('content_id',?,'agent_run_id','agent','schema','1','content_hash','enrichment-hash','result',json('{}')),1,1 )`,
+    ).run(old.id, old.id);
     db.prepare(
-      `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'match_result',json_object('content_id',d.job_revision_id,'profile_version_id',d.profile_version_id,'enrichment_id',d.job_enrichment_id,'rules_hash','fixture','filter_status',d.filter_status,'total_score',d.total_score,'input_hash',d.input_hash,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(d.components_json) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),d.created_at,d.created_at FROM (SELECT 'score' AS id, 'pv' AS profile_version_id, ? AS job_revision_id, 'enrichment' AS job_enrichment_id, 'rules' AS ruleset_id, 'eligible' AS filter_status, 80 AS total_score, '[]' AS components_json, '[]' AS risks_json, 'score-hash' AS input_hash, 1 AS created_at) d`,
-    ).run(old.id);
+      `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) VALUES ( 'score',(SELECT id FROM jobs WHERE content_id=?),'match_result',json_object('content_id',?,'profile_version_id','pv','enrichment_id','enrichment','rules_hash','fixture','filter_status','eligible','total_score',80,'input_hash','score-hash','components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each('[]') c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each('[]') r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each('[]') r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),1,1 )`,
+    ).run(old.id, old.id);
     db.exec(
-      `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT job_id FROM job_metadata WHERE id=d.match_result_id),'match_advice',json_object('match_result_id',d.match_result_id,'agent_run_id',d.agent_run_id,'schema',d.schema_version,'content_hash',d.content_hash,'result',json(d.result_json)),d.created_at,d.created_at FROM (SELECT 'advice' AS id, 'score' AS match_result_id, 'agent' AS agent_run_id, '1' AS schema_version, 'advice-hash' AS content_hash, '{}' AS result_json, 1 AS created_at) d`,
+      `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) VALUES ( 'advice',(SELECT job_id FROM job_metadata WHERE id='score'),'match_advice',json_object('match_result_id','score','agent_run_id','agent','schema','1','content_hash','advice-hash','result',json('{}')),1,1 )`,
     );
     for (const [id, type, payload, status] of [
       ['pending-score', 'match.score-job', { jobRevisionId: old.id }, 'pending'],
@@ -495,16 +494,12 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     fixture.scenario.jobs[0] = { ...first, description: 'Updated requirements' };
     await run(fixture);
     const current = db
-      .prepare(
-        `SELECT id FROM ${currentJobContentSql} WHERE job_id = ? ORDER BY revision_no DESC LIMIT 1`,
-      )
+      .prepare('SELECT content_id FROM jobs WHERE id = ?')
       .pluck()
       .get(old.job_id) as string;
     expect(
-      db
-        .prepare(`SELECT id, change_set_json FROM ${currentJobContentSql} WHERE job_id = ?`)
-        .all(old.job_id),
-    ).toEqual([{ id: current, change_set_json: '[]' }]);
+      db.prepare('SELECT content_id AS id, description FROM jobs WHERE id = ?').all(old.job_id),
+    ).toEqual([{ id: current, description: 'Updated requirements' }]);
     expect(
       db
         .prepare(`SELECT count(*) FROM job_metadata WHERE name='match_result' AND id = 'score'`)
@@ -533,9 +528,9 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     expect(() =>
       db
         .prepare(
-          `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'match_result',json_object('content_id',d.job_revision_id,'profile_version_id',d.profile_version_id,'enrichment_id',NULL,'rules_hash','fixture','filter_status',d.filter_status,'total_score',d.total_score,'input_hash',d.input_hash,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(d.components_json) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),d.created_at,d.created_at FROM (SELECT 'late' AS id, 'pv' AS profile_version_id, ? AS job_revision_id, 'rules' AS ruleset_id, 'eligible' AS filter_status, 80 AS total_score, '[]' AS components_json, '[]' AS risks_json, 'late-hash' AS input_hash, 3 AS created_at) d`,
+          `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) VALUES ( 'late',(SELECT id FROM jobs WHERE content_id=?),'match_result',json_object('content_id',?,'profile_version_id','pv','enrichment_id',NULL,'rules_hash','fixture','filter_status','eligible','total_score',80,'input_hash','late-hash','components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each('[]') c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each('[]') r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each('[]') r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),3,3 )`,
         )
-        .run(old.id),
+        .run(old.id, old.id),
     ).toThrow(/NOT NULL/);
     expect(db.pragma('foreign_key_check')).toEqual([]);
   });
@@ -694,7 +689,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     };
 
     await details.run(command(0), new AbortController().signal);
-    expect(count(fixture.handle, currentJobContentSql)).toBe(3);
+    expect(count(fixture.handle, 'jobs')).toBe(3);
     expect(count(fixture.handle, 'source_job_details')).toBe(1);
     // 1、详情补全属于内容变化，但不改写列表观察时间或虚构来源发布时间。
     expect(
@@ -763,7 +758,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     };
 
     await details.run(detailCommand(), new AbortController().signal);
-    expect(count(fixture.handle, currentJobContentSql)).toBe(3);
+    expect(count(fixture.handle, 'jobs')).toBe(3);
 
     fixture.handle.client
       .prepare('DELETE FROM source_job_details WHERE source_id = ? AND external_job_id = ?')
@@ -772,10 +767,10 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     if (!first) throw new Error('Fixture job-1 is missing.');
     fixture.scenario.jobs[0] = { ...first, token: 'new-list-payload' };
     await run(fixture);
-    expect(count(fixture.handle, currentJobContentSql)).toBe(3);
+    expect(count(fixture.handle, 'jobs')).toBe(3);
 
     await details.run(detailCommand(), new AbortController().signal);
-    expect(count(fixture.handle, currentJobContentSql)).toBe(3);
+    expect(count(fixture.handle, 'jobs')).toBe(3);
     expect(
       fixture.handle.client
         .prepare("SELECT status FROM source_job_details WHERE external_job_id = 'job-1'")
@@ -806,7 +801,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       stats: { discovered: 3, created: 3, followupEnqueued: 0 },
     });
     expect(count(fixture.handle, 'jobs')).toBe(3);
-    expect(count(fixture.handle, currentJobContentSql)).toBe(3);
+    expect(count(fixture.handle, 'jobs')).toBe(3);
     expect(count(fixture.handle, 'job_observations')).toBe(3);
     expect(count(fixture.handle, 'tasks')).toBe(0);
 
@@ -815,7 +810,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       status: 'succeeded',
       stats: { unchanged: 3, created: 0, revised: 0, followupEnqueued: 0 },
     });
-    expect(count(fixture.handle, currentJobContentSql)).toBe(3);
+    expect(count(fixture.handle, 'jobs')).toBe(3);
     expect(count(fixture.handle, 'job_observations')).toBe(6);
     expect(count(fixture.handle, 'tasks')).toBe(0);
 
@@ -830,7 +825,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       status: 'succeeded',
       stats: { unchanged: 2, revised: 1, followupEnqueued: 0 },
     });
-    expect(count(fixture.handle, currentJobContentSql)).toBe(3);
+    expect(count(fixture.handle, 'jobs')).toBe(3);
     expect(count(fixture.handle, 'tasks')).toBe(0);
   });
 
@@ -912,7 +907,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
         .prepare("SELECT status, missing_count FROM jobs WHERE external_job_id = 'job-3'")
         .get(),
     ).toMatchObject({ status: 'active', missing_count: 0 });
-    expect(count(fixture.handle, currentJobContentSql)).toBe(3);
+    expect(count(fixture.handle, 'jobs')).toBe(3);
   });
 
   it('isolates a known normalization failure while preserving observation evidence', async () => {
@@ -954,10 +949,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     await run(fixture);
     const row = fixture.handle.client
       .prepare(
-        `SELECT revision.source_payload_hash, revision.source_url
-         FROM ${currentJobContentSql} revision
-         JOIN jobs job ON job.id = revision.job_id
-         WHERE job.external_job_id = 'job-large'`,
+        `SELECT source_payload_hash, source_url FROM jobs WHERE external_job_id = 'job-large'`,
       )
       .get() as { readonly source_payload_hash: string; readonly source_url: string };
     expect(row.source_payload_hash).toMatch(/^[a-f0-9]{64}$/);

@@ -54,7 +54,7 @@ test('shows per-request usage and cost with one value per cell', async ({ page }
   await page.goto('/tasks');
   await page
     .locator('[data-agent-section]')
-    .getByRole('button', { name: '职位理解', exact: true })
+    .getByRole('button', { name: '职位分析', exact: true })
     .click();
   const section = page.getByRole('region', { name: '请求用量与费用' });
   await expect(section.getByRole('columnheader', { name: '时间' })).toBeVisible();
@@ -87,7 +87,7 @@ test('shows per-request usage and cost with one value per cell', async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   // 移动端独立进入页面，再从卡片打开详情。
   await page.goto('/tasks');
-  await page.getByRole('button', { name: '职位理解', exact: true }).click();
+  await page.getByRole('button', { name: '职位分析', exact: true }).click();
   await expect(section.getByRole('heading')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

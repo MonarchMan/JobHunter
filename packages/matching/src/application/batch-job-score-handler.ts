@@ -84,7 +84,7 @@ export function createBatchJobScoreTaskHandler(
         items.set(jobRevisionId, item);
         context.checkpoint?.({ items: [...items.values()] });
       }
-      // 2、失败不能伪装为整体成功；重试输入保留成功项与建议阶段检查点。
+      // 2、失败不能伪装为整体成功；重试输入保留成功项，失败项重新运行统一职位分析。
       const result = { items: [...items.values()] };
       const failed = result.items.filter((item) => item.status === 'failed');
       if (failed.length)

@@ -136,6 +136,35 @@ it('migrates research checkpoints into tasks without coupling accepted experienc
   expect(upgraded.client.pragma('foreign_key_check')).toEqual([]);
 });
 
+it('retires unfinished legacy model tasks and removes advice-only recovery inputs', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-analysis-upgrade-');
+  dataRoots.push(root);
+  const folder = await migrationsBefore(root.path, 'before-unified-analysis', 61);
+  const old = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+  handles.push(old);
+  old.client
+    .exec(`INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at)
+ VALUES('understanding','job.enrich','{}','pending','old-understanding',1,1,1),
+ ('advice','match.advise','{}','running','old-advice',1,1,1),
+ ('history','match.advise','{}','succeeded','history',1,1,1),
+ ('score','match.score-job','{"resumeMatchResultId":"old-match","mode":"llm"}','failed','score',3,1,1);`);
+  old.close();
+  const db = openSqliteDatabase({ dataRoot: root.path });
+  handles.push(db);
+  expect(
+    db.client.prepare("SELECT status FROM tasks WHERE id IN ('understanding','advice')").all(),
+  ).toEqual([{ status: 'cancelled' }, { status: 'cancelled' }]);
+  expect(db.client.prepare("SELECT status FROM tasks WHERE id='history'").pluck().get()).toBe(
+    'succeeded',
+  );
+  expect(
+    JSON.parse(
+      String(db.client.prepare("SELECT private_state FROM tasks WHERE id='score'").pluck().get()),
+    ),
+  ).toEqual({ mode: 'llm' });
+  expect(db.client.pragma('foreign_key_check')).toEqual([]);
+});
+
 it('backs up a legacy database without applying pending migrations to the source or snapshot', async () => {
   const root = await createTemporaryDataRoot('jobhunter-before-upgrade-backup-');
   dataRoots.push(root);
@@ -878,7 +907,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      61,
+      62,
     );
   });
 

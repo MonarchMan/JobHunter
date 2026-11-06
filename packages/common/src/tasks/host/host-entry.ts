@@ -36,7 +36,7 @@ export function taskHostConfiguration(config: AppConfig): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
-        runtime: 5,
+        runtime: 6,
         config: values({
           ...config,
           bootstrap: {

@@ -102,9 +102,8 @@ describe('cleanup infrastructure', () => {
         VALUES ('source', 'company', 'channel', 'cleanup-social', 'cleanup.fixture',
                 'https://careers.example.com', '{}', 'v1', '{}', 1, 'supported',
                 'healthy', 0, 1, 1);
-        WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-           sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES ('sync', 'source', 'manual', 'succeeded', 'complete', '1', '1', 'v1',
-                '${'a'.repeat(64)}', '{}', 1, 2)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture;
+        WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES ('sync', 'source', 'manual', 'succeeded', 'complete', '{}', 1, 2))
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input;
         INSERT INTO jobs
           (id, company_id, source_id, external_job_id, title, department, job_family,
            locations_json, employment_type, experience_text, education_text, description,
@@ -114,8 +113,7 @@ describe('cleanup infrastructure', () => {
                 NULL, NULL, 'Fixture', 'https://careers.example.com/job',
                 'https://careers.example.com/job', NULL, 'active', 0, '${'c'.repeat(64)}',
                 1, 1, NULL, 1, 1);
-        UPDATE jobs SET content_id=d.id,content_hash=d.content_hash,source_payload_hash=d.source_payload_hash,source_url=d.source_url FROM (SELECT 'revision' AS id, 'job' AS job_id, 1 AS revision_no, '${'c'.repeat(64)}' AS content_hash, '1' AS normalizer_version, '${'b'.repeat(64)}' AS source_payload_hash,
-                'https://careers.example.com/job' AS source_url, '{}' AS snapshot_json, '[]' AS change_set_json, 1 AS created_at) d WHERE jobs.id=d.job_id;
+        UPDATE jobs SET content_id='revision',content_hash='${'c'.repeat(64)}',source_payload_hash='${'b'.repeat(64)}',source_url='https://careers.example.com/job'  WHERE jobs.id='job';
         INSERT INTO job_observations (job_id, sync_run_id, observed_at)
         VALUES ('job', 'sync', 1);
         INSERT INTO source_job_details

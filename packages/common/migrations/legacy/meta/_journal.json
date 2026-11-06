@@ -428,6 +428,13 @@
       "when": 1793836800013,
       "tag": "0060_research_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "6",
+      "when": 1793836800014,
+      "tag": "0061_unified_job_analysis",
+      "breakpoints": true
     }
   ]
 }

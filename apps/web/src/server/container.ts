@@ -45,8 +45,7 @@ import { JobQueryService } from '@jobhunter/recruitment/jobs/job-query-service';
 import { WebJobDetailService } from '@jobhunter/matching/application/web-job-detail-service';
 import { WebJobQueryService } from '@jobhunter/matching/application/web-job-query-service';
 import {
-  createJobAdviceTaskHandler,
-  createJobUnderstandingTaskHandler,
+  createJobAnalysis,
   createMatchRevisionTaskHandler,
   createManualJobScoreTaskHandler,
   createBatchJobScoreTaskHandler,
@@ -250,16 +249,11 @@ export function createLocalWebContainer(
     registry.register(createResumePdfExportTaskHandler());
     registry.register(createResumeDeletionTaskHandler(resumeDeletion));
     registry.register(createExperienceResearchTaskHandler({ unavailable: true }));
-    const understandingHandler = createJobUnderstandingTaskHandler({ unavailable: true });
-    const adviceHandler = createJobAdviceTaskHandler({ unavailable: true });
     const matchingHandler = createMatchRevisionTaskHandler(null);
-    registry.register(understandingHandler);
-    registry.register(adviceHandler);
     registry.register(matchingHandler);
     const singleScoring = createManualJobScoreTaskHandler({
-      understanding: understandingHandler,
+      analysis: createJobAnalysis({ unavailable: true }),
       matching: matchingHandler,
-      advice: adviceHandler,
       // Web 进程不执行模型任务，开关读取结果不影响实际执行，保持与 Worker 同一装配签名。
       adviceEnabled: () => false,
     });

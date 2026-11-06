@@ -95,17 +95,13 @@ function seedJobs(dataRoot: string): void {
     );
     database.client
       .prepare(
-        `WITH scan_fixture(id, source_id, trigger, status, coverage, adapter_version, normalizer_version,
-          sync_policy_version, source_config_hash, stats_json, started_at, finished_at) AS (VALUES ('018f0000-0000-7000-8000-000000000501',
-          '018f0000-0000-7000-8000-000000000201', 'manual', 'succeeded', 'complete',
-          'v1', 'v1', 'v1', 'source-hash', '{}', 1, 2)) INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_fixture.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_fixture.finished_at,NULL,NULL FROM scan_fixture`,
+        `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES ('018f0000-0000-7000-8000-000000000501', '018f0000-0000-7000-8000-000000000201', 'manual', 'succeeded', 'complete', '{}', 1, 2))
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
       )
       .run();
     database.client
       .prepare(
-        `UPDATE jobs SET content_id=d.id,content_hash=d.content_hash,source_payload_hash=d.source_payload_hash,source_url=d.source_url FROM (SELECT '018f0000-0000-7000-8000-000000000503' AS id,
-          '018f0000-0000-7000-8000-000000000401' AS job_id, 1 AS revision_no, 'revision-hash' AS content_hash, 'v1' AS normalizer_version, ? AS source_payload_hash,
-          'https://careers.tencent.com/job/1' AS source_url, '{}' AS snapshot_json, '[]' AS change_set_json, 2 AS created_at) d WHERE jobs.id=d.job_id`,
+        `UPDATE jobs SET content_id='018f0000-0000-7000-8000-000000000503',content_hash='revision-hash',source_payload_hash=?,source_url='https://careers.tencent.com/job/1'  WHERE jobs.id='018f0000-0000-7000-8000-000000000401'`,
       )
       .run('d'.repeat(64));
     database.client
@@ -116,29 +112,15 @@ function seedJobs(dataRoot: string): void {
       .run();
     database.client
       .prepare(
-        `WITH profile_fixture (id, profile_id, version_no, extracted_json, effective_json, locked_paths_json,
-          content_hash, is_current, created_at) AS (VALUES ('018f0000-0000-7000-8000-000000000602',
-          '018f0000-0000-7000-8000-000000000601', 1, ?, ?, '[]', ?, 1, 1))
+        `WITH profile_input (id, profile_id, version_no, profile_json, content_hash, is_current, created_at) AS (VALUES ('018f0000-0000-7000-8000-000000000602', '018f0000-0000-7000-8000-000000000601', 1, ?, ?, 1, 1))
 INSERT INTO profile_versions (id,profile_id,version_no,content_hash,is_current,created_at,matching_constraints_json,basic_info_json,target_roles_json,intended_roles_json,preferences_json,education_json,work_experience_json,projects_json,works_json,competitions_json,certificates_json,languages_json,professional_skills,self_evaluation,skills_json,domains_json,years_of_experience,management_experience)
-SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(effective_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(effective_json,'$.basicInfo'),'{}'),COALESCE(json_extract(effective_json,'$.targetRoles'),'[]'),COALESCE(json_extract(effective_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(effective_json,'$.preferences'),'{}'),COALESCE(json_extract(effective_json,'$.education'),'[]'),COALESCE(json_extract(effective_json,'$.workExperience'),'[]'),COALESCE(json_extract(effective_json,'$.projects'),'[]'),COALESCE(json_extract(effective_json,'$.works'),'[]'),COALESCE(json_extract(effective_json,'$.competitions'),'[]'),COALESCE(json_extract(effective_json,'$.certificates'),'[]'),COALESCE(json_extract(effective_json,'$.languages'),'[]'),json_extract(effective_json,'$.professionalSkills'),json_extract(effective_json,'$.selfEvaluation'),COALESCE(json_extract(effective_json,'$.skills'),'[]'),COALESCE(json_extract(effective_json,'$.domains'),'[]'),json_extract(effective_json,'$.yearsOfExperience'),json_extract(effective_json,'$.managementExperience') FROM profile_fixture`,
+SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json_extract(profile_json,'$.matchingConstraints'),'{}'),COALESCE(json_extract(profile_json,'$.basicInfo'),'{}'),COALESCE(json_extract(profile_json,'$.targetRoles'),'[]'),COALESCE(json_extract(profile_json,'$.intendedRoles'),'[]'),COALESCE(json_extract(profile_json,'$.preferences'),'{}'),COALESCE(json_extract(profile_json,'$.education'),'[]'),COALESCE(json_extract(profile_json,'$.workExperience'),'[]'),COALESCE(json_extract(profile_json,'$.projects'),'[]'),COALESCE(json_extract(profile_json,'$.works'),'[]'),COALESCE(json_extract(profile_json,'$.competitions'),'[]'),COALESCE(json_extract(profile_json,'$.certificates'),'[]'),COALESCE(json_extract(profile_json,'$.languages'),'[]'),json_extract(profile_json,'$.professionalSkills'),json_extract(profile_json,'$.selfEvaluation'),COALESCE(json_extract(profile_json,'$.skills'),'[]'),COALESCE(json_extract(profile_json,'$.domains'),'[]'),json_extract(profile_json,'$.yearsOfExperience'),json_extract(profile_json,'$.managementExperience') FROM profile_input`,
       )
-      .run(profile, profile, 'e'.repeat(64));
+      .run(profile, 'e'.repeat(64));
+
     database.client
       .prepare(
-        `SELECT * FROM (SELECT '018f0000-0000-7000-8000-000000000603' AS id,
-          '{}' AS definition_json,
-          'ruleset-hash' AS definition_hash, 1 AS active, 1 AS created_at) d`,
-      )
-      .run();
-    database.client
-      .prepare(
-        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) SELECT d.id,(SELECT id FROM jobs WHERE content_id=d.job_revision_id),'match_result',json_object('content_id',d.job_revision_id,'profile_version_id',d.profile_version_id,'enrichment_id',NULL,'rules_hash','fixture','filter_status',d.filter_status,'total_score',d.total_score,'input_hash',d.input_hash,'components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each(d.components_json) c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each(d.risks_json) r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),d.created_at,d.created_at FROM (SELECT '018f0000-0000-7000-8000-000000000604' AS id,
-          '018f0000-0000-7000-8000-000000000602' AS profile_version_id,
-          '018f0000-0000-7000-8000-000000000503' AS job_revision_id,
-          '018f0000-0000-7000-8000-000000000603' AS ruleset_id, 'eligible' AS filter_status, 78 AS total_score,
-          '[{"dimension":"skills","score":28,"maximumScore":35,"matchedEvidence":[{"source":"profile","path":"/skills/0","summary":"具备 Agent 开发经验"}],"missingEvidence":["生产级评测经验"],"uncertainties":[]}]' AS components_json,
-          '[{"ruleId":"location","status":"pass","evidence":[{"source":"preference","path":"/preferences/locations","summary":"接受北京"}],"explanation":"地点符合偏好"}]' AS risks_json,
-          'match-hash' AS input_hash, 3 AS created_at) d`,
+        `INSERT INTO job_metadata(id,job_id,name,value,created_at,updated_at) VALUES ( '018f0000-0000-7000-8000-000000000604',(SELECT id FROM jobs WHERE content_id='018f0000-0000-7000-8000-000000000503'),'match_result',json_object('content_id','018f0000-0000-7000-8000-000000000503','profile_version_id','018f0000-0000-7000-8000-000000000602','enrichment_id',NULL,'rules_hash','fixture','filter_status','eligible','total_score',78,'input_hash','match-hash','components',json((SELECT json_group_array(json_object('dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),'max_score',json_extract(c.value,'$.maximumScore'))) FROM json_each('[{"dimension":"skills","score":28,"maximumScore":35,"matchedEvidence":[{"source":"profile","path":"/skills/0","summary":"具备 Agent 开发经验"}],"missingEvidence":["生产级评测经验"],"uncertainties":[]}]') c WHERE json_extract(c.value,'$.dimension')!='model')),'risk_results',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each('[{"ruleId":"location","status":"pass","evidence":[{"source":"preference","path":"/preferences/locations","summary":"接受北京"}],"explanation":"地点符合偏好"}]') r WHERE json_extract(r.value,'$.status')='fail')),'unknown_rules',json((SELECT json_group_array(json_extract(r.value,'$.ruleId')) FROM json_each('[{"ruleId":"location","status":"pass","evidence":[{"source":"preference","path":"/preferences/locations","summary":"接受北京"}],"explanation":"地点符合偏好"}]') r WHERE json_extract(r.value,'$.status')='unknown')),'model',NULL),3,3 )`,
       )
       .run();
   } finally {
