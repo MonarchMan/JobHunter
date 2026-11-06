@@ -17,7 +17,11 @@ import {
 import { TaskActions } from './task-actions.js';
 import { taskPresentation } from './task-presentation.js';
 import { TaskAutoRefresh } from './task-auto-refresh.js';
-import { AgentRunDetailsDialog, TaskDetailsDialog } from './diagnostic-details.js';
+import {
+  AgentRunDetailsDialog,
+  DiagnosticRecord,
+  TaskDetailsDialog,
+} from './diagnostic-details.js';
 import { CurrencySelect } from './currency-select.js';
 import { SelectField } from '../components/forms/select-field.js';
 import dataTableStyles from '../components/lists/data-table.module.css';
@@ -207,7 +211,7 @@ export default async function TasksPage({
                 </tr>
               ) : (
                 diagnostics.tasks.map((task) => (
-                  <tr key={task.id}>
+                  <DiagnosticRecord as="tr" key={task.id}>
                     <td>
                       <strong>
                         <TaskDetailsDialog task={task} />
@@ -226,7 +230,9 @@ export default async function TasksPage({
                     <td>
                       <TruncatedText value={taskPresentation(task).error || '—'} />
                     </td>
-                    <td>{taskDuration(task.startedAt, task.finishedAt)}</td>
+                    <td title={`${time(task.startedAt)} - ${time(task.finishedAt)}`}>
+                      {taskDuration(task.startedAt, task.finishedAt)}
+                    </td>
                     <td>
                       {task.kind === 'task' ? (
                         <TaskActions
@@ -238,7 +244,7 @@ export default async function TasksPage({
                         '—'
                       )}
                     </td>
-                  </tr>
+                  </DiagnosticRecord>
                 ))
               )}
             </tbody>
@@ -246,7 +252,8 @@ export default async function TasksPage({
         </div>
         <div className={styles.cards} aria-label="后台任务卡片列表" data-task-cards>
           {diagnostics.tasks.map((task) => (
-            <article
+            <DiagnosticRecord
+              as="article"
               className={[styles.card, styles.taskCard].filter(Boolean).join(' ')}
               key={task.id}
             >
@@ -274,7 +281,7 @@ export default async function TasksPage({
               {taskPresentation(task).error ? (
                 <p className={styles.taskCardError}>{taskPresentation(task).error}</p>
               ) : null}
-            </article>
+            </DiagnosticRecord>
           ))}
         </div>
         <Pagination
@@ -322,7 +329,7 @@ export default async function TasksPage({
                 </tr>
               ) : (
                 diagnostics.agentRuns.map((run) => (
-                  <tr key={run.id}>
+                  <DiagnosticRecord as="tr" key={run.id}>
                     <td>
                       <AgentRunDetailsDialog run={run} />
                     </td>
@@ -342,7 +349,7 @@ export default async function TasksPage({
                           : formatCost(run.estimatedCostMicros, run.costCurrency, displayCurrency)}
                     </td>
                     <td>{time(run.startedAt)}</td>
-                  </tr>
+                  </DiagnosticRecord>
                 ))
               )}
             </tbody>
@@ -350,7 +357,7 @@ export default async function TasksPage({
         </div>
         <div className={styles.cards} aria-label="Agent 运行卡片列表" data-agent-cards>
           {diagnostics.agentRuns.map((run) => (
-            <article className={styles.card} key={run.id}>
+            <DiagnosticRecord as="article" className={styles.card} key={run.id}>
               <div className={styles.cardHeading}>
                 <AgentRunDetailsDialog run={run} />
                 <span className={`status status-${run.status}`}>
@@ -358,7 +365,7 @@ export default async function TasksPage({
                 </span>
               </div>
               <p>{time(run.startedAt)}</p>
-            </article>
+            </DiagnosticRecord>
           ))}
         </div>
         <Pagination

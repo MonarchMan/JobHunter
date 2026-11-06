@@ -5,7 +5,7 @@ import type {
   WebAgentRunSummary,
   WebTask,
 } from '@jobhunter/recruitment/contracts/web';
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import {
   labelStatus,
@@ -22,6 +22,33 @@ import dataTableStyles from '../components/lists/data-table.module.css';
 import styles from './diagnostic-details.module.css';
 import { AgentBillingDetails } from './agent-billing-details.js';
 import { taskPresentation } from './task-presentation.js';
+
+/** 行和卡片共用名称按钮打开详情，按钮也提供键盘入口及焦点恢复。 */
+export function DiagnosticRecord({
+  as: Tag,
+  className,
+  children,
+}: Readonly<{
+  as: 'tr' | 'article';
+  className?: string | undefined;
+  children: ReactNode;
+}>): ReactElement {
+  return (
+    <Tag
+      className={[styles.record, className].filter(Boolean).join(' ')}
+      onClick={(event) => {
+        if (
+          !(event.target instanceof Element) ||
+          event.target.closest('button, a, input, select, textarea, dialog')
+        )
+          return;
+        event.currentTarget.querySelector<HTMLButtonElement>('[data-record-details]')?.click();
+      }}
+    >
+      {children}
+    </Tag>
+  );
+}
 
 function time(value: string | null): string {
   return value
@@ -103,7 +130,9 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
       <button
         ref={triggerReference}
         type="button"
-        className={['button-link', styles.trigger].filter(Boolean).join(' ')}
+        className={styles.trigger}
+        data-record-details
+        aria-haspopup="dialog"
         title={displayName}
         onClick={() => {
           setOpen(true);
@@ -383,7 +412,9 @@ export function AgentRunDetailsDialog({
       <button
         ref={triggerReference}
         type="button"
-        className={['button-link', styles.trigger].filter(Boolean).join(' ')}
+        className={styles.trigger}
+        data-record-details
+        aria-haspopup="dialog"
         onClick={() => {
           setOpen(true);
         }}

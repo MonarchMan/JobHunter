@@ -1,10 +1,15 @@
+.record {
+  cursor: pointer;
+}
+
 .trigger {
   min-height: auto;
   padding: 0;
   color: var(--primary-hover);
   text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 0.18rem;
+  border: 0;
+  background: transparent;
+  text-decoration: none;
 }
 
 .trigger:hover:not(:disabled) {
