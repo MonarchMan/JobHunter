@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { zhilianSessionFromHome } from '../../src/platform/connectors/zhilian-home.js';
+import { zhilianSessionFromHome } from '../../src/platform/connectors/zhilian/zhilian-home.js';
 import { zhilianSearchFixture as fixture } from './fixtures/zhilian-search-fixture.js';
 
 const auth = {

@@ -14,8 +14,8 @@ import type {
 import type { JobStatus, NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import type { DeterministicMatchOutput, MatchingCompanyContext } from '../model.js';
 import type { JobAdvice } from '../contracts/job-advice.js';
-import type { JobUnderstanding } from '../job-understanding.js';
-import type { MatchRuleset } from '../rulesets.js';
+import type { JobUnderstanding } from '../agents/job-understanding.js';
+import type { MatchRuleset } from '../scoring/rulesets.js';
 
 /** 应用层数据结构或端口契约。 */
 export interface MatchingJobRevisionRecord {

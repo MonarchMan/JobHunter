@@ -2,9 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Worker } from 'node:worker_threads';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { ThreadTaskExecutor, threadPoolOptionsSchema } from '../../src/tasks/thread-executor.js';
-import { AsyncSemaphore } from '../../src/tasks/async-semaphore.js';
-import type { TaskRecord, TaskHandlerContext } from '../../src/tasks/model.js';
+import {
+  ThreadTaskExecutor,
+  threadPoolOptionsSchema,
+} from '../../src/tasks/execution/thread-executor.js';
+import { AsyncSemaphore } from '../../src/tasks/concurrency/async-semaphore.js';
+import type { TaskRecord, TaskHandlerContext } from '../../src/tasks/contracts/model.js';
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error('Expected available capacity');

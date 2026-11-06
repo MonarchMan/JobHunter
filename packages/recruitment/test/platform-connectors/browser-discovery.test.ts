@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { chromePortFile } from '../../src/platform/connectors/browser-discovery.js';
+import { chromePortFile } from '../../src/platform/connectors/browser/browser-discovery.js';
 
 const machine = vi.hoisted(() => ({ system: 'darwin' }));
 vi.mock('node:os', () => ({ homedir: () => '/fixture-user', platform: () => machine.system }));

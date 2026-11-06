@@ -1,4 +1,7 @@
-import { threadPoolOptionsSchema, type ThreadPoolOptions } from '../tasks/thread-pool-options.js';
+import {
+  threadPoolOptionsSchema,
+  type ThreadPoolOptions,
+} from '../tasks/execution/thread-pool-options.js';
 import { isDomesticModelApi, resolveCatalogPricing } from '../models/pricing-catalog.js';
 import { resolveLegacyPricing } from '../models/legacy-pricing.js';
 import { resolveLegacyDomesticPricing } from '../models/legacy-domestic-pricing.js';

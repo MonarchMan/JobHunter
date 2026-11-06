@@ -5,7 +5,7 @@ import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { openSqliteDatabase } from '../../src/persistence/connection.js';
 import { createBackup, planRestoreBackup, restoreBackup } from '../../src/persistence/backup.js';
 import { acquireTaskServiceLock } from '../../src/persistence/task-service-lock.js';
-import { startTaskHostBridge } from '../../src/tasks/host-bridge.js';
+import { startTaskHostBridge } from '../../src/tasks/host/host-bridge.js';
 
 it('keeps service startup excluded throughout restore, including the directory replacement gap', async () => {
   const root = await createTemporaryDataRoot('jobhunter-restore-service-');

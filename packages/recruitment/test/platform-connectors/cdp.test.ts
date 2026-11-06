@@ -4,7 +4,7 @@ import {
   ZhilianCdpSessionProvider,
   Job51CdpSessionProvider,
   LiepinCdpSessionProvider,
-} from '../../src/platform/connectors/cdp.js';
+} from '../../src/platform/connectors/browser/cdp.js';
 import type { PlatformSession } from '@jobhunter/recruitment/platform-contracts';
 import { zhilianSearchFixture as fixture } from './fixtures/zhilian-search-fixture.js';
 

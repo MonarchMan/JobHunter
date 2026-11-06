@@ -13,7 +13,7 @@ describe('SQLite maintenance worker composition', () => {
     const command = resolveSqliteMaintenanceCommand();
     expect(command.arguments[0]).toMatch(/[\\/]tsx[\\/]dist[\\/]cli\.mjs$/u);
     expect(command.arguments[1]).toMatch(
-      /[\\/]packages[\\/]common[\\/]src[\\/]tasks[\\/]sqlite-maintenance-main\.ts$/u,
+      /[\\/]packages[\\/]common[\\/]src[\\/]tasks[\\/]maintenance[\\/]sqlite-maintenance-main\.ts$/u,
     );
   });
 

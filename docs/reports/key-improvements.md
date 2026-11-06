@@ -247,8 +247,8 @@
    本轮不修改评分列表语义、关键词检索、完整性检查策略、业务数据保留策略或官网速率。运行期锁忙后的提交恢复仍遵循既有至少一次执行和幂等约束。需要重启 Web/Worker 才能加载新的运行时逻辑。
 
    - [Worker 设计](../../specs/003-task-worker/design.md)、[Web 设计](../../specs/011-web-console/design.md)。
-   - [首页查询](../../apps/web/src/server/dashboard/read-model.ts)、[Worker 引擎](../../packages/common/src/tasks/worker-engine.ts)。
-   - [Web 可重试初始化](../../apps/web/src/server/retryable-singleton.ts)、[维护入口](../../packages/common/src/tasks/sqlite-maintenance.ts)。
+   - [首页查询](../../apps/web/src/server/dashboard/read-model.ts)、[Worker 引擎](../../packages/common/src/tasks/scheduling/worker-engine.ts)。
+   - [Web 可重试初始化](../../apps/web/src/server/retryable-singleton.ts)、[维护入口](../../packages/common/src/tasks/maintenance/sqlite-maintenance.ts)。
 
 4. **连接校验分层与关键词分页复用**
 

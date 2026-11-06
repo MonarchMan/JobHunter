@@ -1,4 +1,4 @@
-import { startTaskHostBridge } from '../../src/tasks/host-bridge.js';
+import { startTaskHostBridge } from '../../src/tasks/host/host-bridge.js';
 
 const dataRoot = process.argv[2];
 if (!dataRoot) throw new Error('Missing fixture data root');

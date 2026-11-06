@@ -1,7 +1,7 @@
 import type { CandidateProfileData } from '@jobhunter/user/contracts';
 import type { NormalizedJob } from '@jobhunter/recruitment/contracts/domain';
 import { z } from 'zod';
-import type { JobUnderstanding } from './job-understanding.js';
+import type { JobUnderstanding } from './agents/job-understanding.js';
 
 /** 匹配规则或评分引用的证据片段。 */
 export const matchingEvidenceSchema = z

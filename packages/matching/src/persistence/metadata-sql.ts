@@ -1,5 +1,5 @@
-import { defaultMatchRulesetId } from '../rulesets.js';
-import { scoreWeights } from '../score-composition.js';
+import { defaultMatchRulesetId } from '../scoring/rulesets.js';
+import { scoreWeights } from '../scoring/score-composition.js';
 /** metadata 的领域读取投影；数据库仅保存精简 JSON，不复制展示文案。 */
 const components = `json((SELECT json_group_array(json_object(
  'dimension',json_extract(c.value,'$.dimension'),'score',json_extract(c.value,'$.score'),

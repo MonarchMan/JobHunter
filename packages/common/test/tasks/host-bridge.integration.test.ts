@@ -1,12 +1,12 @@
-import { taskServiceRequestSchema } from '../../src/tasks/host-bridge-protocol.js';
+import { taskServiceRequestSchema } from '../../src/tasks/host/host-bridge-protocol.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fork, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { startTaskHostBridge } from '../../src/tasks/host-bridge.js';
-import { requestTaskService } from '../../src/tasks/host-bridge-client.js';
+import { startTaskHostBridge } from '../../src/tasks/host/host-bridge.js';
+import { requestTaskService } from '../../src/tasks/host/host-bridge-client.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   acquireTaskServiceLock,

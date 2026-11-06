@@ -1,5 +1,5 @@
 import { resolveAppConfig, resolveBootstrapConfig } from '../../src/config/index.js';
-import { startConfiguredTaskHost } from '../../src/tasks/host-entry.js';
+import { startConfiguredTaskHost } from '../../src/tasks/host/host-entry.js';
 
 const root = process.argv[2];
 if (!root) throw new Error('Fixture data directory is required');

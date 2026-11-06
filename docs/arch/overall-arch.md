@@ -220,13 +220,12 @@ recruitment 与 user 互不导入，均不依赖 matching；common 不依赖业�
 JobHunter/
 ├─ apps/
 │  ├─ cli/                    # 命令与依赖装配
-│  ├─ worker/                 # 后台进程生命周期与 Handler 装配
 │  └─ web/                    # 页面、HTTP 适配与依赖装配
 ├─ packages/
 │  ├─ recruitment/            # 招聘信息与流程
 │  ├─ user/                   # 个人资料、简历与面试准备
 │  ├─ matching/               # recruitment 与 user 的匹配
-│  └─ common/             # 通用运行能力
+│  └─ common/                 # 通用运行能力
 ├─ docs/arch/                 # 总体与专题架构
 ├─ docs/adr/                  # 架构决策
 ├─ specs/                     # SDD 功能规格
@@ -234,6 +233,14 @@ JobHunter/
 ```
 
 模块内部按 profile、interview、sources、mail 等功能组织目录，复杂功能再细分领域、用例和适配器。契约与 runtime 使用独立公开入口，保留 development/src 和 production/dist 条件，避免根 barrel 引入 OCR、邮箱、浏览器或模型的全部实现。
+
+职责较多的目录进一步按以下结构组织；公开包入口保持稳定，不为保留旧内部路径添加转发文件：
+
+- `common/src/tasks/`：`contracts/` 保存任务契约，`scheduling/` 保存队列与调度用例，`execution/` 保存线程执行，`host/` 保存宿主装配和命令桥，`concurrency/` 保存并发与限流，`maintenance/` 保存维护能力；根目录只保留 `index.ts`。
+- `matching/src/`：`scoring/` 保存确定性评分与资格规则，`agents/` 保存职位理解和建议 Agent，继续由既有 `application/` 编排。
+- `recruitment/src/platform/connectors/`：`boss/`、`job51/`、`liepin/`、`zhilian/` 保存平台实现，`browser/` 保存 CDP、Cookie、浏览器发现与请求节奏能力；根目录只保留公开聚合入口。
+
+仓储、公开契约和端口等目录已经围绕单一职责组织，不按文件数量机械拆分。
 
 测试工具作为 common/testing 子路径，业务合成样本放在所属模块 test/fixtures。入口只保留交互、协议转换、生命周期和装配；可复用业务 Handler 与连接器随模块迁移。
 

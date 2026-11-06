@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
 import { installTaskExecutionGate } from '../../src/persistence/task-execution-gate.js';
-import { withTaskExecution, type TaskExecutionIdentity } from '../../src/tasks/execution-scope.js';
+import {
+  withTaskExecution,
+  type TaskExecutionIdentity,
+} from '../../src/tasks/contracts/execution-scope.js';
 
 /** 用真实 SQLite 事务验证不同业务表的提交门控，避免只测试 tasks 更新。 */
 function fixture(): {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runStagedItems } from '../src/tasks/staged.js';
+import { runStagedItems } from '../src/tasks/contracts/staged.js';
 
 describe('runStagedItems', () => {
   it('executes items in order, checkpoints after each and returns all results', async () => {

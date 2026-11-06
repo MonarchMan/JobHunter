@@ -3,7 +3,7 @@ import {
   LiepinRecommendationHttpSession,
   liepinCookieHeader,
   liepinRequestHeaders,
-} from '../../src/platform/connectors/liepin.js';
+} from '../../src/platform/connectors/liepin/liepin.js';
 
 const signal = new AbortController().signal;
 const url = 'https://www.liepin.com/job/1980000001.shtml';

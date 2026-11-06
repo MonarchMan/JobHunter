@@ -10,9 +10,9 @@
       "import": "./dist/persistence/model-request-repository.js"
     },
     "./task-host": {
-      "development": "./src/tasks/configured-host.ts",
-      "types": "./dist/tasks/configured-host.d.ts",
-      "import": "./dist/tasks/configured-host.js"
+      "development": "./src/tasks/host/configured-host.ts",
+      "types": "./dist/tasks/host/configured-host.d.ts",
+      "import": "./dist/tasks/host/configured-host.js"
     },
     "./resource-references": {
       "development": "./src/contracts/resource-references.ts",
@@ -140,19 +140,19 @@
       "import": "./dist/models/index.js"
     },
     "./task-runtime": {
-      "development": "./src/tasks/runtime.ts",
-      "types": "./dist/tasks/runtime.d.ts",
-      "import": "./dist/tasks/runtime.js"
+      "development": "./src/tasks/host/runtime.ts",
+      "types": "./dist/tasks/host/runtime.d.ts",
+      "import": "./dist/tasks/host/runtime.js"
     },
     "./task-cleanup": {
-      "development": "./src/tasks/cleanup-capability.ts",
-      "types": "./dist/tasks/cleanup-capability.d.ts",
-      "import": "./dist/tasks/cleanup-capability.js"
+      "development": "./src/tasks/maintenance/cleanup-capability.ts",
+      "types": "./dist/tasks/maintenance/cleanup-capability.d.ts",
+      "import": "./dist/tasks/maintenance/cleanup-capability.js"
     },
     "./task-maintenance": {
-      "development": "./src/tasks/sqlite-maintenance.ts",
-      "types": "./dist/tasks/sqlite-maintenance.d.ts",
-      "import": "./dist/tasks/sqlite-maintenance.js"
+      "development": "./src/tasks/maintenance/sqlite-maintenance.ts",
+      "types": "./dist/tasks/maintenance/sqlite-maintenance.d.ts",
+      "import": "./dist/tasks/maintenance/sqlite-maintenance.js"
     },
     "./browser/executable": {
       "development": "./src/browser/executable.ts",
@@ -175,14 +175,14 @@
       "import": "./dist/persistence/periodic-config.js"
     },
     "./source-rate-limit": {
-      "development": "./src/tasks/source-token-bucket.ts",
-      "types": "./dist/tasks/source-token-bucket.d.ts",
-      "import": "./dist/tasks/source-token-bucket.js"
+      "development": "./src/tasks/concurrency/source-token-bucket.ts",
+      "types": "./dist/tasks/concurrency/source-token-bucket.d.ts",
+      "import": "./dist/tasks/concurrency/source-token-bucket.js"
     },
     "./task-host-runtime": {
-      "development": "./src/tasks/host-entry.ts",
-      "types": "./dist/tasks/host-entry.d.ts",
-      "import": "./dist/tasks/host-entry.js"
+      "development": "./src/tasks/host/host-entry.ts",
+      "types": "./dist/tasks/host/host-entry.d.ts",
+      "import": "./dist/tasks/host/host-entry.js"
     }
   },
   "files": [

@@ -3,11 +3,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   CdpConnectionManager,
   type CdpConnectionLease,
-} from '../../src/platform/connectors/cdp-connection.js';
+} from '../../src/platform/connectors/browser/cdp-connection.js';
 import {
   BossCdpSessionProvider,
   Job51CdpSessionProvider,
-} from '../../src/platform/connectors/cdp.js';
+} from '../../src/platform/connectors/browser/cdp.js';
 
 vi.mock('node:fs/promises', () => ({ readFile: vi.fn() }));
 

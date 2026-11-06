@@ -2,8 +2,8 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   Job51HttpSession,
   type Job51RequestTemplate,
-} from '../../src/platform/connectors/job51.js';
-import { Job51RequestObserver } from '../../src/platform/connectors/job51-observer.js';
+} from '../../src/platform/connectors/job51/job51.js';
+import { Job51RequestObserver } from '../../src/platform/connectors/job51/job51-observer.js';
 
 /** 脱敏合成模板，不包含真实账号、Cookie 或签名。 */
 function template(page = 1): Job51RequestTemplate {

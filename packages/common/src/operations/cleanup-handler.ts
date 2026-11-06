@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { TaskHandler } from '../tasks/model.js';
-import { TaskExecutionError } from '../tasks/retry-policy.js';
+import type { TaskHandler } from '../tasks/contracts/model.js';
+import { TaskExecutionError } from '../tasks/scheduling/retry-policy.js';
 import type { CleanupService } from './cleanup-service.js';
 
 /** 清理任务输入。 */

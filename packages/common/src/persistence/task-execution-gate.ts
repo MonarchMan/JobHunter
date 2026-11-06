@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { currentTaskExecution } from '../tasks/execution-scope.js';
+import { currentTaskExecution } from '../tasks/contracts/execution-scope.js';
 
 /** 任务提交被拒绝时使用固定错误，不泄露业务内容和分派凭证。 */
 export const taskExecutionLostMessage = 'JOBHUNTER_TASK_EXECUTION_LOST';

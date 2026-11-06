@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseNormalizedJob } from '@jobhunter/recruitment/contracts/domain';
-import { requirementStatements } from '../src/requirement-language.js';
+import { requirementStatements } from '../src/scoring/requirement-language.js';
 
 /** 最小职位原文夹具，不读取真实数据或参考标签。 */
 function extract(description: string): string[] {

@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi, type Mock } from 'vitest';
-import { BossBrowserSession } from '../../src/platform/connectors/boss-browser.js';
-import type { BossPageState } from '../../src/platform/connectors/boss-page-state.js';
+import { BossBrowserSession } from '../../src/platform/connectors/boss/boss-browser.js';
+import type { BossPageState } from '../../src/platform/connectors/boss/boss-page-state.js';
 
 const listUrl = 'https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json?page=1&city=1';
 const detailUrl = 'https://www.zhipin.com/wapi/zpgeek/job/detail.json?securityId=private-a';

@@ -1,4 +1,4 @@
-import { matchMetadataValueSchema } from '../job-metadata.js';
+import { matchMetadataValueSchema } from '../scoring/job-metadata.js';
 import { matchMetadataSql, enrichmentMetadataSql, adviceMetadataSql } from './metadata-sql.js';
 import type { MatchingJobReader } from '@jobhunter/recruitment/contracts/matching-jobs';
 import type { MatchingProfileIdentityReader } from '@jobhunter/user/contracts';
@@ -22,8 +22,8 @@ import {
 } from '@jobhunter/common/domain';
 import { parseDeterministicMatchOutput } from '../model.js';
 import { parseStoredJobAdvice } from '../contracts/job-advice.js';
-import { parseJobUnderstanding } from '../job-understanding.js';
-import { currentMatchRuleset } from '../rulesets.js';
+import { parseJobUnderstanding } from '../agents/job-understanding.js';
+import { currentMatchRuleset } from '../scoring/rulesets.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 

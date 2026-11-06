@@ -4,9 +4,9 @@ import {
   buildProfileSnapshot,
   jobUnderstandingAgentDefinition,
   parseJobUnderstandingAgentOutput,
-} from '../job-understanding-agent.js';
+} from '../agents/job-understanding-agent.js';
 import { z } from 'zod';
-import { recruitmentCategory } from '../recruitment-requirements.js';
+import { recruitmentCategory } from '../scoring/recruitment-requirements.js';
 import { mapAgentRuntimeError } from '@jobhunter/common/tasks';
 import type { MatchingRepository } from '../ports/matching.js';
 import type { CandidateProfileReader } from '@jobhunter/user/contracts';

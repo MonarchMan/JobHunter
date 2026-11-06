@@ -4,9 +4,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import type { AppConfig } from '../../src/config/index.js';
-import { createTaskRuntime, type TaskRuntimeOptions } from '../../src/tasks/runtime.js';
-import { runTaskThreadEntry } from '../../src/tasks/host-entry.js';
-import { voidTaskOutputSchema } from '../../src/tasks/handler-registry.js';
+import { createTaskRuntime, type TaskRuntimeOptions } from '../../src/tasks/host/runtime.js';
+import { runTaskThreadEntry } from '../../src/tasks/host/host-entry.js';
+import { voidTaskOutputSchema } from '../../src/tasks/contracts/handler-registry.js';
 
 /** 合成宿主持续写计数文件，验证入口强杀后工作线程不再执行。 */
 export function createConfiguredTaskApplication(

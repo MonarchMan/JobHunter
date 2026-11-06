@@ -1,4 +1,7 @@
-import { ThreadNetworkSemaphore, serveTaskThread } from '../../src/tasks/thread-worker.js';
+import {
+  ThreadNetworkSemaphore,
+  serveTaskThread,
+} from '../../src/tasks/execution/thread-worker.js';
 import { threadId } from 'node:worker_threads';
 import { setTimeout } from 'node:timers/promises';
 

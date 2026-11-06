@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
-import type { TaskRelationStatusReader } from '../tasks/relation-status.js';
+import type { TaskRelationStatusReader } from '../tasks/contracts/relation-status.js';
 
 /** 通用任务关联状态查询；业务模块通过端口读取，不直接访问任务表。 */
 export class SqliteTaskRelationStatusReader implements TaskRelationStatusReader {

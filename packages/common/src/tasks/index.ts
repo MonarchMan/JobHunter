@@ -1,12 +1,12 @@
 /** 通用任务队列、调度与 Worker 执行契约的公开入口。 */
-export * from './async-semaphore.js';
-export * from './error-mapping.js';
-export * from './handler-registry.js';
-export * from './model.js';
-export * from './retry-policy.js';
-export * from './staged.js';
-export * from './schedule-service.js';
-export * from './task-service.js';
-export * from './worker-engine.js';
-export * from './relation-status.js';
-export { currentTaskExecution } from './execution-scope.js';
+export * from './concurrency/async-semaphore.js';
+export * from './scheduling/error-mapping.js';
+export * from './contracts/handler-registry.js';
+export * from './contracts/model.js';
+export * from './scheduling/retry-policy.js';
+export * from './contracts/staged.js';
+export * from './scheduling/schedule-service.js';
+export * from './scheduling/task-service.js';
+export * from './scheduling/worker-engine.js';
+export * from './contracts/relation-status.js';
+export { currentTaskExecution } from './contracts/execution-scope.js';

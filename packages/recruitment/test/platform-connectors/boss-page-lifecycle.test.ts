@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { BossPageLifecycle } from '../../src/platform/connectors/boss-page-lifecycle.js';
-import type { BossPageState } from '../../src/platform/connectors/boss-page-state.js';
+import { BossPageLifecycle } from '../../src/platform/connectors/boss/boss-page-lifecycle.js';
+import type { BossPageState } from '../../src/platform/connectors/boss/boss-page-state.js';
 
 beforeEach(() => {
   vi.useFakeTimers();

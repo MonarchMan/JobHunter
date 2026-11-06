@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { PlatformRequestPacer } from '../../src/platform/connectors/request-pacing.js';
+import { PlatformRequestPacer } from '../../src/platform/connectors/browser/request-pacing.js';
 
 it('默认零间隔无需推进时钟即可连续执行', async () => {
   const pacer = new PlatformRequestPacer(0, () => 0);

@@ -9,9 +9,9 @@ import {
 } from '@jobhunter/common/domain';
 import type { CandidateProfileReader } from '@jobhunter/user/contracts';
 import { buildMatchIdentity } from '../domain/index.js';
-import { composeMatchScore, scoreWeights } from '../score-composition.js';
-import { calculateDeterministicMatch } from '../scoring.js';
-import { currentMatchRuleset, defaultMatchRulesetId } from '../rulesets.js';
+import { composeMatchScore, scoreWeights } from '../scoring/score-composition.js';
+import { calculateDeterministicMatch } from '../scoring/scoring.js';
+import { currentMatchRuleset, defaultMatchRulesetId } from '../scoring/rulesets.js';
 import type {
   MatchingRepository,
   MatchResultRecord,

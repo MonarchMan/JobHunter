@@ -1,6 +1,6 @@
 import { AgentRuntimeError, type AgentRunner } from '@jobhunter/common/agent';
 import { contentHash, parseId, type Clock, type IdGenerator } from '@jobhunter/common/domain';
-import { jobAdviceAgentDefinition, parseJobAdviceAgentOutput } from '../job-advice-agent.js';
+import { jobAdviceAgentDefinition, parseJobAdviceAgentOutput } from '../agents/job-advice-agent.js';
 import { z } from 'zod';
 import { mapAgentRuntimeError } from '@jobhunter/common/tasks';
 import type { MatchingRepository } from '../ports/matching.js';

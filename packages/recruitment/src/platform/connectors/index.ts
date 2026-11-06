@@ -1,21 +1,24 @@
-export { BossHttpSession } from './boss.js';
-export { CdpConnectionManager } from './cdp-connection.js';
-export { LiepinRecommendationHttpSession, type LiepinRecommendationTemplate } from './liepin.js';
-export { Job51HttpSession, type Job51RequestTemplate } from './job51.js';
-export { ZhilianSearchHttpSession, type ZhilianSearchTemplates } from './zhilian-search.js';
+export { BossHttpSession } from './boss/boss.js';
+export { CdpConnectionManager } from './browser/cdp-connection.js';
+export {
+  LiepinRecommendationHttpSession,
+  type LiepinRecommendationTemplate,
+} from './liepin/liepin.js';
+export { Job51HttpSession, type Job51RequestTemplate } from './job51/job51.js';
+export { ZhilianSearchHttpSession, type ZhilianSearchTemplates } from './zhilian/zhilian-search.js';
 export {
   BossCdpSessionProvider,
   ZhilianCdpSessionProvider,
   Job51CdpSessionProvider,
   LiepinCdpSessionProvider,
-} from './cdp.js';
+} from './browser/cdp.js';
 export {
   ZhilianCampusHttpSession,
   type ZhilianCampusRequestTemplate,
-} from './zhilian-recommend.js';
+} from './zhilian/zhilian-recommend.js';
 export {
   ZhilianCampusSelectionSession,
   parseZhilianCampusDetail,
   type ZhilianCampusSelection,
-} from './zhilian.js';
-export { cookieHeaderForUrl, type BrowserCookie } from './cookies.js';
+} from './zhilian/zhilian.js';
+export { cookieHeaderForUrl, type BrowserCookie } from './browser/cookies.js';
