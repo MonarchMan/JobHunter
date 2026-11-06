@@ -1,7 +1,6 @@
 import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
-import { PageHeader } from '../components/layout/page-header.js';
 import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { PlatformTabs, SourceTabs, type SourceChannel } from './source-tabs.js';
@@ -59,7 +58,6 @@ export default async function SourcesPage({
       : [];
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader title="招聘来源" />
       <div className={styles.toolbar} data-source-toolbar>
         <SourceTabs active={channel} officialCount={companies.length} />
         {channel === 'official' && sourceChannels.length > 0 ? (

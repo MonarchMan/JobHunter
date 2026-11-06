@@ -16,7 +16,7 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(page.getByRole('group', { name: '自动匹配' })).toBeVisible();
     await expect(page.getByRole('group', { name: '默认职位视图' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: '同步频率' })).toBeVisible();
-    await expect(page.getByLabel('执行时间')).toBeVisible();
+    await expect(page.getByRole('group', { name: '执行时间', exact: true })).toBeVisible();
     await expect(page.getByRole('combobox', { name: '默认职位排序' })).toBeVisible();
     await expect(page.getByText('记住筛选条件', { exact: true })).toBeVisible();
     await expect(page.getByLabel('QQ 邮箱授权码')).toBeHidden();
@@ -512,7 +512,7 @@ test.describe('校招实习管理台核心流程', () => {
 
   test('separates official and platform recruitment sources', async ({ page }) => {
     await page.goto('/sources');
-    await expect(page.getByRole('heading', { name: '招聘来源' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /官网来源/ })).toBeVisible();
     await expect(page.getByRole('link', { name: /官网来源/ })).toHaveAttribute(
       'aria-current',
       'page',
@@ -1009,8 +1009,17 @@ test.describe('校招实习管理台核心流程', () => {
 
   test('shows queued task and redacted Agent trace diagnostics', async ({ page }) => {
     await page.goto('/tasks');
-    await expect(page.getByRole('heading', { name: '任务与 Agent 运行' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '任务与Agent', exact: true })).toBeVisible();
     const taskFilters = page.getByRole('form', { name: '任务筛选' });
+    const refreshControls = taskFilters.locator('[data-task-refresh]');
+    await expect(refreshControls.getByRole('button', { name: '立即刷新', exact: true })).toHaveText(
+      '',
+    );
+    await refreshControls.getByRole('button', { name: '暂停自动刷新', exact: true }).click();
+    await expect(
+      refreshControls.getByRole('button', { name: '恢复自动刷新', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await refreshControls.getByRole('button', { name: '恢复自动刷新', exact: true }).click();
     await expect(taskFilters.locator('select:not([aria-hidden="true"])')).toHaveCount(0);
     await expect(taskFilters.locator('[data-authored-select-trigger]')).toHaveCount(2);
     await taskFilters.getByRole('combobox', { name: '状态' }).click();

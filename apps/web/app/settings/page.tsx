@@ -14,28 +14,29 @@ export default async function SettingsPage(): Promise<ReactElement> {
   return (
     <main id="main-content" tabIndex={-1}>
       <PageHeader title="设置" />
-      <section
-        className={[styles.settingsPanel, 'panel'].join(' ')}
-        aria-labelledby="settings-title"
-      >
-        <div className={[styles.sectionHeading, 'section-heading'].join(' ')}>
-          <h2 id="settings-title">工作流偏好</h2>
-          <p className="muted">设置同步范围、自动匹配和职位列表的默认展示方式。</p>
-        </div>
-        <SettingsForm settings={container.services.settings.get()} />
-      </section>
-      <section
-        className={[styles.settingsPanel, 'panel'].join(' ')}
-        aria-labelledby="mailbox-title"
-      >
-        <MailboxSettings
-          initial={await container.services.mailboxes.snapshot()}
-          oauthAvailability={{
-            gmail: container.mailOAuth.gmail !== null,
-            microsoftGraph: container.mailOAuth.microsoftGraph !== null,
-          }}
-        />
-      </section>
+      <div className={styles.layout}>
+        <section
+          className={[styles.settingsPanel, 'panel'].join(' ')}
+          aria-labelledby="settings-title"
+        >
+          <div className={[styles.sectionHeading, 'section-heading'].join(' ')}>
+            <h2 id="settings-title">工作流偏好</h2>
+          </div>
+          <SettingsForm settings={container.services.settings.get()} />
+        </section>
+        <section
+          className={[styles.settingsPanel, 'panel'].join(' ')}
+          aria-labelledby="mailbox-title"
+        >
+          <MailboxSettings
+            initial={await container.services.mailboxes.snapshot()}
+            oauthAvailability={{
+              gmail: container.mailOAuth.gmail !== null,
+              microsoftGraph: container.mailOAuth.microsoftGraph !== null,
+            }}
+          />
+        </section>
+      </div>
     </main>
   );
 }

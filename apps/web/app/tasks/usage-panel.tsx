@@ -3,6 +3,7 @@ import { useState, type ReactElement, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation.js';
 import type { UsageCall, UsageReport, UsageTotals } from '@jobhunter/common/usage';
 import { SelectField } from '../components/forms/select-field.js';
+import { TaskAutoRefresh } from './task-auto-refresh.js';
 import { UsageChart } from './usage-chart.js';
 import styles from './usage.module.css';
 
@@ -203,6 +204,7 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
             options={ranges}
           />
         </div>
+        <TaskAutoRefresh />
       </div>
       <div className={styles.metricRow}>
         <div className={styles.metrics}>

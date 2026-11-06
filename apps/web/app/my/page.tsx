@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
-import { PageHeader } from '../components/layout/page-header.js';
+import { PageTabs } from '../components/layout/page-tabs.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import ProfilePage from '../profile/page.js';
 import { ApplicationsProgressContent } from '../applications/page.js';
@@ -19,18 +19,13 @@ export default async function MyPage({ searchParams }: MyPageProperties): Promis
   const tab = firstSearchParameter(query, 'tab') === 'applications' ? 'applications' : 'profile';
   return (
     <main id="main-content" className={styles.page} tabIndex={-1}>
-      <PageHeader title="我的" />
-      <nav className={styles.tabs} aria-label="我的页面分区">
-        <a className={tab === 'profile' ? styles.activeTab : undefined} href="/my?tab=profile">
-          个人资料
-        </a>
-        <a
-          className={tab === 'applications' ? styles.activeTab : undefined}
-          href="/my?tab=applications"
-        >
-          应聘进展
-        </a>
-      </nav>
+      <PageTabs
+        label="我的页面分区"
+        items={[
+          { href: '/my?tab=profile', label: '个人资料', active: tab === 'profile' },
+          { href: '/my?tab=applications', label: '应聘进展', active: tab === 'applications' },
+        ]}
+      />
       <section className={styles.content} aria-label={tab === 'profile' ? '个人资料' : '应聘进展'}>
         {tab === 'applications' ? (
           <ApplicationsProgressContent embedded />

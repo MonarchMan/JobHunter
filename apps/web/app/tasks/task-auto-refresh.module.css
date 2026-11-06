@@ -3,7 +3,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.55rem 0.75rem;
-  margin-top: 0.65rem;
+  margin-left: auto;
   color: var(--muted-ink);
   font-size: 0.8rem;
 }
@@ -13,10 +13,13 @@
   animation: feedback-in var(--motion-standard) var(--ease-out) both;
 }
 
-.refresh :global(.button-muted),
-.refresh :global(.button-link) {
+.refresh :global(.button-muted) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 2.25rem;
-  font-size: 0.78rem;
+  width: 2.25rem;
+  padding: 0;
 }
 
 @keyframes feedback-in {

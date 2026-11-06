@@ -4,7 +4,7 @@ test('历史会话持续可读，新会话支持两种类别和回答覆盖编�
   await page.goto('/interview');
   await page.getByRole('combobox', { name: '选择会话' }).click();
   await page.getByRole('option', { name: '项目面试', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'AI 对话与模拟面试' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'AI 模拟面试', exact: true })).toBeVisible();
   await expect(
     page.getByText('为什么把模型调用放在事务提交之后，失败时如何保持任务可重试？'),
   ).toBeVisible();

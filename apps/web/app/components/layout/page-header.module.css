@@ -3,17 +3,16 @@
   align-items: end;
   justify-content: space-between;
   gap: 2rem;
-  min-height: 7rem;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1.35rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--line);
 }
 
 .header :is(h1, h2) {
   margin: 0;
-  font-size: clamp(2rem, 4vw, 2.75rem);
-  letter-spacing: -0.045em;
-  line-height: 1.08;
+  font-size: 1rem;
+  letter-spacing: normal;
+  line-height: 1.5;
 }
 
 .header > div:last-child > p {
@@ -57,6 +56,6 @@
   }
 
   .header :is(h1, h2) {
-    font-size: 2rem;
+    font-size: 1rem;
   }
 }

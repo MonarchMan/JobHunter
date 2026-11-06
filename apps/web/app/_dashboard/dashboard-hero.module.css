@@ -18,12 +18,12 @@
 }
 
 .hero h1 {
-  max-width: 13ch;
+  max-width: 100%;
   margin: 0 0 1rem;
   color: var(--text-primary);
-  font-size: clamp(1.75rem, 3vw, 2.5rem);
-  letter-spacing: -0.07em;
-  line-height: 0.98;
+  font-size: 1rem;
+  letter-spacing: normal;
+  line-height: 1.5;
 }
 
 .hero h1 em {
@@ -203,7 +203,7 @@
   }
 
   .hero h1 {
-    font-size: 1.75rem;
+    font-size: 1rem;
   }
 
   .brandSymbol img {

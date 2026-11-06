@@ -196,7 +196,7 @@ main.empty-state {
 .error-state h1,
 main.empty-state h1 {
   margin: 0;
-  font-size: clamp(2.25rem, 5vw, 3.75rem);
+  font-size: 1rem;
   letter-spacing: -0.05em;
 }
 

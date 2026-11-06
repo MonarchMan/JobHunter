@@ -130,10 +130,11 @@
 .detailLink {
   color: var(--primary-hover);
   cursor: pointer;
+  text-decoration: none;
 }
 
 .detailLink:hover {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .detailLink:focus-visible {

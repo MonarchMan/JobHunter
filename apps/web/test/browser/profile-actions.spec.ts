@@ -4,7 +4,10 @@ test('我的页在标签下方直接显示简历导入，不重复显示画像�
   await page.goto('/my');
   await expect(page.getByRole('navigation', { name: '我的页面分区' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '导入简历' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: '个人资料', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: '个人资料', exact: true })).toHaveCount(1);
+  await expect(
+    page.getByRole('navigation', { name: '我的页面分区' }).getByRole('heading', { level: 1 }),
+  ).toHaveCSS('font-size', '16px');
   await expect(page.getByRole('combobox', { name: '选择画像' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '查看', exact: true })).toHaveCount(0);
 });

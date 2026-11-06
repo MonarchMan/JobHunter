@@ -26,6 +26,7 @@ export function SelectField({
   value,
   onValueChange,
   disabled = false,
+  compact = false,
 }: Readonly<{
   name: string;
   label: string;
@@ -34,6 +35,7 @@ export function SelectField({
   value?: string;
   onValueChange?: (value: string) => void;
   disabled?: boolean;
+  compact?: boolean;
 }>): ReactElement {
   const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
   const selectedValue = value ?? uncontrolledValue;
@@ -113,7 +115,9 @@ export function SelectField({
       >
         <SelectPrimitive.Trigger
           ref={trigger}
-          className={styles.trigger}
+          className={[styles.trigger, compact ? styles.compact : undefined]
+            .filter(Boolean)
+            .join(' ')}
           aria-label={label}
           title={selectedLabel}
           data-authored-select-trigger

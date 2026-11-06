@@ -5,6 +5,7 @@ import type { ReactElement, SyntheticEvent } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { SelectField } from '../components/forms/select-field.js';
+import { TimePicker } from '../components/forms/time-picker.js';
 import { useToast } from '../components/toast-provider.js';
 import styles from './settings.module.css';
 
@@ -68,7 +69,6 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
       }}
       noValidate
     >
-      <p className={styles.fieldHelp}>修改后请点击“保存设置”，新的选项才会生效。</p>
       <fieldset className={styles.channelFieldset}>
         <legend>同步招聘渠道</legend>
         <p className={styles.fieldHelp}>
@@ -101,24 +101,24 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
       </fieldset>
       <fieldset className={styles.settingGroup}>
         <legend>自动同步</legend>
-        <label className={styles.settingsToggle}>
-          <input
-            type="checkbox"
-            checked={syncEnabled}
-            onChange={(event) => {
-              setSyncEnabled(event.target.checked);
-            }}
-          />
-          <span>
-            <strong>定时同步职位</strong>
-            <small>{syncEnabled ? '已开启' : '已关闭'}</small>
-          </span>
-        </label>
         <div className={styles.compactFields}>
-          <label>
+          <label className={styles.settingsToggle}>
+            <input
+              type="checkbox"
+              checked={syncEnabled}
+              onChange={(event) => {
+                setSyncEnabled(event.target.checked);
+              }}
+            />
+            <span>
+              <strong>定时同步职位</strong>
+            </span>
+          </label>
+          <label className={styles.compactSelect}>
             同步频率
             <SelectField
               name="sync-frequency"
+              compact
               label="同步频率"
               value={syncFrequency}
               disabled={!syncEnabled}
@@ -131,17 +131,12 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
               ]}
             />
           </label>
-          <label>
-            执行时间
-            <input
-              type="time"
-              value={syncTime}
-              disabled={!syncEnabled}
-              onChange={(event) => {
-                setSyncTime(event.target.value);
-              }}
-            />
-          </label>
+          <TimePicker
+            label="执行时间"
+            value={syncTime}
+            disabled={!syncEnabled}
+            onChange={setSyncTime}
+          />
         </div>
       </fieldset>
       <fieldset className={styles.settingGroup}>
@@ -156,8 +151,8 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
           />
           <span>
             <strong>同步后自动评分</strong>
-            <small>为新职位运行一次模型分析并汇总规则评分</small>
           </span>
+          <small>为新职位运行一次模型分析并汇总规则评分</small>
         </label>
         <label className={styles.settingsToggle}>
           <input
@@ -169,11 +164,23 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
           />
           <span>
             <strong>自动生成求职建议</strong>
-            <small>在同一次职位分析中生成求职建议，需要已经配置 AI 模型</small>
+          </span>
+          <small>在同一次职位分析中生成求职建议，需要已经配置 AI 模型</small>
+        </label>
+        <label className={styles.settingsToggle}>
+          <input
+            type="checkbox"
+            checked={enabled}
+            onChange={(event) => {
+              setEnabled(event.target.checked);
+            }}
+          />
+          <span>
+            <strong>自动执行职位理解</strong>
           </span>
         </label>
       </fieldset>
-      <fieldset className={styles.settingGroup}>
+      <fieldset className={[styles.settingGroup, styles.viewGroup].join(' ')}>
         <legend>默认职位视图</legend>
         <label className={styles.compactSelect}>
           默认排序
@@ -201,25 +208,12 @@ export function SettingsForm({ settings }: SettingsFormProperties): ReactElement
           />
           <span>
             <strong>记住筛选条件</strong>
-            <small>下次打开职位页时恢复上次筛选</small>
           </span>
+          <small>下次打开职位页时恢复上次筛选</small>
         </label>
       </fieldset>
-      <label className={styles.settingsToggle}>
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(event) => {
-            setEnabled(event.target.checked);
-          }}
-        />
-        <span>
-          <strong>自动执行职位理解</strong>
-          <small>{enabled ? '已开启' : '已关闭'}</small>
-        </span>
-      </label>
-      <div className="inline-actions">
-        <button type="submit" disabled={busy}>
+      <div className={styles.saveBar}>
+        <button className="button-primary" type="submit" disabled={busy}>
           {busy ? '保存中…' : '保存设置'}
         </button>
       </div>

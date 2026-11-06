@@ -3,7 +3,6 @@ import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../../src/server/job-query.js';
-import { PageHeader } from '../../components/layout/page-header.js';
 import { InterviewSectionNav } from '../interview-section-nav.js';
 import { ResearchIndex } from './research-index.js';
 
@@ -36,7 +35,6 @@ export default async function ResearchPage({
   const allAccepted = service.listAccepted();
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader title="网友面经" />
       <InterviewSectionNav />
       <ResearchIndex
         requests={service.listRequests()}

@@ -5,7 +5,6 @@ import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { agentRunStatusLabels, labelStatus, taskTypeLabels } from '../components/status-labels.js';
-import { PageHeader } from '../components/layout/page-header.js';
 import { TruncatedText } from '../components/lists/truncated-text.js';
 import { Pagination } from '../components/lists/pagination.js';
 import { getWebContainer } from '../../src/server/container.js';
@@ -111,9 +110,6 @@ export default async function TasksPage({
     });
     return (
       <main id="main-content" tabIndex={-1}>
-        <PageHeader title="任务与 Agent 运行">
-          <TaskAutoRefresh />
-        </PageHeader>
         <TaskTabs usage />
         <UsagePanel report={report} view={firstSearchParameter(parameters, 'view') ?? 'logs'} />
       </main>
@@ -131,12 +127,6 @@ export default async function TasksPage({
   });
   return (
     <main id="main-content" tabIndex={-1}>
-      <PageHeader title="任务与 Agent 运行">
-        <div>
-          <TaskAutoRefresh />
-        </div>
-      </PageHeader>
-
       <TaskTabs />
       <form
         className={styles.filters}
@@ -177,6 +167,7 @@ export default async function TasksPage({
         <a className="button-secondary" href="/tasks">
           清除
         </a>
+        <TaskAutoRefresh />
       </form>
 
       <section

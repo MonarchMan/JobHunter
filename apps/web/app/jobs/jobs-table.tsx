@@ -170,7 +170,7 @@ export function JobsTable({
                     data-row-detail-link
                     aria-label={`查看职位详情：${job.title}`}
                   >
-                    {job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`}
+                    {job.score === null ? '无' : `${job.score.toFixed(1)} 分`}
                   </a>
                 </td>
                 <td>
@@ -236,7 +236,7 @@ export function JobsTable({
                 data-row-detail-link
                 aria-label={`查看职位详情：${job.title}`}
               >
-                {job.score === null ? '尚未匹配' : `${job.score.toFixed(1)} 分`}
+                {job.score === null ? '无' : `${job.score.toFixed(1)} 分`}
               </a>{' '}
               · 发布时间：
               <PublishedDate value={job.publishedAt} />

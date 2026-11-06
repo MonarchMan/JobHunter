@@ -29,6 +29,20 @@
   white-space: nowrap;
 }
 
+.compact {
+  min-width: 4rem;
+  min-height: 2rem;
+  height: 2rem;
+  gap: 0.2rem;
+  padding-inline: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.compact .icon svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
 .trigger:hover:not(:disabled) {
   border-color: var(--border-hover);
   background: var(--surface);

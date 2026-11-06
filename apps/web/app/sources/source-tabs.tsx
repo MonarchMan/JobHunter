@@ -1,5 +1,6 @@
 import type { ReactElement } from 'react';
 import styles from './source-tabs.module.css';
+import { PageTabs } from '../components/layout/page-tabs.js';
 
 export type SourceChannel = 'official' | 'platform';
 
@@ -35,27 +36,30 @@ export function SourceTabs({
   officialCount,
 }: Readonly<{ active: SourceChannel; officialCount: number }>): ReactElement {
   return (
-    <nav className={styles.tabs} aria-label="招聘来源分类">
-      <a
-        className={[styles.tab, active === 'official' ? styles.active : undefined]
-          .filter(Boolean)
-          .join(' ')}
-        href="/sources"
-        aria-current={active === 'official' ? 'page' : undefined}
-      >
-        <span>官网来源</span>
-        <span className={styles.count}>{officialCount}</span>
-      </a>
-      <a
-        className={[styles.tab, active === 'platform' ? styles.active : undefined]
-          .filter(Boolean)
-          .join(' ')}
-        href="/sources?channel=platform"
-        aria-current={active === 'platform' ? 'page' : undefined}
-      >
-        <span>招聘平台来源</span>
-        <span className={styles.count}>4 · 实验中</span>
-      </a>
-    </nav>
+    <PageTabs
+      label="招聘来源分类"
+      items={[
+        {
+          href: '/sources',
+          label: (
+            <>
+              <span>官网来源</span>
+              <span className={styles.count}>{officialCount}</span>
+            </>
+          ),
+          active: active === 'official',
+        },
+        {
+          href: '/sources?channel=platform',
+          label: (
+            <>
+              <span>招聘平台来源</span>
+              <span className={styles.count}>4 · 实验中</span>
+            </>
+          ),
+          active: active === 'platform',
+        },
+      ]}
+    />
   );
 }

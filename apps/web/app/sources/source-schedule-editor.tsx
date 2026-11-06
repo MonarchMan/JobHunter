@@ -6,6 +6,7 @@ import type { WebSource } from '@jobhunter/recruitment/contracts/web';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { Icon } from '../components/ui-icon.js';
 import { SelectField } from '../components/forms/select-field.js';
+import { TimePicker } from '../components/forms/time-picker.js';
 import { useToast } from '../components/toast-provider.js';
 import { scheduleLabel } from './schedule-label.js';
 import { parseSchedule, scheduleExpression, type ScheduleModel } from './schedule-model.js';
@@ -177,17 +178,13 @@ function ScheduleDialog({
                   />
                 </label>
               ) : null}
-              <label>
-                <input
-                  type="time"
-                  aria-label="执行时间"
-                  required
-                  value={model.time}
-                  onChange={(event) => {
-                    setModel({ ...model, time: event.target.value });
-                  }}
-                />
-              </label>
+              <TimePicker
+                label="执行时间"
+                value={model.time}
+                onChange={(time) => {
+                  setModel({ ...model, time });
+                }}
+              />
             </div>
           ) : null}
           {model.mode === 'hours' ? (

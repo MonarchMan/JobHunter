@@ -9,16 +9,44 @@ async function storedScoring(response: { json(): Promise<unknown> }): Promise<bo
   return webSettingsSchema.parse(body.data).matchingAutomation.scoreEnabled;
 }
 
-for (const width of [1280, 390]) {
+for (const width of [1600, 1280, 390]) {
   test(`automatic scoring checkbox persists its checked value at ${String(width)}px`, async ({
     page,
   }) => {
     // 1. 在隔离夹具中验证 UI、提交值与重载值，不触发真实来源同步。
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/settings');
-    await expect(page.getByText(/修改后请点击“保存设置”/)).toBeVisible();
+    await expect(page.locator('html')).toHaveJSProperty('scrollWidth', width);
+    await expect(page.getByText(/修改后请点击“保存设置”/)).toHaveCount(0);
+    await expect(page.locator('input[type="time"]')).toHaveCount(0);
+    const frequencyBox = await page
+      .getByRole('combobox', { name: '同步频率', exact: true })
+      .boundingBox();
+    const timeBox = await page.getByRole('group', { name: '执行时间', exact: true }).boundingBox();
+    if (!frequencyBox || !timeBox) throw new Error('同步时间控件未显示');
+    expect(frequencyBox.height).toBe(32);
+    expect(timeBox.height).toBe(32);
+    if (width >= 1100) expect(timeBox.y).toBeCloseTo(frequencyBox.y, 0);
+    const workflow = await page
+      .getByRole('region', { name: '工作流偏好', exact: true })
+      .boundingBox();
+    const mailbox = await page.getByRole('region', { name: '邮箱连接', exact: true }).boundingBox();
+    if (!workflow || !mailbox) throw new Error('设置卡片未显示');
+    if (width >= 1100) {
+      expect(mailbox.x).toBeGreaterThan(workflow.x + workflow.width);
+      expect(mailbox.y).toBeCloseTo(workflow.y, 0);
+    } else {
+      expect(mailbox.width).toBeCloseTo(workflow.width, 0);
+      expect(mailbox.x).toBeCloseTo(workflow.x, 0);
+      expect(mailbox.y).toBeGreaterThan(workflow.y + workflow.height);
+    }
     const scoring = page.getByRole('checkbox', { name: /^同步后自动评分/ });
     const advice = page.getByRole('checkbox', { name: /^自动生成求职建议/ });
+    const adviceBox = await advice.boundingBox();
+    const helpBox = await advice.locator('..').locator('small').boundingBox();
+    if (!adviceBox || !helpBox) throw new Error('开关或说明未显示');
+    expect(helpBox.x).toBeCloseTo(adviceBox.x, 0);
+    expect(helpBox.y).toBeGreaterThan(adviceBox.y + adviceBox.height);
     const save = page.getByRole('button', { name: '保存设置', exact: true });
     for (const enabled of [false, true]) {
       const before = await page.request.get('/api/settings');
@@ -67,6 +95,7 @@ for (const width of [1280, 390]) {
     await page.unroute('**/api/settings');
     await page.reload();
     await expect(scoring).toBeChecked();
+    await expect(page.locator('html')).toHaveJSProperty('scrollWidth', width);
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({
       path: `../../var/settings-scoring-${String(width)}.png`,

@@ -119,6 +119,6 @@ test('usage is readable on mobile and chart data supports keyboard focus', async
   await expect(page).toHaveURL(/statusCode=200/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '../../var/research/usage-mobile.png', fullPage: true });
-  await page.getByRole('link', { name: '任务与运行', exact: true }).click();
+  await page.getByRole('link', { name: '任务与Agent', exact: true }).click();
   await expect(page.getByRole('heading', { name: '后台任务', exact: true })).toBeVisible();
 });

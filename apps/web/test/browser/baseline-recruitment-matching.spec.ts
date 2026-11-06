@@ -95,7 +95,7 @@ test('recruitment detail separates objective conditions from model assessment', 
   await page.goto('/jobs/018f0000-0000-7000-8000-000000000402');
   await expect(page.getByText(/招聘类别：/)).toHaveCount(0);
   await expect(page.getByText(/证据完整度/)).toHaveCount(0);
-  await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('font-size', '30px');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCSS('font-size', '16px');
   await expect(page.getByRole('heading', { name: '职位描述', exact: true })).toHaveCSS(
     'font-size',
     '14px',

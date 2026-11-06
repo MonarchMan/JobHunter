@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useCallback, useEffect, useState, useTransition } from 'react';
 import styles from './task-auto-refresh.module.css';
+import { Icon } from '../components/ui-icon.js';
 
 export function TaskAutoRefresh(): ReactElement {
   const router = useRouter();
@@ -37,17 +38,27 @@ export function TaskAutoRefresh(): ReactElement {
     <div className={styles.refresh} aria-live="polite" data-task-refresh>
       <span>{paused ? '自动刷新已暂停' : '自动刷新 · 每 10 秒'}</span>
       {updatedAt ? <small>刚刚更新</small> : null}
-      <button type="button" className="button-muted" onClick={refresh} disabled={refreshing}>
-        {refreshing ? '正在刷新…' : '立即刷新'}
+      <button
+        type="button"
+        className="button-muted"
+        onClick={refresh}
+        disabled={refreshing}
+        aria-label={refreshing ? '正在刷新…' : '立即刷新'}
+        title="立即刷新"
+      >
+        <Icon name="refresh" size={18} />
       </button>
       <button
         type="button"
-        className="button-link"
+        className="button-muted"
+        aria-label={paused ? '恢复自动刷新' : '暂停自动刷新'}
+        title={paused ? '恢复自动刷新' : '暂停自动刷新'}
+        aria-pressed={paused}
         onClick={() => {
           setPaused((value) => !value);
         }}
       >
-        {paused ? '恢复自动刷新' : '暂停自动刷新'}
+        <Icon name={paused ? 'play' : 'pause'} size={18} />
       </button>
     </div>
   );

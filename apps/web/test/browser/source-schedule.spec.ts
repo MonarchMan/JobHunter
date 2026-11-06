@@ -21,7 +21,21 @@ test('edits a source schedule with weekly controls and restores global settings'
   await dialog.getByRole('combobox', { name: '执行星期', exact: true }).click();
   await dialog.getByRole('option', { name: '周三', exact: true }).click();
   await expect(dialog.getByText('时区：北京时间', { exact: true })).toHaveCount(0);
-  await dialog.getByLabel('执行时间', { exact: true }).fill('09:45');
+  await dialog.getByRole('button', { name: '选择执行时间', exact: true }).click();
+  const timePanel = page.getByRole('dialog', { name: '选择执行时间', exact: true });
+  await timePanel
+    .getByRole('group', { name: '小时', exact: true })
+    .getByRole('button', { name: '09', exact: true })
+    .click();
+  await timePanel
+    .getByRole('group', { name: '分钟', exact: true })
+    .getByRole('button', { name: '45', exact: true })
+    .click();
+  await expect(dialog.getByRole('textbox', { name: '执行时间', exact: true })).toHaveValue('09:45');
+  await dialog.getByRole('button', { name: '选择执行时间', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(timePanel).toHaveCount(0);
+  await expect(dialog).toBeVisible();
   const saved = page.waitForResponse(
     (response) =>
       response.request().method() === 'PATCH' && response.url().includes('/api/sources/'),
