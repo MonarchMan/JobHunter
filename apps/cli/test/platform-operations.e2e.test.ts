@@ -133,7 +133,7 @@ it('publishes preview, confirms and disables retention through real CLI and prod
   const root = await createTemporaryDataRoot('platform-cli-');
   const worker = createProductionTaskApplication({ dataRoot: root.path });
   const db = openSqliteDatabase({ dataRoot: root.path });
-  /** CLI 只创建任务，真实生产处理器执行控制变更，不接触浏览器。 */
+  /** CLI 宿主发布任务、在线程中执行并等待结束；策略操作不接触浏览器。 */
   const run = async (
     args: string[],
   ): Promise<ReturnType<typeof platformRetentionResultSchema.parse>> => {
