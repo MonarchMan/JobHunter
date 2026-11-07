@@ -4,6 +4,7 @@ import type { CandidateProfileData } from '@jobhunter/user/domain';
 import type { ReactElement } from 'react';
 import { SelectField } from '../components/forms/select-field.js';
 import { DatePicker } from '../components/forms/date-picker.js';
+import { NumberField } from '../components/forms/number-field.js';
 
 /** 用户确认的资格事实；空值表示未知，不根据当前日期自动推断。 */
 type Constraints = NonNullable<CandidateProfileData['matchingConstraints']>;
@@ -59,8 +60,8 @@ export function MatchingConstraintsFields({
       </label>
       <label>
         毕业届别（年份）
-        <input
-          type="number"
+        <NumberField
+          label="毕业届别（年份）"
           min="1900"
           max="2200"
           step="1"
@@ -100,8 +101,8 @@ export function MatchingConstraintsFields({
       </label>
       <label>
         可持续实习月数
-        <input
-          type="number"
+        <NumberField
+          label="可持续实习月数"
           min="0"
           max="60"
           step="0.5"

@@ -263,6 +263,15 @@ export const webSyncScoringProgressSchema = z
   })
   .strict();
 
+/** 批量任务只向页面提供数量汇总，不暴露逐项结果或执行输入。 */
+export const webBatchProgressSchema = z
+  .object({
+    total: z.number().int().positive(),
+    processed: z.number().int().nonnegative(),
+  })
+  .strict()
+  .refine((value) => value.processed <= value.total);
+
 /** 通用任务详情 Schema。 */
 export const webTaskSchema = z
   .object({
@@ -283,6 +292,7 @@ export const webTaskSchema = z
     jobDetailBatch: webJobDetailBatchSchema.nullable(),
     /** 同步任务评分阶段进度；非同步任务或未执行评分阶段时为 null。 */
     syncScoring: webSyncScoringProgressSchema.nullable(),
+    batchProgress: webBatchProgressSchema.nullable().default(null),
   })
   .strict();
 

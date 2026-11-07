@@ -13,6 +13,7 @@ import type { ReactElement, SyntheticEvent } from 'react';
 import { useRef, useState } from 'react';
 import { mutationHeaders } from '../../../src/client/csrf.js';
 import { DatePicker } from '../../components/forms/date-picker.js';
+import { NumberField } from '../../components/forms/number-field.js';
 import { CommunityExperienceRecord } from './community-experience-record.js';
 import styles from './research.module.css';
 
@@ -190,13 +191,13 @@ export function ResearchIndex({
             </label>
             <label>
               最多来源数
-              <input name="maxSources" type="number" min={1} max={20} defaultValue={8} />
+              <NumberField label="最多来源数" name="maxSources" min={1} max={20} defaultValue={8} />
             </label>
             <label>
               每个来源最多问题数
-              <input
+              <NumberField
+                label="每个来源最多问题数"
                 name="maxQuestionsPerSource"
-                type="number"
                 min={1}
                 max={30}
                 defaultValue={12}

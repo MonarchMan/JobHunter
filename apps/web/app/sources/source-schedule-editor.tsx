@@ -7,6 +7,7 @@ import { mutationHeaders } from '../../src/client/csrf.js';
 import { Icon } from '../components/ui-icon.js';
 import { SelectField } from '../components/forms/select-field.js';
 import { TimePicker } from '../components/forms/time-picker.js';
+import { NumberField } from '../components/forms/number-field.js';
 import { useToast } from '../components/toast-provider.js';
 import { scheduleLabel } from './schedule-label.js';
 import { parseSchedule, scheduleExpression, type ScheduleModel } from './schedule-model.js';
@@ -190,8 +191,8 @@ function ScheduleDialog({
           {model.mode === 'hours' ? (
             <div className={styles.timeRow}>
               <label className={styles.unitInput}>
-                <input
-                  type="number"
+                <NumberField
+                  label="间隔小时数"
                   aria-label="间隔小时数"
                   min="1"
                   max="12"
@@ -205,8 +206,8 @@ function ScheduleDialog({
                 <span>小时</span>
               </label>
               <label className={styles.unitInput}>
-                <input
-                  type="number"
+                <NumberField
+                  label="分钟"
                   aria-label="分钟"
                   min="0"
                   max="59"

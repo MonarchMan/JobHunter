@@ -8,6 +8,7 @@ import type { ReactElement, SyntheticEvent } from 'react';
 import { useEffect, useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { Icon } from '../components/ui-icon.js';
+import { NumberField } from '../components/forms/number-field.js';
 import { useToast } from '../components/toast-provider.js';
 import styles from './settings.module.css';
 
@@ -455,8 +456,8 @@ export function MailboxSettings({
                   </label>
                   <label>
                     初次回溯天数
-                    <input
-                      type="number"
+                    <NumberField
+                      label="初次回溯天数"
                       min="1"
                       max="365"
                       value={editLookback}
@@ -675,8 +676,8 @@ export function MailboxSettings({
           <div className={styles.compactFields}>
             <label>
               端口
-              <input
-                type="number"
+              <NumberField
+                label="端口"
                 min="1"
                 max="65535"
                 value={port}
@@ -687,8 +688,8 @@ export function MailboxSettings({
             </label>
             <label>
               初次回溯天数
-              <input
-                type="number"
+              <NumberField
+                label="初次回溯天数"
                 min="1"
                 max="365"
                 value={lookback}

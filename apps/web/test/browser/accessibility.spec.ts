@@ -20,6 +20,18 @@ for (const width of [1280, 768]) {
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
         .analyze();
       expect(result.violations).toEqual([]);
+      if (route === '/jobs') {
+        const score = page.locator('[data-row-detail-link]:visible').first();
+        await expect(score).toHaveCSS('text-decoration-line', 'none');
+        await expect(score).toHaveAttribute('data-score-band', 'high');
+        await expect(score).toHaveAttribute('title', '高契合');
+        if (width > 900) await expect(score).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+        await score.hover();
+        if (width > 900) await expect(score).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+        await expect(score).toHaveCSS('text-decoration-line', 'none');
+        await score.focus();
+        await expect(score).toHaveCSS('outline-style', 'solid');
+      }
     });
   }
 }
@@ -34,7 +46,7 @@ test('filter controls and diagnostic tables expose semantic names', async ({ pag
     .click();
   await expect(page.getByRole('form', { name: '职位筛选' })).toBeVisible();
   await expect(page.getByLabel('关键词')).toBeVisible();
-  await expect(page.getByLabel('最低分')).toBeVisible();
+  await expect(page.getByLabel('最低分', { exact: true })).toBeVisible();
 
   await page.goto('/tasks');
   for (const caption of ['后台任务列表', 'Agent 运行列表']) {

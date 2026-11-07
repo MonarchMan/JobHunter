@@ -1,0 +1,52 @@
+.field {
+  position: relative;
+  display: inline-grid;
+  width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.field > input {
+  min-width: 0;
+  padding-right: 1.8rem;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.field > input::-webkit-inner-spin-button,
+.field > input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.controls {
+  position: absolute;
+  inset: 0.3rem 0.25rem 0.3rem auto;
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  width: 1.25rem;
+  border-left: 1px solid var(--line-soft);
+}
+
+.controls > button {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0.2rem;
+  background: transparent;
+  color: var(--muted-ink);
+}
+
+.controls > button:hover:not(:disabled) {
+  background: var(--primary-soft);
+  color: var(--primary);
+  transform: none;
+}
+
+.controls > button:disabled {
+  opacity: 0.3;
+}

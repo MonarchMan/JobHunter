@@ -1,4 +1,5 @@
 import { scanTaskProjection } from './scan-task-sql.js';
+import { presentBatchProgress } from '../diagnostics/task-progress.js';
 import {
   webAgentRunDetailSchema,
   webTaskSchema,
@@ -177,7 +178,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     const rows = this.#client
       .prepare(
         `
-      SELECT task.private_state, task.started_at AS window_started_at,
+      SELECT task.private_state, task.public_state, task.started_at AS window_started_at,
         task.finished_at AS window_finished_at, json_object(
         'kind', 'task', 'id', task.id, 'taskType', task.task_type, 'status', task.status,
         'attemptCount', task.attempt_count, 'maxAttempts', task.max_attempts,
@@ -222,13 +223,22 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       .all(JSON.stringify(ids)) as {
       readonly detail_json: string;
       readonly private_state: string;
+      readonly public_state: string | null;
       readonly window_started_at: number | null;
       readonly window_finished_at: number | null;
     }[];
     // 2、与单任务详情共用运行时校验，阻止原始执行数据进入页面。
     return rows.map((row) => {
-      const task = webTaskSchema.parse(JSON.parse(row.detail_json) as unknown);
       const payload = JSON.parse(row.private_state) as { readonly sourceIds?: unknown };
+      const detail = JSON.parse(row.detail_json) as Record<string, unknown>;
+      const task = webTaskSchema.parse({
+        ...detail,
+        batchProgress: presentBatchProgress(
+          String(detail.taskType),
+          payload,
+          row.public_state ? (JSON.parse(row.public_state) as unknown) : null,
+        ),
+      });
       if (!task.sourceSync || !Array.isArray(payload.sourceIds)) return task;
       const sourceIds = payload.sourceIds.filter((id): id is string => typeof id === 'string');
       if (sourceIds.length < 2) return task;

@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { DatePicker } from '../components/forms/date-picker.js';
 import { SelectField } from '../components/forms/select-field.js';
+import { NumberField } from '../components/forms/number-field.js';
 import { useToast } from '../components/toast-provider.js';
 import { ResumePolish } from './resume-polish.js';
 import { ResumeTemplateEntry } from './resume-template-entry.js';
@@ -963,8 +964,8 @@ export function ResumeEditor({
               </label>
               <label>
                 经验年限
-                <input
-                  type="number"
+                <NumberField
+                  label="经验年限"
                   min="0"
                   step="0.5"
                   value={draft.yearsOfExperience ?? ''}

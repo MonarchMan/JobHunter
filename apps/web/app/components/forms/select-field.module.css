@@ -38,6 +38,35 @@
   font-size: 0.85rem;
 }
 
+/* 不可见的选项共用同一网格单元，以实际字体的最长内容决定触发框宽度。 */
+.fitOptions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fitOptions > span:first-child,
+.optionSizer {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.optionSizer {
+  display: grid;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.optionSizer > span {
+  grid-column: 1;
+  grid-row: 1;
+  white-space: nowrap;
+}
+
+.fitOptions .icon {
+  grid-column: 2;
+  grid-row: 1;
+}
+
 .compact .icon svg {
   width: 0.85rem;
   height: 0.85rem;

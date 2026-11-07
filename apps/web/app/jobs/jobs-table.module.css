@@ -71,7 +71,7 @@
 }
 
 .tableScroll th:nth-child(5) {
-  width: 5.5rem;
+  width: 7.5rem;
 }
 
 .tableScroll th:nth-child(6) {
@@ -128,13 +128,52 @@
 }
 
 .detailLink {
-  color: var(--primary-hover);
+  /* 浅底深字区分契合度，色块将链接与相邻说明文字分开，保持无下划线。 */
+  --score-ink: #4b5563;
+  --score-background: #f3f4f6;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.35rem;
+  background: var(--score-background);
+  color: var(--score-ink);
+  font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
   text-decoration: none;
 }
 
 .detailLink:hover {
+  color: var(--score-ink);
+  box-shadow: 0 0 0 1px var(--score-ink);
   text-decoration: none;
+}
+
+/* 桌面表格只以文字颜色表达档位，移动卡片保留色块以区分旁侧说明文字。 */
+.tableScroll .detailLink {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.detailLink[data-score-band='high'] {
+  --score-ink: #166534;
+  --score-background: #f0fdf4;
+}
+
+.detailLink[data-score-band='good'] {
+  --score-ink: #1e40af;
+  --score-background: #eff6ff;
+}
+
+.detailLink[data-score-band='partial'] {
+  --score-ink: #92400e;
+  --score-background: #fffbeb;
+}
+
+.detailLink[data-score-band='low'] {
+  --score-ink: #991b1b;
+  --score-background: #fef2f2;
 }
 
 .detailLink:focus-visible {

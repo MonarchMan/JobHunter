@@ -38,7 +38,7 @@ export const taskTypeLabels: Readonly<Record<string, string>> = {
   'match.compute-revision': '职位匹配',
   'match.score-job': '手动职位评分',
   'match.score-batch': '批量职位评分',
-  'ai.reply': 'AI 对话回复',
+  'ai.reply': 'AI 模拟面试',
   'interview.experience-research': '面经研究流程',
   'interview.experience-research.execute': '面经采集与导入',
   'mailbox.sync@v1': '邮箱同步',
@@ -56,7 +56,7 @@ const agentKeyLabels: Readonly<Record<string, string>> = {
   'resume-profile': '简历画像提取',
   'resume-polish': '简历润色',
   'job-analysis': '职位分析',
-  'ai.reply': 'AI 对话回复',
+  'ai.reply': 'AI 模拟面试',
   'interview.community-research-configured-model': '面经研究',
   'recruitment-mail.classify': '招聘邮件分析',
 };

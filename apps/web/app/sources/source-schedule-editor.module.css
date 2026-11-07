@@ -100,7 +100,12 @@
   flex: 0 1 6rem;
 }
 
-.unitInput span {
+.unitInput > span:last-child {
   flex-shrink: 0;
   color: var(--text-secondary);
+}
+
+.unitInput > [data-number-field] {
+  flex: 1;
+  min-width: 0;
 }

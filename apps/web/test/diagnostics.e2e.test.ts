@@ -18,6 +18,7 @@ describe('Agent 诊断展示标签', () => {
 const failedTaskId = '018f0000-0000-7000-8000-000000000701';
 const pendingTaskId = '018f0000-0000-7000-8000-000000000702';
 const agentRunId = '018f0000-0000-7000-8000-000000000703';
+const batchTaskId = '018f0000-0000-7000-8000-000000000705';
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
 function seedDiagnostics(dataRoot: string): void {
@@ -52,6 +53,24 @@ function seedDiagnostics(dataRoot: string): void {
       null,
       null,
     );
+    // 批量检查点保留内部结果，但诊断列表和单条查询只允许输出汇总进度。
+    database.client
+      .prepare(
+        `INSERT INTO tasks
+      (id, task_type, private_state, public_state, status, idempotency_key,
+       attempt_count, max_attempts, available_at, created_at, started_at)
+      VALUES (?, 'match.score-batch', ?, ?, 'running', 'fixture-batch-progress', 1, 3, 1, 1, 1)`,
+      )
+      .run(
+        batchTaskId,
+        JSON.stringify({ jobRevisionIds: ['a', 'b', 'c'] }),
+        JSON.stringify({
+          items: [
+            { jobRevisionId: 'a', status: 'succeeded', result: { private: 'secret-result' } },
+            { jobRevisionId: 'b', status: 'failed', result: null, error: 'secret-error' },
+          ],
+        }),
+      );
     database.client
       .prepare(
         `INSERT INTO agent_runs
@@ -99,7 +118,19 @@ describe('Web diagnostics', () => {
       const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
       try {
         const diagnostics = container.services.diagnostics.list();
-        expect(diagnostics.tasks).toHaveLength(2);
+        expect(diagnostics.tasks).toHaveLength(3);
+        expect(diagnostics.tasks.find((task) => task.id === batchTaskId)?.batchProgress).toEqual({
+          total: 3,
+          processed: 2,
+        });
+        expect(container.services.diagnostics.getTask(batchTaskId)?.batchProgress).toEqual({
+          total: 3,
+          processed: 2,
+        });
+        expect(JSON.stringify(diagnostics)).not.toContain('secret-');
+        expect(JSON.stringify(container.services.diagnostics.getTask(batchTaskId))).not.toContain(
+          'secret-',
+        );
         expect(JSON.stringify(diagnostics)).not.toContain('018f0000-0000-7000-8000-000000000201');
         expect(diagnostics.agentRuns).toMatchObject([
           {

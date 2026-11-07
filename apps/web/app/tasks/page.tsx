@@ -142,7 +142,7 @@ export default async function TasksPage({
             label="状态"
             defaultValue={status ?? ''}
             options={[
-              { value: '', label: '全部状态' },
+              { value: '', label: '全部' },
               { value: 'pending', label: '待处理' },
               { value: 'running', label: '运行中' },
               { value: 'failed', label: '失败' },
@@ -155,10 +155,11 @@ export default async function TasksPage({
           类型
           <SelectField
             name="type"
+            fitOptions
             label="类型"
             defaultValue={taskType ?? ''}
             options={[
-              { value: '', label: '全部类型' },
+              { value: '', label: '全部' },
               ...Object.entries(taskTypeLabels).map(([value, label]) => ({ value, label })),
             ]}
           />
@@ -276,6 +277,7 @@ export default async function TasksPage({
           ))}
         </div>
         <Pagination
+          total={diagnostics.taskPagination.total}
           pageSize={diagnostics.taskPagination.pageSize}
           pageParameter="taskPage"
           sizeParameter="taskPageSize"
@@ -360,6 +362,7 @@ export default async function TasksPage({
           ))}
         </div>
         <Pagination
+          total={diagnostics.agentPagination.total}
           pageSize={diagnostics.agentPagination.pageSize}
           pageParameter="agentPage"
           sizeParameter="agentPageSize"

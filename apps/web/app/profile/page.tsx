@@ -141,6 +141,7 @@ export default async function ProfilePage({
             ))}
           </ol>
           <Pagination
+            total={versionPagination.total}
             pageSize={versionPagination.pageSize}
             currentPage={versionPagination.current}
             totalPages={versionPagination.totalPages}

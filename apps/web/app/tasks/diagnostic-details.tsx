@@ -125,6 +125,13 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
   const [open, setOpen] = useState(false);
   const triggerReference = useRef<HTMLButtonElement>(null);
   const displayName = task.jobDetailBatch ? '职位详情同步' : labelTaskType(task.taskType);
+  const counts = task.jobDetailBatch?.counts;
+  const progress = counts
+    ? {
+        total: counts.total,
+        processed: counts.succeeded + counts.failed + counts.cancelled,
+      }
+    : task.batchProgress;
   return (
     <>
       <button
@@ -151,6 +158,12 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
           <div className={styles.body}>
             <dl className="facts">
               <div>
+                <dt>ID</dt>
+                <dd>
+                  <code>{task.id}</code>
+                </dd>
+              </div>
+              <div>
                 <dt>任务类型</dt>
                 <dd>{displayName}</dd>
               </div>
@@ -160,12 +173,18 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                   <span className={`status status-${presentation.status}`}>
                     {presentation.label}
                   </span>
-                </dd>
-              </div>
-              <div>
-                <dt>{task.jobDetailBatch ? '同步批次 ID' : '任务 ID'}</dt>
-                <dd>
-                  <code>{task.id}</code>
+                  {progress ? (
+                    <div className={styles.progress}>
+                      <progress
+                        aria-label="批量任务进度"
+                        max={progress.total}
+                        value={progress.processed}
+                      />
+                      <small>
+                        已处理 {progress.processed} / {progress.total}
+                      </small>
+                    </div>
+                  ) : null}
                 </dd>
               </div>
               <div>

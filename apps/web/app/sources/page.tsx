@@ -117,6 +117,7 @@ export default async function SourcesPage({
             ))}
           </div>
           <Pagination
+            total={sourcePage.total}
             pageSize={sourcePage.pageSize}
             currentPage={sourcePage.current}
             totalPages={sourcePage.totalPages}

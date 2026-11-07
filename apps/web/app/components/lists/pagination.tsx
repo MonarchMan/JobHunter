@@ -5,6 +5,7 @@ import styles from './pagination.module.css';
 interface PaginationProperties {
   readonly currentPage: number;
   readonly totalPages: number;
+  readonly total: number;
   readonly createHref: (page: number) => string;
   readonly label: string;
   readonly pageSize: number;
@@ -38,6 +39,7 @@ function pageItems(currentPage: number, totalPages: number): readonly (number | 
 export function Pagination({
   currentPage,
   totalPages,
+  total,
   createHref,
   label,
   pageSize,
@@ -46,6 +48,7 @@ export function Pagination({
 }: PaginationProperties): ReactElement {
   return (
     <nav className={styles.pagination} aria-label={label}>
+      <span className={styles.summary}>共 {total} 条</span>
       <div className={styles.pages}>
         {pageItems(currentPage, totalPages).map((item, index) =>
           item === 'ellipsis' ? (
@@ -65,9 +68,6 @@ export function Pagination({
         )}
       </div>
       <div className={styles.details}>
-        <span className={styles.summary}>
-          第 {currentPage} / {totalPages} 页
-        </span>
         <PageSizeSelect
           pageSize={pageSize}
           pageParameter={pageParameter}

@@ -27,6 +27,7 @@ export function SelectField({
   onValueChange,
   disabled = false,
   compact = false,
+  fitOptions = false,
 }: Readonly<{
   name: string;
   label: string;
@@ -36,6 +37,8 @@ export function SelectField({
   onValueChange?: (value: string) => void;
   disabled?: boolean;
   compact?: boolean;
+  /** 按最长选项预留宽度，避免切换选项后截断或导致筛选栏跳动。 */
+  fitOptions?: boolean;
 }>): ReactElement {
   const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
   const selectedValue = value ?? uncontrolledValue;
@@ -115,7 +118,11 @@ export function SelectField({
       >
         <SelectPrimitive.Trigger
           ref={trigger}
-          className={[styles.trigger, compact ? styles.compact : undefined]
+          className={[
+            styles.trigger,
+            compact ? styles.compact : undefined,
+            fitOptions ? styles.fitOptions : undefined,
+          ]
             .filter(Boolean)
             .join(' ')}
           aria-label={label}
@@ -125,6 +132,13 @@ export function SelectField({
           <SelectPrimitive.Value placeholder={cascading ? selectedLabel : undefined}>
             {cascading ? selectedLabel : undefined}
           </SelectPrimitive.Value>
+          {fitOptions ? (
+            <span className={styles.optionSizer} aria-hidden="true">
+              {options.map((option) => (
+                <span key={option.value}>{option.label}</span>
+              ))}
+            </span>
+          ) : null}
           <SelectPrimitive.Icon className={styles.icon}>
             <Icon name="chevronDown" />
           </SelectPrimitive.Icon>

@@ -10,6 +10,33 @@ import { Icon } from '../components/ui-icon.js';
 import { TruncatedText } from '../components/lists/truncated-text.js';
 import { CompanyLogo } from '../components/company-logo.js';
 import styles from './jobs-table.module.css';
+import { scoreBand } from './score-band.js';
+
+/** 分数链接在桌面和移动端使用一致的契合度档位，同时保留详情入口。 */
+function JobScoreLink({
+  score,
+  href,
+  jobTitle,
+}: Readonly<{
+  score: number | null;
+  href: string;
+  jobTitle: string;
+}>): ReactElement {
+  const band = scoreBand(score);
+  return (
+    <a
+      className={styles.detailLink}
+      href={href}
+      data-row-detail-link
+      data-score-band={band.key}
+      aria-label={`查看职位详情：${jobTitle}`}
+      aria-description={band.label}
+      title={band.label}
+    >
+      {score === null ? '无' : `${score.toFixed(1)} 分`}
+    </a>
+  );
+}
 
 /** 桌面与移动共用来源发布时间；空值保持未知，不能回退到采集时间。 */
 function PublishedDate({ value }: Readonly<{ value: string | null }>): ReactElement {
@@ -164,14 +191,7 @@ export function JobsTable({
                   />
                 </td>
                 <td>
-                  <a
-                    className={styles.detailLink}
-                    href={detailHref(job.id)}
-                    data-row-detail-link
-                    aria-label={`查看职位详情：${job.title}`}
-                  >
-                    {job.score === null ? '无' : `${job.score.toFixed(1)} 分`}
-                  </a>
+                  <JobScoreLink score={job.score} href={detailHref(job.id)} jobTitle={job.title} />
                 </td>
                 <td>
                   <PublishedDate value={job.publishedAt} />
@@ -230,15 +250,8 @@ export function JobsTable({
               </span>
             </p>
             <small>
-              <a
-                className={styles.detailLink}
-                href={detailHref(job.id)}
-                data-row-detail-link
-                aria-label={`查看职位详情：${job.title}`}
-              >
-                {job.score === null ? '无' : `${job.score.toFixed(1)} 分`}
-              </a>{' '}
-              · 发布时间：
+              <JobScoreLink score={job.score} href={detailHref(job.id)} jobTitle={job.title} /> ·
+              发布时间：
               <PublishedDate value={job.publishedAt} />
             </small>
             <div className={styles.rowActions} data-row-navigation-ignore>

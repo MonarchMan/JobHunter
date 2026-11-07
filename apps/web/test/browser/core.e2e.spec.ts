@@ -61,7 +61,7 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(mailbox.getByRole('button', { name: '删除邮箱连接 f***@qq.com' })).toBeVisible();
     await mailbox.getByRole('button', { name: '编辑邮箱连接 f***@qq.com' }).click();
     await expect(mailbox.getByLabel('文件夹（逗号分隔）')).toHaveValue('INBOX');
-    await expect(mailbox.getByLabel('初次回溯天数')).toHaveValue('90');
+    await expect(mailbox.getByLabel('初次回溯天数', { exact: true })).toHaveValue('90');
     const replacement = mailbox.getByLabel('新授权码（不修改请留空）');
     await expect(replacement).toHaveValue('');
     await replacement.fill('replacement-code');
@@ -101,7 +101,10 @@ test.describe('校招实习管理台核心流程', () => {
     await mailbox.getByRole('button', { name: '编辑邮箱连接 f***@qq.com' }).click();
     await expect(mailbox.getByLabel('文件夹（逗号分隔）')).toBeVisible();
     const foldersBox = await mailbox.getByLabel('文件夹（逗号分隔）').boundingBox();
-    const lookbackBox = await mailbox.getByLabel('初次回溯天数').last().boundingBox();
+    const lookbackBox = await mailbox
+      .getByLabel('初次回溯天数', { exact: true })
+      .last()
+      .boundingBox();
     if (!foldersBox || !lookbackBox) throw new Error('Mailbox edit form did not render.');
     expect(foldersBox.x + foldersBox.width).toBeLessThanOrEqual(390);
     expect(lookbackBox.x + lookbackBox.width).toBeLessThanOrEqual(390);
@@ -315,6 +318,14 @@ test.describe('校招实习管理台核心流程', () => {
     const body = (await response.json()) as { data: unknown[] };
     expect(body.data).toHaveLength(1);
     expect(body.data[0]).toMatchObject({ task: { taskType: 'match.score-batch' } });
+    await page.goto('/tasks?type=match.score-batch');
+    await page.getByRole('button', { name: '批量职位评分', exact: true }).first().click();
+    const detail = page.getByRole('dialog', { name: '任务详情' });
+    await expect(detail.locator('dt').first()).toHaveText('ID');
+    const progress = detail.getByRole('progressbar', { name: '批量任务进度' });
+    await expect(progress).toHaveAttribute('max', '2');
+    await expect(progress).toHaveAttribute('value', '0');
+    await expect(detail.getByText('已处理 0 / 2', { exact: true })).toBeVisible();
   });
 
   test('restores a reload toast exactly once', async ({ page }) => {

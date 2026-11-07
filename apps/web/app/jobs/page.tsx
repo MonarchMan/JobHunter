@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { Pagination } from '../components/lists/pagination.js';
 import { SelectField } from '../components/forms/select-field.js';
+import { NumberField } from '../components/forms/number-field.js';
 import { JobsRefresh } from './jobs-refresh.js';
 import { PageHeader } from '../components/layout/page-header.js';
 import { JobsTable } from './jobs-table.js';
@@ -120,6 +121,7 @@ export default async function JobsPage({
               职位类别
               <SelectField
                 name="subfamily"
+                fitOptions
                 label="职位类别"
                 defaultValue={fieldValue(parameters, 'subfamily')}
                 options={[
@@ -142,7 +144,7 @@ export default async function JobsPage({
                   { value: 'active', label: '仅在招' },
                   { value: 'stale', label: '仅待确认' },
                   { value: 'closed', label: '仅已关闭' },
-                  { value: 'active,stale,closed', label: '全部状态' },
+                  { value: 'active,stale,closed', label: '全部' },
                 ]}
               />
             </label>
@@ -211,9 +213,9 @@ export default async function JobsPage({
             </label>
             <label className={styles.scoreField}>
               最低分
-              <input
+              <NumberField
+                label="最低分"
                 name="minScore"
-                type="number"
                 min="0"
                 max="100"
                 defaultValue={fieldValue(parameters, 'minScore')}
@@ -268,6 +270,7 @@ export default async function JobsPage({
         </>
       )}
       <Pagination
+        total={page.page.total}
         pageSize={page.page.pageSize}
         currentPage={page.page.current}
         totalPages={page.page.totalPages}

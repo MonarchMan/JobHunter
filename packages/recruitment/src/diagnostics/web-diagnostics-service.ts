@@ -21,6 +21,7 @@ import {
 } from '@jobhunter/common/web-contracts';
 import type { TaskRecord } from '@jobhunter/common/tasks';
 import type { TaskService } from '@jobhunter/common/tasks';
+import { presentBatchProgress } from './task-progress.js';
 
 /** 应用层数据结构或端口契约。 */
 export interface WebDiagnosticsRepository {
@@ -132,6 +133,7 @@ function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): We
         : null,
     jobDetailBatch: null,
     syncScoring: presentSyncScoring(task),
+    batchProgress: presentBatchProgress(task.taskType, task.payload, task.result),
   });
 }
 

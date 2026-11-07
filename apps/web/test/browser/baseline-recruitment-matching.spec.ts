@@ -23,8 +23,8 @@ for (const width of [1280, 390]) {
     const days = page.getByRole('combobox', { name: '每周可实习天数', exact: true });
     await days.click();
     await page.getByRole('option', { name: '3 天', exact: true }).click();
-    await page.getByLabel('毕业届别（年份）').fill('2027');
-    await page.getByLabel('可持续实习月数').fill('6');
+    await page.getByLabel('毕业届别（年份）', { exact: true }).fill('2027');
+    await page.getByLabel('可持续实习月数', { exact: true }).fill('6');
     const dateInput = page.getByRole('textbox', { name: '最早可到岗日期', exact: true });
     await dateInput.click();
     const calendar = page.getByRole('dialog', { name: '最早可到岗日期日历' });
@@ -36,11 +36,11 @@ for (const width of [1280, 390]) {
     const chosenDate = await firstDay.getAttribute('aria-label');
     await firstDay.click();
     const save = page.getByRole('button', { name: '保存简历', exact: true });
-    await page.getByLabel('毕业届别（年份）').fill('1800');
+    await page.getByLabel('毕业届别（年份）', { exact: true }).fill('1800');
     await save.click();
-    await expect(page.getByLabel('毕业届别（年份）')).toBeFocused();
+    await expect(page.getByLabel('毕业届别（年份）', { exact: true })).toBeFocused();
     await expect(page.getByText('请输入 1900～2200 之间的整数年份。')).toBeVisible();
-    await page.getByLabel('毕业届别（年份）').fill('2027');
+    await page.getByLabel('毕业届别（年份）', { exact: true }).fill('2027');
     const saved = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/profile') && response.request().method() === 'PATCH',
@@ -50,7 +50,7 @@ for (const width of [1280, 390]) {
     await expect(page.getByText('结构化简历已保存为新版本。')).toBeVisible();
     await expect(student).toContainText('在读（非应届）');
     await expect(days).toContainText('3 天');
-    await expect(page.getByLabel('毕业届别（年份）')).toHaveValue('2027');
+    await expect(page.getByLabel('毕业届别（年份）', { exact: true })).toHaveValue('2027');
     await expect(page.getByRole('textbox', { name: '最早可到岗日期', exact: true })).toHaveValue(
       chosenDate ?? '',
     );
@@ -62,15 +62,15 @@ for (const width of [1280, 390]) {
         json: { error: { message: '测试：暂时无法保存资格信息。' } },
       });
     });
-    await page.getByLabel('毕业届别（年份）').fill('2028');
+    await page.getByLabel('毕业届别（年份）', { exact: true }).fill('2028');
     await save.click();
     await expect(page.getByText('测试：暂时无法保存资格信息。')).toBeVisible();
-    await expect(page.getByLabel('毕业届别（年份）')).toHaveValue('2028');
+    await expect(page.getByLabel('毕业届别（年份）', { exact: true })).toHaveValue('2028');
     await page.unroute('**/api/profile');
-    await page.getByLabel('毕业届别（年份）').fill('');
+    await page.getByLabel('毕业届别（年份）', { exact: true }).fill('');
     await dateInput.click();
     await calendar.getByRole('button', { name: '清除', exact: true }).click();
-    await page.getByLabel('可持续实习月数').fill('');
+    await page.getByLabel('可持续实习月数', { exact: true }).fill('');
     const cleared = page.waitForResponse(
       (response) =>
         response.url().endsWith('/api/profile') && response.request().method() === 'PATCH',
@@ -78,7 +78,7 @@ for (const width of [1280, 390]) {
     await save.click();
     expect((await cleared).ok()).toBe(true);
     await expect(page.getByText('结构化简历已保存为新版本。')).toBeVisible();
-    await expect(page.getByLabel('毕业届别（年份）')).toHaveValue('');
+    await expect(page.getByLabel('毕业届别（年份）', { exact: true })).toHaveValue('');
     await expect(page.getByRole('textbox', { name: '最早可到岗日期', exact: true })).toHaveValue(
       '',
     );
