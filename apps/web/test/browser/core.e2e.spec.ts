@@ -34,6 +34,16 @@ test.describe('校招实习管理台核心流程', () => {
       .getByRole('menu', { name: '选择邮箱类型' })
       .getByRole('menuitem', { name: /IMAP 邮箱/ })
       .click();
+    const mailboxType = page.getByRole('combobox', { name: '邮箱类型', exact: true });
+    await expect(mailboxType).toHaveAttribute('data-authored-select-trigger', 'true');
+    await expect(mailboxType).toContainText('QQ 邮箱');
+    await mailboxType.click();
+    await page.getByRole('option', { name: '其他 IMAP 邮箱', exact: true }).click();
+    await expect(page.getByLabel('IMAP 主机', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('应用专用密码', { exact: true })).toBeVisible();
+    await mailboxType.click();
+    await page.getByRole('option', { name: 'QQ 邮箱', exact: true }).click();
+    await expect(page.getByLabel('IMAP 主机', { exact: true })).toBeHidden();
     const credential = page.getByLabel('QQ 邮箱授权码');
     await credential.fill('fixture-authorization-code');
     await expect(credential).toHaveAttribute('type', 'password');
@@ -1019,7 +1029,7 @@ test.describe('校招实习管理台核心流程', () => {
   });
 
   test('shows queued task and redacted Agent trace diagnostics', async ({ page }) => {
-    await page.goto('/tasks');
+    await page.goto('/tasks?range=all');
     await expect(page.getByRole('heading', { name: '任务与Agent', exact: true })).toBeVisible();
     const taskFilters = page.getByRole('form', { name: '任务筛选' });
     const refreshControls = taskFilters.locator('[data-task-refresh]');
@@ -1032,12 +1042,12 @@ test.describe('校招实习管理台核心流程', () => {
     ).toHaveAttribute('aria-pressed', 'true');
     await refreshControls.getByRole('button', { name: '恢复自动刷新', exact: true }).click();
     await expect(taskFilters.locator('select:not([aria-hidden="true"])')).toHaveCount(0);
-    await expect(taskFilters.locator('[data-authored-select-trigger]')).toHaveCount(2);
+    await expect(taskFilters.locator('[data-authored-select-trigger]')).toHaveCount(3);
     await taskFilters.getByRole('combobox', { name: '状态' }).click();
     await page.getByRole('option', { name: '失败' }).click();
     await taskFilters.getByRole('button', { name: '搜索', exact: true }).click();
     await expect(page).toHaveURL(/(?:\?|&)status=failed(?:&|$)/);
-    await page.goto('/tasks');
+    await page.goto('/tasks?range=all');
     const taskTitle = page.getByRole('button', { name: '来源同步' }).first();
     await expect(taskTitle).toBeVisible();
     await expect(page.getByRole('button', { name: '职位分析' })).toBeVisible();
@@ -1084,7 +1094,7 @@ test.describe('校招实习管理台核心流程', () => {
         ),
       });
     });
-    await page.goto('/tasks');
+    await page.goto('/tasks?range=all');
     const action = page.getByRole('button', { name: /^(?:取消|重试)任务 / }).first();
     await expect(action).toBeVisible();
     const actionBox = await action.boundingBox();

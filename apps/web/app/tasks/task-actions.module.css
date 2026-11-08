@@ -37,3 +37,8 @@
   min-height: 44px;
   border-radius: 8px;
 }
+
+.cell.regular .cancel {
+  width: 72px;
+  min-width: 72px;
+}

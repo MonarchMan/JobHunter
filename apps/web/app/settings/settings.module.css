@@ -115,6 +115,12 @@
   max-width: 18rem;
 }
 
+/* 紧凑频率控件仍需为“每周一”和选中标记留出完整空间。 */
+.compactFields .compactSelect > :global([data-authored-select-trigger]) {
+  min-width: 5.5rem;
+  flex-shrink: 0;
+}
+
 .channelFieldset {
   grid-column: 1 / -1;
   display: grid;

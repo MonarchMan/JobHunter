@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { Icon } from '../components/ui-icon.js';
 import { NumberField } from '../components/forms/number-field.js';
+import { SelectField } from '../components/forms/select-field.js';
 import { useToast } from '../components/toast-provider.js';
 import styles from './settings.module.css';
 
@@ -615,15 +616,19 @@ export function MailboxSettings({
           </p>
           <label>
             邮箱类型
-            <select
+            <SelectField
+              name="mailboxType"
+              label="邮箱类型"
+              fitOptions
               value={preset}
-              onChange={(event) => {
-                setPreset(event.target.value as 'qq' | 'custom');
+              options={[
+                { value: 'qq', label: 'QQ 邮箱' },
+                { value: 'custom', label: '其他 IMAP 邮箱' },
+              ]}
+              onValueChange={(value) => {
+                if (value === 'qq' || value === 'custom') setPreset(value);
               }}
-            >
-              <option value="qq">QQ 邮箱</option>
-              <option value="custom">其他 IMAP 邮箱</option>
-            </select>
+            />
           </label>
           <label>
             完整邮箱地址

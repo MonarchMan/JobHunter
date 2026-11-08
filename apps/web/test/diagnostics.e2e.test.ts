@@ -4,6 +4,7 @@ import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 import { labelAgentErrorCategory, labelAgentKey } from '../app/components/status-labels.js';
+import { taskTimeRange } from '../src/server/task-time-range.js';
 
 describe('Agent 诊断展示标签', () => {
   it('将已知及未知 Agent 名称和错误分类转换为中文', () => {
@@ -106,6 +107,75 @@ function seedDiagnostics(dataRoot: string): void {
 }
 
 describe('Web diagnostics', () => {
+  it('filters both lists and pagination totals with inclusive day starts and exclusive ends', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-diagnostics-time-');
+    try {
+      const now = Date.parse('2026-11-08T04:00:00Z');
+      const midnight = Date.parse('2026-11-07T16:00:00Z');
+      const day = 86_400_000;
+      const times = [
+        midnight - 30 * day,
+        midnight - 29 * day,
+        midnight - 6 * day,
+        midnight - 1,
+        midnight,
+        midnight + day - 1,
+        midnight + day,
+      ];
+      const database = openSqliteDatabase({ dataRoot: root.path });
+      try {
+        const task = database.client.prepare(`INSERT INTO tasks
+          (id,task_type,private_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
+          VALUES (?,'source.health-check','{}','pending',?,0,3,1,?)`);
+        const agent = database.client.prepare(`INSERT INTO agent_runs
+          (id,agent_key,definition_hash,model_config_hash,input_hash,cache_key,status,started_at)
+          VALUES (?,'job-analysis','fixture','fixture','fixture',?,'succeeded',?)`);
+        for (const [index, time] of times.entries()) {
+          const id = `018f0000-0000-7000-8000-${String(index + 800).padStart(12, '0')}`;
+          task.run(id, `time-task-${String(index)}`, time);
+          agent.run(id, `time-agent-${String(index)}`, time);
+        }
+      } finally {
+        database.close();
+      }
+      const bootstrap = resolveBootstrapConfig({
+        cli: { dataRoot: root.path },
+        environment: {},
+        cwd: root.path,
+      });
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
+      try {
+        for (const [range, total] of [
+          ['today', 2],
+          ['7d', 4],
+          ['30d', 5],
+          ['all', 7],
+        ] as const) {
+          const { range: _range, ...timeFilter } = taskTimeRange(range, now);
+          void _range;
+          const result = container.services.diagnostics.list({
+            ...timeFilter,
+            pageSize: 1,
+            taskPage: 99,
+            agentPage: 99,
+          });
+          expect(result.taskPagination).toMatchObject({ current: total, total, totalPages: total });
+          expect(result.agentPagination).toMatchObject({
+            current: total,
+            total,
+            totalPages: total,
+          });
+          expect(result.tasks).toHaveLength(1);
+          expect(result.agentRuns).toHaveLength(1);
+        }
+      } finally {
+        container.close();
+      }
+    } finally {
+      await root.cleanup();
+    }
+  });
+
   it('redacts private data and supports idempotent retry and cancellation', async () => {
     const root = await createTemporaryDataRoot('jobhunter-web-diagnostics-');
     try {
@@ -377,6 +447,20 @@ INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key
 
         const details = container.services.diagnostics.list({ taskType: 'source.job-detail' });
         expect(details.taskPagination.total).toBe(2);
+        const batchWindow = container.services.diagnostics.list({
+          taskType: 'source.job-detail',
+          since: 200,
+          before: 201,
+        });
+        expect(batchWindow.taskPagination.total).toBe(1);
+        expect(batchWindow.tasks[0]?.jobDetailBatch?.counts.total).toBe(3);
+        expect(
+          container.services.diagnostics.list({
+            taskType: 'source.job-detail',
+            since: 201,
+            before: 300,
+          }).taskPagination.total,
+        ).toBe(0);
         expect(details.tasks).toMatchObject([
           {
             kind: 'source_job_detail_batch',

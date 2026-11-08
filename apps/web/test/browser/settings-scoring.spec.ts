@@ -27,6 +27,29 @@ for (const width of [1600, 1280, 390]) {
     expect(frequencyBox.height).toBe(32);
     expect(timeBox.height).toBe(32);
     if (width >= 1100) expect(timeBox.y).toBeCloseTo(frequencyBox.y, 0);
+    const sync = page.getByRole('checkbox', { name: '定时同步职位', exact: true });
+    const wasSyncEnabled = await sync.isChecked();
+    await sync.check();
+    const frequency = page.getByRole('combobox', { name: '同步频率', exact: true });
+    await frequency.click();
+    const weekly = page.getByRole('option', { name: '每周一', exact: true });
+    const text = weekly.locator('span').first();
+    expect(
+      await text.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const option = element.closest('[role="option"]');
+        return (
+          option !== null &&
+          range.getBoundingClientRect().right <= option.getBoundingClientRect().right - 20
+        );
+      }),
+    ).toBe(true);
+    await weekly.click();
+    await expect(frequency).toContainText('每周一');
+    await frequency.click();
+    await page.getByRole('option', { name: '每天', exact: true }).click();
+    await sync.setChecked(wasSyncEnabled);
     const workflow = await page
       .getByRole('region', { name: '工作流偏好', exact: true })
       .boundingBox();

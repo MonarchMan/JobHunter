@@ -23,6 +23,7 @@ import {
 } from './diagnostic-details.js';
 import { CurrencySelect } from './currency-select.js';
 import { SelectField } from '../components/forms/select-field.js';
+import { taskTimeRange } from '../../src/server/task-time-range.js';
 import dataTableStyles from '../components/lists/data-table.module.css';
 import styles from './page.module.css';
 
@@ -115,7 +116,9 @@ export default async function TasksPage({
       </main>
     );
   }
+  const { range, ...timeFilter } = taskTimeRange(firstSearchParameter(parameters, 'range'));
   const diagnostics = container.services.diagnostics.list({
+    ...timeFilter,
     ...(status && ['pending', 'running', 'failed', 'succeeded', 'cancelled'].includes(status)
       ? { status: status as 'pending' | 'running' | 'failed' | 'succeeded' | 'cancelled' }
       : {}),
@@ -135,6 +138,21 @@ export default async function TasksPage({
         aria-label="任务筛选"
         noValidate
       >
+        <label>
+          时间
+          <SelectField
+            name="range"
+            label="时间"
+            defaultValue={range}
+            fitOptions
+            options={[
+              { value: 'today', label: '当天' },
+              { value: '7d', label: '近7天' },
+              { value: '30d', label: '近30天' },
+              { value: 'all', label: '全部' },
+            ]}
+          />
+        </label>
         <label>
           状态
           <SelectField
@@ -222,8 +240,11 @@ export default async function TasksPage({
                     <td>
                       <TruncatedText value={taskPresentation(task).error || '—'} />
                     </td>
-                    <td title={`${time(task.startedAt)} - ${time(task.finishedAt)}`}>
-                      {taskDuration(task.startedAt, task.finishedAt)}
+                    <td>
+                      <TruncatedText
+                        value={taskDuration(task.startedAt, task.finishedAt)}
+                        tooltip={`${time(task.startedAt)} - ${time(task.finishedAt)}`}
+                      />
                     </td>
                     <td>
                       {task.kind === 'task' ? (

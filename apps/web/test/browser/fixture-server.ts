@@ -582,9 +582,9 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       .run(ids.task);
     // 1、维护记录仅用于只读审计展示，不应提供普通队列的重试/取消入口。
     database.client.exec(`INSERT INTO tasks
-      (id,task_type,private_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
+      (id,task_type,private_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at)
       VALUES('018f0000-0000-7000-8000-000000000709','maintenance.sqlite','{}','failed',
-      'fixture-maintenance-audit',1,1,1,3)`);
+      'fixture-maintenance-audit',1,1,1,3,unixepoch('2026-11-07 08:00:00')*1000,unixepoch('2026-11-07 08:01:30')*1000)`);
     database.client
       .prepare(
         `INSERT INTO agent_runs

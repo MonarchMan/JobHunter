@@ -1379,7 +1379,7 @@ function ProjectEditor({
                 }}
               />
               <Field
-                label="本地项目路径（仅关联位置，不上传文件）"
+                label="本地路径"
                 value={item.local_path ?? null}
                 onChange={(local_path) => {
                   const next = [...entries];

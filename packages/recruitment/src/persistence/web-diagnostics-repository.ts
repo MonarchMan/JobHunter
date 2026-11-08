@@ -259,6 +259,8 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
 
   /** 执行数据库组件对外暴露的操作。 */
   public listTaskEntries(input: {
+    readonly since?: number;
+    readonly before?: number;
     readonly status?: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
     readonly taskType?: string;
     readonly limit: number;
@@ -266,6 +268,14 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
   }): { readonly items: readonly WebTaskListEntry[]; readonly total: number } {
     const conditions: string[] = [];
     const parameters: unknown[] = [];
+    if (input.since !== undefined) {
+      conditions.push('created_at >= ?');
+      parameters.push(input.since);
+    }
+    if (input.before !== undefined) {
+      conditions.push('created_at < ?');
+      parameters.push(input.before);
+    }
     if (input.status) {
       conditions.push('status = ?');
       parameters.push(input.status);
@@ -351,11 +361,29 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
   }
 
   /** 执行数据库组件对外暴露的操作。 */
-  public listAgentRuns(input: { readonly limit: number; readonly offset: number }): {
+  public listAgentRuns(input: {
+    readonly limit: number;
+    readonly offset: number;
+    readonly since?: number;
+    readonly before?: number;
+  }): {
     readonly items: readonly WebAgentRunSummary[];
     readonly total: number;
   } {
-    const count = this.#client.prepare('SELECT COUNT(*) AS total FROM agent_runs').get() as {
+    const conditions: string[] = [];
+    const parameters: number[] = [];
+    if (input.since !== undefined) {
+      conditions.push('started_at >= ?');
+      parameters.push(input.since);
+    }
+    if (input.before !== undefined) {
+      conditions.push('started_at < ?');
+      parameters.push(input.before);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const count = this.#client
+      .prepare(`SELECT COUNT(*) AS total FROM agent_runs ${where}`)
+      .get(...parameters) as {
       readonly total: number;
     };
     const requestedPage = Math.floor(input.offset / input.limit) + 1;
@@ -363,9 +391,9 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     const offset = (Math.min(requestedPage, totalPages) - 1) * input.limit;
     const rows = this.#client
       .prepare(
-        `SELECT ${columns} FROM agent_runs ORDER BY started_at DESC, id ASC LIMIT ? OFFSET ?`,
+        `SELECT ${columns} FROM agent_runs ${where} ORDER BY started_at DESC, id ASC LIMIT ? OFFSET ?`,
       )
-      .all(input.limit, offset) as AgentRunRow[];
+      .all(...parameters, input.limit, offset) as AgentRunRow[];
     return { items: rows.map((row) => summary(row)), total: count.total };
   }
 

@@ -1,5 +1,6 @@
 import { dataResponse, errorResponse } from '../../../src/server/http.js';
 import { getWebContainer } from '../../../src/server/container.js';
+import { taskTimeRange } from '../../../src/server/task-time-range.js';
 
 /** 返回任务与 Agent 运行诊断列表。 */
 export async function GET(request: Request): Promise<Response> {
@@ -10,11 +11,14 @@ export async function GET(request: Request): Promise<Response> {
     const agentPage = Number(search.get('agentPage') ?? '1');
     const status = search.get('status');
     const taskType = search.get('type');
+    const { range: _range, ...timeFilter } = taskTimeRange(search.get('range'));
+    void _range;
     const validStatuses = ['pending', 'running', 'failed', 'succeeded', 'cancelled'] as const;
     // 2、通过诊断服务读取任务和 Agent 运行摘要。
     const container = await getWebContainer();
     return dataResponse(
       container.services.diagnostics.list({
+        ...timeFilter,
         ...(validStatuses.includes(status as (typeof validStatuses)[number])
           ? { status: status as (typeof validStatuses)[number] }
           : {}),

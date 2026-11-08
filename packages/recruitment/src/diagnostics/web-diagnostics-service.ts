@@ -27,7 +27,10 @@ import { presentBatchProgress } from './task-progress.js';
 export interface WebDiagnosticsRepository {
   /** 批量读取当前页普通任务及关联来源信息，不返回执行 payload。 */
   getTaskDetails(ids: readonly string[]): readonly WebTask[];
+  /** 时间边界为 UTC 毫秒、含首不含尾；先筛选完整批次再分页计数。 */
   listTaskEntries(input: {
+    readonly since?: number;
+    readonly before?: number;
     readonly status?: TaskRecord['status'];
     readonly taskType?: string;
     readonly limit: number;
@@ -36,7 +39,13 @@ export interface WebDiagnosticsRepository {
     readonly items: readonly WebTaskListEntry[];
     readonly total: number;
   };
-  listAgentRuns(input: { readonly limit: number; readonly offset: number }): {
+  /** 与任务列表共用时间窗口，按 Agent 开始时间筛选并统计总数。 */
+  listAgentRuns(input: {
+    readonly limit: number;
+    readonly offset: number;
+    readonly since?: number;
+    readonly before?: number;
+  }): {
     readonly items: readonly WebAgentRunSummary[];
     readonly total: number;
   };
@@ -185,6 +194,8 @@ export class WebDiagnosticsService {
   /** 执行应用组件对外暴露的操作。 */
   public list(
     input: {
+      readonly since?: number;
+      readonly before?: number;
       readonly status?: TaskRecord['status'];
       readonly taskType?: string;
       readonly taskPage?: number;
@@ -198,7 +209,12 @@ export class WebDiagnosticsService {
     const agentPageSize = input.agentPageSize ?? input.pageSize ?? 25;
     const taskPage = input.taskPage ?? 1;
     const agentPage = input.agentPage ?? 1;
+    const timeFilter = {
+      ...(input.since !== undefined ? { since: input.since } : {}),
+      ...(input.before !== undefined ? { before: input.before } : {}),
+    };
     const taskFilter = {
+      ...timeFilter,
       ...(input.status ? { status: input.status } : {}),
       ...(input.taskType ? { taskType: input.taskType } : {}),
     };
@@ -216,12 +232,14 @@ export class WebDiagnosticsService {
       });
     }
     let agentPageResult = this.#repository.listAgentRuns({
+      ...timeFilter,
       limit: agentPageSize,
       offset: (agentPage - 1) * agentPageSize,
     });
     const agentPagination = webPagination(agentPageResult.total, agentPage, agentPageSize);
     if (agentPagination.current !== agentPage) {
       agentPageResult = this.#repository.listAgentRuns({
+        ...timeFilter,
         limit: agentPageSize,
         offset: (agentPagination.current - 1) * agentPageSize,
       });

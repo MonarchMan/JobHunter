@@ -51,7 +51,7 @@ test('shows per-request usage and cost with one value per cell', async ({ page }
     ];
     await route.fulfill({ response, json: body });
   });
-  await page.goto('/tasks');
+  await page.goto('/tasks?range=all');
   await page
     .locator('[data-agent-section]')
     .getByRole('button', { name: '职位分析', exact: true })
@@ -86,7 +86,7 @@ test('shows per-request usage and cost with one value per cell', async ({ page }
   // 2、窄屏仍能读取明细，横向溢出限定在表格内部。
   await page.setViewportSize({ width: 390, height: 844 });
   // 移动端独立进入页面，再从卡片打开详情。
-  await page.goto('/tasks');
+  await page.goto('/tasks?range=all');
   await page.getByRole('button', { name: '职位分析', exact: true }).click();
   await expect(section.getByRole('heading')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
