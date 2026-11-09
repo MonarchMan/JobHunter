@@ -83,7 +83,21 @@ test('shows per-request usage and cost with one value per cell', async ({ page }
   expect(dialogBox).not.toBeNull();
   expect(tableBox).not.toBeNull();
   if (dialogBox && tableBox) expect(tableBox.width).toBeLessThanOrEqual(dialogBox.width);
-  // 2、窄屏仍能读取明细，横向溢出限定在表格内部。
+  // 2、运行成本列区分已知金额与真正未知：已知金额（含 0）直接展示，不被价格版本遮挡。
+  // 弹窗打开时自动刷新暂停，列表行稳定可读。
+  const agentTable = page.getByRole('table', { name: 'Agent 运行列表' });
+  await expect(agentTable.getByRole('row').filter({ hasText: '职位分析' }).first()).toContainText(
+    '$0.0010',
+  );
+  const cancelled = agentTable.getByRole('row').filter({ hasText: '已取消' });
+  await expect(cancelled).toContainText('简历画像提取');
+  await expect(cancelled).toContainText('$0.0000');
+  await expect(cancelled).not.toContainText('未定价');
+  // 旧记录合计未知且没有价格版本时保持破折号占位。
+  const failed = agentTable.getByRole('row').filter({ hasText: '招聘邮件分析' });
+  await expect(failed.getByRole('cell').nth(3)).toHaveText('—');
+  await expect(failed).not.toContainText('未定价');
+  // 3、窄屏仍能读取明细，横向溢出限定在表格内部。
   await page.setViewportSize({ width: 390, height: 844 });
   // 移动端独立进入页面，再从卡片打开详情。
   await page.goto('/tasks?range=all');

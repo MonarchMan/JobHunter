@@ -603,6 +603,15 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       VALUES('018f0000-0000-7000-8000-000000000708','recruitment-mail.classify',
        'fake-definition','fake-config','fake-input-2','fake-cache-2',
        'failed','unknown',NULL,4,5)`);
+    // 无模型调用的取消运行：成本为真实的 0，不能显示“未定价”。
+    database.client.exec(`INSERT INTO agent_runs
+      (id,agent_key,definition_hash,model_config_hash,input_hash,cache_key,status,
+       input_tokens,output_tokens,estimated_cost_micros,cost_currency,pricing_version,
+       started_at,finished_at)
+      VALUES('018f0000-0000-7000-8000-00000000070a','resume-profile',
+       'fake-definition','fake-config','fake-input-3','fake-cache-3',
+       'cancelled',0,0,0,'USD','no-calls',
+       unixepoch('2026-11-07 08:30:00')*1000,unixepoch('2026-11-07 08:30:05')*1000)`);
     database.client
       .prepare(
         `INSERT INTO events
