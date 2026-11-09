@@ -47,7 +47,7 @@ interface RecruitmentScheduleFact {
 ## 4. 版本与迁移
 
 - Agent 版本升级为 `recruitment-mail.classify@v3`，Prompt 升级为 `v5-written-exam`，输出 Schema 升级为 `v3`；该版本删除 `coding_test` 并要求模型把在线代码题统一输出为 `written_exam`。
-- Worker 任务类型仍为 `mail.classify@v1`，但策略版本包含新 Agent 和 Prompt 版本，使内容版本相同的邮件可以按新策略安全重跑。
+- Worker 侧招聘邮件分类仍是 `mailbox.sync@v1` 任务第二阶段（ADR-0066 合并后），但策略版本包含新 Agent 和 Prompt 版本，使内容版本相同的邮件可以按新策略安全重跑。
 - 新申请事件同时写入 `schedule` 对象和类型化列。迁移只从统一 `schedule` 结构回填新字段，不兼容旧分类格式；需要时允许重新分类或重建本地数据。
 - 移除 `coding_test` 活动类型并直接重建 `application_events`；旧日程事实不做兼容转换，由招聘邮件按新 Agent 版本重新分类生成。
 

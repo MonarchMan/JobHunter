@@ -2,7 +2,7 @@
 
 > 状态：Ready
 > 对应规格：[spec.md](./spec.md)
-> 架构决策：[ADR-0055](../../docs/adr/0055-recruitment-mail-ingestion-and-privacy-boundary.md)、[ADR-0056](../../docs/adr/0056-encrypted-mail-credential-file.md)
+> 架构决策：[ADR-0055](../../docs/adr/0055-recruitment-mail-ingestion-and-privacy-boundary.md)、[ADR-0056](../../docs/adr/0056-encrypted-mail-credential-file.md)、[ADR-0066](../../docs/adr/0066-mailbox-task-consolidation.md)
 
 ## 1. 设计结论
 
@@ -185,39 +185,43 @@ sequenceDiagram
     participant D as SQLite
     participant M as Configured Model
 
-    S->>D: 每日发布 mailbox.sync@v1
-    W->>A: 领取同步任务
-    A->>F: 读取邮箱配置和增量状态
+    S->>D: 每日按启用邮箱投递 mailbox.sync@v1(mailboxKey)
+    W->>A: 领取对应邮箱的同步任务
+    A->>F: 读取该邮箱配置和增量状态
     W->>C: discoverChanges(cursor)
     C-->>W: 消息引用页 + nextCursor
     W->>A: 粗筛引用
-    A->>D: 保存引用并发布 mail.classify@v1
-    A->>F: 数据库提交后原子推进 cursor
-    W->>C: fetchMessage(messageRef)
-    C-->>W: 有界 MIME/正文
-    W->>A: 清洗正文、规则候选筛选
-    opt 命中候选且配置模型可用
-        W->>M: 无工具结构化分类与字段提取
-        M-->>W: Schema 输出
+    A->>D: 保存本页引用（processing_status=discovered）
+    loop 本页每封引用
+        W->>C: fetchMessage(messageRef)
+        C-->>W: 有界 MIME/正文
+        W->>A: 清洗正文、规则候选筛选
+        opt 命中候选且配置模型可用
+            W->>M: 无工具结构化分类与字段提取
+            M-->>W: Schema 输出
+        end
+        A->>D: 消息结论 + 申请事件 + 当前投影
     end
-    A->>D: 消息结论 + 申请事件 + 当前投影
+    A->>D: 页检查点（已完成的外部消息键）
+    A->>F: 页分类提交后原子推进 cursor
 ```
 
 ### 4.1 `mailbox.sync@v1`
 
-- payload：空对象，不包含文件夹游标或任何邮件内容；任务内部遍历所有启用邮箱。
-- 并发键：`mailbox-sync`，同一批次只允许一个每日同步任务运行。
-- 计划默认每天 03:00（`Asia/Shanghai`）执行；停机期间只补最近一次 occurrence。
-- 每个邮箱的增量页先在事务外获取并校验，再在一个短事务内保存新引用并发布对应分类任务；数据库提交后，才以临时文件加原子替换更新 `<dataRoot>/mail/runtime-state.json` 中的页游标。若数据库提交后、游标写入前崩溃，下次允许整页重放，并由消息唯一键和任务幂等键消重。
+- payload：`{ mailboxKey }`，只携带稳定邮箱键，不包含文件夹游标或任何邮件内容。
+- 计划：启动时按已启用邮箱配置幂等对账，每邮箱一条每日 03:00（`Asia/Shanghai`）计划（键 `mailbox.sync:{mailboxKey}`，配置禁用时停用对应计划）；停机期间只补最近一次 occurrence。对账与触发都只针对启用邮箱。
+- 并发键：`mailbox-sync:{mailboxKey}`；同一邮箱同时只允许一条同步任务，不同邮箱的任务可以并行。同一邮箱的重复触发命中并发冲突时静默跳过。
+- 阶段一（扫描）：该邮箱的增量页在事务外获取并校验，随后在一个短事务内保存新引用（`processing_status=discovered`），不另行发布分类任务。阶段二完成后才以临时文件加原子替换推进 `<dataRoot>/mail/runtime-state.json` 中的页游标；若阶段二提交后、游标写入前崩溃，下次允许整页重放，由消息唯一键和已提交状态消重。
+- 阶段二（分类）：对当前页引用串行执行正文获取、规则筛选和模型分类（与 4.2 相同）；每页全部引用处理完提交结果后写入一次页检查点，Worker 心跳在整段执行期间持续续租。任务重试时读取检查点，跳过已完成页，仅重放未完成页及其中未提交分类结论的引用。
+- 单封邮件正文读取或分类失败时不阻塞同页其他邮件；该引用保持最小身份，在后续同步任务中重放，页内其余引用正常提交。网络或邮箱不可用导致本页无法推进时，整任务按错误类别重试。
 - 初次同步默认使用 30 天回溯；游标缺失、失效或最近成功定位时间早于配置窗口时，丢弃旧游标并重新执行有界扫描，总范围仍受 365 天上限约束。
 
-### 4.2 `mail.classify@v1`
+### 4.2 单封分类处理（同步任务第二阶段）
 
-- payload：`mailMessageRefId`、预期 `contentVersion` 和分类策略版本，不包含主题、地址或正文。
-- 任务幂等键：`mail-classify:{messageRefId}:{contentVersion}:{policyVersion}`；正文读取后再以 `messageRefId + contentHash + sourceEventNo` 约束最终申请事件，分类器版本仅用于追溯，不能绕过业务唯一约束。这样可避免提供商版本变化或分类策略重跑时产生重复事实。
-- 并发度独立配置并共享 Worker 全局网络信号量；同一消息的内容版本变更可以产生新任务。
-- Handler 在事务外获取正文、解析 MIME、清洗引用历史、执行规则或 Agent；最终输出全部校验后才进入短事务。
-- 最终事务更新消息处理结论、追加申请事件并更新申请当前投影，通过 Task 状态门控处理取消与租约竞争。自动接受结果直接提交事件；待确认只更新 `mail_message_refs.processing_status`。用户打开详情时重新读取和分类原邮件，确认时提交刚通过校验的结果。
+- 处理单元为单个邮件引用；执行前以（邮件引用、内容版本、分类策略版本）判定该引用是否已按当前策略提交结论，同一任务重试或崩溃恢复时跳过已提交引用，等价于原 `mail-classify:{messageRefId}:{contentVersion}:{policyVersion}` 幂等键。
+- 正文读取后再以 `messageRefId + contentHash + sourceEventNo` 约束最终申请事件；分类器版本仅用于追溯，不能绕过业务唯一约束。
+- 处理在事务外获取正文、解析 MIME、清洗引用历史、执行规则或 Agent；最终输出全部校验后才进入短事务。
+- 最终事务更新消息处理结论、追加申请事件并更新申请当前投影。自动接受结果直接提交事件；待确认只更新 `mail_message_refs.processing_status`。用户打开详情时重新读取和分类原邮件，确认时提交刚通过校验的结果。
 
 ### 4.3 `mail.retention@v1`
 
@@ -271,7 +275,7 @@ Agent key 初始版本为 `recruitment-mail.classify@v1`；030 日程规格当�
 
 邮件分类 Agent 不启用持久化输出缓存；每次模型调用使用独立运行身份，AgentRun 只保留输入/输出哈希、校验状态和用量。自动接受与忽略结果分别通过申请事件和消息处理状态避免重复调用，待确认详情允许重新调用模型，但不从 AgentRun 恢复字段结果。
 
-邮件分类使用独立模型客户端，单次请求上限 120 秒、Agent 总时限 180 秒，最多一次结构修复；共享 8,000 输出 Token 预算，适配包含推理 Token 的模型用量。单邮件任务租约为 4 分钟，覆盖正文读取与分类时限；到达时限时保留待确认引用，不丢弃候选。模型未配置时不发起请求。
+邮件分类使用独立模型客户端，单次请求上限 120 秒、Agent 总时限 180 秒，最多一次结构修复；共享 8,000 输出 Token 预算，适配包含推理 Token 的模型用量。单封分类在同步任务阶段二内串行执行，由任务心跳维持租约；处理到达时限或失败时保留待确认引用，不丢弃候选。模型未配置时不发起请求。
 
 运行配置 `mail.classification.modelMode` 首版只允许 `off` 或 `configured`，默认 `off`。使用环境变量 `MAIL_MODEL_MODE` 显式开启；`configured` 表示用户同意将清洗后的招聘候选正文发送给所配置模型提供商。关闭时不影响同步和规则识别，候选进入待确认。
 
@@ -364,6 +368,6 @@ Agent key 初始版本为 `recruitment-mail.classify@v1`；030 日程规格当�
 - Repository 集成测试：三张新表、唯一约束、待确认不保存分类结果、重复页重放、申请事件幂等、状态投影、删除影响和外键检查。
 - 文件状态集成测试：邮箱配置校验、运行状态原子替换、写入失败保留旧游标以及数据库提交后崩溃重放。
 - 凭据文件测试：密文不含明文、重启解密、认证数据防调换、并发写入、撤销、密钥缺失安全失败及 Windows 旧凭据迁移。
-- Worker 测试：租约恢复、同邮箱互斥、跨邮箱隔离、网络信号量、取消和重复提交。
+- Worker 测试：租约恢复、同一邮箱同时至多一条同步任务、跨邮箱并行隔离、网络信号量、取消和重复提交。
 - Web E2E：授权状态、待确认确认/忽略、申请选择、时间线、时区推断、断开与删除流程，以及桌面/窄屏无障碍。
 - 发布门禁：Gmail、Microsoft Graph 和 IMAP 必须分别在脱敏夹具和隔离账号上完成授权、首次回溯、增量、游标恢复、分类、断开和重新授权全链路；各连接器独立标记 supported，三者全部通过前不得宣称 M1 邮箱能力完整交付。

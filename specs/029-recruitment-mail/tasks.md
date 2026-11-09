@@ -2,6 +2,8 @@
 
 > 状态：Ready
 
+- [ ] **MAIL-T018** 按 ADR-0066 将每邮箱扫描与分类合并为单条 `mailbox.sync@v1` 两阶段任务：payload 携带 `mailboxKey`，启动时按启用邮箱对账每日计划并停用旧全局计划；阶段一串行分类写页检查点，删除 `mail.classify@v1` Handler 并入站路径，迁移取消历史未完成任务。（MAIL-017, MAIL-012, MAIL-Q08）
+
 - [x] **MAIL-T017** 将自动邮箱增量扫描改为每日 03:00（`Asia/Shanghai`）运行，并合并发现与同步阶段为单个 `mailbox.sync@v1` 批次任务，更新既有计划键以停用旧五分钟调度。（MAIL-017）
 
 - [x] **MAIL-T001** 建立 029 规格、设计和任务文档，更新总体架构与数据模型，并新增 ADR-0055 固定独立招聘进展领域、本地增量轮询、凭据边界及 `packages/mail/core`、`packages/mail/connectors` 目录决策。（MAIL-001, MAIL-002, MAIL-003, MAIL-004, MAIL-007, MAIL-010, MAIL-012, MAIL-017, MAIL-018, MAIL-Q01, MAIL-Q02, MAIL-Q04, MAIL-Q05）

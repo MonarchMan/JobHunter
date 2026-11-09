@@ -49,3 +49,4 @@ ADR 一经 Accepted 通常不直接改写历史结论；后续决策变更通过
 - [ADR-0064：Web 停止级联停止中央任务服务](./0064-web-stop-cascades-to-task-service.md)
 
 - [ADR-0065：单宿主与有界动态任务线程池](./0065-single-host-dynamic-thread-pool.md)
+- [ADR-0066：招聘邮件识别并入邮箱同步任务](./0066-mailbox-task-consolidation.md)
