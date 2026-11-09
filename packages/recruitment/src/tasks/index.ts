@@ -382,12 +382,12 @@ export function createRecruitmentTasks(
         timezone: 'Asia/Shanghai',
       });
       if (input.mail) {
-        // 旧的全局批次计划原位停用，避免与每邮箱计划并行重复投递。
+        // 旧的全局批次计划原位停用；其 payload 已不符合新 schema，改用保留任务类型承载停用记录。
         scheduleService.upsert({
           id: ids.generate(),
           scheduleKey: 'mailbox-scan-every-five-minutes',
-          taskType: 'mailbox.sync@v1',
-          payload: {},
+          taskType: 'platform.retention',
+          payload: { action: 'run' },
           cronExpression: '0 3 * * *',
           timezone: 'Asia/Shanghai',
           enabled: false,
