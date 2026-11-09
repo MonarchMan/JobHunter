@@ -404,7 +404,12 @@ export class AgentRunner {
     }
   }
 
-  /** 处理模块类内部的辅助逻辑。 */
+  /**
+   * 汇总运行级用量与成本。
+   * 关键不变量：没有请求账单的运行（未发生模型调用，如刚启动即被取消）成本为真实
+   * 的 0，价格版本记为 'no-calls'；'unpriced' 只表示存在已上报用量但缺价，避免
+   * 展示层把真实的零成本遮挡成“未定价”。
+   */
   #usage(totals: Totals, previous: AgentRunRecord | null): AgentRunUsage {
     const billingCalls = [...(previous?.billingCalls ?? []), ...totals.billingCalls];
     return {
@@ -420,7 +425,7 @@ export class AgentRunner {
       costCurrency: this.#model.metadata.costCurrency,
       pricingVersion: billingCalls.length
         ? [...new Set(billingCalls.map((call) => call.pricingVersion))].join(',')
-        : this.#model.metadata.pricingVersion,
+        : (previous?.pricingVersion ?? 'no-calls'),
     };
   }
 }

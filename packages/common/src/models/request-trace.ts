@@ -179,7 +179,12 @@ async function readStream(
   }
 }
 
-/** 单次实际 HTTP 请求快照；不保留完整 URL、Headers 或响应正文。 */
+/**
+ * 单次实际 HTTP 请求快照；不保留完整 URL、Headers 或响应正文。
+ * billing 仅在已完成 HTTP 交换并解析出账单后设置；未上报用量的失败请求（网络错误、
+ * 400 协商拒绝、超时取消）保持缺省，聚合时以 billing 是否为 undefined 区分
+ * “未上报用量”（对运行合计按 0 计入）与“已上报但缺价”（使合计未知）。
+ */
 interface Attempt {
   id: string;
   completed: boolean;
@@ -339,7 +344,11 @@ export class ModelRequestTrace {
       ...(latest ? { billing: latest } : {}),
       inputTokens: calls.reduce((n, c) => n + (c.inputTokens ?? 0), 0),
       outputTokens: calls.reduce((n, c) => n + (c.outputTokens ?? 0), 0),
-      estimatedCostMicros: calls.some((c) => c.totalCostMicros === null)
+      // 只有已解析账单但缺价的请求才使合计未知；未上报用量的失败请求没有已知
+      // 成本，对运行合计按 0 计入，不得把其他请求的真实成本一起标成“未定价”。
+      estimatedCostMicros: this.#attempts.some(
+        (attempt) => attempt.billing?.totalCostMicros === null,
+      )
         ? null
         : calls.reduce((n, c) => n + (c.totalCostMicros ?? 0), 0),
     };

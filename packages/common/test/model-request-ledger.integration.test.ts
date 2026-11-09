@@ -113,6 +113,63 @@ it('persists each negotiation attempt before the next HTTP and retains the ledge
   }
 });
 
+it('persists zero run cost for a failed request while keeping its per-call cost unknown (AGT-015)', async () => {
+  const root = await createTemporaryDataRoot('request-failed-cost-');
+  const db = openSqliteDatabase({ dataRoot: root.path });
+  try {
+    // 1、网关连接被拒：请求未送达且没有上报用量，运行成本按 0 入账。
+    const model = new OpenAiCompatibleModelClient({
+      baseUrl: 'https://example.test/v1',
+      apiKey: 'synthetic',
+      model: 'fixture',
+      fetchImplementation: () =>
+        Promise.reject(
+          Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:1'), { code: 'ECONNREFUSED' }),
+        ),
+    });
+    const store = new SqliteAgentRunStore(db.client);
+    const runner = new AgentRunner({ store, model, createId: randomUUID });
+    const definition = defineAgent({
+      key: 'failed-cost-fixture',
+      outputSchemaVersion: '1',
+      outputSchemaName: 'Result',
+      systemPrompt: 'Synthetic',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      tools: [],
+      limits: {
+        maxSteps: 1,
+        timeoutMs: 10000,
+        maxInputTokens: 1000,
+        maxOutputTokens: 1000,
+        maxEstimatedCostMicros: 10000,
+      },
+    });
+    await expect(
+      runner.run({ definition, value: {}, signal: new AbortController().signal }),
+    ).rejects.toMatchObject({ category: 'temporary' });
+    const persisted = db.client
+      .prepare(
+        'SELECT status, input_tokens, output_tokens, estimated_cost_micros, pricing_version FROM agent_runs',
+      )
+      .get();
+    expect(persisted).toEqual({
+      status: 'failed',
+      input_tokens: 0,
+      output_tokens: 0,
+      estimated_cost_micros: 0,
+      pricing_version: 'unpriced',
+    });
+    // 2、逐请求明细仍保持未知
+    expect(
+      db.client.prepare('SELECT total_cost_micros, pricing_version FROM model_requests').all(),
+    ).toEqual([{ total_cost_micros: null, pricing_version: 'unpriced' }]);
+  } finally {
+    db.close();
+    await root.cleanup();
+  }
+});
+
 it('retains an interrupted request start without inventing final usage (USG-009)', async () => {
   const root = await createTemporaryDataRoot('request-interrupted-');
   let db = openSqliteDatabase({ dataRoot: root.path });

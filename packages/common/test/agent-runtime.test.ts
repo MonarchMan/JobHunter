@@ -619,6 +619,18 @@ describe('agent runtime', () => {
       status: 'failed',
       errorCategory: 'timeout',
     });
+    // 未发生模型调用的取消/超时运行成本是 0
+    expect([...cancelledStore.runs.values()][0]).toMatchObject({
+      status: 'cancelled',
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostMicros: 0,
+      pricingVersion: 'no-calls',
+    });
+    expect([...timeoutStore.runs.values()][0]).toMatchObject({
+      estimatedCostMicros: 0,
+      pricingVersion: 'no-calls',
+    });
   });
 
   it('does not persist input or prompt content in run records', async () => {

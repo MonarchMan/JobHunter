@@ -29,7 +29,7 @@
 
 common 契约定义请求计费明细 Schema，模型适配器归一化缓存语义并调用纯计价函数，Runner 汇总并通过仓储在完成事务中写入新增 nullable model_usage_json。详情页按请求展示时间、模型、输入输出 Token 与合计费用，缓存分项仅保存不逐列展示。参考 cc-switch 的 parser/calculator 分层，使用定点十进制运算；DeepSeek 官方输入命中字段优先，其他兼容接口使用标准缓存字段。官方忙闲价仅在无显式价格覆盖时启用；CNY 使用官网人民币价，不通过汇率反推。当前日历覆盖 2026 年，未知年份仅在可确定的周末或非忙时计价，潜在忙时返回未知。Schema 迁移仅新增可空字段，旧记录金额保持不变，不推测补齐历史缓存量。
 
-实现参考 [cc-switch 用量解析](https://github.com/farion1231/cc-switch/blob/8be8405/src-tauri/src/proxy/usage/parser.rs) 与同目录 calculator.rs；节假日日历依据 [2026 年放假通知](https://www.beijing.gov.cn/cs/gncs/zcwj/202603/t20260327_4568275.html)。缓存未知时保留 null；界面每个单元格只展示一个值，合计为空时展示“未定价”，不再逐条标注估算口径。
+实现参考 [cc-switch 用量解析](https://github.com/farion1231/cc-switch/blob/8be8405/src-tauri/src/proxy/usage/parser.rs) 与同目录 calculator.rs；节假日日历依据 [2026 年放假通知](https://www.beijing.gov.cn/cs/gncs/zcwj/202603/t20260327_4568275.html)。缓存未知时保留 null；界面每个单元格只展示一个值，逐请求明细仍按原口径展示，“未定价”仅出现在明细未知或运行合计未知时，不再逐条标注估算口径。运行合计区分真实未知与真实为零：未上报用量的传输失败请求对运行合计按 0 计入，不再把其他请求的已知成本一起标为未知；已解析账单且缺价的请求（如缓存写入时长缺失、忙闲时段未知）仍使合计未知并展示“未定价”。
 
 通过独立 AgentRunCostCorrectionStore 端口回填已完成且 unpriced、成本为空的运行。仓储用开始时间、输入输出用量作条件更新，只允许更新金额、币种与价格版本；维护前备份数据库并保存脱敏计算依据。DeepSeek Flash 2026-11-01 核验来源：https://api-docs.deepseek.com/quick_start/pricing/ 。闲时每百万 Token 美元价格：缓存命中 0.003、未命中 0.15、输出 0.6；高峰翻倍。北京时间工作日 09–12、14–18 为高峰，周末和法定节假日除外。本次历史记录全程位于闲时，未保存缓存明细，使用全部输入未命中的估算上界。
 

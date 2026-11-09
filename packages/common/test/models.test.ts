@@ -91,6 +91,7 @@ describe('Anthropic model client', () => {
     await expect(client.complete(request, new AbortController().signal)).resolves.toMatchObject({
       kind: 'output',
       output: { ok: true },
+      // 未配置报价时请求缺价，运行合计仍必须标为未知。
       usage: { inputTokens: 3, outputTokens: 2, estimatedCostMicros: null },
     });
     expect(body).toMatchObject({
@@ -345,6 +346,7 @@ describe('OpenAI-compatible model client', () => {
       await expect(client.complete(request, new AbortController().signal)).resolves.toMatchObject({
         kind: 'unparsed_output',
         text: content,
+        // 响应缺少 usage 时账单无法定价，运行合计仍必须标为未知。
         usage: { inputTokens: 0, outputTokens: 0, estimatedCostMicros: null },
       });
     },
@@ -427,5 +429,68 @@ describe('OpenAI-compatible model client', () => {
       error instanceof Error ? error.message : '',
     );
     expect(reason).not.toContain('172.16.2.210');
+  });
+
+  it('counts an undelivered request as zero run cost while keeping its per-call cost unknown', async () => {
+    const client = new OpenAiCompatibleModelClient({
+      baseUrl: 'https://models.example.test/v1',
+      apiKey: 'test-secret',
+      model: 'test-model',
+      fetchImplementation: () =>
+        Promise.reject(
+          Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8080'), {
+            code: 'ECONNREFUSED',
+          }),
+        ),
+    });
+    const failure = await client
+      .complete(request, new AbortController().signal)
+      .catch((error: unknown) => error as ModelClientError);
+    expect(failure).toBeInstanceOf(ModelClientError);
+    expect(failure.usage).toMatchObject({ inputTokens: 0, outputTokens: 0 });
+    // 未送达的请求没有已知成本，运行合计按 0 记录，不能再显示“未定价”。
+    expect(failure.usage?.estimatedCostMicros).toBe(0);
+    // 逐请求明细仍为未知，不伪造 0 成本明细。
+    expect(failure.usage?.billingCalls).toHaveLength(1);
+    expect(failure.usage?.billingCalls?.[0]).toMatchObject({
+      totalCostMicros: null,
+      pricingVersion: 'unpriced',
+      statusCode: null,
+      transportError: 'network',
+    });
+  });
+
+  it('keeps the priced retry total when format negotiation is rejected with 400', async () => {
+    let calls = 0;
+    const client = new OpenAiCompatibleModelClient({
+      baseUrl: 'https://models.example.test/v1',
+      apiKey: 'test-secret',
+      model: 'test-model',
+      inputCostPerMillionUsd: 1,
+      outputCostPerMillionUsd: 2,
+      fetchImplementation: () => {
+        calls += 1;
+        return Promise.resolve(
+          calls === 1
+            ? new Response('{"error":{"message":"json_schema unsupported"}}', { status: 400 })
+            : new Response(
+                JSON.stringify({
+                  choices: [{ finish_reason: 'stop', message: { content: '{"ok":true}' } }],
+                  usage: { prompt_tokens: 1000, completion_tokens: 500 },
+                }),
+                { status: 200 },
+              ),
+        );
+      },
+    });
+    const result = await client.complete(request, new AbortController().signal);
+    // 协商 400 被供应商拒绝且未上报用量，不得把重试请求的已知成本标成未知。
+    expect(result.usage.estimatedCostMicros).toBe(2000);
+    expect(result.usage.billingCalls).toHaveLength(2);
+    expect(result.usage.billingCalls?.[0]).toMatchObject({
+      totalCostMicros: null,
+      statusCode: 400,
+    });
+    expect(result.usage.billingCalls?.[1]).toMatchObject({ totalCostMicros: 2000 });
   });
 });

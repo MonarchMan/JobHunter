@@ -169,6 +169,41 @@ describe('SQLite agent run store', () => {
       }),
     ).toThrow(/Invalid cost correction/);
   });
+  it('keeps zero-cost failed runs known and excludes them from backfill', async () => {
+    const { store } = await setup();
+    // 1、无模型调用的失败运行保存 0 成本与 no-calls 价格版本，不再标记未定价。
+    store.createRunning(running('zero-cost'));
+    store.completeFailed({
+      id: 'zero-cost',
+      status: 'failed',
+      category: 'temporary',
+      summary: 'gateway unreachable',
+      finishedAt: 3,
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        estimatedCostMicros: 0,
+        costCurrency: 'USD',
+        pricingVersion: 'no-calls',
+      },
+    });
+    expect(store.get('zero-cost')).toMatchObject({
+      status: 'failed',
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostMicros: 0,
+      pricingVersion: 'no-calls',
+    });
+    // 2、0 是已知成本，定向回填只针对 unpriced 且金额为空的记录。
+    expect(
+      store.backfillUnpricedCost({
+        id: 'zero-cost',
+        startedAt: 1,
+        usage,
+      }),
+    ).toBe(false);
+    expect(store.get('zero-cost')).toMatchObject({ estimatedCostMicros: 0 });
+  });
   it('invalidates a bad success without deleting its audit and allows a new winner', async () => {
     const { store } = await setup();
     store.createRunning(running('invalid'));

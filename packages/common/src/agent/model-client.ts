@@ -10,7 +10,7 @@ export interface ModelUsage {
   readonly billing?: ModelBilling;
   readonly inputTokens: number;
   readonly outputTokens: number;
-  /** 未配置供应商报价时为 null，不能把未知成本误记为 0。 */
+  /** 仅当存在已上报用量但缺少单价的请求时为 null；未上报用量的失败请求按 0 计入。 */
   readonly estimatedCostMicros: number | null;
 }
 
