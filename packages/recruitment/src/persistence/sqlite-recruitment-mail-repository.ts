@@ -157,7 +157,7 @@ export class SqliteRecruitmentMailRepository {
     transaction();
   }
 
-  /** 按内部引用恢复连接器所需的最小外部身份。 */
+  /** 按内部引用恢复连接器所需的最小外部身份与已提交结论，供同步重放幂等判定。 */
   public findProcessingMessageRef(id: string): RecruitmentMailMessageRef | null {
     const row = this.#client.prepare('SELECT * FROM mail_message_refs WHERE id = ?').get(id) as
       Record<string, unknown> | undefined;
@@ -173,6 +173,9 @@ export class SqliteRecruitmentMailRepository {
       contentVersion: String(row.content_version),
       sourceUrl: typeof row.source_url === 'string' ? row.source_url : null,
       changeKind: 'added',
+      processingStatus: String(row.processing_status),
+      lastClassifierVersion:
+        typeof row.last_classifier_version === 'string' ? row.last_classifier_version : null,
     };
   }
 
@@ -507,10 +510,9 @@ export class SqliteRecruitmentMailRepository {
   }
 }
 
-/** 组合数据库引用写入与 Worker 发布器，保持数据库包不依赖具体任务队列。 */
+/** 组合数据库引用写入；分类在同步任务第二阶段内联，不再经任务队列发布。 */
 export function createRecruitmentMailSyncRepository(input: {
   readonly repository: SqliteRecruitmentMailRepository;
-  readonly enqueueClassification: MailSyncRepository['enqueueClassification'];
   readonly now?: () => number;
 }): MailSyncRepository {
   return {
@@ -518,7 +520,6 @@ export function createRecruitmentMailSyncRepository(input: {
       input.repository.saveMessageRefs(refs, input.now?.() ?? Date.now());
       return Promise.resolve();
     },
-    enqueueClassification: input.enqueueClassification,
   };
 }
 

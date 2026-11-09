@@ -44,7 +44,6 @@ class MemoryRuntimeState implements MailRuntimeStatePort {
 /** 空仓储仍保留提交顺序，使测试聚焦游标过期策略。 */
 const repository: MailSyncRepository = {
   saveMessageRefs: () => Promise.resolve(),
-  enqueueClassification: () => Promise.resolve(),
 };
 
 /** 创建只产出一个空页面的连接器，并记录应用层传入的发现请求。 */

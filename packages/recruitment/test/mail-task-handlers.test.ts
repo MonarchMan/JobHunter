@@ -7,8 +7,8 @@ import type {
 } from '@jobhunter/recruitment/mail-contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  createMailClassifyTaskHandler,
   createMailboxSyncTaskHandler,
+  MailClassificationService,
   type RecruitmentMailClassificationPort,
   type RecruitmentMailMessageRef,
   type RecruitmentMailProcessingRepository,
@@ -45,7 +45,7 @@ const message: ExternalMailMessage = {
   headers: {},
 };
 
-/** 构造任务上下文，确保测试覆盖 Worker 的取消信号和提交时间。 */
+/** 构造任务上下文，确保测试覆盖 Worker 的取消信号、检查点和提交时间。 */
 function context(controller = new AbortController()): TaskHandlerContext {
   return {
     taskId: parseId('018f0000-0000-7000-8000-000000000201', 'Task'),
@@ -118,7 +118,7 @@ function classification(
   };
 }
 
-/** 记录分类任务的持久化副作用，不模拟数据库实现细节。 */
+/** 记录分类阶段的持久化副作用，不模拟数据库实现细节。 */
 class RecordingRepository implements RecruitmentMailProcessingRepository {
   public readonly updates: Parameters<
     RecruitmentMailProcessingRepository['updateMessageStatus']
@@ -128,7 +128,9 @@ class RecordingRepository implements RecruitmentMailProcessingRepository {
   >[0][] = [];
 
   public findMessageRef(id: string): RecruitmentMailMessageRef | null {
-    return id === 'message-ref-1' ? { ...message, id } : null;
+    return id === 'message-ref-1'
+      ? { ...message, id, processingStatus: 'discovered', lastClassifierVersion: null }
+      : null;
   }
 
   public updateMessageStatus(
@@ -166,63 +168,108 @@ function connector(): MailboxConnector {
   };
 }
 
+/** 稳定的内部引用 ID 计算替身，避免测试接触持久化哈希细节。 */
+const messageRefIdOf = (): string => 'message-ref-1';
+
 describe('mailbox sync task handler', () => {
-  it('performs discovery and synchronization for all enabled mailboxes in one task', async () => {
-    const secondMailbox: MailboxConfig = { ...mailbox, mailboxKey: 'mailbox-2' };
-    const disabledMailbox: MailboxConfig = {
-      ...mailbox,
-      mailboxKey: 'mailbox-disabled',
-      enabled: false,
-    };
+  it('scopes a task to a single mailbox and runs page classification inline', async () => {
     const sync = vi
       .fn<MailSyncService['sync']>()
-      .mockResolvedValueOnce({ pages: 2, messages: 3, cursor: null })
-      .mockResolvedValueOnce({ pages: 1, messages: 4, cursor: null });
-    const taskContext = context();
+      .mockImplementation((_config, _connector, _credentialRef, signal, control) => {
+        void signal;
+        // 模拟一页两封引用的同步过程：保存后由控制钩子分类并落检查点。
+        void control?.processPage([
+          { ...message },
+          { ...message, externalMessageKey: 'INBOX:1:3' },
+        ]);
+        control?.onPageCommitted?.({ INBOX: { lastUid: 20 } });
+        return Promise.resolve({ pages: 1, messages: 2, cursor: null });
+      });
+    const checkpoints: unknown[] = [];
+    const controller = new AbortController();
+    const base = context(controller);
     const handler = createMailboxSyncTaskHandler({
-      configs: { list: () => Promise.resolve([mailbox, disabledMailbox, secondMailbox]) },
+      configs: { list: () => Promise.resolve([mailbox]) },
       connectorFor: () => connector(),
       service: { sync } as unknown as MailSyncService,
+      classification: {
+        classifyOne: () => Promise.resolve('accepted'),
+      } as unknown as MailClassificationService,
     });
 
-    const output = await handler.execute(taskContext, {});
+    const output = await handler.execute(
+      { ...base, checkpoint: (value) => checkpoints.push(value) },
+      { mailboxKey: mailbox.mailboxKey },
+    );
 
     expect(handler.taskType).toBe('mailbox.sync@v1');
-    expect(handler.concurrencyKey?.({})).toBe('mailbox-sync');
-    expect(sync).toHaveBeenCalledTimes(2);
-    expect(sync.mock.calls.map(([config]) => config.mailboxKey)).toEqual([
-      mailbox.mailboxKey,
-      secondMailbox.mailboxKey,
-    ]);
-    expect(sync.mock.calls.every(([, , , signal]) => signal === taskContext.signal)).toBe(true);
-    expect(output).toEqual({ mailboxes: 2, pages: 3, messages: 7 });
-    expect(() => handler.payloadSchema.parse({ mailboxKey: mailbox.mailboxKey })).toThrow();
+    expect(handler.concurrencyKey?.({ mailboxKey: mailbox.mailboxKey })).toBe(
+      'mailbox-sync:mailbox-1',
+    );
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(sync.mock.calls[0]?.[0]).toMatchObject({ mailboxKey: mailbox.mailboxKey });
+    expect(output).toMatchObject({ mailboxKey: mailbox.mailboxKey, pages: 1, messages: 2 });
+    expect(checkpoints).toHaveLength(1);
+  });
+
+  it('rejects a payload without a mailbox key', () => {
+    const handler = createMailboxSyncTaskHandler({
+      configs: { list: () => Promise.resolve([mailbox]) },
+      connectorFor: () => connector(),
+      service: { sync: vi.fn() } as unknown as MailSyncService,
+      classification: {
+        classifyOne: () => Promise.resolve(null),
+      } as unknown as MailClassificationService,
+    });
+
+    expect(() => handler.payloadSchema.parse({})).toThrow();
+    expect(() => handler.payloadSchema.parse({ mailboxKey: mailbox.mailboxKey })).not.toThrow();
+  });
+
+  it('fails with invalid_config when the mailbox is disabled or unknown', async () => {
+    const handler = createMailboxSyncTaskHandler({
+      configs: { list: () => Promise.resolve([{ ...mailbox, enabled: false }]) },
+      connectorFor: () => connector(),
+      service: { sync: vi.fn() } as unknown as MailSyncService,
+      classification: {
+        classifyOne: () => Promise.resolve(null),
+      } as unknown as MailClassificationService,
+    });
+
+    await expect(
+      handler.execute(context(), { mailboxKey: mailbox.mailboxKey }),
+    ).rejects.toMatchObject({ category: 'invalid_config' });
   });
 });
 
-/** 使用固定分类端口运行单邮件处理器，便于验证事件提交门槛。 */
+/** 使用固定分类端口运行单邮件分类，便于验证事件提交门槛。 */
 async function execute(result: RecruitmentMailClassificationResult): Promise<{
-  output: { status: 'accepted' | 'needs_review' | 'ignored' };
+  output: 'accepted' | 'needs_review' | 'ignored' | null;
   repository: RecordingRepository;
 }> {
   const repository = new RecordingRepository();
   const classifier: RecruitmentMailClassificationPort = { classify: () => Promise.resolve(result) };
-  const handler = createMailClassifyTaskHandler({
+  const service = new MailClassificationService({
     configs: { list: () => Promise.resolve([mailbox]) },
     connectorFor: () => connector(),
     classifier,
     repository,
+    messageRefIdOf,
     createId: () => 'event-1',
   });
-  const output = await handler.execute(context(), { messageRefId: 'message-ref-1' });
+  const output = await service.classifyOne({
+    reference: message,
+    signal: new AbortController().signal,
+    now: () => 1_760_000_100_000,
+  });
   return { output, repository };
 }
 
-describe('mail classification task handler', () => {
+describe('mail classification service', () => {
   it('persists an accepted event only when application identity is complete', async () => {
     const { output, repository } = await execute(classification());
 
-    expect(output).toEqual({ status: 'accepted' });
+    expect(output).toBe('accepted');
     expect(repository.events).toHaveLength(1);
     expect(repository.events[0]).toMatchObject({
       companyName: '示例科技',
@@ -247,7 +294,7 @@ describe('mail classification task handler', () => {
   it('derives a stable application identity for an accepted schedule without an external key', async () => {
     const { output, repository } = await execute(classification({ applicationKey: null }));
 
-    expect(output).toEqual({ status: 'accepted' });
+    expect(output).toBe('accepted');
     expect(repository.events).toHaveLength(1);
     expect(repository.events[0]).toMatchObject({
       externalApplicationKeyHash: null,
@@ -270,7 +317,7 @@ describe('mail classification task handler', () => {
       classification({ applicationKey: null, roleTitle: null }),
     );
 
-    expect(output).toEqual({ status: 'accepted' });
+    expect(output).toBe('accepted');
     expect(repository.events).toHaveLength(1);
     expect(repository.events[0]).toMatchObject({
       companyName: '示例科技',
@@ -291,7 +338,7 @@ describe('mail classification task handler', () => {
       classification({ applicationKey: null, schedule: null }),
     );
 
-    expect(output).toEqual({ status: 'needs_review' });
+    expect(output).toBe('needs_review');
     expect(repository.events).toEqual([]);
     expect(repository.updates[0]?.status).toBe('needs_review');
   });
@@ -310,7 +357,7 @@ describe('mail classification task handler', () => {
       }),
     );
 
-    expect(output).toEqual({ status: 'ignored' });
+    expect(output).toBe('ignored');
     expect(repository.events).toEqual([]);
     expect(repository.updates[0]).toMatchObject({
       status: 'ignored',
@@ -319,10 +366,41 @@ describe('mail classification task handler', () => {
     });
   });
 
+  it('skips a reference already committed under the current policy', async () => {
+    const repository = new RecordingRepository();
+    repository.findMessageRef = () => ({
+      ...message,
+      id: 'message-ref-1',
+      processingStatus: 'accepted',
+      lastClassifierVersion: 'candidate-rules-v4+agent-v3-prompt-v5+schedule-identity-v2',
+    });
+    const classifier: RecruitmentMailClassificationPort = {
+      classify: () => Promise.reject(new Error('must not be called')),
+    };
+    const service = new MailClassificationService({
+      configs: { list: () => Promise.resolve([mailbox]) },
+      connectorFor: () => connector(),
+      classifier,
+      repository,
+      messageRefIdOf,
+      createId: () => 'event-1',
+    });
+
+    const output = await service.classifyOne({
+      reference: message,
+      signal: new AbortController().signal,
+      now: () => 1_760_000_100_000,
+    });
+
+    expect(output).toBeNull();
+    expect(repository.events).toEqual([]);
+    expect(repository.updates).toEqual([]);
+  });
+
   it('maps an aborted classification to a cancelled task', async () => {
     const controller = new AbortController();
     const repository = new RecordingRepository();
-    const handler = createMailClassifyTaskHandler({
+    const service = new MailClassificationService({
       configs: { list: () => Promise.resolve([mailbox]) },
       connectorFor: () => connector(),
       classifier: {
@@ -332,11 +410,16 @@ describe('mail classification task handler', () => {
         },
       },
       repository,
+      messageRefIdOf,
       createId: () => 'event-1',
     });
 
     await expect(
-      handler.execute(context(controller), { messageRefId: 'message-ref-1' }),
+      service.classifyOne({
+        reference: message,
+        signal: controller.signal,
+        now: () => 1_760_000_100_000,
+      }),
     ).rejects.toMatchObject({ category: 'cancelled', message: 'Mailbox task was cancelled.' });
     expect(repository.updates).toEqual([]);
   });

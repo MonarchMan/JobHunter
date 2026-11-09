@@ -16,11 +16,11 @@ import { createSourceSyncTaskHandler } from '@jobhunter/recruitment/sync/job-syn
 import { createSourceHealthTaskHandler } from '@jobhunter/recruitment/sync/source-health-handler';
 import {
   createMailboxSyncTaskHandler,
-  createMailClassifyTaskHandler,
+  MailClassificationService,
   MailSyncService,
   RecruitmentMailClassifier,
-  recruitmentMailPolicyVersion,
 } from '@jobhunter/recruitment/mail-application';
+import type { MailboxConfig } from '@jobhunter/recruitment/mail-contracts';
 import { JobDetailService } from '@jobhunter/recruitment/sync/job-detail-service';
 import { JobSyncService } from '@jobhunter/recruitment/sync/job-sync-service';
 import type { SyncScoringStage } from '@jobhunter/recruitment/contracts/sync-scoring';
@@ -183,21 +183,18 @@ export function createRecruitmentTasks(
   },
 ): TaskCapability {
   // 1、来源和平台只创建本模块仓储，资料筛选与引用检查由入口注入。
-  const {
-    database,
-    ids,
-    clock,
-    registry,
-    networkSemaphore,
-    tasks: interviewTasks,
-    schedules: scheduleService,
-  } = context;
+  const { database, ids, clock, registry, networkSemaphore, schedules: scheduleService } = context;
   const adapters = new AdapterRegistry();
   registerFirstPartyAdapters(adapters);
   const settings = new SystemSettingsService({
     repository: new SqliteSettingsStore(database.client),
     clock,
   });
+  // 邮箱配置在装配期同步读取一次，供 initialize 同步对账每邮箱每日计划；本地小文件读取与 .env 同理。
+  const mailboxConfigStore = input.mail
+    ? new FileMailboxConfigStore(input.mail.mailboxConfigPath)
+    : null;
+  const mailboxConfigSnapshot: readonly MailboxConfig[] = mailboxConfigStore?.listSnapshot() ?? [];
   const uow = new SqliteUnitOfWork(database.client);
   const sourcePolicies = firstPartyRateLimits();
   const localRateLimit = new TokenBucketSourceRateLimitGate(sourcePolicies);
@@ -332,9 +329,9 @@ export function createRecruitmentTasks(
     writer: new SqliteSourceHealthWriter(database.client),
   });
   registry.register(createSourceHealthTaskHandler(sourceHealth));
-  if (input.mail) {
-    // 1、读取非敏感配置；2、使用加密文件凭据和独立运行状态；3、先登记引用再发布分类任务。
-    const mailboxConfigs = new FileMailboxConfigStore(input.mail.mailboxConfigPath);
+  if (input.mail && mailboxConfigStore) {
+    // 1、读取非敏感配置；2、使用加密文件凭据和独立运行状态；3、引用入库后由同步任务第二阶段分类。
+    const mailboxConfigs = mailboxConfigStore;
     const mailboxRuntimeState = new MailRuntimeStateStore(context.dataRoot);
     const credentialVault = new EncryptedFileCredentialVault({
       filePath: input.mail.credentialPath,
@@ -346,20 +343,6 @@ export function createRecruitmentTasks(
     const syncRepository = createRecruitmentMailSyncRepository({
       repository: recruitmentRepository,
       now: () => Date.now(),
-      enqueueClassification: (refs) => {
-        for (const reference of refs) {
-          const messageRefId = recruitmentMailMessageRefId(
-            reference.mailboxKey,
-            reference.externalMessageKey,
-          );
-          interviewTasks.enqueue({
-            taskType: 'mail.classify@v1',
-            payload: { messageRefId },
-            idempotencyKey: `mail.classify:${messageRefId}:${reference.contentVersion}:${recruitmentMailPolicyVersion}`,
-          });
-        }
-        return Promise.resolve();
-      },
     });
     const mailSync = new MailSyncService(syncRepository, mailboxRuntimeState);
     const classifier = new RecruitmentMailClassifier({
@@ -367,20 +350,22 @@ export function createRecruitmentTasks(
       runner: input.mail.modelMode === 'configured' ? context.createRunner(120_000) : null,
       defaultTimezone: input.mail.defaultTimezone ?? 'Asia/Shanghai',
     });
+    const connectorFor = (config: MailboxConfig): ReturnType<typeof connectorRegistry.get> =>
+      connectorRegistry.get(config.providerKey);
+    const mailClassification = new MailClassificationService({
+      configs: mailboxConfigs,
+      connectorFor,
+      classifier,
+      repository: createRecruitmentMailProcessingRepository(recruitmentRepository),
+      messageRefIdOf: recruitmentMailMessageRefId,
+      createId: () => ids.generate(),
+    });
     registry.register(
       createMailboxSyncTaskHandler({
         configs: mailboxConfigs,
-        connectorFor: (config) => connectorRegistry.get(config.providerKey),
+        connectorFor,
         service: mailSync,
-      }),
-    );
-    registry.register(
-      createMailClassifyTaskHandler({
-        configs: mailboxConfigs,
-        connectorFor: (config) => connectorRegistry.get(config.providerKey),
-        classifier,
-        repository: createRecruitmentMailProcessingRepository(recruitmentRepository),
-        createId: () => ids.generate(),
+        classification: mailClassification,
       }),
     );
   }
@@ -397,15 +382,27 @@ export function createRecruitmentTasks(
         timezone: 'Asia/Shanghai',
       });
       if (input.mail) {
+        // 旧的全局批次计划原位停用，避免与每邮箱计划并行重复投递。
         scheduleService.upsert({
           id: ids.generate(),
-          // 保留稳定键以原位更新旧的五分钟调度，避免旧计划仍持续入队。
           scheduleKey: 'mailbox-scan-every-five-minutes',
           taskType: 'mailbox.sync@v1',
           payload: {},
           cronExpression: '0 3 * * *',
           timezone: 'Asia/Shanghai',
+          enabled: false,
         });
+        // 每个启用邮箱一条每日计划；payload 只携带邮箱键，配置禁用即停用对应计划。
+        for (const mailbox of mailboxConfigSnapshot.filter((entry) => entry.enabled)) {
+          scheduleService.upsert({
+            id: ids.generate(),
+            scheduleKey: `mailbox.sync:${mailbox.mailboxKey}`,
+            taskType: 'mailbox.sync@v1',
+            payload: { mailboxKey: mailbox.mailboxKey },
+            cronExpression: '0 3 * * *',
+            timezone: 'Asia/Shanghai',
+          });
+        }
       }
       settings.applySourceSyncChannelSelection();
       new SourceScheduleReconciliationService({

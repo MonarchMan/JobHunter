@@ -42,7 +42,6 @@ export const taskTypeLabels: Readonly<Record<string, string>> = {
   'interview.experience-research': '面经研究流程',
   'interview.experience-research.execute': '面经采集与导入',
   'mailbox.sync@v1': '邮箱同步',
-  'mail.classify@v1': '招聘邮件识别',
   'maintenance.cleanup': '系统数据清理',
   'maintenance.sqlite': '数据库空间整理',
 };

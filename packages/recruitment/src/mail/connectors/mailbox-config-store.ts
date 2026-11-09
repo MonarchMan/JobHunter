@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -30,6 +31,22 @@ export class FileMailboxConfigStore implements MailboxConfigStore {
 
   public async list(): Promise<readonly MailboxConfig[]> {
     return (await this.#read()).mailboxes;
+  }
+
+  /**
+   * 同步读取当前配置快照；仅用于装配期对账计划，与异步 list 走同一份文件校验。
+   * 文件缺失或暂不可读时返回空列表，使对账只停用旧计划而不误建。
+   */
+  public listSnapshot(): readonly MailboxConfig[] {
+    try {
+      const text = readFileSync(this.#filePath, 'utf8');
+      return mailboxConfigDocumentSchema.parse(JSON.parse(text) as unknown).mailboxes;
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        return [];
+      }
+      throw error;
+    }
   }
 
   public async upsert(config: MailboxConfig): Promise<void> {
