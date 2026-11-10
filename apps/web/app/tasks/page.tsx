@@ -356,12 +356,12 @@ export default async function TasksPage({
                       {run.inputTokens ?? '—'} / {run.outputTokens ?? '—'}
                     </td>
                     <td>
-                      {/* 已记录的金额（含 0）直接展示；只有合计真正未知（已上报用量的请求缺价）时才提示“未定价”。 */}
-                      {run.estimatedCostMicros === null
-                        ? run.pricingVersion === 'unpriced'
+                      {/* 已记录的金额（含 0）直接展示；合计未知时，任一段缺价（pricingVersion 含 unpriced）显示“未定价”，否则为旧数据缺省值“—”。 */}
+                      {run.estimatedCostMicros !== null
+                        ? formatCost(run.estimatedCostMicros, run.costCurrency, displayCurrency)
+                        : run.pricingVersion?.split(',').includes('unpriced')
                           ? '未定价'
-                          : '—'
-                        : formatCost(run.estimatedCostMicros, run.costCurrency, displayCurrency)}
+                          : '—'}
                     </td>
                     <td>{time(run.startedAt)}</td>
                   </DiagnosticRecord>

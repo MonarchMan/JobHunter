@@ -17,6 +17,7 @@ const outputSchema = z
     matchResultId: z.string(),
     matchAdviceId: z.string().nullable(),
     modelScoreMissing: z.boolean().nullable(),
+    agentRunId: z.string().trim().min(1).nullable(),
   })
   .strict();
 /** 只调用一次分析用例；开关在开始执行时读取并固定于本次输入。 */
@@ -60,6 +61,7 @@ export function createManualJobScoreTaskHandler(input: {
         matchResultId: matched.matchResultId,
         matchAdviceId: input.analysis.storeAdvice(matched.matchResultId, analysis),
         modelScoreMissing: payload.mode === 'llm' ? analysis.fitScore === null : null,
+        agentRunId: analysis.agentRunId,
       };
     },
   };

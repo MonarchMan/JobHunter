@@ -112,7 +112,7 @@ accepted 仅用于事件明确、confidence >= 0.85 且 companyName 非空；oth
     maxOutputTokens: 8_000,
     maxEstimatedCostMicros: 300_000,
   },
-  resultPolicy: { cache: 'disabled', persistOutput: false },
+  resultPolicy: { cache: 'enabled', persistOutput: true },
 });
 
 /** 招聘邮件分类结果附带候选规则和 Agent 运行定位，不包含模型输入正文。 */

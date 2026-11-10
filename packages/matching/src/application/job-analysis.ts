@@ -104,15 +104,25 @@ export function createJobAnalysis(
         let jobEnrichmentId: string | null = null;
         if (parsed.understanding) {
           const facts = parsed.understanding;
-          jobEnrichmentId = input.matching.saveEnrichment({
-            id: parseId(input.ids.generate(), 'JobEnrichment'),
-            jobRevisionId: job.id,
-            agentRunId: result.run.id,
-            schemaVersion: jobAnalysisAgentDefinition.outputSchemaVersion,
-            contentHash: contentHash(facts),
-            result: facts,
-            createdAt: input.clock.now(),
-          }).id;
+          try {
+            jobEnrichmentId = input.matching.saveEnrichment({
+              id: parseId(input.ids.generate(), 'JobEnrichment'),
+              jobRevisionId: job.id,
+              agentRunId: result.run.id,
+              schemaVersion: jobAnalysisAgentDefinition.outputSchemaVersion,
+              contentHash: contentHash(facts),
+              result: facts,
+              createdAt: input.clock.now(),
+            }).id;
+          } catch (saveError) {
+            context.logger.error('saveEnrichment failed', {
+              error: saveError,
+              agentRunId: result.run.id,
+              jobRevisionId: job.id,
+              profileVersionId: payload.profileVersionId,
+            });
+            throw saveError;
+          }
         }
         return {
           inputIdentity: {

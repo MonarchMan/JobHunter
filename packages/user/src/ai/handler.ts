@@ -22,7 +22,7 @@ export const aiReplyAgent = defineAgent({
   }),
   outputSchema: z.object({ content: z.string().trim().min(1).max(20_000) }).strict(),
   tools: [],
-  resultPolicy: { cache: 'disabled', persistOutput: false },
+  resultPolicy: { cache: 'enabled', persistOutput: true },
   limits: {
     timeoutMs: 90_000,
     maxSteps: 1,

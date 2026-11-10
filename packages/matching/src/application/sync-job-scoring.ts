@@ -19,6 +19,7 @@ interface AutoScoreItemResult {
   readonly matchResultId: string;
   readonly matchAdviceId: string | null;
   readonly degraded: boolean;
+  readonly agentRunId: string | null;
 }
 
 /** 评分阶段设置读取端口，由入口用系统设置服务实现。 */
@@ -93,6 +94,7 @@ export function createSyncScoringStage(input: {
             matchResultId: result.matchResultId,
             matchAdviceId: result.matchAdviceId,
             degraded: result.modelScoreMissing === true,
+            agentRunId: result.agentRunId,
           } satisfies AutoScoreItemResult,
           error: null,
         });
