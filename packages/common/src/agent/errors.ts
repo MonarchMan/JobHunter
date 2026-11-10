@@ -1,4 +1,5 @@
 import type { ModelUsage } from './model-client.js';
+import { redactCredentials } from '../logging/redact-credentials.js';
 /** Agent 运行错误的稳定分类，用于重试策略和用户提示。 */
 export const agentErrorCategories = [
   'rate_limited',
@@ -24,8 +25,13 @@ export class AgentRuntimeError extends Error {
   public readonly category: AgentErrorCategory;
   public readonly retryable: boolean;
 
-  public constructor(category: AgentErrorCategory, message: string, retryable = false) {
-    super(message);
+  public constructor(
+    category: AgentErrorCategory,
+    message: string,
+    retryable = false,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
     this.name = 'AgentRuntimeError';
     this.category = category;
     this.retryable = retryable;
@@ -36,25 +42,54 @@ export class AgentRuntimeError extends Error {
 export class ModelClientError extends AgentRuntimeError {
   /** 已发出的真实请求，即使调用失败也应保留在运行账本中。 */
   public usage?: ModelUsage;
-  public constructor(category: AgentErrorCategory, message: string, retryable = false) {
-    super(category, message, retryable);
+  public constructor(
+    category: AgentErrorCategory,
+    message: string,
+    retryable = false,
+    options?: ErrorOptions,
+  ) {
+    super(category, message, retryable, options);
     this.name = 'ModelClientError';
   }
 }
 
 /** 账本写入失败属于本地运行故障，不可误判为网络故障而重复消费。 */
 export class ModelRequestPersistenceError extends AgentRuntimeError {
-  public constructor() {
-    super('configuration', 'Unable to persist model request ledger.');
+  public constructor(
+    public readonly requestId?: string,
+    public readonly phase?: 'running' | 'completed',
+    options?: ErrorOptions,
+  ) {
+    super('configuration', 'Unable to persist model request ledger.', false, options);
     this.name = 'ModelRequestPersistenceError';
   }
 }
 
+/** 账本失败已决定停止模型调用；诊断中的存储原因不得重新触发租约恢复。 */
+export function hasModelRequestPersistenceError(error: unknown): boolean {
+  const seen = new Set<Error>();
+  while (error instanceof Error && seen.size < 16 && !seen.has(error)) {
+    if (error instanceof ModelRequestPersistenceError) return true;
+    seen.add(error);
+    error = error.cause;
+  }
+  return false;
+}
+
+/** 不可重试的 Agent 边界优先于诊断链中的存储锁忙，避免重复消费模型或工具。 */
+export function hasNonRetryableAgentError(error: unknown): boolean {
+  const seen = new Set<Error>();
+  while (error instanceof Error && seen.size < 16 && !seen.has(error)) {
+    if (error instanceof AgentRuntimeError && !error.retryable) return true;
+    seen.add(error);
+    error = error.cause;
+  }
+  return false;
+}
+
 /** 脱敏并截断错误摘要，避免日志泄露凭据或过长响应。 */
 export function sanitizeAgentErrorSummary(summary: string): string {
-  return summary
-    .replaceAll(/Bearer\s+[^\s]+/gi, 'Bearer [redacted]')
-    .replaceAll(/(api[-_ ]?key|token|password|cookie)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+  return redactCredentials(summary, '[redacted]')
     .replaceAll(/[\r\n\t]+/g, ' ')
     .replaceAll(/\s{2,}/g, ' ')
     .trim()
@@ -65,10 +100,7 @@ export function sanitizeAgentErrorSummary(summary: string): string {
 export function classifyAgentError(error: unknown): AgentRuntimeError {
   if (error instanceof AgentRuntimeError) return error;
   if (error instanceof DOMException && error.name === 'AbortError') {
-    return new AgentRuntimeError('cancelled', 'Agent run was cancelled.');
+    return new AgentRuntimeError('cancelled', 'Agent run was cancelled.', false, { cause: error });
   }
-  return new AgentRuntimeError(
-    'unknown',
-    error instanceof Error ? error.message : 'Unknown error.',
-  );
+  return new AgentRuntimeError('unknown', 'Agent execution failed.', false, { cause: error });
 }

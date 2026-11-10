@@ -35,7 +35,7 @@ describe('SQLite dashboard read model', () => {
       handle.client
         .prepare(
           `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES ('sync-1', 'source-1', 'manual', 'succeeded', 'complete', '{}', 1000, 2000))
-INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
         )
         .run();
       handle.client
@@ -53,9 +53,9 @@ INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key
         .prepare(
           `INSERT INTO tasks
            (id, task_type, private_state, status, priority, idempotency_key, attempt_count,
-            max_attempts, available_at, created_at)
-           VALUES ('task-1', 'source.sync', '{}', 'pending', 0, 'pending-1', 0, 3, 1, 1),
-                  ('task-2', 'source.sync', '{}', 'failed', 0, 'failed-1', 3, 3, 1, 1)`,
+            available_at, created_at)
+           VALUES ('task-1', 'source.sync', '{}', 'pending', 0, 'pending-1', 0, 1, 1),
+                  ('task-2', 'source.sync', '{}', 'failed', 0, 'failed-1', 3, 1, 1)`,
         )
         .run();
 

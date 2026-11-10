@@ -2,6 +2,15 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { ZhilianSearchHttpSession } from '../../src/platform/connectors/index.js';
 import { zhilianSearchFixture as fixture } from './fixtures/zhilian-search-fixture.js';
 
+/** 协议样本的嵌套对象副本允许按用例修改，原始共享样本保持只读。 */
+type MutableFixture<T> = {
+  -readonly [K in keyof T]: T[K] extends object ? MutableFixture<T[K]> : T[K];
+};
+/** 返回独立可修改的详情样本，不改变共享夹具。 */
+function detailFixture(): MutableFixture<typeof fixture.detail> {
+  return structuredClone(fixture.detail);
+}
+
 const signal = new AbortController().signal;
 /** 合成结果使用相同协议，不包含真实个人令牌。 */
 function batch(
@@ -104,7 +113,7 @@ it('preserves search filters across pages and requests independent verified deta
 
 it('preserves the observed unordered-list description in a main-site detail', async () => {
   // 1、主站详情允许无属性 ul/li；正文仍只能来自通过身份核对的独立 HTTP 响应。
-  const detail = structuredClone(fixture.detail);
+  const detail = detailFixture();
   detail.data.detailedPosition.jobDesc = '<div>职责<ul><li>开发。</li><li>测试。</li></ul></div>';
   const { session } = setup([batch(), detail]);
   await session.readNext(signal);
@@ -114,7 +123,7 @@ it('preserves the observed unordered-list description in a main-site detail', as
 });
 
 it('rejects malformed unordered-list structure in a main-site detail', async () => {
-  const detail = structuredClone(fixture.detail);
+  const detail = detailFixture();
   detail.data.detailedPosition.jobDesc = '<ul><li>正文</ul>';
   const { session } = setup([batch(), detail]);
   await session.readNext(signal);
@@ -191,7 +200,7 @@ it('counts missing company IDs, deduplicates overlap and rejects fully repeated 
 it.each(['job', 'title', 'company', 'name', 'html', 'empty', 'malformed-html'] as const)(
   'rejects %s detail mismatch',
   async (kind) => {
-    const raw = structuredClone(fixture.detail);
+    const raw = detailFixture();
     if (kind === 'job') raw.data.detailedPosition.positionNumber = 'other';
     if (kind === 'title') raw.data.detailedPosition.positionName = 'other';
     if (kind === 'company') raw.data.detailedCompany.companyNumber = 'other';

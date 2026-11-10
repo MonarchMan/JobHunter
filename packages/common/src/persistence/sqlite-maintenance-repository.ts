@@ -158,9 +158,9 @@ export class SqliteMaintenanceRepository implements MaintenancePort {
         this.#client
           .prepare(
             `INSERT INTO tasks
-        (id, task_type, private_state, status, idempotency_key, attempt_count, max_attempts,
+        (id, task_type, private_state, status, idempotency_key, attempt_count,
          available_at, created_at, started_at, lease_owner, lease_expires_at)
-        VALUES (?, 'maintenance.sqlite', '{}', 'running', ?, 1, 1, ?, ?, ?, ?, ?)`,
+        VALUES (?, 'maintenance.sqlite', '{}', 'running', ?, 1, ?, ?, ?, ?, ?)`,
           )
           .run(
             taskId,

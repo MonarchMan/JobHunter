@@ -61,6 +61,7 @@ export const fromThreadSchema = z.discriminatedUnion('kind', [
     ]),
     summary: z.string().max(240),
     storageFailure: threadStorageFailureSchema.optional(),
+    diagnostic: z.record(z.string(), z.unknown()).optional(),
     retryable: z.boolean().nullable(),
     retryAfterAt: z.number().nullable(),
     result: z.unknown().optional(),

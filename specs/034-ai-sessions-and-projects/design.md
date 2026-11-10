@@ -1,5 +1,7 @@
 # 034 数据与执行设计
 
+研究浏览器分别累计成功渠道与失败原因；任一渠道正常完成但无匹配结果时允许返回空集合，全部失败时抛出带 AggregateError 原因的 search_unavailable。HTTP 错误进入回退，取消不得转为空结果；工具边界记录脱敏诊断，公共工具结果仅返回固定摘要。
+
 > 状态：Implemented
 
 ai_sessions 保存 id/type/title/created_at/updated_at；ai_messages 保存 id/session_id/role/content/sequence/status/created_at/updated_at，session_id/sequence 唯一。可选画像和项目关系归 ai_session_metadata，应用层校验通用 value 引用并在删除时清理。会话读取当前画像项目，不固定历史画像版本。
@@ -19,3 +21,7 @@ ai_sessions 保存 id/type/title/created_at/updated_at；ai_messages 保存 id/s
 项目位置由当前画像的 project.local_path 编辑和清空；系统只存位置，不上传、复制或自动读取目录。旧档案、材料和备忘录入口及实现删除。
 
 研究以 interview.experience-research 父任务持有 brief 和导入检查点；创建后等待外部交付，系统执行作为关联子任务。等待文件的父任务不占执行器、不靠轮询调度。校验导入完成即成功，候选审核独立于执行成功。指定路径按数据根目录和任务 ID 生成，仅允许普通 JSON 文件；重复检查同一内容不重建候选。任务清理通过 SET NULL 解除来源关联，保留面经、问题和审核结果。
+
+## 执行恢复修正
+
+AI 对话即时执行，不维护结果缓存和输出副本。中断标记失败、解除生成中，不自动恢复生成；调用账本保留状态和用量。历史输出副本仅清理检查，本轮未经用户另行确认不删除实际数据。

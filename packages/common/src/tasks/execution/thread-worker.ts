@@ -1,3 +1,4 @@
+import { redactLogValue } from '../../logging/index.js';
 import { performance, monitorEventLoopDelay } from 'node:perf_hooks';
 import { parentPort, type MessagePort } from 'node:worker_threads';
 import { randomUUID } from 'node:crypto';
@@ -120,6 +121,7 @@ export async function serveTaskThread(
           id: data.id,
           category: classified.category,
           summary: classified.safeSummary,
+          diagnostic: { error: redactLogValue(error) },
           storageFailure: threadStorageFailure(error),
           retryable: classified.retryable,
           retryAfterAt: classified.retryAfterAt,

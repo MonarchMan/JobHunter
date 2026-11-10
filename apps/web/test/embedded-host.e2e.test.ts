@@ -45,8 +45,6 @@ it('owns its task threads and stops the entire runtime with Web', async () => {
     priority: 0,
     idempotencyKey: 'host-lifecycle',
     concurrencyKey: null,
-    retryOfTaskId: null,
-    maxAttempts: 1,
     availableAt: utcInstant(1),
     createdAt: utcInstant(1),
   });
@@ -85,6 +83,7 @@ it('owns its task threads and stops the entire runtime with Web', async () => {
     dataRoot: root.path,
     configuration: taskHostConfiguration(serviceConfig),
   };
+  if (!child.stdout || !child.stderr) throw new Error('Expected captured child output');
   let output = '';
   child.stdout.on('data', (data: Buffer) => {
     output += data.toString();

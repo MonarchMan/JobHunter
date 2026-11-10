@@ -109,6 +109,11 @@
       "types": "./dist/persistence/agent-run-store.d.ts",
       "import": "./dist/persistence/agent-run-store.js"
     },
+    "./task-contracts": {
+      "development": "./src/tasks/contracts/errors.ts",
+      "types": "./dist/tasks/contracts/errors.d.ts",
+      "import": "./dist/tasks/contracts/errors.js"
+    },
     "./tasks": {
       "development": "./src/tasks/index.ts",
       "types": "./dist/tasks/index.d.ts",

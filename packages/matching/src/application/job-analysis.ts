@@ -93,12 +93,21 @@ export function createJobAnalysis(
         ].join('\n'),
       };
       try {
-        const result = await input.runner.run({
+        const request = {
           definition: jobAnalysisAgentDefinition,
           value,
           signal: context.signal,
-          ...(context.taskId ? { retryKey: context.taskId } : {}),
-        });
+        };
+        const result = await (context.taskId
+          ? input.runner.runStep({
+              ...request,
+              execution: {
+                taskId: context.taskId,
+                stepKey: 'job-analysis',
+                resourceKey: payload.jobRevisionId,
+              },
+            })
+          : input.runner.run(request));
         context.signal.throwIfAborted();
         const parsed = parseJobAnalysisOutput(result.output, value);
         let jobEnrichmentId: string | null = null;

@@ -235,7 +235,7 @@ export default async function TasksPage({
                     <td>
                       {task.jobDetailBatch
                         ? `${String(task.jobDetailBatch.counts.succeeded)} / ${String(task.jobDetailBatch.counts.total)}`
-                        : `${String(task.attemptCount)} / ${String(task.maxAttempts)}`}
+                        : String(task.attemptCount)}
                     </td>
                     <td>
                       <TruncatedText value={taskPresentation(task).error || '—'} />
@@ -263,7 +263,7 @@ export default async function TasksPage({
             </tbody>
           </table>
         </div>
-        <div className={styles.cards} aria-label="后台任务卡片列表" data-task-cards>
+        <div className={styles.cards} role="group" aria-label="后台任务卡片列表" data-task-cards>
           {diagnostics.tasks.map((task) => (
             <DiagnosticRecord
               as="article"
@@ -370,7 +370,7 @@ export default async function TasksPage({
             </tbody>
           </table>
         </div>
-        <div className={styles.cards} aria-label="Agent 运行卡片列表" data-agent-cards>
+        <div className={styles.cards} role="group" aria-label="Agent 运行卡片列表" data-agent-cards>
           {diagnostics.agentRuns.map((run) => (
             <DiagnosticRecord as="article" className={styles.card} key={run.id}>
               <div className={styles.cardHeading}>

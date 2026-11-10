@@ -141,7 +141,6 @@ export const jobAnalysisAgentDefinition: AgentDefinition<
     parseJobAnalysisOutput(output, input);
   },
   tools: [],
-  resultPolicy: { cache: 'enabled', persistOutput: true },
   limits: {
     timeoutMs: 240_000,
     maxSteps: 2,

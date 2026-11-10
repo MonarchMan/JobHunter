@@ -70,7 +70,7 @@ test('Zhilian UI completes explicit browsing, preserves idempotency and separate
   const commands: {
     command: {
       action: string;
-      profileSearch?: true;
+      profileSearch?: true | undefined;
       search?: { keyword: string; city: string } | undefined;
     };
     idempotencyToken: string;

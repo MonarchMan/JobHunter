@@ -1,8 +1,10 @@
 import { parseId, utcInstant } from '@jobhunter/common/domain';
 import { SourceError } from '@jobhunter/recruitment/source-contracts';
 import { z } from 'zod';
+import { taskErrorCategorySchema } from '@jobhunter/common/task-contracts';
 import {
   TaskExecutionError,
+  isTaskErrorRetryable,
   type TaskErrorCategory,
   type TaskHandler,
 } from '@jobhunter/common/tasks';
@@ -26,6 +28,8 @@ const scoringItemSchema = z
     status: z.enum(['succeeded', 'failed']),
     result: z.unknown(),
     error: z.string().nullable(),
+    errorCategory: taskErrorCategorySchema.optional(),
+    retryable: z.boolean().optional(),
   })
   .strict();
 
@@ -299,12 +303,20 @@ export function createSourceSyncTaskHandler(
       // 4、评分失败不掩盖已提交的同步；摘要明示进度，重试只补跑失败项。
       if (scoring) {
         const total = scoring.items.length;
-        const failed = scoring.items.filter((item) => item.status === 'failed').length;
-        if (failed > 0) {
+        const failures = scoring.items.filter((item) => item.status === 'failed');
+        if (failures.length > 0) {
+          // 4.a、优先报告不可重试失败，避免网络错误掩盖配置、校验及内部故障。
+          const canRetry = (item: (typeof failures)[number]): boolean =>
+            isTaskErrorRetryable({
+              category: item.errorCategory ?? 'permanent',
+              retryable: item.retryable ?? null,
+            });
+          const representative = failures.find((item) => !canRetry(item)) ?? failures[0];
+          if (!representative) throw new Error('Missing scoring failure.');
           throw new TaskExecutionError(
-            'network_temporary',
-            `同步已提交；评分 ${String(total - failed)}/${String(total)} 完成。`,
-            { retryable: true, result: { runs, accJobIds, scoring } },
+            representative.errorCategory ?? 'permanent',
+            `同步已提交；评分 ${String(total - failures.length)}/${String(total)} 完成。${representative.error ?? '评分失败，未记录具体原因。'}`,
+            { retryable: failures.every(canRetry), result: { runs, accJobIds, scoring } },
           );
         }
       }

@@ -1,7 +1,12 @@
 'use client';
 import { useState, type ReactElement, type ReactNode } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation.js';
-import type { UsageCall, UsageReport, UsageTotals } from '@jobhunter/common/usage';
+import {
+  convertUsageCost,
+  type UsageCall,
+  type UsageReport,
+  type UsageTotals,
+} from '@jobhunter/common/usage';
 import { SelectField } from '../components/forms/select-field.js';
 import { TaskAutoRefresh } from './task-auto-refresh.js';
 import { UsageChart } from './usage-chart.js';
@@ -82,8 +87,11 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
   const currentView = ['logs', 'providers', 'models', 'settings'].includes(view) ? view : 'logs';
   const visible = (search.get('columns') ?? defaultColumns.join(',')).split(',');
   const chartStyle = search.get('chart') === 'line' ? 'line' : 'bar';
-  const money = (value: number, digits = 4): string =>
-    `${filters.currency === 'USD' ? '$' : '¥'}${(value / 1000000).toFixed(digits)}`;
+  const money = (value: number, currency: 'USD' | 'CNY', digits = 4): string =>
+    `${filters.currency === 'USD' ? '$' : '¥'}${(convertUsageCost(value, currency, filters.currency, report.usdToCnyRate) / 1000000).toFixed(digits)}`;
+  /** 汇总已统一换算，未知费用不作为零参与合计。 */
+  const costs = (value: UsageTotals): string =>
+    value.cost === null ? '—' : money(value.cost, filters.currency, 2);
   const href = (changes: Record<string, string>): string =>
     `/tasks?${new URLSearchParams({
       tab: 'usage',
@@ -148,7 +156,7 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
         return call.totalCostMicros == null ? (
           <span title="未定价">—</span>
         ) : (
-          money(call.totalCostMicros)
+          money(call.totalCostMicros, call.currency)
         );
       case 'speed':
         return speed(
@@ -170,6 +178,18 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
     <div className={styles.dashboard}>
       <div className={styles.filters}>
         <div className={styles.filterFields}>
+          <SelectField
+            name="currency"
+            label="币种"
+            value={filters.currency}
+            onValueChange={(value) => {
+              select('currency', value);
+            }}
+            options={[
+              { value: 'USD', label: 'USD · 美元' },
+              { value: 'CNY', label: 'CNY · 人民币' },
+            ]}
+          />
           <SelectField
             name="provider"
             label="供应商"
@@ -208,16 +228,16 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
       </div>
       <div className={styles.metricRow}>
         <div className={styles.metrics}>
-          <article
-            title={
-              total.unpriced
-                ? `${String(total.unpriced)} 次请求未定价，仅合计已知金额`
-                : '按请求价格快照估算'
-            }
-          >
-            <span>总成本</span>
+          <article title="按请求价格快照估算，仅合计已知金额">
+            <span
+              title={
+                '显示币种 ' + filters.currency + '；1 USD = ' + String(report.usdToCnyRate) + ' CNY'
+              }
+            >
+              总成本
+            </span>
             <strong>
-              {total.requests && total.unpriced === total.requests ? '—' : money(total.cost, 2)}
+              {total.requests && total.unpriced === total.requests ? '—' : costs(total)}
             </strong>
           </article>
           <article
@@ -352,21 +372,6 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
             <h3 className={styles.settingsHeading}>显示</h3>
             <div className={styles.settings}>
               <label>
-                币种
-                <SelectField
-                  name="currency"
-                  label="币种"
-                  value={filters.currency}
-                  onValueChange={(value) => {
-                    select('currency', value);
-                  }}
-                  options={[
-                    { value: 'USD', label: 'USD · 美元' },
-                    { value: 'CNY', label: 'CNY · 人民币' },
-                  ]}
-                />
-              </label>
-              <label>
                 趋势图样式
                 <SelectField
                   name="chart"
@@ -422,7 +427,7 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
             </div>
             <div className={styles.pricingHeading}>
               <h3>定价</h3>
-              <span title="请求使用的价格快照；切换币种仅筛选相同币种的账单">
+              <span title="请求价格快照按显示币种及配置汇率换算，不修改原始报价">
                 {filters.currency} / 每百万 Tokens
               </span>
             </div>
@@ -446,7 +451,9 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
                         <td>{price.model}</td>
                         {(['input', 'output', 'cacheRead', 'cacheWrite'] as const).map((key) => (
                           <td key={key}>
-                            {price.rates?.[key] == null ? '—' : money(price.rates[key], 2)}
+                            {price.rates?.[key] == null
+                              ? '—'
+                              : money(price.rates[key], price.currency, 2)}
                           </td>
                         ))}
                         <td>
@@ -554,9 +561,7 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
                           {compact(group.total.tokens)}
                         </td>
                         <td>
-                          {group.total.unpriced === group.total.requests
-                            ? '—'
-                            : money(group.total.cost, 2)}
+                          {group.total.unpriced === group.total.requests ? '—' : costs(group.total)}
                         </td>
                         <td>{success(group.total)}</td>
                         <td>{speed(group.total.outputTokensPerSecond)}</td>

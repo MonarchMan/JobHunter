@@ -1,3 +1,4 @@
+import { utcInstant } from '@jobhunter/common/domain';
 import { describe, expect, it } from 'vitest';
 import {
   ApplicationProgressQueryService,
@@ -18,8 +19,8 @@ const schedule = (
   label: string,
 ): ApplicationProgressRecord['events'][number]['schedule'] => ({
   activityType: 'interview' as const,
-  scheduledStartAt: start,
-  scheduledEndAt: start + 45 * 60_000,
+  scheduledStartAt: utcInstant(start),
+  scheduledEndAt: utcInstant(start + 45 * 60_000),
   deadlineAt: null,
   scheduledStartLocalDate: null,
   scheduledEndLocalDate: null,

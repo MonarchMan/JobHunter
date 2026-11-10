@@ -20,6 +20,51 @@ import {
 const dataRoots: Awaited<ReturnType<typeof createTemporaryDataRoot>>[] = [];
 const handles: SqliteDatabaseHandle[] = [];
 
+it('moves durable polish suggestions out of diagnostics and disables automatic conversation replay', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-step-upgrade-');
+  dataRoots.push(root);
+  const folder = await migrationsBefore(root.path, 'before-step-recovery', 63);
+  const old = openSqliteDatabase({ dataRoot: root.path, migrationsFolder: folder });
+  handles.push(old);
+  old.client.exec(`
+    INSERT INTO candidate_profiles VALUES('profile','候选人',1,1);
+    INSERT INTO profile_versions(id,profile_id,version_no,content_hash,is_current,created_at)
+      VALUES('version','profile',1,'hash',1,1);
+    INSERT INTO agent_runs(id,agent_key,definition_hash,model_config_hash,input_hash,cache_key,status,output_json,started_at,finished_at)
+      VALUES('polish-run','resume-polish','definition','model','input','polish-key','succeeded','{"workExperience":null,"projects":[["建议"]]}',1,2);
+    INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,max_attempts,available_at,created_at)
+      VALUES('polish-task','resume.polish','{"suggestionId":"suggestion","sourceVersionId":"version"}','{"agentRunId":"polish-run"}','succeeded','polish',3,1,1);
+    INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
+      VALUES('reply-task','ai.reply','{}','pending','reply',1,3,1,1);
+  `);
+  old.close();
+  const upgraded = openSqliteDatabase({ dataRoot: root.path });
+  handles.push(upgraded);
+  expect(
+    upgraded.client
+      .prepare('SELECT id,profile_version_id,result_json FROM resume_polish_suggestions')
+      .get(),
+  ).toEqual({
+    id: 'suggestion',
+    profile_version_id: 'version',
+    result_json: '{"workExperience":null,"projects":[["建议"]]}',
+  });
+  expect(
+    upgraded.client
+      .prepare("SELECT output_json FROM agent_runs WHERE id='polish-run'")
+      .pluck()
+      .get(),
+  ).not.toBeNull();
+  expect(upgraded.client.prepare("SELECT status FROM tasks WHERE id='reply-task'").get()).toEqual({
+    status: 'failed',
+  });
+  upgraded.client.exec("DELETE FROM candidate_profiles WHERE id='profile'");
+  expect(
+    upgraded.client.prepare('SELECT count(*) FROM resume_polish_suggestions').pluck().get(),
+  ).toBe(0);
+  expect(upgraded.client.pragma('foreign_key_check')).toEqual([]);
+});
+
 it('expands profile fields and migrates only the latest answer into durable AI messages', async () => {
   const root = await createTemporaryDataRoot('jobhunter-ai-upgrade-');
   dataRoots.push(root);
@@ -233,8 +278,8 @@ it('merges scans into task stages and preserves observation identity and parent 
   expect(db.client.pragma('foreign_key_check')).toEqual([]);
   db.client
     .exec(`UPDATE tasks SET status='running',lease_owner='attempt-4',lease_expires_at=100 WHERE id='parent';
-    INSERT INTO tasks(id,task_type,parent_task_id,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
-      VALUES('next-scan','source.scan','parent','{"sourceId":"source","trigger":"retry"}','{}','running','next-scan',1,1,3,3);
+    INSERT INTO tasks(id,task_type,parent_task_id,private_state,public_state,status,idempotency_key,attempt_count,available_at,created_at)
+      VALUES('next-scan','source.scan','parent','{"sourceId":"source","trigger":"retry"}','{}','running','next-scan',1,3,3);
     UPDATE tasks SET status='pending',lease_owner=NULL,available_at=4 WHERE id='parent';`);
   expect(
     db.client.prepare("SELECT status,finished_at FROM tasks WHERE id='next-scan'").get(),
@@ -292,14 +337,11 @@ it('moves periodic configuration into settings without losing due progress or qu
     payload_json: '{"sourceId":"fixture"}',
   });
   expect(
-    current.client
-      .prepare('SELECT id, status, attempt_count, max_attempts, idempotency_key FROM tasks')
-      .get(),
+    current.client.prepare('SELECT id, status, attempt_count, idempotency_key FROM tasks').get(),
   ).toEqual({
     id: 'queued-task',
     status: 'pending',
     attempt_count: 2,
-    max_attempts: 5,
     idempotency_key: 'schedule:fixture.daily:1000',
   });
   expect(current.client.pragma('foreign_key_check')).toEqual([]);
@@ -713,6 +755,9 @@ describe('SQLite migrations and capabilities', () => {
     expect(upgraded.client.prepare('SELECT * FROM agent_runs WHERE id=?').get('old')).toEqual({
       ...facts,
       definition_hash: 'historical:old',
+      task_id: null,
+      step_key: null,
+      resource_key: null,
     });
   });
   it('resets legacy application events and rejects the removed activity type', async () => {
@@ -780,7 +825,7 @@ describe('SQLite migrations and capabilities', () => {
     ).toThrow();
   });
 
-  it('backfills retry roots and maintains projections for newly inserted retries', async () => {
+  it('removes historical retry links while preserving tasks and source projections', async () => {
     const root = await createTemporaryDataRoot('jobhunter-task-projection-');
     dataRoots.push(root);
     const folder = await migrationsBefore(root.path, 'before-projection', 32);
@@ -798,17 +843,23 @@ describe('SQLite migrations and capabilities', () => {
     expect(integrity).toHaveBeenCalledTimes(2);
     handles.push(current);
     current.client
-      .prepare(insert.replace('payload_json', 'private_state'))
-      .run('retry-again', payload, 'retry-again', 'retry');
+      .prepare(
+        `INSERT INTO tasks
+        (id, task_type, private_state, status, idempotency_key,
+         available_at, created_at)
+        VALUES (?, 'source.job-detail', ?, 'failed', ?, 0, 0)`,
+      )
+      .run('retry-again', payload, 'retry-again');
+    const columns = current.client.prepare('PRAGMA table_info(tasks)').all() as { name: string }[];
+    expect(columns.map((column) => column.name)).not.toContain('retry_of_task_id');
+    expect(columns.map((column) => column.name)).not.toContain('retry_root_task_id');
+    expect(columns.map((column) => column.name)).not.toContain('max_attempts');
     expect(
-      current.client
-        .prepare('SELECT source_id, source_run_id, retry_root_task_id FROM tasks ORDER BY id')
-        .all(),
+      current.client.prepare('SELECT source_id, source_run_id FROM tasks ORDER BY id').all(),
     ).toEqual(
       Array.from({ length: 3 }, () => ({
         source_id: 'source',
         source_run_id: 'run',
-        retry_root_task_id: 'root',
       })),
     );
   });
@@ -859,7 +910,6 @@ describe('SQLite migrations and capabilities', () => {
       'job_status_events',
       'resume_documents',
       'experience_documents',
-      'resume_polish_suggestions',
       'agent_tool_calls',
       'sync_item_failures',
       'operation_audit_events',
@@ -907,7 +957,7 @@ describe('SQLite migrations and capabilities', () => {
       reopened.client.prepare('SELECT name FROM companies WHERE slug = ?').pluck().get('fixture'),
     ).toBe('Fixture');
     expect(reopened.client.prepare('SELECT count(*) FROM __drizzle_migrations').pluck().get()).toBe(
-      62,
+      66,
     );
   });
 

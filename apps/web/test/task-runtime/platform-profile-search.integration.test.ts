@@ -129,11 +129,13 @@ it.each(['boss', 'zhilian', '51job', 'liepin'] as const)(
             versionNo: 1,
             resumeDocumentId: null,
             agentRunId: null,
-            extracted: profile,
+
             effective: profile,
-            lockedPaths: [],
+
             contentHash: contentHash(profile),
             isCurrent: true,
+            isCandidate: false,
+            baseVersionId: null,
             createdAt: utcInstant(index + 1),
           },
         });

@@ -53,6 +53,11 @@ describe('recruitment mail persistence', () => {
         updatedAt: 100,
       } as const;
       repository.upsertMessageRef(first);
+      repository.updateMessageStatus('mail-1', 'accepted', 'agent', 'policy', 'a'.repeat(64), 101);
+      repository.upsertMessageRef({ ...first, lastSeenAt: 150, updatedAt: 150 });
+      expect(repository.findProcessingMessageRef('mail-1')?.processingStatus).toBe('accepted');
+      expect(repository.listPendingReferences('personal', '', 'policy')).toEqual([]);
+
       repository.upsertMessageRef({
         ...first,
         contentVersion: '1:3',
@@ -60,6 +65,17 @@ describe('recruitment mail persistence', () => {
         updatedAt: 200,
       });
       expect(repository.findMessageRef('mail-1')?.contentVersion).toBe('1:3');
+      expect(repository.findProcessingMessageRef('mail-1')).toMatchObject({
+        processingStatus: 'discovered',
+        lastClassifierVersion: null,
+      });
+      expect(
+        repository.listPendingReferences('personal', '', 'policy').map((ref) => ref.id),
+      ).toEqual(['mail-1']);
+      repository.updateMessageStatus('mail-1', 'failed', 'agent', 'policy', null, 201);
+      expect(repository.listPendingReferences('personal', '', 'policy')).toHaveLength(1);
+      expect(repository.listPendingReferences('personal', 'mail-1', 'policy')).toEqual([]);
+
       expect(
         handle.client.prepare('SELECT count(*) AS count FROM mail_message_refs').get(),
       ).toEqual({ count: 1 });

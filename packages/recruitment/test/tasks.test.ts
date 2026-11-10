@@ -336,58 +336,128 @@ describe('source.sync handler', () => {
     });
   });
 
-  it('fails the task with progress summary when scoring stage exhausts retries', async () => {
-    const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
-    const run = vi.fn(() =>
-      Promise.resolve(
-        completedSyncResult({
-          runId,
-          status: 'succeeded',
-          coverage: 'complete',
-          scorableJobIds: ['job-a', 'job-b'],
-        }) as never,
-      ),
-    );
-    const scoringStage = {
-      run: () =>
-        Promise.resolve({
-          kind: 'completed' as const,
-          progress: {
-            items: [
-              {
-                jobId: 'job-a',
-                status: 'succeeded' as const,
-                result: null,
-                error: null,
-              },
-              {
-                jobId: 'job-b',
-                status: 'failed' as const,
-                result: null,
-                error: '评分失败。',
-              },
-            ],
-            degraded: 0,
-          },
-        }),
-    };
-    const handler = createSourceSyncTaskHandler({ run }, { scoringStage });
+  it.each([
+    ['network_temporary', true, 'network_temporary', true],
+    ['rate_limited', undefined, 'rate_limited', true],
+    ['invalid_config', false, 'invalid_config', false],
+    ['validation_failed', false, 'validation_failed', false],
+    ['permanent', false, 'permanent', false],
+    ['network_temporary', false, 'network_temporary', false],
+    [undefined, undefined, 'permanent', false],
+  ] as const)(
+    'preserves scoring failure classification %s',
+    async (category, retryable, expectedCategory, expectedRetryable) => {
+      const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
+      const run = vi.fn(() =>
+        Promise.resolve(
+          completedSyncResult({
+            runId,
+            status: 'succeeded',
+            coverage: 'complete',
+            scorableJobIds: ['job-a', 'job-b'],
+          }) as never,
+        ),
+      );
+      const scoringStage = {
+        run: () =>
+          Promise.resolve({
+            kind: 'completed' as const,
+            progress: {
+              items: [
+                {
+                  jobId: 'job-a',
+                  status: 'succeeded' as const,
+                  result: null,
+                  error: null,
+                },
+                {
+                  jobId: 'job-b',
+                  status: 'failed' as const,
+                  result: null,
+                  error: '评分失败。',
+                  ...(category ? { errorCategory: category } : {}),
+                  ...(retryable === undefined ? {} : { retryable }),
+                },
+              ],
+              degraded: 0,
+            },
+          }),
+      };
+      const handler = createSourceSyncTaskHandler({ run }, { scoringStage });
 
-    await expect(
-      handler.execute(
+      await expect(
+        handler.execute(
+          {
+            signal: new AbortController().signal,
+            clock: { now: () => utcInstant(1) },
+            logger: silentLogger,
+            services: {},
+          },
+          { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'manual' },
+        ),
+      ).rejects.toMatchObject({
+        category: expectedCategory,
+        retryable: expectedRetryable,
+        safeSummary: '同步已提交；评分 1/2 完成。评分失败。',
+      });
+    },
+  );
+
+  it.each([
+    ['network_temporary', 'invalid_config'],
+    ['invalid_config', 'network_temporary'],
+  ] as const)(
+    'does not hide permanent failures behind mixed transient failures: %s',
+    async (first, second) => {
+      const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');
+      const handler = createSourceSyncTaskHandler(
         {
-          signal: new AbortController().signal,
-          clock: { now: () => utcInstant(1) },
-          logger: silentLogger,
-          services: {},
+          run: () =>
+            Promise.resolve(
+              completedSyncResult({
+                runId,
+                status: 'succeeded',
+                coverage: 'complete',
+                scorableJobIds: ['job-a', 'job-b'],
+              }) as never,
+            ),
         },
-        { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'manual' },
-      ),
-    ).rejects.toMatchObject({
-      category: 'network_temporary',
-      safeSummary: '同步已提交；评分 1/2 完成。',
-    });
-  });
+        {
+          scoringStage: {
+            run: () =>
+              Promise.resolve({
+                kind: 'completed',
+                progress: {
+                  degraded: 0,
+                  items: [first, second].map((category, index) => ({
+                    jobId: `job-${String(index)}`,
+                    status: 'failed' as const,
+                    result: null,
+                    errorCategory: category,
+                    error: category === 'invalid_config' ? '配置失败。' : '网络失败。',
+                  })),
+                },
+              }),
+          },
+        },
+      );
+      await expect(
+        handler.execute(
+          {
+            signal: new AbortController().signal,
+            clock: { now: () => utcInstant(1) },
+            logger: silentLogger,
+            services: {},
+          },
+          { sourceId: '018f0000-0000-7000-8000-000000000002', trigger: 'manual' },
+        ),
+      ).rejects.toMatchObject({
+        category: 'invalid_config',
+        retryable: false,
+        safeSummary: '同步已提交；评分 0/2 完成。配置失败。',
+      });
+    },
+  );
 
   it('skips scoring stage entirely when the stage port is not injected', async () => {
     const runId = parseId('018f0000-0000-7000-8000-000000000003', 'SyncRun');

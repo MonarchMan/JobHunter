@@ -15,8 +15,8 @@ export function seedPlatformJobs(
     database.client
       .prepare(
         `INSERT INTO tasks
-      (id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
-      VALUES (?,?,'{}','running',?,1,0,0,10000)`,
+      (id,task_type,private_state,status,idempotency_key,available_at,created_at,lease_expires_at)
+      VALUES (?,?,'{}','running',?,0,0,10000)`,
       )
       .run(taskId, `platform.${provider}`, taskId);
     for (let index = 1; index <= (provider === 'boss' ? (options.bossCount ?? 2) : 1); index++) {

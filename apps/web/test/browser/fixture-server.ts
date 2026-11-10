@@ -267,7 +267,7 @@ async function seedFixture(dataRoot: string): Promise<void> {
     database.client
       .prepare(
         `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES (?, ?, 'manual', 'succeeded', 'complete', '{"discovered":3,"created":3}', 1, 2))
-INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
       )
       .run(ids.syncRun, ids.source);
 
@@ -574,17 +574,17 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     database.client
       .prepare(
         `INSERT INTO tasks
-         (id, task_type, private_state, status, idempotency_key, attempt_count, max_attempts,
+         (id, task_type, private_state, status, idempotency_key, attempt_count,
           available_at, created_at)
          VALUES (?, 'source.sync', '{"sourceId":"campus"}', 'pending',
-          'fixture-pending-sync', 0, 3, 1, 2)`,
+          'fixture-pending-sync', 0, 1, 2)`,
       )
       .run(ids.task);
     // 1、维护记录仅用于只读审计展示，不应提供普通队列的重试/取消入口。
     database.client.exec(`INSERT INTO tasks
-      (id,task_type,private_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at)
+      (id,task_type,private_state,status,idempotency_key,attempt_count,available_at,created_at,started_at,finished_at)
       VALUES('018f0000-0000-7000-8000-000000000709','maintenance.sqlite','{}','failed',
-      'fixture-maintenance-audit',1,1,1,3,unixepoch('2026-11-07 08:00:00')*1000,unixepoch('2026-11-07 08:01:30')*1000)`);
+      'fixture-maintenance-audit',1,1,3,unixepoch('2026-11-07 08:00:00')*1000,unixepoch('2026-11-07 08:01:30')*1000)`);
     database.client
       .prepare(
         `INSERT INTO agent_runs

@@ -1231,7 +1231,12 @@ const campusRequest = {
   }),
 };
 /** 合成页面事件，不执行真实浏览器操作或网站请求。 */
-function emitCampus(request = campusRequest, sessionId = 'attached'): void {
+function emitCampus(
+  request: Omit<typeof campusRequest, 'headers'> & {
+    readonly headers: Readonly<Record<string, string>>;
+  } = campusRequest,
+  sessionId = 'attached',
+): void {
   FakeSocket.instances[0]?.dispatchEvent(
     new MessageEvent('message', {
       data: JSON.stringify({

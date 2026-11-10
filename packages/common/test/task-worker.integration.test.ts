@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { ModelRequestPersistenceError } from '../src/agent/errors.js';
 import {
   HandlerRegistry,
   RetryPolicy,
@@ -61,7 +62,7 @@ afterEach(async () => {
 });
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
-async function setup(): Promise<{
+async function setup(attemptLimit = 3): Promise<{
   readonly handle: SqliteDatabaseHandle;
   readonly queue: SqliteTaskRepository;
   readonly clock: TestClock;
@@ -73,7 +74,7 @@ async function setup(): Promise<{
   handles.push(handle);
   return {
     handle,
-    queue: new SqliteTaskRepository(handle.client),
+    queue: new SqliteTaskRepository(handle.client, () => attemptLimit),
     clock: new TestClock(1_000),
     ids: new SequentialIds(),
   };
@@ -151,6 +152,22 @@ function engine(
 }
 
 describe('persistent task queue', () => {
+  it('fails a model ledger write without recovering the lease and replaying the model', async () => {
+    const input = await setup();
+    const execute = vi.fn(() => {
+      throw new ModelRequestPersistenceError('request-1', 'completed', {
+        cause: Object.assign(new Error('locked'), { code: 'SQLITE_BUSY' }),
+      });
+    });
+    const registry = registryWith({ execute });
+    const { tasks } = services(input, registry);
+    const task = enqueueSync(tasks, 'ledger-lock').task;
+    const worker = engine(input, registry);
+    await worker.runOnce();
+    expect(tasks.get(task.id)?.status).toBe('failed');
+    await worker.runOnce();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
   it('persists checkpoints through lease recovery and rejects stale writers', async () => {
     const input = await setup();
     const { tasks } = services(input, registryWith({ execute: () => undefined }));
@@ -391,7 +408,7 @@ describe('persistent task queue', () => {
   });
 
   it('recovers an expired lease and fails it after attempts are exhausted', async () => {
-    const input = await setup();
+    const input = await setup(2);
     const registry = registryWith({ execute: () => undefined, maxAttempts: 2 });
     const { tasks } = services(input, registry);
     const queued = enqueueSync(tasks, 'recover');
@@ -440,7 +457,7 @@ describe('persistent task queue', () => {
         attempts += 1;
         if (attempts > 1) return;
         started();
-        await new Promise<void>((resolve, reject) => {
+        await new Promise<void>((_resolve, reject) => {
           signal.addEventListener(
             'abort',
             () => {
@@ -508,6 +525,65 @@ describe('persistent task queue', () => {
     expect(tasks.cancel(succeeded.task.id).kind).toBe('not_cancellable');
   });
 
+  it('applies configured retry budgets and initial backoff again after manual retry', async () => {
+    const input = await setup(2);
+    const registry = registryWith({
+      maxAttempts: 2,
+      execute: () => {
+        throw new TaskExecutionError('network_temporary', 'Temporary failure.');
+      },
+    });
+    const { tasks } = services(input, registry);
+    const task = enqueueSync(tasks, 'round-budget').task;
+    const worker = engine(input, registry);
+    for (let round = 0; round < 2; round += 1) {
+      expect(await worker.runOnce()).toBe(true);
+      expect(tasks.get(task.id)).toMatchObject({
+        status: 'pending',
+        attemptCount: round * 2 + 1,
+        availableAt: input.clock.now() + 100,
+      });
+      input.clock.advance(100);
+      expect(await worker.runOnce()).toBe(true);
+      expect(tasks.get(task.id)).toMatchObject({ status: 'failed', attemptCount: round * 2 + 2 });
+      expect(input.queue.attemptsInCurrentRound(task.id)).toBe(2);
+      if (round === 0) {
+        tasks.retryFailed(task.id, 'new-round');
+        expect(input.queue.attemptsInCurrentRound(task.id)).toBe(0);
+        tasks.retryFailed(task.id, 'new-round');
+        expect(input.queue.attemptsInCurrentRound(task.id)).toBe(0);
+      }
+    }
+  });
+
+  it('uses current system limits and the manual retry baseline during lease recovery', async () => {
+    const input = await setup();
+    let limit = 2;
+    const queue = new SqliteTaskRepository(input.handle.client, () => limit);
+    const { tasks } = services({ ...input, queue }, registryWith({ execute: () => undefined }));
+    const task = enqueueSync(tasks, 'lease-round-budget').task;
+    const claim = (): ReturnType<SqliteTaskRepository['claim']> =>
+      queue.claim({
+        taskType: 'source.sync',
+        workerId: 'crashed',
+        now: input.clock.now(),
+        leaseDurationMsFor: () => 1_000,
+      });
+    claim();
+    // 配置改为一次后，现有执行也按新配置终止，不读取入队快照。
+    limit = 1;
+    input.clock.advance(1_001);
+    expect(queue.recoverExpired(input.clock.now())).toEqual({ recovered: 0, exhausted: 1 });
+    tasks.retryFailed(task.id, 'manual-lease-retry');
+    limit = 2;
+    expect(claim()?.attemptCount).toBe(2);
+    input.clock.advance(1_001);
+    expect(queue.recoverExpired(input.clock.now())).toEqual({ recovered: 1, exhausted: 0 });
+    expect(claim()?.attemptCount).toBe(3);
+    input.clock.advance(1_001);
+    expect(queue.recoverExpired(input.clock.now())).toEqual({ recovered: 0, exhausted: 1 });
+  });
+
   it('preserves cumulative attempts across exhausted manual retries and atomically logs failures', async () => {
     const input = await setup();
     const registry = registryWith({ execute: () => undefined, maxAttempts: 1 });
@@ -534,7 +610,6 @@ describe('persistent task queue', () => {
         id: failed.task.id,
         status: 'pending',
         attemptCount: 1,
-        maxAttempts: 1 + registry.get('source.sync').defaultMaxAttempts,
         errorSummary: null,
       },
     });
@@ -546,7 +621,7 @@ describe('persistent task queue', () => {
     ).toEqual([{ error_summary: 'Non-retryable.' }]);
     expect(tasks.retryFailed(failed.task.id, 'user-1')).toMatchObject({
       kind: 'idempotent',
-      task: { attemptCount: 1, maxAttempts: retry.task.maxAttempts },
+      task: { attemptCount: 1 },
     });
     expect(() => tasks.retryFailed(failed.task.id, 'user-2')).toThrow('Only failed tasks');
     // 1、第二轮再次失败后，旧令牌不能误触发第三轮。
@@ -583,18 +658,16 @@ describe('persistent task queue', () => {
       task: {
         id: failed.task.id,
         attemptCount: 2,
-        maxAttempts: 2 + registry.get('source.sync').defaultMaxAttempts,
       },
     });
     expect(input.handle.client.prepare('SELECT count(*) FROM task_retry_logs').pluck().get()).toBe(
       2,
     );
-    // 3、耗尽后手动追加的预算必须可由真实 Worker 消费，下一次领取延续累计次数。
+    // 3、新一轮读取系统预算，下一次领取仍延续累计次数。
     await engine(input, registry).runOnce();
     expect(tasks.get(failed.task.id)).toMatchObject({
       status: 'succeeded',
       attemptCount: 3,
-      maxAttempts: 3,
     });
     expect(
       input.handle.client

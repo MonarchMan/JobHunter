@@ -14,6 +14,9 @@ import type Database from 'better-sqlite3';
 interface AgentRunRow {
   readonly id: string;
   readonly agent_key: string;
+  readonly task_id: string | null;
+  readonly step_key: string | null;
+  readonly resource_key: string | null;
   readonly definition_hash: string;
   readonly model_config_hash: string;
   readonly input_hash: string;
@@ -35,7 +38,7 @@ interface AgentRunRow {
 const columns = `id, agent_key, definition_hash, model_config_hash, input_hash,
                  cache_key, status, output_json, output_hash, error_category, error_summary, input_tokens,
                  output_tokens, estimated_cost_micros, cost_currency, pricing_version,
-                 started_at, finished_at`;
+                 started_at, finished_at, task_id, step_key, resource_key`;
 
 /** 执行数据库结果的解析、转换或持久化辅助逻辑。 */
 function isStatus(value: string): value is AgentRunRecord['status'] {
@@ -62,6 +65,9 @@ function toRecord(row: AgentRunRow): AgentRunRecord {
   }
   return {
     id: row.id,
+    ...(row.task_id && row.step_key && row.resource_key
+      ? { execution: { taskId: row.task_id, stepKey: row.step_key, resourceKey: row.resource_key } }
+      : {}),
     agentKey: row.agent_key,
     definitionHash: row.definition_hash,
     modelConfigHash: row.model_config_hash,
@@ -194,18 +200,30 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
   public restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null {
     return this.#client
       .transaction(() => {
+        // 1、中央领取事务已关闭遗留调用；Runner 只恢复终态，绝不抢占活跃调用。
         const row = this.#client
           .prepare(
-            `SELECT ${columns} FROM agent_runs WHERE cache_key = ? AND status IN ('failed', 'cancelled') ORDER BY started_at DESC LIMIT 1`,
+            `SELECT ${columns} FROM agent_runs WHERE cache_key = ? AND status IN ('failed','cancelled') ORDER BY started_at DESC LIMIT 1`,
           )
           .get(cacheKey) as AgentRunRow | undefined;
         if (!row) return null;
         this.#client
           .prepare(
-            `UPDATE agent_runs SET status = 'running', started_at = ?, finished_at = NULL, error_category = NULL, error_summary = NULL, output_json = NULL, output_hash = NULL WHERE id = ? AND status IN ('failed', 'cancelled')`,
+            `UPDATE agent_runs SET status = 'running', started_at = ?, finished_at = NULL, error_category = NULL, error_summary = NULL, output_json = NULL, output_hash = NULL WHERE id = ?`,
           )
           .run(startedAt, row.id);
-        return this.#toRecord(row);
+        const record = this.#toRecord(row);
+        if (record.inputTokens !== null || record.outputTokens !== null) return record;
+        // 2、崩溃可能发生在请求账单已落库、运行合计未提交之间，先从账本还原旧轮次用量。
+        const calls = record.billingCalls ?? [];
+        return {
+          ...record,
+          inputTokens: calls.reduce((total, call) => total + (call.inputTokens ?? 0), 0),
+          outputTokens: calls.reduce((total, call) => total + (call.outputTokens ?? 0), 0),
+          estimatedCostMicros: calls.some((call) => call.totalCostMicros === null)
+            ? null
+            : calls.reduce((total, call) => total + (call.totalCostMicros ?? 0), 0),
+        };
       })
       .immediate();
   }
@@ -227,8 +245,8 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
       .prepare(
         `INSERT INTO agent_runs
            (id, agent_key, definition_hash, model_config_hash, input_hash,
-            cache_key, status, cost_currency, pricing_version, started_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?)`,
+            cache_key, status, cost_currency, pricing_version, started_at, task_id, step_key, resource_key)
+         VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.id,
@@ -240,6 +258,9 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
         record.costCurrency,
         record.pricingVersion,
         record.startedAt,
+        record.execution?.taskId ?? null,
+        record.execution?.stepKey ?? null,
+        record.execution?.resourceKey ?? null,
       );
   }
 

@@ -73,6 +73,7 @@ describe('Pinduoduo campus intern source adapter', () => {
 
   it('normalizes internship fields and official detail URLs', async () => {
     const raw = fixture.result.list[0];
+    if (!raw) throw new Error('Expected one fixture job');
     const normalized = await adapter.normalize(
       {
         discovered: {

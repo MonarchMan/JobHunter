@@ -1,6 +1,6 @@
 import type { ModelClient } from '@jobhunter/common/agent';
 import { registerAnthropicProvider } from './anthropic-client.js';
-import { registerOpenAiCompatibleProvider } from './openai-compatible-client.js';
+import { registerOpenAiCompatibleProvider } from './openai-client.js';
 import { ModelProviderRegistry } from './provider-registry.js';
 
 /** 模块数据结构或契约。 */

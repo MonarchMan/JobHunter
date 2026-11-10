@@ -47,11 +47,13 @@ it('matches a formally saved platform job and protects its matching history from
         versionNo: 1,
         resumeDocumentId: null,
         agentRunId: null,
-        extracted: profile,
+
         effective: profile,
-        lockedPaths: [],
+
         contentHash: contentHash(profile),
         isCurrent: true,
+        isCandidate: false,
+        baseVersionId: null,
         createdAt: utcInstant(1),
       },
     });
@@ -182,7 +184,7 @@ async function withDatabase(
     const taskId = ids.generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,0,0,10000)",
       )
       .run(taskId, taskId);
     const id = platform.save(
@@ -269,7 +271,7 @@ it('rechecks new business references, task references and user interaction after
     const taskId = new SystemIdGenerator().generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at) VALUES (?,'fixture',?,'pending',?,1,0,0)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at) VALUES (?,'fixture',?,'pending',?,0,0)",
       )
       .run(taskId, JSON.stringify({ nested: { jobId: active } }), taskId);
     repository.execute({ action: 'touch', jobId: touched }, now);
@@ -292,7 +294,7 @@ it('keeps numeric external identities protected across owner reference ports', a
     const taskId = new SystemIdGenerator().generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at) VALUES (?,'fixture',?,'pending',?,1,0,0)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at) VALUES (?,'fixture',?,'pending',?,0,0)",
       )
       .run(taskId, JSON.stringify({ nested: { externalJobId: 123 } }), taskId);
     const repository = new SqlitePlatformRetentionRepository(db.client, [

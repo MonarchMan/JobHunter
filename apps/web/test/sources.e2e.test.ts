@@ -55,7 +55,7 @@ function seedSource(dataRoot: string): void {
     database.client
       .prepare(
         `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES ('018f0000-0000-7000-8000-000000000301', ?, 'manual', 'succeeded', 'complete', '{"created":3,"updated":1}', 1, 2))
-INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
       )
       .run(sourceId);
     const profile = JSON.stringify({
@@ -262,7 +262,10 @@ describe('Web source management', () => {
           activeChannelTasks.every(
             (result) =>
               channelBySource.get(
-                (result.task.payload as { readonly sourceId: string }).sourceId,
+                parseId(
+                  (result.task.payload as { readonly sourceId: string }).sourceId,
+                  'JobSource',
+                ),
               ) === 'campus',
           ),
         ).toBe(true);
@@ -326,7 +329,7 @@ describe('Web source management', () => {
         customized.client
           .prepare(
             `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES ('018f0000-0000-7000-8f00-00000000f911', '018f0000-0000-7000-8000-000000000211', 'manual', 'succeeded', 'complete', '{}', 1, 2))
-INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
           )
           .run();
       } finally {

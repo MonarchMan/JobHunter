@@ -33,4 +33,48 @@ export function seedUsageFixture(client: SqliteDatabaseHandle['client'], runId: 
   calls.forEach((billing, index) => {
     ledger.save(runId, { id: `fixture:${String(index)}`, state: 'completed', billing });
   });
+  const base = calls[0];
+  if (!base) throw new Error('Missing usage fixture');
+  ledger.save(runId, {
+    id: 'fixture:network-failed',
+    state: 'completed',
+    billing: {
+      ...base,
+      model: 'network-failed-fixture',
+      provider: 'network.example.test',
+      requestedAt: now,
+      transportError: 'network',
+      totalCostMicros: 5000000,
+    },
+  });
+  ledger.save(runId, {
+    id: 'fixture:unknown-cost',
+    state: 'completed',
+    billing: {
+      ...base,
+      model: 'unknown-cost-fixture',
+      requestedAt: now,
+      inputTokens: null,
+      outputTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      uncachedInputTokens: null,
+      totalCostMicros: null,
+    },
+  });
+  ledger.save(runId, {
+    id: 'fixture:deepseek-cny',
+    state: 'completed',
+    billing: {
+      ...base,
+      model: 'deepseek-fixture-model',
+      currency: 'CNY',
+      requestedAt: now,
+      inputTokens: 999,
+      uncachedInputTokens: 321,
+      cacheReadTokens: 678,
+      outputTokens: 123,
+      totalCostMicros: 12000,
+    },
+  });
 }

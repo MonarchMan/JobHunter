@@ -532,10 +532,13 @@ describe('community interview research persistence', () => {
     const value = researchBundle();
     const actualFinalUrl =
       'https://www.nowcoder.com/feed/main/detail/84f8d10f0b994be6aeeea786b63070d9?sourceSSR=search&utm_source=jobhunter';
+    const firstSource = value.sources[0];
+    const firstExperience = value.experiences[0];
+    if (!firstSource || !firstExperience) throw new Error('Research fixture is empty');
     const trackedBundle: CommunityResearchBundle = {
       ...value,
-      sources: [{ ...value.sources[0], url: actualFinalUrl }],
-      experiences: [{ ...value.experiences[0], sourceUrl: actualFinalUrl }],
+      sources: [{ ...firstSource, url: actualFinalUrl }],
+      experiences: [{ ...firstExperience, sourceUrl: actualFinalUrl }],
     };
 
     const imported = await service.importBundle({
@@ -929,6 +932,7 @@ describe('community interview research persistence', () => {
         return stored;
       },
       read: (input) => artifacts.read(input),
+      remove: (input) => artifacts.remove(input),
       resolve: (relativePath) => artifacts.resolve(relativePath),
       quarantine: (artifactId, relativePath) => artifacts.quarantine(artifactId, relativePath),
       restoreQuarantined: (artifact) => artifacts.restoreQuarantined(artifact),

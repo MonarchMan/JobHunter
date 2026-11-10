@@ -1,10 +1,11 @@
-import { contentHash, parseId, utcInstant } from '@jobhunter/common/domain';
+import { contentHash, parseId, utcInstant, type TaskId } from '@jobhunter/common/domain';
 import type { RecruitmentMailClassification } from '@jobhunter/recruitment/domain';
 import type {
   ExternalMailMessage,
   MailboxConfig,
   MailboxConnector,
 } from '@jobhunter/recruitment/mail-contracts';
+import { recruitmentMailPolicyVersion } from '../src/mail/application/mail-task-handlers.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createMailboxSyncTaskHandler,
@@ -46,7 +47,9 @@ const message: ExternalMailMessage = {
 };
 
 /** 构造任务上下文，确保测试覆盖 Worker 的取消信号、检查点和提交时间。 */
-function context(controller = new AbortController()): TaskHandlerContext {
+function context(
+  controller = new AbortController(),
+): TaskHandlerContext & { readonly taskId: TaskId } {
   return {
     taskId: parseId('018f0000-0000-7000-8000-000000000201', 'Task'),
     signal: controller.signal,
@@ -79,10 +82,10 @@ function classification(
     companyName: '示例科技',
     roleTitle: '后端工程师',
     applicationKey: 'APP-100',
-    effectiveAt: message.receivedAt,
+    effectiveAt: utcInstant(message.receivedAt),
     schedule: {
       activityType: 'interview',
-      scheduledStartAt: 1_760_100_000_000,
+      scheduledStartAt: utcInstant(1_760_100_000_000),
       scheduledEndAt: null,
       deadlineAt: null,
       scheduledStartLocalDate: null,
@@ -120,6 +123,10 @@ function classification(
 
 /** 记录分类阶段的持久化副作用，不模拟数据库实现细节。 */
 class RecordingRepository implements RecruitmentMailProcessingRepository {
+  public listPendingReferences(): readonly RecruitmentMailMessageRef[] {
+    return [];
+  }
+
   public readonly updates: Parameters<
     RecruitmentMailProcessingRepository['updateMessageStatus']
   >[0][] = [];
@@ -172,6 +179,40 @@ function connector(): MailboxConnector {
 const messageRefIdOf = (): string => 'message-ref-1';
 
 describe('mailbox sync task handler', () => {
+  it('replays persisted backlog independently of the cursor and rejects a failed page', async () => {
+    const failure = new Error('temporary');
+    const classifyOne = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue('accepted');
+    const sync = vi.fn<MailSyncService['sync']>(
+      async (_config, _connector, _credential, _signal, options) => {
+        if (!options) throw new Error('Missing page control');
+        await options.processPage([{ ...message, externalMessageKey: 'new' }]);
+        return { pages: 1, messages: 1, cursor: null };
+      },
+    );
+    const handler = createMailboxSyncTaskHandler({
+      configs: { list: () => Promise.resolve([mailbox]) },
+      connectorFor: () => connector(),
+      service: { sync } as unknown as MailSyncService,
+      classification: {
+        pending: (_key: string, after: string) => (after ? [] : [{ ...message, id: 'old' }]),
+        classifyOne,
+      } as unknown as MailClassificationService,
+    });
+    await expect(handler.execute(context(), { mailboxKey: mailbox.mailboxKey })).rejects.toBe(
+      failure,
+    );
+    expect(classifyOne).toHaveBeenCalledTimes(2);
+    expect(classifyOne.mock.calls[0]?.[0]).toMatchObject({
+      taskId: context().taskId,
+      reference: { id: 'old' },
+    });
+    // 1、发现阶段有失败时 processPage 必须向上传播，不能提交该页游标。
+    classifyOne.mockRejectedValue(failure);
+    await expect(handler.execute(context(), { mailboxKey: mailbox.mailboxKey })).rejects.toBe(
+      failure,
+    );
+  });
+
   it('scopes a task to a single mailbox and runs page classification inline', async () => {
     const sync = vi
       .fn<MailSyncService['sync']>()
@@ -193,6 +234,7 @@ describe('mailbox sync task handler', () => {
       connectorFor: () => connector(),
       service: { sync } as unknown as MailSyncService,
       classification: {
+        pending: () => [],
         classifyOne: () => Promise.resolve('accepted'),
       } as unknown as MailClassificationService,
     });
@@ -218,6 +260,7 @@ describe('mailbox sync task handler', () => {
       connectorFor: () => connector(),
       service: { sync: vi.fn() } as unknown as MailSyncService,
       classification: {
+        pending: () => [],
         classifyOne: () => Promise.resolve(null),
       } as unknown as MailClassificationService,
     });
@@ -232,6 +275,7 @@ describe('mailbox sync task handler', () => {
       connectorFor: () => connector(),
       service: { sync: vi.fn() } as unknown as MailSyncService,
       classification: {
+        pending: () => [],
         classifyOne: () => Promise.resolve(null),
       } as unknown as MailClassificationService,
     });
@@ -266,6 +310,40 @@ async function execute(result: RecruitmentMailClassificationResult): Promise<{
 }
 
 describe('mail classification service', () => {
+  it('persists model failures for replay and scopes each message version', async () => {
+    const repository = new RecordingRepository();
+    const classify = vi.fn().mockRejectedValue(new Error('temporary'));
+    const service = new MailClassificationService({
+      configs: { list: () => Promise.resolve([mailbox]) },
+      connectorFor: () => connector(),
+      classifier: { classify },
+      repository,
+      messageRefIdOf,
+      createId: () => 'event',
+    });
+    await expect(
+      service.classifyOne({
+        taskId: context().taskId,
+        reference: message,
+        signal: context().signal,
+        now: () => 100,
+      }),
+    ).rejects.toThrow();
+    expect(repository.updates[0]).toMatchObject({
+      status: 'failed',
+      classifierVersion: recruitmentMailPolicyVersion,
+    });
+    expect(classify.mock.calls[0]?.[2]).toEqual({
+      taskId: context().taskId,
+      stepKey: 'mail.classify',
+      resourceKey: JSON.stringify([
+        message.mailboxKey,
+        message.externalMessageKey,
+        message.contentVersion,
+      ]),
+    });
+  });
+
   it('persists an accepted event only when application identity is complete', async () => {
     const { output, repository } = await execute(classification());
 
@@ -362,7 +440,7 @@ describe('mail classification service', () => {
     expect(repository.updates[0]).toMatchObject({
       status: 'ignored',
       classifierKind: 'rules',
-      classifierVersion: 'candidate-rules-v4',
+      classifierVersion: recruitmentMailPolicyVersion,
     });
   });
 
@@ -372,7 +450,7 @@ describe('mail classification service', () => {
       ...message,
       id: 'message-ref-1',
       processingStatus: 'accepted',
-      lastClassifierVersion: 'candidate-rules-v4+agent-v3-prompt-v5+schedule-identity-v2',
+      lastClassifierVersion: recruitmentMailPolicyVersion,
     });
     const classifier: RecruitmentMailClassificationPort = {
       classify: () => Promise.reject(new Error('must not be called')),

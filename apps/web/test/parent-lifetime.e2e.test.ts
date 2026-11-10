@@ -16,6 +16,7 @@ for (const mode of ['shutdown', 'disconnect'] as const) {
       ],
       { stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true },
     );
+    if (!wrapper.stdout) throw new Error('Expected captured wrapper output');
     let output = '';
     wrapper.stdout.on('data', (chunk: Buffer) => {
       output += chunk.toString();

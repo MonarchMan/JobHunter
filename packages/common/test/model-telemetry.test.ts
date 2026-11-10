@@ -59,8 +59,11 @@ function openAiFrames(): unknown[] {
 }
 
 describe('model request telemetry (USG-006)', () => {
-  it('does not dispatch or retry when the request-start ledger write fails (USG-009)', async () => {
+  it('keeps completion ledger failures associated with the request without resending', async () => {
     let sent = 0;
+    const original = Object.assign(new Error('synthetic completion write failed'), {
+      code: 'SQLITE_FULL',
+    });
     const client = new OpenAiCompatibleModelClient({
       ...config,
       fetchImplementation: () => {
@@ -70,11 +73,69 @@ describe('model request telemetry (USG-006)', () => {
     });
     await expect(
       client.complete(request, new AbortController().signal, {
-        save() {
-          throw new Error('synthetic database failure');
+        save(record) {
+          if (record.state === 'completed') throw original;
         },
       }),
-    ).rejects.toMatchObject({ category: 'configuration', retryable: false });
+    ).rejects.toMatchObject({
+      category: 'configuration',
+      phase: 'completed',
+      requestId: expect.any(String) as unknown,
+      cause: original,
+    });
+    expect(sent).toBe(1);
+  });
+  it.each([OpenAiCompatibleModelClient, AnthropicModelClient])(
+    'preserves the network cause through model wrapping',
+    async (Client) => {
+      const original = Object.assign(new Error('synthetic transport failure'), {
+        code: 'ECONNRESET',
+      });
+      const client = new Client({ ...config, fetchImplementation: () => Promise.reject(original) });
+      await expect(client.complete(request, new AbortController().signal)).rejects.toMatchObject({
+        category: 'temporary',
+        cause: original,
+      });
+    },
+  );
+  it.each([OpenAiCompatibleModelClient, AnthropicModelClient])(
+    'preserves schema failure details without changing classification',
+    async (Client) => {
+      const client = new Client({
+        ...config,
+        fetchImplementation: () => Promise.resolve(Response.json({ choices: 42, content: 42 })),
+      });
+      await expect(client.complete(request, new AbortController().signal)).rejects.toMatchObject({
+        category: 'invalid_output',
+        cause: expect.any(z.ZodError) as unknown,
+      });
+    },
+  );
+  it('does not dispatch or retry when the request-start ledger write fails (USG-009)', async () => {
+    let sent = 0;
+    const client = new OpenAiCompatibleModelClient({
+      ...config,
+      fetchImplementation: () => {
+        sent++;
+        return Promise.resolve(stream(openAiFrames()));
+      },
+    });
+    const original = Object.assign(new Error('synthetic database failure'), {
+      code: 'SQLITE_CONSTRAINT',
+    });
+    await expect(
+      client.complete(request, new AbortController().signal, {
+        save() {
+          throw original;
+        },
+      }),
+    ).rejects.toMatchObject({
+      category: 'configuration',
+      retryable: false,
+      cause: original,
+      requestId: expect.any(String) as unknown,
+      phase: 'running',
+    });
     expect(sent).toBe(0);
   });
   it('measures effective first content, generation speed and host without leaking credentials', async () => {

@@ -1,5 +1,9 @@
 import { parseId } from '@jobhunter/common/domain';
-import { SourceError, type SourceHttpClient } from '@jobhunter/recruitment/source-contracts';
+import {
+  SourceError,
+  type SourceHttpClient,
+  type SourceHttpResponse,
+} from '@jobhunter/recruitment/source-contracts';
 import { describe, expect, it } from 'vitest';
 import {
   createTencentInternAdapter,
@@ -65,12 +69,12 @@ describe('Tencent internship detail variants', () => {
   it('reports concrete missing content fields as parse_changed', async () => {
     const adapter = createTencentInternAdapter();
     const http: SourceHttpClient = {
-      request: () =>
+      request: <TBody>(): Promise<SourceHttpResponse<TBody>> =>
         Promise.resolve({
           status: 200,
           url: discovered.sourceUrl,
           headers: new Headers(),
-          body: qingyunResponse('', ''),
+          body: qingyunResponse('', '') as TBody,
         }),
     };
 

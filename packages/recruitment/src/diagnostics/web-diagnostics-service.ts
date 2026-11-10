@@ -118,8 +118,6 @@ function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): We
     taskType: task.taskType,
     status: task.status,
     attemptCount: task.attemptCount,
-    maxAttempts: task.maxAttempts,
-    retryOfTaskId: task.retryOfTaskId,
     errorCategory: task.errorCategory,
     errorSummary: task.errorSummary,
     cancelRequested: task.cancelRequestedAt !== null,
@@ -160,8 +158,6 @@ function presentTaskEntry(
     taskType: 'source.job-detail',
     status: entry.status,
     attemptCount: 0,
-    maxAttempts: 3,
-    retryOfTaskId: null,
     errorCategory: entry.batch.counts.failed > 0 ? 'batch_partial_failure' : null,
     errorSummary:
       entry.batch.counts.failed > 0

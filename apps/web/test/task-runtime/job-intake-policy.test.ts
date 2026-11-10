@@ -24,23 +24,7 @@ const version: ProfileVersionRecord = {
   versionNo: 1,
   resumeDocumentId: null,
   agentRunId: null,
-  extracted: parseCandidateProfile({
-    targetRoles: ['大模型算法', '大模型应用开发'],
-    preferences: {
-      locations: [],
-      companySizes: [],
-      employmentTypes: [],
-      excludedTerms: [],
-      remoteAccepted: null,
-    },
-    education: [],
-    workExperience: [],
-    projects: [],
-    skills: [],
-    domains: [],
-    yearsOfExperience: null,
-    managementExperience: null,
-  }),
+
   effective: parseCandidateProfile({
     targetRoles: ['大模型算法', '大模型应用开发'],
     preferences: {
@@ -58,9 +42,11 @@ const version: ProfileVersionRecord = {
     yearsOfExperience: null,
     managementExperience: null,
   }),
-  lockedPaths: [],
+
   contentHash: 'a'.repeat(64) as ProfileVersionRecord['contentHash'],
   isCurrent: true,
+  isCandidate: false,
+  baseVersionId: null,
   createdAt: utcInstant(1),
 };
 
@@ -95,11 +81,7 @@ describe('ProfileJobIntakePolicy', () => {
   it('requires an explicit target role even when the profile has R&D domains', () => {
     const emptyTargetVersion: ProfileVersionRecord = {
       ...version,
-      extracted: parseCandidateProfile({
-        ...version.extracted,
-        targetRoles: [],
-        domains: ['人工智能', '后端开发'],
-      }),
+
       effective: parseCandidateProfile({
         ...version.effective,
         targetRoles: [],
@@ -111,7 +93,6 @@ describe('ProfileJobIntakePolicy', () => {
       ...profiles,
       getCurrentVersion: () => emptyTargetVersion,
       getVersion: () => emptyTargetVersion,
-      listVersions: () => [emptyTargetVersion],
     });
 
     expect(policy.allowedJobFamilies()).toEqual([]);

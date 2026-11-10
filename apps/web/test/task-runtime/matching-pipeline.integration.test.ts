@@ -215,7 +215,7 @@ async function setup(): Promise<{
   handle.client
     .prepare(
       `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES ('sync-match', ?, 'manual', 'succeeded', 'complete', '{}', 1, 2))
-INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
     )
     .run(sourceId);
   handle.client
@@ -288,6 +288,85 @@ SELECT id,profile_id,version_no,resume_file_id,agent_run_id,content_hash,is_curr
 }
 
 describe('matching persistence pipeline', () => {
+  it.each(['enrichment', 'match', 'advice'] as const)(
+    'locks before reading while saving %s and releases the lock after commit',
+    async (kind) => {
+      const fixture = await setup();
+      const writer = openSqliteDatabase({
+        dataRoot: fixture.handle.dataRoot,
+        runMigrations: false,
+        busyTimeoutMs: 0,
+      });
+      try {
+        const facts = {
+          requiredSkills: [],
+          preferredSkills: [],
+          minimumYearsExperience: null,
+          seniority: null,
+          domains: [],
+        };
+        const enrichment = fixture.matching.saveEnrichment({
+          id: parseId(fixture.ids.generate(), 'JobEnrichment'),
+          jobRevisionId: revisionId,
+          agentRunId: null,
+          schemaVersion: 'test',
+          contentHash: contentHash(facts),
+          result: facts,
+          createdAt: fixture.clock.now(),
+        });
+        const match = new DeterministicMatchingService(fixture).compute({
+          jobRevisionId: revisionId,
+          profileVersionId,
+          jobEnrichmentId: enrichment.id,
+        }).match;
+        const jobs = new SqliteMatchingJobReader(fixture.handle.client);
+        const read = jobs.getRevision.bind(jobs);
+        const competingWrite = (): void => {
+          writer.client
+            .prepare('UPDATE companies SET updated_at=updated_at+1 WHERE id=?')
+            .run(companyId);
+        };
+        const blockedCodes: unknown[] = [];
+        vi.spyOn(jobs, 'getRevision').mockImplementation((id) => {
+          const result = read(id);
+          // 在读取和写入之间插入真实的第二连接提交，重现 WAL 快照升级竞争。
+          try {
+            competingWrite();
+          } catch (error) {
+            blockedCodes.push(error instanceof Error && 'code' in error ? error.code : null);
+          }
+          return result;
+        });
+        const repository = new SqliteMatchingRepository(
+          fixture.handle.client,
+          jobs,
+          new SqliteProfileIdentityReader(fixture.handle.client),
+          new SqliteAgentRunStore(fixture.handle.client),
+        );
+        if (kind === 'enrichment') repository.saveEnrichment(enrichment);
+        if (kind === 'match') repository.createOrGetMatch(match);
+        if (kind === 'advice') {
+          const result = { highlights: [], gaps: [], preparation: ['建议正文'] };
+          repository.saveAdvice({
+            id: parseId(fixture.ids.generate(), 'MatchAdvice'),
+            matchResultId: match.id,
+            matchInputHash: match.inputHash,
+            agentRunId: null,
+            schemaVersion: 'test',
+            contentHash: contentHash(result),
+            result,
+            createdAt: fixture.clock.now(),
+          });
+        }
+        expect(blockedCodes).toEqual(['SQLITE_BUSY']);
+        expect(competingWrite).not.toThrow();
+        expect(fixture.handle.client.pragma('foreign_key_check')).toEqual([]);
+      } finally {
+        writer.close();
+      }
+    },
+  );
+
   it('enqueues one batch atomically and keeps the same task on idempotent submission', async () => {
     const fixture = await setup();
     const registry = new HandlerRegistry();
@@ -376,7 +455,7 @@ describe('matching persistence pipeline', () => {
     const service = new DeterministicMatchingService(fixture);
     service.ensureRuleset();
     const handler = createMatchRevisionTaskHandler(
-      new MatchingBatchService({ matching: fixture.matching, calculator: service, pageSize: 1 }),
+      new MatchingBatchService({ calculator: service }),
     );
 
     await expect(

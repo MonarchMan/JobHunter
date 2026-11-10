@@ -4,6 +4,8 @@ const count = z.number().int().nonnegative().nullable();
 /** 单次请求的用量和价格快照；null 表示未上报或无法定价，不能解释为零。 */
 export const modelBillingSchema = z.object({
   requestId: z.string().min(1).optional(),
+  /** 已脱敏的传输、协商或输出校验失败原因，不含响应正文。 */
+  failureReason: z.string().trim().min(1).max(300).optional(),
   application: z.string().optional(),
   provider: z.string().optional(),
   statusCode: z.number().int().min(100).max(599).nullable().optional(),

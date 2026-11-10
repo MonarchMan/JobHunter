@@ -30,14 +30,11 @@ async function command(
   readonly stderr: string;
 }> {
   const output = memoryIo();
-  const exitCode = await runLocalCli(
-    {
-      argv: ['--json', '--data-root', dataRoot, ...argv],
-      io: output.io,
-      environment: {},
-    },
-    90_000,
-  );
+  const exitCode = await runLocalCli({
+    argv: ['--json', '--data-root', dataRoot, ...argv],
+    io: output.io,
+    environment: {},
+  });
   return {
     exitCode,
     body: JSON.parse(output.stdout.join('')) as Record<string, unknown>,
@@ -153,8 +150,6 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
           priority: 0,
           idempotencyKey: 'cli-research-retry-fixture',
           concurrencyKey: `experience-research:${requestId}`,
-          retryOfTaskId: null,
-          maxAttempts: 2,
           availableAt: utcInstant(1),
           createdAt: utcInstant(1),
         });
@@ -180,10 +175,10 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
           );
         database.client
           .prepare(
-            `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at)
+            `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at)
 VALUES (?, 'interview.experience-research',json_object('research',json_object(
 'request_fingerprint',?,'prompt_hash',?,'prompt_file_id',?,'schema_file_id',?,'current_task_id',?,'state','ready','revision',0)),
-'pending','cli-research-parent',1,253402300799000,1)`,
+'pending','cli-research-parent',253402300799000,1)`,
           )
           .run(
             requestId,
@@ -207,7 +202,6 @@ VALUES (?, 'interview.experience-research',json_object('research',json_object(
             task: {
               taskType: 'interview.experience-research.execute',
               status: 'succeeded',
-              retryOfTaskId: null,
             },
           },
         },

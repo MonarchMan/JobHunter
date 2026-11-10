@@ -115,7 +115,7 @@ describe('SQLite automatic maintenance infrastructure', () => {
     const maintenance = new SqliteMaintenanceRepository(database.databasePath);
     try {
       database.client.exec(`INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,
-        max_attempts,available_at,created_at) VALUES('running','test','{}','running','running',1,0,0)`);
+        available_at,created_at) VALUES('running','test','{}','running','running',0,0)`);
       const nextCheckAt = database.client
         .prepare('SELECT next_check_at FROM database_maintenance WHERE id = 1')
         .pluck()

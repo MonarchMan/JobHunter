@@ -184,8 +184,8 @@ export class SqliteInterviewResearchRepository implements InterviewResearchRepos
         const inserted = this.#client
           .prepare(
             `INSERT INTO tasks
-          (id, task_type, private_state, public_state, status, idempotency_key, max_attempts, available_at, created_at)
-          VALUES (?, 'interview.experience-research', ?, '{"phase":"awaiting_result"}', 'pending', ?, 1, 253402300799000, ?)
+          (id, task_type, private_state, public_state, status, idempotency_key, available_at, created_at)
+          VALUES (?, 'interview.experience-research', ?, '{"phase":"awaiting_result"}', 'pending', ?, 253402300799000, ?)
           ON CONFLICT(idempotency_key) DO NOTHING`,
           )
           .run(

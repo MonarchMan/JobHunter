@@ -17,6 +17,7 @@ import { createSourceHealthTaskHandler } from '@jobhunter/recruitment/sync/sourc
 import {
   createMailboxSyncTaskHandler,
   MailClassificationService,
+  reconcileMailboxSchedules,
   MailSyncService,
   RecruitmentMailClassifier,
 } from '@jobhunter/recruitment/mail-application';
@@ -194,7 +195,15 @@ export function createRecruitmentTasks(
   const mailboxConfigStore = input.mail
     ? new FileMailboxConfigStore(input.mail.mailboxConfigPath)
     : null;
-  const mailboxConfigSnapshot: readonly MailboxConfig[] = mailboxConfigStore?.listSnapshot() ?? [];
+  const reconcileMailboxes = (): void => {
+    if (mailboxConfigStore)
+      reconcileMailboxSchedules({
+        configs: mailboxConfigStore.listSnapshot(),
+        schedules: scheduleService,
+        createId: () => ids.generate(),
+      });
+  };
+  const removeMailboxReconciler = scheduleService.registerReconciler(reconcileMailboxes);
   const uow = new SqliteUnitOfWork(database.client);
   const sourcePolicies = firstPartyRateLimits();
   const localRateLimit = new TokenBucketSourceRateLimitGate(sourcePolicies);
@@ -392,17 +401,7 @@ export function createRecruitmentTasks(
           timezone: 'Asia/Shanghai',
           enabled: false,
         });
-        // 每个启用邮箱一条每日计划；payload 只携带邮箱键，配置禁用即停用对应计划。
-        for (const mailbox of mailboxConfigSnapshot.filter((entry) => entry.enabled)) {
-          scheduleService.upsert({
-            id: ids.generate(),
-            scheduleKey: `mailbox.sync:${mailbox.mailboxKey}`,
-            taskType: 'mailbox.sync@v1',
-            payload: { mailboxKey: mailbox.mailboxKey },
-            cronExpression: '0 3 * * *',
-            timezone: 'Asia/Shanghai',
-          });
-        }
+        reconcileMailboxes();
       }
       settings.applySourceSyncChannelSelection();
       new SourceScheduleReconciliationService({
@@ -415,6 +414,7 @@ export function createRecruitmentTasks(
       }).reconcile();
     },
     async close() {
+      removeMailboxReconciler();
       // 3、先取消平台初始化，再等待自建浏览器租约释放。
       boss.close();
       zhilian.close();

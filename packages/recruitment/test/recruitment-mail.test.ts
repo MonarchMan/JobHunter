@@ -672,15 +672,12 @@ describe('recruitment mail classification', () => {
       defaultTimezone: 'Asia/Shanghai',
     });
 
-    const result = await classifier.classify(
-      mail({ textBody: '示例科技面试邀请：https://meet.example.test/interview' }),
-      new AbortController().signal,
-    );
-
-    expect(result).toMatchObject({
-      modelStatus: 'unavailable',
-      classification: { decision: 'needs_review' },
-    });
+    await expect(
+      classifier.classify(
+        mail({ textBody: '示例科技面试邀请：https://meet.example.test/interview' }),
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ category: 'invalid_output' });
     expect(model.requests).toHaveLength(2);
     const stored = store.get('invalid-mail-run');
     expect(stored?.status).toBe('failed');

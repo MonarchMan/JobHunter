@@ -1,8 +1,10 @@
 # 008 轻量 Agent 运行时设计
 
+AgentRuntimeError/ModelClientError 接受 ErrorOptions；模型边界保留原异常。ModelRequestPersistenceError 带 requestId/phase 与 cause；Runner 先记录工具故障，再尝试持久化失败记录，双故障用 AggregateError 保留。公开摘要与重试语义保持独立。
+
 删除 AgentDefinition 的 version/promptVersion，以 definitionHash 替代运行记录及业务结果选择中的版本组合；哈希包含 Prompt、输入输出 Schema、工具定义、业务校验和运行限制。Prompt 注册按功能 key 唯一，只保留当前文件。迁移删除版本列，旧运行保留不可复用的历史内容身份。
 
-重试使用 AgentRunStore.restartFailed 事务恢复失败或取消记录，Runner 继续使用原 ID，旧用量与本次用量在结束时合并，预算仍针对本次尝试。任务作用域进入缓存键，禁用成功缓存的任务仍可通过该作用域恢复失败记录。工具序号从历史最大值之后开始；版本、模型或输入改变时新建独立运行。
+普通 run 不复用任何结果，不保存输出正文。后台用例显式使用 runStep，以任务、步骤、资源、输入及定义身份恢复；restartFailed 保留原运行 ID、累计用量和工具序号。合法的新分派可接续旧轮次遗留记录，同轮次不接管运行中记录；输入、模型或定义变化时新建运行。
 
 ## 国内供应商价格目录
 
@@ -16,14 +18,14 @@
 
 ### 2026-11-01 国内报价核验
 
-| 来源 | 接入规则与范围 |
-| --- | --- |
-| [cc-switch 用量解析](https://github.com/farion1231/cc-switch/blob/8be840557bacd89d592f13ddc1bee0586afaea14/src-tauri/src/proxy/usage/parser.rs) | 参考缓存语义与分项计算。其海外价格和固定汇率折算不作为国内报价。 |
-| [DeepSeek 中文价目表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/) | 保留 Flash/Pro 的忙闲映射及官方原生币种报价，按每次请求时刻定价。 |
-| [智谱 API 价格](https://docs.bigmodel.cn/cn/guide/start/pricing) | 国内 CNY；GLM-5.3、Flash、FlashX、5.2、4-Plus 等固定价，GLM-5/5.1 按输入分档，GLM-4.7 还按输出分档，缓存存储当前免费。 |
-| [Kimi 国内首页](https://platform.kimi.com/)、[K2.6/2.7 国内价](https://platform.kimi.com/?aff=nanoinfra)、[缓存细则](https://platform.kimi.com/docs/guide/context-caching) | K3、K3.1 Pro/Highspeed、K2.6、K2.7 Code。K3 的两个 TTL 价格已确认；K3.1 Pro 的 1 小时价未在可读取国内价目中确认，保留 null，可显式覆盖。 |
-| [MiniMax 国内价格](https://platform.minimax.cn/docs/pricing/overview)、[缓存语义](https://platform.minimax.cn/docs/api-reference/text-prompt-caching) | M3/M3.1-Flash 使用人民币官网价，M3 按总输入长度换档；旧 M2 系列国内完整价目前未核实，按明确白名单使用 cc-switch 美元参考价，不折算成虚构的人民币官网价。 |
-| [千问 Plus](https://help.aliyun.com/zh/model-studio/qwen-plus)、[Max](https://help.aliyun.com/zh/model-studio/qwen-max)、[缓存规则](https://help.aliyun.com/zh/model-studio/context-cache)、[模型价格](https://help.aliyun.com/en/model-studio/model-pricing) | 北京 CNY 隐式缓存；Plus 按输入长度分档，思考模式依响应 reasoning_tokens 区分，缺失时输出单价未知；Turbo 缓存折扣未确认时不设缓存价。 |
+| 来源                                                                                                                                                                                                                                                          | 接入规则与范围                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [cc-switch 用量解析](https://github.com/farion1231/cc-switch/blob/8be840557bacd89d592f13ddc1bee0586afaea14/src-tauri/src/proxy/usage/parser.rs)                                                                                                               | 参考缓存语义与分项计算。其海外价格和固定汇率折算不作为国内报价。                                                                                         |
+| [DeepSeek 中文价目表](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)                                                                                                                                                                               | 保留 Flash/Pro 的忙闲映射及官方原生币种报价，按每次请求时刻定价。                                                                                        |
+| [智谱 API 价格](https://docs.bigmodel.cn/cn/guide/start/pricing)                                                                                                                                                                                              | 国内 CNY；GLM-5.3、Flash、FlashX、5.2、4-Plus 等固定价，GLM-5/5.1 按输入分档，GLM-4.7 还按输出分档，缓存存储当前免费。                                   |
+| [Kimi 国内首页](https://platform.kimi.com/)、[K2.6/2.7 国内价](https://platform.kimi.com/?aff=nanoinfra)、[缓存细则](https://platform.kimi.com/docs/guide/context-caching)                                                                                    | K3、K3.1 Pro/Highspeed、K2.6、K2.7 Code。K3 的两个 TTL 价格已确认；K3.1 Pro 的 1 小时价未在可读取国内价目中确认，保留 null，可显式覆盖。                 |
+| [MiniMax 国内价格](https://platform.minimax.cn/docs/pricing/overview)、[缓存语义](https://platform.minimax.cn/docs/api-reference/text-prompt-caching)                                                                                                         | M3/M3.1-Flash 使用人民币官网价，M3 按总输入长度换档；旧 M2 系列国内完整价目前未核实，按明确白名单使用 cc-switch 美元参考价，不折算成虚构的人民币官网价。 |
+| [千问 Plus](https://help.aliyun.com/zh/model-studio/qwen-plus)、[Max](https://help.aliyun.com/zh/model-studio/qwen-max)、[缓存规则](https://help.aliyun.com/zh/model-studio/context-cache)、[模型价格](https://help.aliyun.com/en/model-studio/model-pricing) | 北京 CNY 隐式缓存；Plus 按输入长度分档，思考模式依响应 reasoning_tokens 区分，缺失时输出单价未知；Turbo 缓存折扣未确认时不设缓存价。                     |
 
 仅自动计算本应用的同步文本按量调用；套餐入口、非标准 service_tier、未核验地域或模型保留未知。旧 moonshot-v1、模糊 kimi-k2 等白名单外的未知型号仍需要显式配置。价格版本是本次核验快照，不回算历史金额。未知缓存可以给出含假设的估算，但缓存写入可能更贵，因此不声称是上界。
 
@@ -79,7 +81,7 @@ Anthropic Provider 使用原生 `POST {baseUrl}/v1/messages` 边界和 `2023-06-
 
 Runner 自身不写业务表，只通过 AgentRunStore 保存运行和工具摘要。业务 Handler 在 Runner 返回后关联 ProfileVersion、JobEnrichment 或独立 MatchAdvice，不能把建议直接写回 MatchResult。
 
-AgentRunStore 允许同一 cacheKey 存在多个失败/取消运行，只对 succeeded 建立部分唯一约束。创建运行前先查成功缓存；并发提交成功发生唯一冲突时，当前运行读取胜出的成功记录并以 cache-race-resolved 结束，不覆盖对方结果。
+AgentRunStore 允许同一 cacheKey 存在多个失败/取消运行，只对 succeeded 建立部分唯一约束。仅 runStep 创建运行前查找同一执行步骤的成功结果；并发提交成功发生唯一冲突时，当前运行读取胜出的成功记录并以 cache-race-resolved 结束，不覆盖对方结果。
 
 工具循环每一步先验证预算和取消，再验证工具名/input，执行只读工具并验证 output。结构化修复使用独立、固定提示且不允许工具；无效 JSON 与 Schema 不匹配共享同一个修复预算，不能各自重试一次。
 
@@ -94,3 +96,21 @@ Prompt 以模块内 `prompts/<agent>.ts` 存储，每个功能仅保留当前文
 ## 隐私
 
 Canonical input hash 在进程内从完整最小输入计算；持久化只保存哈希和已校验输出。若业务必须保留输出，输出 Schema 必须排除联系方式等不必要字段。
+
+步骤运行创建时保存 task_id、step_key、resource_key，不另存 task_attempt。中央调度器在领取 pending 任务的同一事务内，将该任务遗留的 running Agent 标为中断；Runner 只恢复失败记录，不抢占活跃调用。分派身份及累计执行次数由 tasks 统一管理，旧执行者提交由现有门控拒绝。恢复输出在任务终态提交之前清除，与终态更新同属事务，仍接受旧执行者写入门控。简历润色建议是 user 模块拥有的业务事实，保存在 resume_polish_suggestions，画像删除级联清理；0063 从仍有任务及画像关联的旧成功输出迁入，不删除历史副本。
+
+对于 unrecognized_keys，纠正提示说明错误所在层级、应删除的额外字段，并要求仅保留 JSON Schema 声明的属性。字段名按标识符字符集和数量、长度约束，避免把输出值或任意模型文本带入诊断。两次 HTTP 200 仍可能对应首次输出不合规及纠正，不应误报为重复任务；历史汇总用量不能反推真实 HTTP 请求身份或次数。
+
+请求诊断沿用 events：stream_type=model_request、stream_id 为真实请求 ID，固定序号 1 和 model.request.failure 事件保存脱敏 failureReason。ModelBilling 对外仅增加可选 failureReason，账本表不新增正文或诊断 JSON 列。请求及诊断同一短事务保存，未携带原因的账单更新保留既有诊断；读取时关联请求事件，诊断随独立请求账本保留，不依赖 Agent 输出副本。
+
+## 日志诊断
+
+逐请求失败说明与 Agent 错误摘要使用一致的 300 字符上限；长校验错误脱敏截断后必须能落库，不得阻断纠正调用或改变原有错误分类。
+
+Agent 开始、完成和失败事件绑定 agentRunId，模型请求诊断绑定 modelRequestId 与 agentRunId；继承任务执行上下文。失败只保存脱敏诊断，事件不携带 Prompt、模型正文或工具参数。模型详细事件为 debug，持久请求账本仍是查询来源。（OPS-020）
+
+实际运行观察补充：模型并发限流包装器必须完整转发 ModelRequestObserver，等待网络响应期间就应存在 running 请求记录；不得仅依赖 Runner 在响应结束后回填用量。通过真实 TaskRuntime 装配及延迟合成响应验证这条链路。
+
+## 流式用量收尾
+
+传输层在每个包含 usage 的完整 SSE 事件到达时，将累计快照交给所属协议适配器校验、归一化和计价，再通过原观察器按请求 ID 幂等更新账本。usage 事件是累计快照，更新不能相加；空值不覆盖先前已知分项。正常响应与中断快照共用适配器计价逻辑。终态沿用取消、超时、网络或协议错误分类，保留 HTTP 状态和安全原因；没有协议终止事件时不能提交业务成功。账本保存失败仍显式失败。只保存用量，不保存流正文，不延长取消或后台继续请求上游。

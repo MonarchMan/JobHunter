@@ -1,3 +1,4 @@
+import { parseCandidateProfile } from '@jobhunter/user/domain';
 import { ProfileVersionConflictError } from '@jobhunter/user/profile';
 import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
@@ -6,7 +7,7 @@ import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { describe, expect, it } from 'vitest';
 import { createLocalWebContainer } from '../src/server/container.js';
 
-const initialProfile = {
+const initialProfile = parseCandidateProfile({
   targetRoles: ['Agent 开发工程师'],
   preferences: {
     locations: ['北京'],
@@ -46,7 +47,7 @@ const initialProfile = {
   domains: ['大模型应用'],
   yearsOfExperience: 3,
   managementExperience: false,
-} as const;
+});
 
 function seedProfile(dataRoot: string): void {
   const database = openSqliteDatabase({ dataRoot });

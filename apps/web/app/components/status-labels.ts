@@ -51,18 +51,28 @@ export function labelTaskType(value: string): string {
   return taskTypeLabels[value] ?? '其他后台任务';
 }
 
-const agentKeyLabels: Readonly<Record<string, string>> = {
-  'resume-profile': '简历画像提取',
-  'resume-polish': '简历润色',
-  'job-analysis': '职位分析',
-  'ai.reply': 'AI 模拟面试',
-  'interview.community-research-configured-model': '面经研究',
-  'recruitment-mail.classify': '招聘邮件分析',
+const agentPresentation: Readonly<
+  Record<string, { label: string; normallySingleRequest: boolean }>
+> = {
+  'resume-profile': { label: '简历画像提取', normallySingleRequest: true },
+  'resume-polish': { label: '简历润色', normallySingleRequest: true },
+  'job-analysis': { label: '职位分析', normallySingleRequest: true },
+  'ai.reply': { label: 'AI 模拟面试', normallySingleRequest: true },
+  'interview.community-research-configured-model': {
+    label: '面经研究',
+    normallySingleRequest: true,
+  },
+  'recruitment-mail.classify': { label: '招聘邮件分析', normallySingleRequest: true },
 };
 
 /** 已登记 Agent 展示业务名称，历史或未识别类型统一显示“未知”。 */
 export function labelAgentKey(value: string): string {
-  return agentKeyLabels[value] ?? '未知';
+  return agentPresentation[value]?.label ?? '未知';
+}
+
+/** 无工具的已登记 Agent 通常只发一次请求；未知或未来工具型 Agent 不推断失败。 */
+export function agentNormallyUsesSingleRequest(value: string): boolean {
+  return agentPresentation[value]?.normallySingleRequest ?? false;
 }
 
 const agentErrorCategoryLabels: Readonly<Record<string, string>> = {

@@ -25,6 +25,8 @@ export interface ExternalResearchCollectionPlan {
 /** 应用层数据结构或端口契约。 */
 export interface ExternalResearchInput {
   readonly requestId: string;
+  /** 实际执行任务身份；研究流程 ID 仅作为业务资源身份。 */
+  readonly taskId?: string;
   readonly prompt: string;
   readonly outputSchema: Readonly<Record<string, unknown>>;
   readonly collectionPlan: ExternalResearchCollectionPlan;

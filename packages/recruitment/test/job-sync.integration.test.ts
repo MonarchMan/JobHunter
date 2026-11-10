@@ -481,8 +481,8 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       ['running-advice', 'match.advise', { matchResultId: 'score' }, 'running'],
     ] as const)
       db.prepare(
-        `INSERT INTO tasks (id, task_type, private_state, status, idempotency_key, max_attempts, available_at, created_at)
-      VALUES (?, ?, ?, ?, ?, 3, 1, 1)`,
+        `INSERT INTO tasks (id, task_type, private_state, status, idempotency_key, available_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 1, 1)`,
       ).run(id, type, JSON.stringify(payload), status, id);
     // 1、相同内容重放不得删除有效结果。
     await run(fixture);
@@ -847,7 +847,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     const abort = new AbortController();
     abort.abort();
     const cancelled = await run(fixture, 'manual', abort.signal);
-    expect(cancelled.status).toBe('cancelled');
+    expect(cancelled).toMatchObject({ status: 'cancelled' });
     const lastCursor = fixture.handle.client
       .prepare(
         `SELECT cursor_out_json FROM ${scanTaskProjection} WHERE status = 'succeeded' ORDER BY finished_at DESC LIMIT 1`,
@@ -882,7 +882,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     if (!removed) throw new Error('Removed fixture job is missing.');
     fixture.scenario.jobs = fixture.scenario.jobs.slice(0, 2);
     const stale = await run(fixture);
-    expect(stale.stats).toMatchObject({ staled: 1 });
+    expect(stale).toMatchObject({ stats: { staled: 1 } });
     expect(
       fixture.handle.client
         .prepare("SELECT status FROM jobs WHERE external_job_id = 'job-3'")
@@ -891,7 +891,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     ).toBe('stale');
 
     const closed = await run(fixture);
-    expect(closed.stats).toMatchObject({ closed: 1 });
+    expect(closed).toMatchObject({ stats: { closed: 1 } });
     expect(
       fixture.handle.client
         .prepare("SELECT status FROM jobs WHERE external_job_id = 'job-3'")
@@ -901,7 +901,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
 
     fixture.scenario.jobs.push(removed);
     const restored = await run(fixture);
-    expect(restored.stats).toMatchObject({ restored: 1, unchanged: 3 });
+    expect(restored).toMatchObject({ stats: { restored: 1, unchanged: 3 } });
     expect(
       fixture.handle.client
         .prepare("SELECT status, missing_count FROM jobs WHERE external_job_id = 'job-3'")
@@ -1001,8 +1001,8 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
 
     // 父任务重试会更新执行时间；明确关联的扫描不应因此从诊断中消失。
     fixture.handle.client.exec(`
-      INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
-      VALUES('retry-parent','source.sync','{}','running','retry-parent',2,3,1,1);
+      INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,attempt_count,available_at,created_at)
+      VALUES('retry-parent','source.sync','{}','running','retry-parent',2,1,1);
     `);
     fixture.handle.client
       .prepare('UPDATE tasks SET parent_task_id=? WHERE id=?')

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type Mock } from 'vitest';
+import { z } from 'zod';
 import type { TaskHandlerContext } from '@jobhunter/common/tasks';
 import { TaskExecutionError } from '@jobhunter/common/tasks';
 import type {
@@ -53,23 +54,41 @@ function makeMatching(revision?: { id: string; jobStatus: string }): StageInput[
   } as never;
 }
 
+type SingleScoringHandler = ReturnType<typeof createManualJobScoreTaskHandler>;
+/** 完整评分处理器夹具，保留强类型 Mock 供调用断言使用。 */
+type SingleScoringMock = Omit<SingleScoringHandler, 'execute'> & {
+  readonly execute: Mock<SingleScoringHandler['execute']>;
+};
+
 function makeSingle(result?: {
   matchResultId: string;
   matchAdviceId: string | null;
   modelScoreMissing: boolean | null;
-}): ReturnType<typeof createManualJobScoreTaskHandler> {
+}): SingleScoringMock {
   return {
+    taskType: 'match.score-job',
+    payloadSchema: manualJobScoreTaskPayloadSchema,
+    outputSchema: z.object({
+      mode: z.enum(['rules', 'llm']),
+      matchResultId: z.string(),
+      matchAdviceId: z.string().nullable(),
+      modelScoreMissing: z.boolean().nullable(),
+      agentRunId: z.string().nullable(),
+    }),
+    defaultMaxAttempts: 3,
+    leaseDurationMs: 300000,
     retryPayload: (payload: unknown) => payload,
-    execute: vi.fn((_context: unknown, input: unknown) => {
+    execute: vi.fn<SingleScoringHandler['execute']>((_context, input) => {
       const parsed = manualJobScoreTaskPayloadSchema.parse(input);
       return Promise.resolve({
         mode: parsed.mode,
         matchResultId: result?.matchResultId ?? 'mr-1',
         matchAdviceId: result?.matchAdviceId ?? null,
         modelScoreMissing: result?.modelScoreMissing ?? null,
+        agentRunId: null,
       });
     }),
-  } as never;
+  };
 }
 
 function makeStage(input: {
@@ -137,7 +156,7 @@ describe('createSyncScoringStage', () => {
     expect(outcome.progress.items).toHaveLength(2);
     expect(outcome.progress.degraded).toBe(2);
     expect(checkpoints).toHaveLength(2);
-    const calls = (single as { execute: ReturnType<typeof vi.fn> }).execute.mock.calls;
+    const calls = vi.mocked(single.execute).mock.calls;
     expect(calls[0]?.[1]).toMatchObject({ requireModelScore: false, mode: 'llm' });
   });
 
@@ -166,7 +185,7 @@ describe('createSyncScoringStage', () => {
     });
     expect(outcome.kind).toBe('completed');
     if (outcome.kind !== 'completed') throw new Error('Expected completed outcome.');
-    expect((single as { execute: ReturnType<typeof vi.fn> }).execute).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(single.execute)).toHaveBeenCalledTimes(1);
     expect(outcome.progress.items[0]?.result).toMatchObject({ matchResultId: 'mr-1' });
   });
 
@@ -187,7 +206,50 @@ describe('createSyncScoringStage', () => {
     expect(outcome.kind).toBe('completed');
     if (outcome.kind !== 'completed') throw new Error('Expected completed outcome.');
     expect(outcome.progress.items.every((item) => item.status === 'failed')).toBe(true);
-    expect((single as { execute: ReturnType<typeof vi.fn> }).execute).not.toHaveBeenCalled();
+    expect(vi.mocked(single.execute)).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new TaskExecutionError('invalid_config', 'model configuration', { retryable: false }),
+    new TaskExecutionError('network_temporary', 'network temporarily unavailable'),
+    Object.assign(new Error('no such column: sensitive_column'), { code: 'SQLITE_ERROR' }),
+    new Error('internal fixture failure'),
+  ])('preserves item classification and retry policy: %s', async (failure) => {
+    const single = {
+      ...makeSingle(),
+      execute: vi
+        .fn<ReturnType<typeof createManualJobScoreTaskHandler>['execute']>()
+        .mockRejectedValue(failure),
+    };
+    const stage = makeStage({ singleScoring: single });
+    const context = makeContext();
+    const errorLog = vi.fn<TaskHandlerContext['logger']['error']>();
+    const outcome = await stage.run({
+      context: { ...context, logger: { ...context.logger, error: errorLog } },
+      jobIds: [jobA],
+      previous: null,
+      checkpoint: noopCheckpoint,
+    });
+    if (outcome.kind !== 'completed') throw new Error('Missing progress');
+    const item = outcome.progress.items[0];
+    expect(item).toMatchObject({
+      status: 'failed',
+      errorCategory:
+        failure instanceof TaskExecutionError
+          ? failure.category
+          : 'code' in failure
+            ? 'invalid_config'
+            : 'permanent',
+      retryable: failure instanceof TaskExecutionError && failure.category === 'network_temporary',
+    });
+    expect(JSON.stringify(item)).not.toContain('sensitive_column');
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    const [event, fields] = errorLog.mock.calls[0] ?? [];
+    expect(event).toBe('matching.score_item_failed');
+    expect(fields?.jobId).toBe(jobA);
+    expect(fields?.error).toMatchObject({
+      cause: failure instanceof TaskExecutionError ? failure.cause : failure,
+    });
   });
 
   it('throws cancelled with progress when signal aborts mid-stage', async () => {

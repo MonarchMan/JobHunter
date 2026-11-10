@@ -1,3 +1,4 @@
+import type { AgentExecution } from '@jobhunter/common/agent';
 import {
   AgentRuntimeError,
   agentDefinitionHash,
@@ -112,7 +113,6 @@ accepted 仅用于事件明确、confidence >= 0.85 且 companyName 非空；oth
     maxOutputTokens: 8_000,
     maxEstimatedCostMicros: 300_000,
   },
-  resultPolicy: { cache: 'enabled', persistOutput: true },
 });
 
 /** 招聘邮件分类结果附带候选规则和 Agent 运行定位，不包含模型输入正文。 */
@@ -144,6 +144,7 @@ export class RecruitmentMailClassifier {
   public async classify(
     message: ExternalMailMessage,
     signal: AbortSignal,
+    execution?: AgentExecution,
   ): Promise<RecruitmentMailClassificationResult> {
     const mail = prepareRecruitmentMail(message);
     const candidate = this.#screener.screen(mail);
@@ -169,42 +170,24 @@ export class RecruitmentMailClassifier {
       };
     }
 
-    try {
-      const result = await this.#runner.run({
-        retryKey: 'mail-classification',
-        definition: recruitmentMailAgentDefinition,
-        value: {
-          mail,
-          candidateReasonCodes: candidate.reasonCodes,
-          defaultTimezone: this.#defaultTimezone,
-        },
-        signal,
-      });
-      return {
-        classification: toDomainClassification(result.output),
-        candidate,
-        agentRunId: result.run.id,
-        modelStatus: 'succeeded',
-      };
-    } catch (error) {
-      if (
-        signal.aborted ||
-        (error instanceof AgentRuntimeError && error.category === 'cancelled')
-      ) {
-        throw error;
-      }
-      return {
-        classification: fallbackClassification(
-          message,
-          'needs_review',
-          'other_recruiting',
-          candidate,
-        ),
-        candidate,
-        agentRunId: null,
-        modelStatus: 'unavailable',
-      };
-    }
+    const request = {
+      definition: recruitmentMailAgentDefinition,
+      value: {
+        mail,
+        candidateReasonCodes: candidate.reasonCodes,
+        defaultTimezone: this.#defaultTimezone,
+      },
+      signal,
+    };
+    const result = await (execution
+      ? this.#runner.runStep({ ...request, execution })
+      : this.#runner.run(request));
+    return {
+      classification: toDomainClassification(result.output),
+      candidate,
+      agentRunId: result.run.id,
+      modelStatus: 'succeeded',
+    };
   }
 }
 

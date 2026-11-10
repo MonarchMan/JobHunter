@@ -39,8 +39,6 @@ it('CLI executes a target workflow in owned threads and closing removes its brid
       priority: 0,
       idempotencyKey: 'embedded-cli',
       concurrencyKey: null,
-      retryOfTaskId: null,
-      maxAttempts: 1,
       availableAt: utcInstant(1),
       createdAt: utcInstant(1),
     });
@@ -91,8 +89,6 @@ describe('CLI query startup', () => {
         priority: 0,
         idempotencyKey: id,
         concurrencyKey: null,
-        retryOfTaskId: null,
-        maxAttempts: 1,
         availableAt: utcInstant(1),
         createdAt: utcInstant(1),
       });

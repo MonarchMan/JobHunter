@@ -273,7 +273,7 @@ function errorFrom(value: unknown): CliError {
 
 /** 将任务记录压缩为终端可读的一行摘要。 */
 function taskHuman(task: TaskRecord): string {
-  return `${task.id}\t${task.status}\t${task.taskType}\t${String(task.attemptCount)}/${String(task.maxAttempts)}`;
+  return `${task.id}\t${task.status}\t${task.taskType}\t${String(task.attemptCount)}`;
 }
 
 async function waitForTask(input: {

@@ -410,7 +410,8 @@ export class ThreadTaskExecutor implements TaskExecutionPort {
     else
       request.reject(
         new TaskExecutionError(data.category, data.summary, {
-          cause: restoreThreadStorageFailure(data.storageFailure),
+          cause:
+            restoreThreadStorageFailure(data.storageFailure, data.diagnostic) ?? data.diagnostic,
           ...(data.retryable === null ? {} : { retryable: data.retryable }),
           ...(data.retryAfterAt === null
             ? {}

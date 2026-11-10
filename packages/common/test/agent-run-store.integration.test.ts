@@ -6,6 +6,9 @@ import {
   type SqliteDatabaseHandle,
 } from '@jobhunter/common/persistence/connection';
 import { SqliteAgentRunStore } from '@jobhunter/common/persistence/agent-runs';
+import { SqliteTaskRepository } from '../src/persistence/task-repository.js';
+import { parseId, utcInstant } from '../src/domain/index.js';
+import { withTaskExecution } from '../src/tasks/contracts/execution-scope.js';
 import { calculateBilling } from '../src/models/billing.js';
 
 const resources: {
@@ -64,6 +67,120 @@ const usage: AgentRunUsage = {
 };
 
 describe('SQLite agent run store', () => {
+  it('recovers abandoned calls through central claiming without a duplicated attempt column', async () => {
+    const { store, handle } = await setup();
+    const taskId = parseId('018f0000-0000-7000-8000-000000000999', 'Task');
+    const queue = new SqliteTaskRepository(handle.client);
+    handle.client
+      .prepare(
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,attempt_count,available_at,created_at) VALUES(?,'fixture','{}','pending','task',0,0,1)",
+      )
+      .run(taskId);
+    const claim = (owner: string, now: number): ReturnType<SqliteTaskRepository['claim']> =>
+      queue.claim({
+        taskType: 'fixture',
+        workerId: owner,
+        now: utcInstant(now),
+        leaseDurationMsFor: () => 1000,
+      });
+    expect(claim('owner-1', 1)?.attemptCount).toBe(1);
+    const identity = { taskId, owner: 'owner-1', attempt: 1, now: () => 10 };
+    withTaskExecution(identity, () => {
+      store.createRunning({
+        ...running('orphan'),
+        execution: { taskId, stepKey: 'step', resourceKey: 'resource' },
+      });
+    });
+    const billing = calculateBilling({
+      model: 'deepseek-flash',
+      baseUrl: 'https://api.deepseek.com',
+      requestedAt: Date.parse('2026-10-30T14:00:00Z'),
+      currency: 'USD',
+      inputTokens: 10,
+      outputTokens: 5,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      uncachedInputTokens: null,
+    });
+    store.saveModelRequest('orphan', { id: 'orphan-http', state: 'completed', billing });
+    store.createRunning({
+      ...running('completed', 'success-key'),
+      execution: { taskId, stepKey: 'completed-step', resourceKey: 'completed-resource' },
+    });
+    store.completeSucceeded({
+      id: 'completed',
+      cacheKey: 'success-key',
+      output: { answer: 'preserved' },
+      outputHash: 'b'.repeat(64),
+      usage,
+      finishedAt: 11,
+    });
+    expect(claim('owner-2', 12)).toBeNull();
+    expect(store.get('orphan')?.status).toBe('running');
+    expect(withTaskExecution(identity, () => store.restartFailed('cache-key', 13))).toBeNull();
+    // 领取后若遗留记录更新失败，分派身份和 Agent 状态必须一并回滚。
+    handle.client.exec(
+      "CREATE TEMP TRIGGER reject_agent_recovery BEFORE UPDATE ON agent_runs WHEN NEW.error_summary='Previous task execution was interrupted.' BEGIN SELECT RAISE(ABORT,'fixture recovery rejected'); END",
+    );
+    expect(() => claim('owner-2', 1002)).toThrow('fixture recovery rejected');
+    expect(queue.get(taskId)).toMatchObject({
+      status: 'running',
+      leaseOwner: 'owner-1',
+      attemptCount: 1,
+    });
+    expect(store.get('orphan')?.status).toBe('running');
+    handle.client.exec('DROP TRIGGER reject_agent_recovery');
+    expect(claim('owner-2', 1002)?.attemptCount).toBe(2);
+    expect(store.get('orphan')).toMatchObject({ status: 'failed', errorCategory: 'temporary' });
+    expect(store.get('completed')).toMatchObject({
+      status: 'succeeded',
+      output: { answer: 'preserved' },
+    });
+    const next = { ...identity, owner: 'owner-2', attempt: 2, now: () => 1003 };
+    expect(withTaskExecution(next, () => store.restartFailed('cache-key', 1003))).toMatchObject({
+      id: 'orphan',
+      inputTokens: 10,
+      outputTokens: 5,
+      estimatedCostMicros: billing.totalCostMicros,
+    });
+    expect(() =>
+      withTaskExecution(identity, () =>
+        store.completeSucceeded({
+          id: 'orphan',
+          cacheKey: 'cache-key',
+          output: { answer: 'late' },
+          outputHash: 'a'.repeat(64),
+          usage,
+          finishedAt: 1003,
+        }),
+      ),
+    ).toThrow('JOBHUNTER_TASK_EXECUTION_LOST');
+    withTaskExecution(next, () =>
+      store.completeSucceeded({
+        id: 'orphan',
+        cacheKey: 'cache-key',
+        output: { answer: 'recover' },
+        outputHash: 'a'.repeat(64),
+        usage,
+        finishedAt: 1004,
+      }),
+    );
+    handle.client.prepare("UPDATE tasks SET status='failed' WHERE id=?").run(taskId);
+    expect(store.get('orphan')?.output).toEqual({ answer: 'recover' });
+    handle.client.prepare("UPDATE tasks SET status='running' WHERE id=?").run(taskId);
+    expect(withTaskExecution(next, () => queue.complete(taskId, 'owner-2', utcInstant(1005)))).toBe(
+      true,
+    );
+    expect(store.get('orphan')?.output).toBeNull();
+    expect(store.get('orphan')?.inputTokens).toBe(10);
+    expect(handle.client.prepare('SELECT count(*) FROM agent_runs').pluck().get()).toBe(2);
+    expect(
+      handle.client
+        .prepare("SELECT name FROM pragma_table_info('agent_runs') WHERE name='task_attempt'")
+        .all(),
+    ).toEqual([]);
+  });
+
   it('restarts the original row and appends tool events after previous attempts', async () => {
     const { store, handle } = await setup();
     store.createRunning(running('retry'));

@@ -1,3 +1,4 @@
+import { utcInstant } from '@jobhunter/common/domain';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Worker } from 'node:worker_threads';
 import { randomUUID } from 'node:crypto';
@@ -59,7 +60,7 @@ function task(milliseconds = 10): TaskRecord {
 function context(signal = new AbortController().signal): TaskHandlerContext {
   return {
     signal,
-    clock: { now: () => Date.now() },
+    clock: { now: () => utcInstant(Date.now()) },
     services: {},
     logger: {
       info() {
@@ -72,7 +73,7 @@ function context(signal = new AbortController().signal): TaskHandlerContext {
         /* fixture */
       },
     },
-  } as TaskHandlerContext;
+  };
 }
 async function until(check: () => boolean): Promise<void> {
   const deadline = Date.now() + 5_000;

@@ -77,8 +77,8 @@ it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一�
       const id = new SystemIdGenerator().generate();
       db.client
         .prepare(
-          `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,public_state)
-        VALUES (?,?,?,'succeeded',?,1,0,0,?)`,
+          `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at,public_state)
+        VALUES (?,?,?,'succeeded',?,0,0,?)`,
         )
         .run(
           id,
@@ -96,8 +96,8 @@ it('四平台 CLI 观察分别识别末批且不会创建详情或干扰另一�
     }
     db.client
       .prepare(
-        `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at)
-      VALUES (?,'platform.boss','{}','failed',?,1,0,1)`,
+        `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at)
+      VALUES (?,'platform.boss','{}','failed',?,0,1)`,
       )
       .run(new SystemIdGenerator().generate(), crypto.randomUUID());
     for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
@@ -165,7 +165,7 @@ it('publishes preview, confirms and disables retention through real CLI and prod
     expect(
       db.client
         .prepare(
-          `SELECT count(*) FROM ${periodicConfigProjection} WHERE task_type='platform.retention'`,
+          `SELECT count(*) FROM ${periodicConfigProjection} WHERE task_type='platform.retention' AND schedule_key='platform-retention-hourly'`,
         )
         .pluck()
         .get(),

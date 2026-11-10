@@ -14,7 +14,7 @@ describe('SQLite maintenance HTTP responses', () => {
       database.client
         .prepare(
           `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,
-        max_attempts,available_at,created_at) VALUES(?,'maintenance.sqlite','{}','failed',?,1,0,0)`,
+        available_at,created_at) VALUES(?,'maintenance.sqlite','{}','failed',?,0,0)`,
         )
         .run(id, id);
       database.close();

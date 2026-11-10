@@ -47,6 +47,10 @@ function fixture(): {
     ),
   );
   db.exec('ALTER TABLE model_requests ADD COLUMN ai_message_id TEXT');
+  // 独立账本的请求诊断归通用事件表，最小夹具也保留其唯一性约束。
+  db.exec(
+    'CREATE TABLE events(id TEXT PRIMARY KEY,stream_type TEXT NOT NULL,stream_id TEXT NOT NULL,sequence_no INTEGER NOT NULL,event_type TEXT NOT NULL,payload_json TEXT NOT NULL,occurred_at INTEGER NOT NULL,UNIQUE(stream_type,stream_id,sequence_no))',
+  );
   const ledger = new SqliteModelRequestRepository(db);
   return {
     db,
@@ -85,16 +89,35 @@ describe('usage ledger (USG-002, USG-003, USG-004)', () => {
       const report = service.query({}, now);
       expect(report.start).toBe(midnight);
       expect(report.total).toMatchObject({
-        requests: 2,
-        tokens: 240,
-        cost: 20,
-        cacheRead: 160,
-        cacheInput: 200,
+        requests: 3,
+        tokens: 360,
+        costByCurrency: { USD: 20, CNY: 10 },
+        cacheRead: 240,
+        cacheInput: 300,
       });
       expect(report.buckets).toHaveLength(21);
       expect(report.buckets[0]?.total.requests).toBe(1);
       expect(report.buckets[1]?.total.requests).toBe(0);
-      expect(service.query({ currency: 'CNY' }, now).total.requests).toBe(1);
+      expect(report.total.cost).toBeCloseTo(20 + 10 / 7.2);
+      expect(service.query({ currency: 'CNY' }, now).total).toMatchObject({
+        requests: 3,
+        cost: 154,
+      });
+      expect(service.query({ currency: 'USD' }, now).total).toMatchObject({
+        requests: 3,
+        costByCurrency: { USD: 20, CNY: 10 },
+      });
+      expect(report.groups[0]?.total.costByCurrency).toEqual({ USD: 20, CNY: 10 });
+      expect(report.groups[0]?.total.cost).toBeCloseTo(report.total.cost ?? 0);
+      expect(new UsageService(new SqliteUsageRepository(db), 10).query({}, now).total.cost).toBe(
+        21,
+      );
+      for (const rate of [0, -1, NaN, Infinity]) {
+        expect(() => new UsageService(new SqliteUsageRepository(db), rate)).toThrow(TypeError);
+      }
+      expect(
+        report.buckets.reduce((sum, bucket) => sum + (bucket.total.costByCurrency.CNY ?? 0), 0),
+      ).toBe(10);
       expect(service.query({ range: '7d' }, now).buckets).toHaveLength(7);
     } finally {
       db.close();
@@ -144,7 +167,7 @@ describe('usage ledger (USG-002, USG-003, USG-004)', () => {
       db.close();
     }
   });
-  it('uses weighted speed, median first content and counts network failures without inferring old status', () => {
+  it('excludes network failures consistently while preserving the ledger and unknown historical status', () => {
     const { db, service, insert } = fixture();
     try {
       insert('metrics', [
@@ -176,15 +199,32 @@ describe('usage ledger (USG-002, USG-003, USG-004)', () => {
           transportError: 'network',
         }),
         billing(now, { provider: 'two.test', application: 'Other' }),
+        billing(now - 4 * 86400000, {
+          provider: 'network-only.test',
+          model: 'network-200',
+          statusCode: 200,
+          transportError: 'network',
+        }),
       ]);
       const report = service.query({}, now);
       expect(report.total).toMatchObject({
         successful: 3,
-        knownStatus: 4,
+        requests: 4,
+        knownStatus: 3,
         firstTokenMs: 3000,
-        uncached: 50,
-        cacheWrite: 50,
+        uncached: 40,
+        cacheWrite: 40,
+        cost: 40,
       });
+      expect(report.models).not.toContain('other');
+      expect(report.calls.every((call) => call.transportError !== 'network')).toBe(true);
+      expect(report.buckets.reduce((sum, bucket) => sum + bucket.total.requests, 0)).toBe(4);
+      expect(
+        db
+          .prepare("SELECT count(*) FROM model_requests WHERE transport_error='network'")
+          .pluck()
+          .get(),
+      ).toBe(2);
       expect(report.total.outputTokensPerSecond).toBeCloseTo(400 / 7);
       expect(report.providerGroups.map((group) => group.provider)).toEqual([
         'one.test',

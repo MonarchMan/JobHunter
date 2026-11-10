@@ -13,18 +13,24 @@ export function UsageChart({
 }): ReactElement {
   const [metric, setMetric] = useState<'tokens' | 'requests' | 'cost'>('tokens');
   const [active, setActive] = useState<number | null>(null);
+  const currency = report.filters.currency;
+  /** 成本由统计服务统一换算，币种切换不改变请求与 Tokens。 */
+  const value = (total: UsageReport['total']): number =>
+    metric === 'cost' ? (total.cost ?? 0) : total[metric];
   const labels = { tokens: 'Tokens', requests: '请求', cost: '成本' };
-  const peak = Math.max(1, ...report.buckets.map((bucket) => bucket.total[metric]));
+  const peak = Math.max(1, ...report.buckets.map((bucket) => value(bucket.total)));
   const step = Math.pow(10, Math.floor(Math.log10(peak)));
   const maximum = Math.ceil(peak / step) * step;
   const format = (value: number): string =>
     metric === 'cost'
-      ? `${report.filters.currency === 'USD' ? '$' : '¥'}${(value / 1000000).toFixed(4)}`
+      ? `${currency === 'USD' ? '$' : '¥'}${(value / 1000000).toFixed(4)}`
       : value.toLocaleString('zh-CN');
   const axisValue = (value: number): string =>
     metric === 'cost'
       ? format(value)
       : Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+  const display = (total: UsageReport['total']): string =>
+    metric === 'cost' && total.cost === null ? '—' : format(value(total));
   const date = (at: number): string =>
     new Intl.DateTimeFormat('zh-CN', {
       timeZone: 'Asia/Shanghai',
@@ -54,6 +60,7 @@ export function UsageChart({
         <span className={styles.legend}>
           <i />
           {labels[metric]}
+          {metric === 'cost' ? ' · ' + currency : ''}
         </span>
         <div className={styles.segment} aria-label="趋势指标">
           {(['tokens', 'requests', 'cost'] as const).map((key) => (
@@ -97,7 +104,7 @@ export function UsageChart({
                 points={report.buckets
                   .map(
                     (bucket, index) =>
-                      `${String(((index + 0.5) / report.buckets.length) * 1000)},${String(180 - (bucket.total[metric] / maximum) * 180)}`,
+                      `${String(((index + 0.5) / report.buckets.length) * 1000)},${String(180 - (value(bucket.total) / maximum) * 180)}`,
                   )
                   .join(' ')}
               />
@@ -117,7 +124,7 @@ export function UsageChart({
                   <i />
                   {labels[metric]}
                 </span>
-                <span>{format(selected.total[metric])}</span>
+                <span>{display(selected.total)}</span>
               </div>
             </div>
           ) : null}
@@ -135,15 +142,15 @@ export function UsageChart({
               onClick={() => {
                 setActive(index);
               }}
-              aria-label={`${date(bucket.at)} ${labels[metric]} ${format(bucket.total[metric])}`}
+              aria-label={`${date(bucket.at)} ${labels[metric]} ${display(bucket.total)}`}
             >
               <span
                 className={chartStyle === 'line' ? styles.linePoint : styles.bar}
                 style={{
                   ...(chartStyle === 'line'
-                    ? { bottom: `${String((bucket.total[metric] / maximum) * 100)}%` }
+                    ? { bottom: `${String((value(bucket.total) / maximum) * 100)}%` }
                     : {}),
-                  height: `${String(Math.max(bucket.total[metric] > 0 ? 1 : 0, (bucket.total[metric] / maximum) * 100))}%`,
+                  height: `${String(Math.max(value(bucket.total) > 0 ? 1 : 0, (value(bucket.total) / maximum) * 100))}%`,
                 }}
               />
             </button>

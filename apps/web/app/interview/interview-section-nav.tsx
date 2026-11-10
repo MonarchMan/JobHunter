@@ -15,6 +15,7 @@ export function InterviewSectionNav(): ReactElement {
   return (
     <PageTabs
       label="面试准备"
+      heading={sections.some((section) => section.href === pathname)}
       items={sections.map((section) => {
         const current =
           section.href === '/interview'

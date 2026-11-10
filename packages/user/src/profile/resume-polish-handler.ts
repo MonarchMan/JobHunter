@@ -1,3 +1,4 @@
+import type { ResumePolishSuggestionStore } from '../ports/resume-polish.js';
 import { AgentRuntimeError, type AgentRunner } from '@jobhunter/common/agent';
 import { parseId } from '@jobhunter/common/domain';
 import {
@@ -31,6 +32,7 @@ export function createResumePolishTaskHandler(
   input:
     | {
         readonly runner: AgentRunner;
+        readonly suggestions: ResumePolishSuggestionStore;
         readonly profiles: CandidateProfileRepository;
       }
     | { readonly unavailable: true },
@@ -78,14 +80,23 @@ export function createResumePolishTaskHandler(
           : null,
       } as const;
       try {
-        const result = await input.runner.run({
-          ...(context.taskId ? { retryKey: context.taskId } : {}),
+        const request = {
           definition: resumePolishAgentDefinition,
           value: agentInput,
           signal: context.signal,
-        });
+        };
+        const result = await (context.taskId
+          ? input.runner.runStep({
+              ...request,
+              execution: {
+                taskId: context.taskId,
+                stepKey: 'resume-polish',
+                resourceKey: payload.suggestionId,
+              },
+            })
+          : input.runner.run(request));
         const polished = parseResumePolishAgentOutput(result.output, agentInput);
-        void polished;
+        input.suggestions.save(payload.suggestionId, payload.sourceVersionId, polished);
         return {
           suggestionId: payload.suggestionId,
           agentRunId: result.run.id,

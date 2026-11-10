@@ -88,8 +88,8 @@ function context<TConfig>(config: TConfig, body: unknown): DiscoverContext<TConf
 }
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
-async function discoveredJobs<TConfig>(
-  adapter: JobSourceAdapter<TConfig, never>,
+async function discoveredJobs<TConfig, TDetail>(
+  adapter: JobSourceAdapter<TConfig, TDetail>,
   discoverContext: DiscoverContext<TConfig>,
 ): Promise<DiscoveredJob[]> {
   const jobs: DiscoveredJob[] = [];
@@ -100,8 +100,8 @@ async function discoveredJobs<TConfig>(
 }
 
 /** 构造测试输入或执行断言的辅助逻辑。 */
-async function runContract<TConfig>(
-  factory: () => JobSourceAdapter<TConfig, never>,
+async function runContract<TConfig, TDetail>(
+  factory: () => JobSourceAdapter<TConfig, TDetail>,
   discoverContext: DiscoverContext<TConfig>,
   text: string,
 ): Promise<void> {

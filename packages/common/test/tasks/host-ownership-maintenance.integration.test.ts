@@ -31,7 +31,7 @@ it('keeps service startup excluded throughout restore, including the directory r
         close: () => Promise.resolve(),
       }),
     });
-  let service: Awaited<ReturnType<typeof start>>;
+  let service: Awaited<ReturnType<typeof start>> | undefined;
   try {
     source.client
       .prepare("INSERT INTO application_settings VALUES('fixture','\"original\"','v1',1)")

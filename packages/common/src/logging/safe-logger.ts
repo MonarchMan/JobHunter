@@ -1,19 +1,10 @@
 import type { Logger } from 'pino';
+import { currentLogFields } from './context.js';
 import { redactLogValue } from './redaction.js';
+import { boundLogFields } from './event-budget.js';
 
-/** 模块使用的类型约束。 */
-export type LogFields = Readonly<Record<string, unknown>>;
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
-
-/** 模块数据结构或契约。 */
-export interface SafeLogger {
-  debug(event: string, fields?: LogFields): void;
-  info(event: string, fields?: LogFields): void;
-  warn(event: string, fields?: LogFields): void;
-  error(event: string, fields?: LogFields): void;
-  child(fields: LogFields): SafeLogger;
-  close(): Promise<void>;
-}
+import type { LogFields, LogLevel, SafeLogger } from './contracts.js';
+export type { LogFields, LogLevel, SafeLogger } from './contracts.js';
 
 /** 基于 Pino 的安全日志实现。 */
 export class PinoSafeLogger implements SafeLogger {
@@ -50,7 +41,7 @@ export class PinoSafeLogger implements SafeLogger {
 
   /** 创建继承固定字段的子日志器。 */
   public child(fields: LogFields): SafeLogger {
-    return new PinoSafeLogger(this.#logger, { ...this.#context, ...fields }, this.#close);
+    return new PinoSafeLogger(this.#logger, { ...this.#context, ...fields });
   }
 
   /** 刷新并关闭底层日志流。 */
@@ -59,7 +50,30 @@ export class PinoSafeLogger implements SafeLogger {
   }
 
   #write(level: LogLevel, event: string, fields: LogFields): void {
-    const safe = redactLogValue({ ...this.#context, ...fields }) as LogFields;
-    this.#logger[level](safe, event);
+    // 1、禁用事件不触发字段枚举或脱敏；2、诊断故障不能覆盖业务异常。
+    if (!this.#logger.isLevelEnabled(level)) return;
+    try {
+      // 分别脱敏后才合并，避免对象展开触发外部输入的 getter。
+      const safe: Record<string, unknown> = {
+        ...(redactLogValue(this.#context) as LogFields),
+        ...(redactLogValue(currentLogFields()) as LogFields),
+        ...(redactLogValue(fields) as LogFields),
+      };
+      // envelope 只能由运行时生成，业务字段不能伪造级别、时间和进程身份。
+      for (const key of ['level', 'time', 'pid', 'threadId', 'msg', 'event', 'schemaVersion'])
+        Reflect.deleteProperty(safe, key);
+      const safeEvent = String(redactLogValue(event)).slice(0, 256);
+      const bounded = boundLogFields(safe);
+      this.#logger[level]({ ...bounded, event: safeEvent, schemaVersion: 1 }, safeEvent);
+    } catch {
+      try {
+        this.#logger.error(
+          { event: 'logging.serialization_failed', schemaVersion: 1 },
+          '日志序列化失败',
+        );
+      } catch {
+        /* 输出失败不能改变业务结果。 */
+      }
+    }
   }
 }

@@ -4,3 +4,4 @@ export * from './mail-content.js';
 export * from './mail-sync-service.js';
 export * from './mail-task-handlers.js';
 export * from './mailbox-settings-service.js';
+export * from './mailbox-schedules.js';

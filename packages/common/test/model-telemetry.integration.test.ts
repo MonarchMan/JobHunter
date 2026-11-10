@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { expect, it } from 'vitest';
 import { AgentRunner, defineAgent } from '../src/agent/index.js';
-import { OpenAiCompatibleModelClient } from '../src/models/openai-compatible-client.js';
+import { OpenAiCompatibleModelClient } from '../src/models/openai-client.js';
 import { SqliteAgentRunStore } from '../src/persistence/agent-run-store.js';
 import { SqliteUsageRepository } from '../src/persistence/usage-repository.js';
 import { UsageService } from '../src/usage/service.js';
@@ -54,9 +54,9 @@ it('persists failed HTTP attempts, retries once and filters HTTP status independ
       definition,
       value: {},
       signal: new AbortController().signal,
-      retryKey: 'synthetic-task',
+      execution: { taskId: 'synthetic-task', stepKey: 'test', resourceKey: 'one' },
     };
-    await expect(runner.run(input)).rejects.toMatchObject({ category: 'rate_limited' });
+    await expect(runner.runStep(input)).rejects.toMatchObject({ category: 'rate_limited' });
     const service = new UsageService(new SqliteUsageRepository(db.client));
     expect(service.query({}, now).calls[0]).toMatchObject({
       statusCode: 429,
@@ -64,7 +64,7 @@ it('persists failed HTTP attempts, retries once and filters HTTP status independ
       provider: 'api.example.test',
       application: 'JobHunter',
     });
-    const success = await runner.run(input);
+    const success = await runner.runStep(input);
     expect(success.run.billingCalls?.map((call) => call.statusCode)).toEqual([429, 200]);
     expect(success.run.inputTokens).toBe(10);
     expect(service.query({ statusCode: '429' }, now)).toMatchObject({
@@ -75,7 +75,7 @@ it('persists failed HTTP attempts, retries once and filters HTTP status independ
       service.query({ provider: 'api.example.test', statusCode: '200' }, now).total.requests,
     ).toBe(1);
     expect(service.query({ statusCode: 'unknown' }, now).total.requests).toBe(0);
-    await runner.run(input);
+    await runner.runStep(input);
     expect(calls).toBe(2);
     expect(service.query({}, now).total.requests).toBe(2);
     expect(JSON.stringify(service.query({}, now))).not.toContain('synthetic-secret');

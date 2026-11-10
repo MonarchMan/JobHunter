@@ -207,75 +207,81 @@ export class SqliteMatchingRepository implements MatchingRepository {
 
   /** 执行数据库组件对外暴露的操作。 */
   public saveEnrichment(record: JobEnrichmentRecord): JobEnrichmentRecord {
-    // 输入校验与覆盖写入共享短事务，拒绝另一连接并发更新后的旧结果。
-    return this.#client.transaction(() => {
-      const job = this.jobs.getRevision(record.jobRevisionId);
-      if (!job) throw new Error('Job content changed before enrichment completed.');
-      const id = this.saveMetadata(
-        record.id,
-        job.jobId,
-        'enrichment',
-        {
-          content_id: job.id,
-          agent_run_id: record.agentRunId,
-          schema: record.schemaVersion,
-          content_hash: record.contentHash,
-          result: record.result,
-        },
-        record.createdAt,
-      );
-      const stored = this.getEnrichment(parseId(id, 'JobEnrichment'));
-      if (!stored) throw new Error('Metadata persistence did not produce a row.');
-      return stored;
-    })();
+    // 先取得写锁再校验和覆盖，避免其他连接提交导致 WAL 读取快照无法升级。
+    return this.#client
+      .transaction(() => {
+        const job = this.jobs.getRevision(record.jobRevisionId);
+        if (!job) throw new Error('Job content changed before enrichment completed.');
+        const id = this.saveMetadata(
+          record.id,
+          job.jobId,
+          'enrichment',
+          {
+            content_id: job.id,
+            agent_run_id: record.agentRunId,
+            schema: record.schemaVersion,
+            content_hash: record.contentHash,
+            result: record.result,
+          },
+          record.createdAt,
+        );
+        const stored = this.getEnrichment(parseId(id, 'JobEnrichment'));
+        if (!stored) throw new Error('Metadata persistence did not produce a row.');
+        return stored;
+      })
+      .immediate();
   }
 
   /** 执行数据库组件对外暴露的操作。 */
   public createOrGetMatch(record: MatchResultRecord): MatchResultRecord {
-    // 输入校验与覆盖写入共享短事务，拒绝另一连接并发更新后的旧结果。
-    return this.#client.transaction(() => {
-      const job = this.jobs.getRevision(record.jobRevisionId);
-      if (!job) throw new Error('Job content changed before scoring completed.');
-      if (!this.isCurrentProfile(record.profileVersionId))
-        throw new Error('Profile changed before scoring completed.');
-      const model = record.components.find((c) => c.dimension === 'model');
-      const id = this.saveMetadata(
-        record.id,
-        job.jobId,
-        'match_result',
-        {
-          content_id: job.id,
-          profile_version_id: record.profileVersionId,
-          enrichment_id: record.jobEnrichmentId,
-          rules_hash: contentHash(currentMatchRuleset),
-          filter_status: record.filterStatus,
-          total_score: record.totalScore,
-          input_hash: record.inputHash,
-          components: record.components
-            .filter((c) => c.dimension !== 'model')
-            .map((c) => ({ dimension: c.dimension, score: c.score, max_score: c.maximumScore })),
-          risk_results: [
-            ...new Set(record.ruleOutcomes.filter((r) => r.status === 'fail').map((r) => r.ruleId)),
-          ],
-          unknown_rules: [
-            ...new Set(
-              record.ruleOutcomes.filter((r) => r.status === 'unknown').map((r) => r.ruleId),
-            ),
-          ],
-          model:
-            record.modelScore === null
-              ? null
-              : {
-                  score: record.modelScore,
-                  reasons: model?.matchedEvidence.map((e) => e.summary) ?? [],
-                },
-        },
-        record.createdAt,
-      );
-      const stored = this.getMatch(parseId(id, 'MatchResult'));
-      if (!stored) throw new Error('Metadata persistence did not produce a row.');
-      return stored;
-    })();
+    // 先取得写锁再校验和覆盖，避免其他连接提交导致 WAL 读取快照无法升级。
+    return this.#client
+      .transaction(() => {
+        const job = this.jobs.getRevision(record.jobRevisionId);
+        if (!job) throw new Error('Job content changed before scoring completed.');
+        if (!this.isCurrentProfile(record.profileVersionId))
+          throw new Error('Profile changed before scoring completed.');
+        const model = record.components.find((c) => c.dimension === 'model');
+        const id = this.saveMetadata(
+          record.id,
+          job.jobId,
+          'match_result',
+          {
+            content_id: job.id,
+            profile_version_id: record.profileVersionId,
+            enrichment_id: record.jobEnrichmentId,
+            rules_hash: contentHash(currentMatchRuleset),
+            filter_status: record.filterStatus,
+            total_score: record.totalScore,
+            input_hash: record.inputHash,
+            components: record.components
+              .filter((c) => c.dimension !== 'model')
+              .map((c) => ({ dimension: c.dimension, score: c.score, max_score: c.maximumScore })),
+            risk_results: [
+              ...new Set(
+                record.ruleOutcomes.filter((r) => r.status === 'fail').map((r) => r.ruleId),
+              ),
+            ],
+            unknown_rules: [
+              ...new Set(
+                record.ruleOutcomes.filter((r) => r.status === 'unknown').map((r) => r.ruleId),
+              ),
+            ],
+            model:
+              record.modelScore === null
+                ? null
+                : {
+                    score: record.modelScore,
+                    reasons: model?.matchedEvidence.map((e) => e.summary) ?? [],
+                  },
+          },
+          record.createdAt,
+        );
+        const stored = this.getMatch(parseId(id, 'MatchResult'));
+        if (!stored) throw new Error('Metadata persistence did not produce a row.');
+        return stored;
+      })
+      .immediate();
   }
 
   /** 执行数据库组件对外暴露的操作。 */
@@ -288,35 +294,37 @@ export class SqliteMatchingRepository implements MatchingRepository {
 
   /** 执行数据库组件对外暴露的操作。 */
   public saveAdvice(record: MatchAdviceRecord): MatchAdviceRecord {
-    // 输入校验与覆盖写入共享短事务，拒绝另一连接并发更新后的旧结果。
-    return this.#client.transaction(() => {
-      const match = this.getMatch(record.matchResultId);
-      if (
-        !match ||
-        record.matchInputHash !== match.inputHash ||
-        !this.isCurrentProfile(match.profileVersionId)
-      )
-        throw new Error('Scoring changed before advice completed.');
-      const job = this.jobs.getRevision(match.jobRevisionId);
-      if (!job) throw new Error('Job content changed before advice completed.');
-      const id = this.saveMetadata(
-        record.id,
-        job.jobId,
-        'match_advice',
-        {
-          match_result_id: match.id,
-          match_input_hash: match.inputHash,
-          agent_run_id: record.agentRunId,
-          schema: record.schemaVersion,
-          content_hash: record.contentHash,
-          result: record.result,
-        },
-        record.createdAt,
-      );
-      const stored = this.getAdvice(parseId(id, 'MatchAdvice'));
-      if (!stored) throw new Error('Metadata persistence did not produce a row.');
-      return stored;
-    })();
+    // 先取得写锁再校验和覆盖，避免其他连接提交导致 WAL 读取快照无法升级。
+    return this.#client
+      .transaction(() => {
+        const match = this.getMatch(record.matchResultId);
+        if (
+          !match ||
+          record.matchInputHash !== match.inputHash ||
+          !this.isCurrentProfile(match.profileVersionId)
+        )
+          throw new Error('Scoring changed before advice completed.');
+        const job = this.jobs.getRevision(match.jobRevisionId);
+        if (!job) throw new Error('Job content changed before advice completed.');
+        const id = this.saveMetadata(
+          record.id,
+          job.jobId,
+          'match_advice',
+          {
+            match_result_id: match.id,
+            match_input_hash: match.inputHash,
+            agent_run_id: record.agentRunId,
+            schema: record.schemaVersion,
+            content_hash: record.contentHash,
+            result: record.result,
+          },
+          record.createdAt,
+        );
+        const stored = this.getAdvice(parseId(id, 'MatchAdvice'));
+        if (!stored) throw new Error('Metadata persistence did not produce a row.');
+        return stored;
+      })
+      .immediate();
   }
 
   /** 执行数据库组件对外暴露的操作。 */

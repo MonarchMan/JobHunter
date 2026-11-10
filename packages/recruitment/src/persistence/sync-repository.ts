@@ -159,8 +159,8 @@ export class SqliteSyncRepository implements SyncRepository {
         .prepare(
           `INSERT INTO tasks
         (id,task_type,private_state,public_state,status,idempotency_key,parent_task_id,
-         attempt_count,max_attempts,available_at,created_at,started_at)
-        VALUES (?,'source.scan',?,?,'running',?,?,1,1,?,?,?)`,
+         attempt_count,available_at,created_at,started_at)
+        VALUES (?,'source.scan',?,?,'running',?,?,1,?,?,?)`,
         )
         .run(
           input.id,

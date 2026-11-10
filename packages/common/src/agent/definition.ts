@@ -24,11 +24,6 @@ export interface AgentDefinition<TInput, TOutput> {
   readonly validateOutput?: (output: TOutput, input: TInput) => void;
   readonly tools: readonly ToolDefinition<unknown, unknown>[];
   readonly limits: AgentLimits;
-  /** 控制成功输出是否可复用、是否写入运行记录；敏感输入任务应禁用缓存并省略输出。 */
-  readonly resultPolicy?: {
-    readonly cache: 'enabled' | 'disabled';
-    readonly persistOutput: boolean;
-  };
 }
 
 /** 根据实际执行内容隔离缓存，定义变化不再依赖人工递增版本号。 */
@@ -49,7 +44,6 @@ export function agentDefinitionHash<TInput, TOutput>(
       execute: tool.execute.toString(),
     })),
     limits: definition.limits,
-    resultPolicy: definition.resultPolicy ?? { cache: 'enabled', persistOutput: true },
   });
 }
 
@@ -69,9 +63,6 @@ export function defineAgent<TInput, TOutput>(
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new TypeError(`Agent limit ${key} must be a positive integer.`);
     }
-  }
-  if (definition.resultPolicy?.cache === 'enabled' && !definition.resultPolicy.persistOutput) {
-    throw new TypeError('Cached agent results must persist their validated output.');
   }
   // 2、校验工具键唯一后冻结定义，避免运行中被调用方修改。
   const toolKeys = new Set<string>();

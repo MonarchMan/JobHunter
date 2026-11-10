@@ -33,9 +33,7 @@ interface TaskRow {
   readonly priority: number;
   readonly idempotency_key: string;
   readonly concurrency_key: string | null;
-  readonly retry_of_task_id: string | null;
   readonly attempt_count: number;
-  readonly max_attempts: number;
   readonly available_at: number;
   readonly lease_owner: string | null;
   readonly lease_expires_at: number | null;
@@ -109,9 +107,7 @@ function taskFromRow(row: TaskRow): TaskRecord {
     priority: row.priority,
     idempotencyKey: row.idempotency_key,
     concurrencyKey: row.concurrency_key,
-    retryOfTaskId: row.retry_of_task_id === null ? null : parseId(row.retry_of_task_id, 'Task'),
     attemptCount: row.attempt_count,
-    maxAttempts: row.max_attempts,
     availableAt: utcInstant(row.available_at),
     leaseOwner: row.lease_owner,
     leaseExpiresAt: nullableInstant(row.lease_expires_at),
@@ -145,7 +141,7 @@ function scheduleFromRow(row: ScheduleRow): ScheduleRecord {
 
 const TASK_COLUMNS = `
   id, parent_task_id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
-  retry_of_task_id, attempt_count, max_attempts, available_at,
+  attempt_count, available_at,
   lease_owner, lease_expires_at, last_heartbeat_at, cancel_requested_at,
   error_category, error_summary, public_state, created_at, started_at, finished_at`;
 
@@ -156,6 +152,7 @@ const SCHEDULE_COLUMNS = `
 /** 实现通用任务队列的入队、租约、完成和失败重试。 */
 export class SqliteTaskRepository implements TaskQueue {
   readonly #client: Database.Database;
+  readonly #maxAttemptsFor: (taskType: string) => number;
   readonly #claimTransaction: (input: {
     readonly rootTaskIds?: readonly string[];
     readonly taskType: string;
@@ -177,9 +174,13 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly now: UtcInstant;
   }) => EnqueueTaskResult | null;
 
-  /** 执行数据库组件对外暴露的操作。 */
-  public constructor(client: Database.Database) {
+  /** 注入按任务类型读取系统重试上限的查询；独立队列采用系统默认三次。 */
+  public constructor(
+    client: Database.Database,
+    maxAttemptsFor: (taskType: string) => number = () => 3,
+  ) {
     this.#client = client;
+    this.#maxAttemptsFor = maxAttemptsFor;
     const claimTransaction = client.transaction((input: ClaimTaskInput) =>
       this.#claimInside(input),
     );
@@ -236,20 +237,15 @@ export class SqliteTaskRepository implements TaskQueue {
         SELECT id, ?, error_category, error_summary, attempt_count, started_at, finished_at, ? FROM tasks WHERE id = ?`,
           )
           .run(input.idempotencyKey, input.createdAt, input.id);
-        // 3、保留业务身份、原始幂等键和累计次数；累计上限追加本轮预算，避免重试后立即耗尽。
+        // 3、保留业务身份、原始幂等键和累计次数；上方日志的累计次数即新一轮预算起点。
         this.#client
           .prepare(
             `UPDATE tasks SET status = 'pending', private_state = ?,
-        max_attempts = ?, available_at = ?, lease_owner = NULL, lease_expires_at = NULL,
+        available_at = ?, lease_owner = NULL, lease_expires_at = NULL,
         last_heartbeat_at = NULL, cancel_requested_at = NULL, error_category = NULL,
         error_summary = NULL, public_state = NULL, started_at = NULL, finished_at = NULL WHERE id = ?`,
           )
-          .run(
-            canonicalJson(input.payload),
-            current.attemptCount + input.maxAttempts,
-            input.availableAt,
-            input.id,
-          );
+          .run(canonicalJson(input.payload), input.availableAt, input.id);
         const task = this.get(input.id);
         if (!task) throw new TypeError('Retried task was not found.');
         return { kind: 'enqueued', task };
@@ -263,10 +259,10 @@ export class SqliteTaskRepository implements TaskQueue {
       .prepare(
         `INSERT INTO tasks
          (id, parent_task_id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
-          retry_of_task_id, attempt_count, max_attempts, available_at,
+          attempt_count, available_at,
           lease_owner, lease_expires_at, last_heartbeat_at, cancel_requested_at,
           error_category, error_summary, public_state, created_at, started_at, finished_at)
-         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, NULL,
+         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, 0, ?, NULL, NULL, NULL, NULL,
                  NULL, NULL, NULL, ?, NULL, NULL)
          RETURNING ${TASK_COLUMNS}`,
       )
@@ -278,8 +274,6 @@ export class SqliteTaskRepository implements TaskQueue {
         input.priority,
         input.idempotencyKey,
         input.concurrencyKey,
-        input.retryOfTaskId,
-        input.maxAttempts,
         input.availableAt,
         input.createdAt,
       ) as TaskRow;
@@ -435,24 +429,52 @@ export class SqliteTaskRepository implements TaskQueue {
          WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested_at IS NOT NULL`,
       )
       .run(now, now);
-    const exhausted = this.#client
+    // 2、只读取已过期执行，按系统配置和最近手动重试起点判断本轮预算。
+    const expired = this.#client
       .prepare(
-        `UPDATE tasks SET status = 'failed', finished_at = ?, lease_owner = NULL,
-           lease_expires_at = NULL, last_heartbeat_at = NULL,
-           error_category = 'permanent', error_summary = 'Lease expired after final attempt.'
-         WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested_at IS NULL
-           AND attempt_count >= max_attempts`,
+        `SELECT id, task_type FROM tasks
+         WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested_at IS NULL`,
       )
-      .run(now, now).changes;
-    const recovered = this.#client
-      .prepare(
-        `UPDATE tasks SET status = 'pending', available_at = ?, lease_owner = NULL,
+      .all(now) as { id: string; task_type: string }[];
+    let recovered = 0;
+    let exhausted = 0;
+    for (const task of expired) {
+      const limit = this.#maxAttemptsFor(task.task_type);
+      if (!Number.isSafeInteger(limit) || limit < 1)
+        throw new TypeError('Invalid task attempt limit.');
+      if (this.attemptsInCurrentRound(parseId(task.id, 'Task')) >= limit) {
+        exhausted += this.#client
+          .prepare(
+            `UPDATE tasks SET status = 'failed', finished_at = ?, lease_owner = NULL,
+             lease_expires_at = NULL, last_heartbeat_at = NULL,
+             error_category = 'permanent', error_summary = 'Lease expired after final attempt.'
+             WHERE id = ?`,
+          )
+          .run(now, task.id).changes;
+      } else {
+        recovered += this.#client
+          .prepare(
+            `UPDATE tasks SET status = 'pending', available_at = ?, lease_owner = NULL,
            lease_expires_at = NULL, last_heartbeat_at = NULL
-         WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested_at IS NULL
-           AND attempt_count < max_attempts`,
-      )
-      .run(now, now).changes;
+             WHERE id = ?`,
+          )
+          .run(now, task.id).changes;
+      }
+    }
     return { recovered, exhausted };
+  }
+
+  /** 手动重试日志提供本轮起点，累计次数持续用于执行身份和审计。 */
+  public attemptsInCurrentRound(taskId: TaskId): number {
+    const row = this.#client
+      .prepare(
+        `SELECT attempt_count - COALESCE(
+      (SELECT MAX(attempt_count) FROM task_retry_logs WHERE task_id = tasks.id), 0
+    ) AS attempts FROM tasks WHERE id = ?`,
+      )
+      .get(taskId) as { attempts: number } | undefined;
+    if (!row) throw new TypeError('Task was not found.');
+    return row.attempts;
   }
 
   /** 执行数据库组件对外暴露的操作。 */
@@ -523,6 +545,14 @@ export class SqliteTaskRepository implements TaskQueue {
       )
       .get(input.workerId, input.now + leaseDurationMs, input.now, input.now, candidate.id) as
       TaskRow | undefined;
+    // 2、只有领取成功后才关闭上一执行者的遗留 Agent；与领取同一事务，失败整体回滚。
+    // 已成功的模型结果保持原样，供业务提交失败后的恢复使用。
+    if (row)
+      this.#client
+        .prepare(
+          "UPDATE agent_runs SET status='failed', error_category='temporary', error_summary='Previous task execution was interrupted.', finished_at=? WHERE task_id=? AND status='running'",
+        )
+        .run(input.now, row.id);
     return row ? taskFromRow(row) : null;
   }
 
@@ -764,7 +794,17 @@ export class SqliteTaskRepository implements TaskQueue {
       .immediate();
   }
 
-  /** 执行数据库组件对外暴露的操作。 */
+  /** 由业务对账周期配置；前缀按字面匹配，不把用户输入解释成 LIKE 模式。 */
+  public listSchedules(prefix: string): readonly ScheduleRecord[] {
+    return (
+      this.#client
+        .prepare(
+          `SELECT ${SCHEDULE_COLUMNS} FROM ${periodicConfigProjection} WHERE substr(schedule_key,1,?)=? ORDER BY schedule_key`,
+        )
+        .all(prefix.length, prefix) as ScheduleRow[]
+    ).map(scheduleFromRow);
+  }
+
   public dueSchedules(now: UtcInstant, limit: number): readonly ScheduleRecord[] {
     const rows = this.#client
       .prepare(

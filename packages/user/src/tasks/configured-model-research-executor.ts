@@ -110,12 +110,21 @@ export class ConfiguredModelResearchExecutor implements ExternalResearchExecutor
       ? await collectBrowserResearchEvidence(input, signal, this.#startBrowserGateway)
       : await collectBrowserResearchEvidence(input, signal);
     try {
-      const result = await this.#runner.run({
-        retryKey: input.requestId,
+      const request = {
         definition: configuredResearchAgentDefinition,
         value: { evidencePrompt: evidence.prompt },
         signal,
-      });
+      };
+      const result = await (input.taskId
+        ? this.#runner.runStep({
+            ...request,
+            execution: {
+              taskId: input.taskId,
+              stepKey: 'experience-research',
+              resourceKey: input.requestId,
+            },
+          })
+        : this.#runner.run(request));
       const bundleText = JSON.stringify(result.output);
       if (Buffer.byteLength(bundleText, 'utf8') > input.maximumOutputBytes) {
         throw new ExternalResearchExecutorError(

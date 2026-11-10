@@ -1,3 +1,4 @@
+import { SqliteResumePolishSuggestionStore } from '@jobhunter/user/persistence/resume-polish-suggestion-store';
 import { NodeResearchDelivery } from '@jobhunter/user/persistence/research-delivery';
 import { AiSessionService } from '@jobhunter/user/ai/service';
 import { createAiReplyHandler } from '@jobhunter/user/ai/handler';
@@ -390,7 +391,10 @@ export function createLocalWebContainer(
           sourceSchedules.reconcile();
         },
       }),
-      usage: new UsageService(new SqliteUsageRepository(database.client)),
+      usage: new UsageService(
+        new SqliteUsageRepository(database.client),
+        Number(process.env.MODEL_USD_TO_CNY_RATE ?? '7.2'),
+      ),
       diagnostics: new WebDiagnosticsService({
         tasks,
         repository: new SqliteWebDiagnosticsRepository(database.client),
@@ -399,7 +403,7 @@ export function createLocalWebContainer(
       resumes,
       resumePolish: new ResumePolishService({
         profiles: profileRepository,
-        agentRuns,
+        suggestions: new SqliteResumePolishSuggestionStore(database.client),
         tasks,
         ids,
       }),

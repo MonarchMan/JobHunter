@@ -10,8 +10,9 @@ export class SqliteUsageRepository implements UsageRepository {
     // 1、索引按真实请求时间扫描；LEFT JOIN 保留运行已被清理的历史账单。
     const rows = this.client
       .prepare(
-        `SELECT request.*, run.status AS run_status
+        `SELECT request.*, run.status AS run_status, json_extract(diagnostic.payload_json,'$.failureReason') AS failure_reason
       FROM model_requests request LEFT JOIN agent_runs run ON run.id = request.agent_run_id
+      LEFT JOIN events diagnostic ON diagnostic.stream_type='model_request' AND diagnostic.stream_id=request.id AND diagnostic.sequence_no=1 AND diagnostic.event_type='model.request.failure'
       WHERE request.requested_at >= ? AND request.requested_at < ?`,
       )
       .all(start, end);

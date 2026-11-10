@@ -96,9 +96,10 @@ describe.skipIf(!enabled || !selected.has('bilibili-campus'))(
       }
       // 3、只打开一条独立官方详情验证 inline 正文身份；无需登录或投递简历。
       const first = jobs[0].job;
+      const executablePath = resolveBrowserExecutablePath();
       const browser = await chromium.launch({
         headless: true,
-        executablePath: resolveBrowserExecutablePath(),
+        ...(executablePath ? { executablePath } : {}),
       });
       try {
         const detailPage = await browser.newPage();

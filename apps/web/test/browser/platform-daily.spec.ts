@@ -59,6 +59,7 @@ for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
       ...state,
       connection: { generation: 2, status: 'available' },
       batch: {
+        status: 'saved',
         generation: 2,
         candidates: [],
         savedCount: 2,

@@ -1,3 +1,4 @@
+import type { TaskErrorCategory } from '@jobhunter/common/task-contracts';
 import type { TaskHandlerContext } from '@jobhunter/common/tasks';
 
 /**
@@ -10,6 +11,9 @@ export interface SyncScoringItemRecord {
   /** 成功项为脱敏评分摘要；失败项为可恢复的子阶段检查点或 null。 */
   readonly result: unknown;
   readonly error: string | null;
+  /** 旧检查点可能缺失分类；汇总不得据此猜测为网络错误。 */
+  readonly errorCategory?: TaskErrorCategory | undefined;
+  readonly retryable?: boolean | undefined;
 }
 
 /** 评分阶段进度；与同步任务检查点及输出中的 scoring 字段同构。 */

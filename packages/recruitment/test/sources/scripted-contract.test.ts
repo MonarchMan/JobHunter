@@ -6,6 +6,7 @@ import {
   type DiscoverContext,
   type JobSourceAdapter,
   type SourceHttpClient,
+  type SourceHttpResponse,
   type SourcePageClient,
   type SourcePageCollection,
 } from '@jobhunter/recruitment/source-contracts';
@@ -101,12 +102,14 @@ describe('scripted adapters common source contract', () => {
   it('covers Xiaohongshu campus JSON', async () => {
     const loaded = await fixture('xiaohongshu/page-1.json');
     const http: SourceHttpClient = {
-      request: (request) =>
+      request: <TBody>(
+        request: Parameters<SourceHttpClient['request']>[0],
+      ): Promise<SourceHttpResponse<TBody>> =>
         Promise.resolve({
           status: 200,
           url: request.url,
           headers: new Headers({ 'content-type': 'application/json' }),
-          body: loaded.value,
+          body: loaded.value as TBody,
         }),
     };
     const contractContext = context(http);

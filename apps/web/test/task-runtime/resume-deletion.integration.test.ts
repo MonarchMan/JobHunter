@@ -42,6 +42,11 @@ class FailOncePurgeStore implements ArtifactStore {
   }
 
   /** 执行测试替身或时钟的操作。 */
+  /** 委托删除操作，保持测试替身实现完整存储端口。 */
+  public remove(input: Parameters<ArtifactStore['remove']>[0]): Promise<void> {
+    return this.#delegate.remove(input);
+  }
+
   public read(input: Parameters<ArtifactStore['read']>[0]): Promise<StoredArtifactContent> {
     return this.#delegate.read(input);
   }

@@ -36,7 +36,7 @@ try {
       assert.equal(await page.evaluate('globalThis.bridgeCount'), 1);
       const result: unknown = await page.evaluate(invokeKuaishouRuntime, {
         campus,
-        operation: 'list',
+        operation: 'list' as const,
         pageNum: 1,
         pageSize: 50,
         ...(campus ? { project: 'fixture-project' } : { nature: 'C001' }),

@@ -119,7 +119,9 @@ it('猎聘 HTTP 批次自动入库，官网和其他平台查询保持隔离', a
     expect(await production.engine.runOnce('platform.liepin')).toBe(true);
     expect(tasks.get(parseId(submitted.task.id, 'Task'))?.status).toBe('succeeded');
     expect(connect).toHaveBeenCalledTimes(1);
-    await consume({ action: 'next', generation: repository.generation() });
+    const generation = repository.generation();
+    if (generation === null) throw new Error('Expected acquired generation');
+    await consume({ action: 'next', generation });
     expect(web.snapshot().batch?.savedCount).toBe(1);
     expect(requests).toBe(2);
     const jobs = new SqliteJobQueryRepository(db.client, new SqliteJobScoreReader(db.client));

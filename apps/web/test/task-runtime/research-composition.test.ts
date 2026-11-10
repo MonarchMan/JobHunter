@@ -31,8 +31,6 @@ describe('production research composition', () => {
             priority: 0,
             idempotencyKey: 'research-composition-fixture',
             concurrencyKey: `experience-research:${requestId}`,
-            retryOfTaskId: null,
-            maxAttempts: 2,
             availableAt: utcInstant(1),
             createdAt: utcInstant(1),
           });

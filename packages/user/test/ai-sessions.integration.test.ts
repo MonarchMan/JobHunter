@@ -74,6 +74,7 @@ it('keeps conversations after project deletion, rejects stale replies and overwr
       },
     });
     const registry = new HandlerRegistry();
+    expect(createAiReplyHandler({}).defaultMaxAttempts).toBe(1);
     registry.register(createAiReplyHandler({}));
     const tasks = new TaskService(
       { queue: new SqliteTaskRepository(db.client), clock, ids },

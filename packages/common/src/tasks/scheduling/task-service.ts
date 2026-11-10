@@ -21,11 +21,10 @@ export interface EnqueueTaskCommand {
   readonly idempotencyKey: string;
   readonly priority?: number;
   readonly concurrencyKey?: string | null;
-  readonly maxAttempts?: number;
   readonly availableAt?: UtcInstant;
 }
 
-/** 校验任务优先级、重试次数等安全整数参数。 */
+/** 校验任务优先级等安全整数参数。 */
 function validateCount(value: number, field: string, minimum: number): void {
   if (!Number.isSafeInteger(value) || value < minimum) {
     throw new TypeError(`${field} is invalid.`);
@@ -62,9 +61,7 @@ export class TaskService {
     const idempotencyKey = command.idempotencyKey.trim();
     if (!idempotencyKey) throw new TypeError('Task idempotency key must not be empty.');
     const priority = command.priority ?? 0;
-    const maxAttempts = command.maxAttempts ?? handler.defaultMaxAttempts;
     validateCount(priority, 'Task priority', -1_000_000);
-    validateCount(maxAttempts, 'Task max attempts', 1);
     const derivedConcurrencyKey = handler.concurrencyKey?.(payload) ?? null;
     const concurrencyKey = command.concurrencyKey ?? derivedConcurrencyKey;
     if (concurrencyKey !== null && !concurrencyKey.trim()) {
@@ -80,8 +77,6 @@ export class TaskService {
       priority,
       idempotencyKey,
       concurrencyKey,
-      retryOfTaskId: null,
-      maxAttempts,
       availableAt: command.availableAt ?? now,
       createdAt: now,
     };
@@ -145,8 +140,6 @@ export class TaskService {
       priority: source.priority,
       idempotencyKey: token,
       concurrencyKey: source.concurrencyKey,
-      retryOfTaskId: source.retryOfTaskId,
-      maxAttempts: handler.defaultMaxAttempts,
       availableAt: now,
       createdAt: now,
     };

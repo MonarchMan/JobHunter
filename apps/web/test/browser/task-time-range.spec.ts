@@ -20,7 +20,10 @@ test('time range defaults to today, filters both lists and survives page size ch
     await expect(page).toHaveURL(new RegExp(`range=${value}`));
     await expect(range).toContainText(label);
   }
+  // 历史任务不保证仍在第一页，以类型筛选核验时间范围。
+  await page.goto('/tasks?range=all&type=maintenance.sqlite');
   await expect(page.getByRole('button', { name: '数据库空间整理', exact: true })).toBeVisible();
+  await page.goto('/tasks?range=all');
   await expect(page.getByRole('button', { name: '招聘邮件分析', exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: '后台任务分页每页数量' }).click();
   await page.getByRole('option', { name: '50 条/页', exact: true }).click();
@@ -31,7 +34,9 @@ test('time range defaults to today, filters both lists and survives page size ch
     ['?range=all', true],
     ['?range=invalid', false],
   ] as const) {
-    const response = await page.request.get(`/api/tasks${query}`);
+    const parameters = new URLSearchParams(query);
+    parameters.set('type', 'maintenance.sqlite');
+    const response = await page.request.get(`/api/tasks?${parameters.toString()}`);
     const body = (await response.json()) as { data: unknown };
     const result = webDiagnosticsSchema.parse(body.data);
     expect(result.tasks.some((task) => task.taskType === 'maintenance.sqlite')).toBe(historical);

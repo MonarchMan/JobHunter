@@ -22,7 +22,6 @@ export const aiReplyAgent = defineAgent({
   }),
   outputSchema: z.object({ content: z.string().trim().min(1).max(20_000) }).strict(),
   tools: [],
-  resultPolicy: { cache: 'enabled', persistOutput: true },
   limits: {
     timeoutMs: 90_000,
     maxSteps: 1,
@@ -43,7 +42,7 @@ export function createAiReplyHandler(input: {
       .object({ sessionId: z.string().min(1), messageId: z.string().min(1) })
       .strict(),
     outputSchema: z.object({ messageId: z.string() }).strict(),
-    defaultMaxAttempts: 3,
+    defaultMaxAttempts: 1,
     leaseDurationMs: 120_000,
     concurrencyKey: (payload) => `ai-message:${payload.messageId}`,
     async execute(context, payload) {
@@ -61,6 +60,15 @@ export function createAiReplyHandler(input: {
         const snapshot = input.service.context(payload.sessionId, payload.messageId);
         const result = await withModelMessage(payload.messageId, () =>
           runner.run({
+            ...(context.taskId
+              ? {
+                  execution: {
+                    taskId: context.taskId,
+                    stepKey: 'ai.reply',
+                    resourceKey: payload.messageId,
+                  },
+                }
+              : {}),
             definition: aiReplyAgent,
             value: snapshot.value,
             signal: context.signal,

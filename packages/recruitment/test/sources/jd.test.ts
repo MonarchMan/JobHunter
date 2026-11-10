@@ -140,7 +140,7 @@ describe('JD source adapter contract', () => {
   });
 
   it('reports partial when a later page is empty before the advertised count', async () => {
-    const emptySecond = [];
+    const emptySecond: unknown[] = [];
     const discovery = await collectDiscovery(
       adapter.discover(context(fixtureHttp({ secondPage: emptySecond }))),
     );

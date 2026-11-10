@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
+import { SystemIdGenerator, parseId, utcInstant } from '@jobhunter/common/domain';
 import { observePlatformRound } from '@jobhunter/recruitment/platform-application/platform-observation';
 import { platformFailure } from '@jobhunter/recruitment/platform-application/platform-progress';
 import { PlatformError } from '@jobhunter/recruitment/platform-contracts';
@@ -8,16 +8,14 @@ import type { TaskRecord } from '@jobhunter/common/tasks';
 /** 合成任务记录只用于本地时钟和隔离测试，不访问浏览器。 */
 function task(provider: string, status: TaskRecord['status'], round = 0): TaskRecord {
   return {
-    id: new SystemIdGenerator().generate(),
+    id: parseId(new SystemIdGenerator().generate(), 'Task'),
     taskType: `platform.${provider}`,
     status,
     payload: { action: 'next', generation: 1 },
     idempotencyKey: `${provider}:stability:1:${String(round)}:next`,
     concurrencyKey: null,
-    retryOfTaskId: null,
     priority: 0,
     attemptCount: 1,
-    maxAttempts: 1,
     availableAt: utcInstant(0),
     leaseOwner: null,
     leaseExpiresAt: null,

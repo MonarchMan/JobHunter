@@ -68,7 +68,7 @@ it('connects, reads and saves into permanent jobs without official synchronizati
     const id = new SystemIdGenerator().generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,0,0,10000)",
       )
       .run(id, id);
     return id;

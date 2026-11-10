@@ -90,6 +90,9 @@ export class SqliteRecruitmentMailRepository {
         thread_key_hash = excluded.thread_key_hash,
         source_url = excluded.source_url,
         received_at = excluded.received_at,
+        processing_status=CASE WHEN mail_message_refs.content_version<>excluded.content_version THEN 'discovered' ELSE mail_message_refs.processing_status END,
+        last_classifier_version=CASE WHEN mail_message_refs.content_version<>excluded.content_version THEN NULL ELSE mail_message_refs.last_classifier_version END,
+        content_hash=CASE WHEN mail_message_refs.content_version<>excluded.content_version THEN NULL ELSE mail_message_refs.content_hash END,
         content_version = excluded.content_version,
         last_seen_at = excluded.last_seen_at,
         updated_at = excluded.updated_at
@@ -155,6 +158,24 @@ export class SqliteRecruitmentMailRepository {
       }
     });
     transaction();
+  }
+
+  /** 失败与未处理引用按稳定 ID 分页重放，不依赖邮件增量游标。 */
+  public listPendingReferences(
+    mailboxKey: string,
+    afterId: string,
+    policyVersion: string,
+  ): readonly RecruitmentMailMessageRef[] {
+    const ids = this.#client
+      .prepare(
+        "SELECT id FROM mail_message_refs WHERE mailbox_key=? AND id>? AND (processing_status IN ('discovered','failed') OR last_classifier_version IS NULL OR last_classifier_version<>?) ORDER BY id LIMIT 100",
+      )
+      .pluck()
+      .all(mailboxKey, afterId, policyVersion) as string[];
+    return ids.flatMap((id) => {
+      const ref = this.findProcessingMessageRef(id);
+      return ref ? [ref] : [];
+    });
   }
 
   /** 按内部引用恢复连接器所需的最小外部身份与已提交结论，供同步重放幂等判定。 */
@@ -529,6 +550,8 @@ export function createRecruitmentMailProcessingRepository(
 ): RecruitmentMailProcessingRepository {
   return {
     findMessageRef: (id) => repository.findProcessingMessageRef(id),
+    listPendingReferences: (mailboxKey, afterId, policyVersion) =>
+      repository.listPendingReferences(mailboxKey, afterId, policyVersion),
     updateMessageStatus: (input) => {
       repository.updateProcessingStatus(input);
     },

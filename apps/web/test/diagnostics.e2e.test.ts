@@ -28,9 +28,9 @@ function seedDiagnostics(dataRoot: string): void {
     const insertTask = database.client.prepare(
       `INSERT INTO tasks
        (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
-        retry_of_task_id, attempt_count, max_attempts, available_at,
+        attempt_count, available_at,
         error_category, error_summary, created_at, started_at, finished_at)
-       VALUES (?, 'source.health-check', ?, ?, 0, ?, NULL, NULL, ?, 3, 1, ?, ?, 1, ?, ?)`,
+       VALUES (?, 'source.health-check', ?, ?, 0, ?, NULL, ?, 1, ?, ?, 1, ?, ?)`,
     );
     insertTask.run(
       failedTaskId,
@@ -59,8 +59,8 @@ function seedDiagnostics(dataRoot: string): void {
       .prepare(
         `INSERT INTO tasks
       (id, task_type, private_state, public_state, status, idempotency_key,
-       attempt_count, max_attempts, available_at, created_at, started_at)
-      VALUES (?, 'match.score-batch', ?, ?, 'running', 'fixture-batch-progress', 1, 3, 1, 1, 1)`,
+       attempt_count, available_at, created_at, started_at)
+      VALUES (?, 'match.score-batch', ?, ?, 'running', 'fixture-batch-progress', 1, 1, 1, 1)`,
       )
       .run(
         batchTaskId,
@@ -125,8 +125,8 @@ describe('Web diagnostics', () => {
       const database = openSqliteDatabase({ dataRoot: root.path });
       try {
         const task = database.client.prepare(`INSERT INTO tasks
-          (id,task_type,private_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at)
-          VALUES (?,'source.health-check','{}','pending',?,0,3,1,?)`);
+          (id,task_type,private_state,status,idempotency_key,attempt_count,available_at,created_at)
+          VALUES (?,'source.health-check','{}','pending',?,0,1,?)`);
         const agent = database.client.prepare(`INSERT INTO agent_runs
           (id,agent_key,definition_hash,model_config_hash,input_hash,cache_key,status,started_at)
           VALUES (?,'job-analysis','fixture','fixture','fixture',?,'succeeded',?)`);
@@ -281,8 +281,8 @@ describe('Web diagnostics', () => {
           .prepare(
             `INSERT INTO tasks
              (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
-              attempt_count, max_attempts, available_at, created_at, started_at, finished_at)
-             VALUES (?, 'source.sync', ?, 'succeeded', 0, 'sync-detail-task', ?, 2, 3, 100, 100, 200, 500)`,
+              attempt_count, available_at, created_at, started_at, finished_at)
+             VALUES (?, 'source.sync', ?, 'succeeded', 0, 'sync-detail-task', ?, 2, 100, 100, 200, 500)`,
           )
           .run(
             taskId,
@@ -291,7 +291,7 @@ describe('Web diagnostics', () => {
           );
         const insertRun = database.client.prepare(
           `WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at, finished_at) AS (VALUES (?, ?, 'schedule', ?, ?, ?, ?, ?))
-INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,started_at,started_at,started_at,scan_input.finished_at,NULL,NULL FROM scan_input`,
         );
         insertRun.run(
           '018f0000-0000-7000-8000-000000000712',
@@ -357,8 +357,8 @@ INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key
         const insert = database.client.prepare(
           `INSERT INTO tasks
            (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
-            attempt_count, max_attempts, available_at, created_at, started_at, finished_at)
-           VALUES (?, 'source.job-detail', ?, ?, 0, ?, ?, 1, 3, 100, ?, ?, ?)`,
+            attempt_count, available_at, created_at, started_at, finished_at)
+           VALUES (?, 'source.job-detail', ?, ?, 0, ?, ?, 1, 100, ?, ?, ?)`,
         );
         const pinduoduoRun = '018f0000-0000-7000-8000-000000000721';
         const meituanRun = '018f0000-0000-7000-8000-000000000722';
@@ -396,21 +396,12 @@ INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key
           'failed',
           201,
         );
+        // 原地重试只更新原任务，批次总数不随重试增加。
         database.client
           .prepare(
-            `INSERT INTO tasks
-             (id, task_type, private_state, status, priority, idempotency_key, concurrency_key,
-              retry_of_task_id, attempt_count, max_attempts, available_at, created_at,
-              started_at, finished_at)
-             VALUES (?, 'source.job-detail', ?, 'succeeded', 0, ?, ?, ?, 1, 3, 100, 202, 203, 204)`,
+            "UPDATE tasks SET status='succeeded', attempt_count=2, finished_at=204 WHERE id=?",
           )
-          .run(
-            '018f0000-0000-7000-8000-000000000737',
-            JSON.stringify({ sourceId: pinduoduoSource, runId: pinduoduoRun }),
-            'detail-retry-success',
-            `source-detail:${pinduoduoSource}:retry`,
-            '018f0000-0000-7000-8000-000000000732',
-          );
+          .run('018f0000-0000-7000-8000-000000000732');
         detail(
           '018f0000-0000-7000-8000-000000000738',
           pinduoduoRun,
@@ -429,9 +420,9 @@ INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key
           .prepare(
             `INSERT INTO tasks
              (id, task_type, private_state, status, priority, idempotency_key,
-              attempt_count, max_attempts, available_at, created_at)
+              attempt_count, available_at, created_at)
              VALUES ('018f0000-0000-7000-8000-000000000736', 'source.health-check', '{}',
-                     'pending', 0, 'health-alongside-batches', 0, 3, 100, 400)`,
+                     'pending', 0, 'health-alongside-batches', 0, 100, 400)`,
           )
           .run();
       } finally {

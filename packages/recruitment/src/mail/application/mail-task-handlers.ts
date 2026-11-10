@@ -1,3 +1,10 @@
+import {
+  AgentRuntimeError,
+  agentDefinitionHash,
+  type AgentExecution,
+} from '@jobhunter/common/agent';
+import { mapAgentRuntimeError } from '@jobhunter/common/tasks';
+import { recruitmentMailAgentDefinition } from './mail-classifier.js';
 import { contentHash } from '@jobhunter/common/domain';
 import type { RecruitmentScheduleFact } from '@jobhunter/recruitment/domain';
 import {
@@ -28,6 +35,11 @@ export interface RecruitmentMailMessageRef extends ExternalMailMessageRef {
 /** 招聘邮件处理持久化端口；网络和模型调用完成后才进入短事务。 */
 export interface RecruitmentMailProcessingRepository {
   findMessageRef(id: string): RecruitmentMailMessageRef | null;
+  listPendingReferences(
+    mailboxKey: string,
+    afterId: string,
+    policyVersion: string,
+  ): readonly RecruitmentMailMessageRef[];
   updateMessageStatus(input: {
     readonly id: string;
     readonly status: 'accepted' | 'needs_review' | 'ignored' | 'failed';
@@ -68,12 +80,16 @@ export interface RecruitmentMailClassificationPort {
   classify(
     message: ExternalMailMessage,
     signal: AbortSignal,
+    execution?: AgentExecution,
   ): Promise<RecruitmentMailClassificationResult>;
 }
 
 /** 稳定分类策略标识同时进入邮件重放判定和邮件处理状态。 */
-export const recruitmentMailPolicyVersion =
-  'candidate-rules-v4+agent-v3-prompt-v5+schedule-identity-v2';
+export const recruitmentMailPolicyVersion = contentHash({
+  rules: 'candidate-rules-v4',
+  schedule: 'schedule-identity-v2',
+  agent: agentDefinitionHash(recruitmentMailAgentDefinition),
+});
 
 export const mailboxSyncTaskPayloadSchema = z
   .object({
@@ -131,8 +147,18 @@ export class MailClassificationService {
     this.#createId = input.createId;
   }
 
+  /** 分页查询持久化积压，包含旧分类队列取消后尚未提交的引用。 */
+  public pending(mailboxKey: string, afterId: string): readonly RecruitmentMailMessageRef[] {
+    return this.#repository.listPendingReferences(
+      mailboxKey,
+      afterId,
+      recruitmentMailPolicyVersion,
+    );
+  }
+
   /** 处理一封邮件；返回提交的处理结论，已按当前策略提交的引用返回 null。 */
   public async classifyOne(input: {
+    readonly taskId?: string;
     readonly reference: ExternalMailMessageRef;
     readonly signal: AbortSignal;
     readonly now: () => number;
@@ -141,7 +167,8 @@ export class MailClassificationService {
     const stored = this.#repository.findMessageRef(id);
     // 1、幂等判定：已按当前策略提交终态结论的引用不再重复调用模型。
     if (
-      stored?.lastClassifierVersion === recruitmentMailPolicyVersion &&
+      stored?.contentVersion === input.reference.contentVersion &&
+      stored.lastClassifierVersion === recruitmentMailPolicyVersion &&
       (stored.processingStatus === 'accepted' ||
         stored.processingStatus === 'needs_review' ||
         stored.processingStatus === 'ignored')
@@ -156,6 +183,11 @@ export class MailClassificationService {
       throw new TaskExecutionError('invalid_config', 'Mailbox configuration is unavailable.');
     }
     const reference: ExternalMailMessageRef & { id: string } = { ...input.reference, id };
+    let sourceContentHash = contentHash({
+      mailboxKey: reference.mailboxKey,
+      key: reference.externalMessageKey,
+      version: reference.contentVersion,
+    });
     try {
       // 2、事务外只读取正文边界；3、规则筛选后按需调用模型；4、最后提交状态或事件。
       const message = await connector.fetchMessage(
@@ -168,12 +200,29 @@ export class MailClassificationService {
         reference,
       );
       const prepared = prepareRecruitmentMail(message);
-      const sourceContentHash = contentHash(prepared);
-      const result = await this.#classifier.classify(message, input.signal);
+      sourceContentHash = contentHash(prepared);
+      const execution = input.taskId
+        ? {
+            taskId: input.taskId,
+            stepKey: 'mail.classify',
+            resourceKey: JSON.stringify([
+              reference.mailboxKey,
+              reference.externalMessageKey,
+              reference.contentVersion,
+            ]),
+          }
+        : undefined;
+      const result = await this.#classifier.classify(message, input.signal, execution);
       // 4.a、取消若发生在外部调用结束前，必须先阻断业务提交，不能依赖连接器主动抛错。
       if (input.signal.aborted) {
         throw new TaskExecutionError('cancelled', 'Mailbox task was cancelled.');
       }
+      const latest = this.#repository.findMessageRef(id);
+      if (latest && latest.contentVersion !== reference.contentVersion)
+        throw new TaskExecutionError(
+          'network_temporary',
+          'Mailbox message changed during classification.',
+        );
       const classification = result.classification;
       const now = input.now();
       let status = classification.decision;
@@ -244,17 +293,34 @@ export class MailClassificationService {
         id: reference.id,
         status,
         classifierKind: classification.classifierKind,
-        classifierVersion: classification.classifierVersion,
+        classifierVersion: recruitmentMailPolicyVersion,
         contentHash: sourceContentHash,
         updatedAt: now,
       });
       return status;
     } catch (error) {
-      if (error instanceof TaskExecutionError) throw error;
       if (input.signal.aborted) {
         throw new TaskExecutionError('cancelled', 'Mailbox task was cancelled.', { cause: error });
       }
-      throw mapMailConnectorError(error);
+      const mapped =
+        error instanceof TaskExecutionError
+          ? error
+          : error instanceof AgentRuntimeError
+            ? mapAgentRuntimeError(error, '邮件分类')
+            : mapMailConnectorError(error);
+      if (
+        mapped.category !== 'cancelled' &&
+        this.#repository.findMessageRef(id)?.contentVersion === reference.contentVersion
+      )
+        this.#repository.updateMessageStatus({
+          id,
+          status: 'failed',
+          classifierKind: 'rules',
+          classifierVersion: recruitmentMailPolicyVersion,
+          contentHash: sourceContentHash,
+          updatedAt: input.now(),
+        });
+      throw mapped;
     }
   }
 }
@@ -293,6 +359,36 @@ export function createMailboxSyncTaskHandler(input: {
       );
       const completedCursors: unknown[] = [...(payload.resume?.completedCursors ?? [])];
       let classified = 0;
+      let backlogError: Error | undefined;
+      const processReference = async (reference: ExternalMailMessageRef): Promise<void> => {
+        context.signal.throwIfAborted();
+        const outcome = await input.classification.classifyOne({
+          reference,
+          signal: context.signal,
+          now: () => context.clock.now(),
+          ...(context.taskId ? { taskId: context.taskId } : {}),
+        });
+        if (outcome !== null) classified++;
+      };
+      // 1.a、历史积压独立于供应商游标重放，分页前进避免本轮重复尝试失败引用。
+      let afterId = '';
+      for (;;) {
+        const pending = input.classification.pending(config.mailboxKey, afterId);
+        if (!pending.length) break;
+        for (const ref of pending) {
+          try {
+            await processReference(ref);
+          } catch (error) {
+            context.signal.throwIfAborted();
+            if (error instanceof TaskExecutionError && error.category === 'cancelled') throw error;
+            backlogError ??=
+              error instanceof Error
+                ? error
+                : new TaskExecutionError('permanent', 'Mailbox backlog failed.');
+          }
+          afterId = ref.id;
+        }
+      }
       const result = await input.service.sync(
         config,
         connector,
@@ -301,28 +397,22 @@ export function createMailboxSyncTaskHandler(input: {
         {
           shouldSkipPage: (nextCursor) => completedKeys.has(stableCursorKey(nextCursor)),
           processPage: async (refs) => {
-            // 2.a、同一页内串行分类；单封失败不阻塞同页其余引用。
+            // 2.a、处理同页其他邮件后才抛错，失败页不能提交游标。
+            let failure: Error | undefined;
             for (const reference of refs) {
-              context.signal.throwIfAborted();
-              const outcome = await input.classification
-                .classifyOne({
-                  reference,
-                  signal: context.signal,
-                  now: () => context.clock.now(),
-                })
-                .catch((error: unknown) => {
-                  // 2.b、取消必须向上抛出以终止任务；其余单封失败跳过，留待后续同步重放。
-                  if (error instanceof TaskExecutionError && error.category === 'cancelled') {
-                    throw error;
-                  }
-                  if (context.signal.aborted) throw error;
-                  context.logger.warn('mail.classify.message_failed', {
-                    error: error instanceof TaskExecutionError ? error.category : 'permanent',
-                  });
-                  return null;
-                });
-              if (outcome !== null) classified += 1;
+              try {
+                await processReference(reference);
+              } catch (error) {
+                context.signal.throwIfAborted();
+                if (error instanceof TaskExecutionError && error.category === 'cancelled')
+                  throw error;
+                failure ??=
+                  error instanceof Error
+                    ? error
+                    : new TaskExecutionError('permanent', 'Mailbox page failed.');
+              }
             }
+            if (failure) throw failure;
           },
           onPageCommitted: (cursor) => {
             completedKeys.add(stableCursorKey(cursor));
@@ -331,6 +421,7 @@ export function createMailboxSyncTaskHandler(input: {
           },
         },
       );
+      if (backlogError) throw backlogError;
       return {
         mailboxKey: payload.mailboxKey,
         pages: result.pages,

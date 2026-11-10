@@ -56,10 +56,23 @@ function latestOccurrence(
 export class ScheduleService {
   readonly #dependencies: TaskRuntimeDependencies;
   readonly #registry: HandlerRegistry;
+  readonly #reconcilers = new Set<() => void>();
 
   public constructor(dependencies: TaskRuntimeDependencies, registry: HandlerRegistry) {
     this.#dependencies = dependencies;
     this.#registry = registry;
+  }
+
+  /** 业务注册轻量配置对账，在任何到期任务发布之前同步执行。 */
+  public registerReconciler(reconcile: () => void): () => void {
+    this.#reconcilers.add(reconcile);
+    return () => {
+      this.#reconcilers.delete(reconcile);
+    };
+  }
+  /** 查询周期配置，业务只通过端口操作调度所有者的数据。 */
+  public list(prefix: string): readonly ScheduleRecord[] {
+    return this.#dependencies.queue.listSchedules(prefix);
   }
 
   /** 校验调度 payload 并保存下一次运行时间。 */
@@ -90,6 +103,7 @@ export class ScheduleService {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) {
       throw new TypeError('Schedule polling limit is invalid.');
     }
+    for (const reconcile of this.#reconcilers) reconcile();
     const now = this.#dependencies.clock.now();
     const results: EnqueueTaskResult[] = [];
     // 2、通过队列端口原子提交 occurrence 和对应任务，避免重复触发。
@@ -116,8 +130,6 @@ export class ScheduleService {
           priority: 0,
           idempotencyKey: `schedule:${schedule.scheduleKey}:${String(occurrenceAt)}`,
           concurrencyKey: handler.concurrencyKey?.(payload) ?? null,
-          retryOfTaskId: null,
-          maxAttempts: handler.defaultMaxAttempts,
           availableAt: now,
           createdAt: now,
         },

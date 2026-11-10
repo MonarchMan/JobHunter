@@ -1,3 +1,4 @@
+import type { CandidateProfileData } from '@jobhunter/user/domain';
 import { assertPromptMatchesDefinition } from '@jobhunter/common/agent';
 import { describe, expect, it } from 'vitest';
 import {
@@ -15,13 +16,13 @@ import {
 } from '../src/resume/index.js';
 
 const encoder = new TextEncoder();
-const emptyPreferences = {
+const emptyPreferences: CandidateProfileData['preferences'] = {
   locations: [],
   companySizes: [],
   employmentTypes: [],
   excludedTerms: [],
   remoteAccepted: null,
-} as const;
+};
 
 describe('resume media detection and deterministic parsing', () => {
   it('accepts strict UTF-8 text and applies the pre-model quality and size gates', async () => {
@@ -303,7 +304,7 @@ describe('resume profile Agent boundary schema', () => {
 });
 
 describe('resume polish Agent boundary schema', () => {
-  const input = {
+  const input = resumePolishAgentDefinition.inputSchema.parse({
     targetRole: '研发',
     selectedSections: ['projects'] as const,
     workExperience: null,
@@ -314,7 +315,7 @@ describe('resume polish Agent boundary schema', () => {
         highlights: ['开发任务重试功能', '降低失败任务人工处理成本'],
       },
     ],
-  };
+  });
 
   it('keeps prompt and Agent versions aligned and accepts selected section suggestions', () => {
     expect(() => {

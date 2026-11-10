@@ -1,6 +1,7 @@
 import { parseId } from '@jobhunter/common/domain';
 import {
   classifyTaskError,
+  isTaskErrorRetryable,
   TaskExecutionError,
   type TaskHandlerContext,
 } from '@jobhunter/common/tasks';
@@ -72,6 +73,8 @@ export function createSyncScoringStage(input: {
           status: 'failed',
           result: null,
           error: '职位修订不存在或已关闭。',
+          errorCategory: 'validation_failed',
+          retryable: false,
         });
         options.checkpoint({ items: [...items.values()], degraded: degradedCount(items) });
         continue;
@@ -100,11 +103,15 @@ export function createSyncScoringStage(input: {
         });
       } catch (error) {
         const classified = classifyTaskError(error);
+        // 汇总检查点会丢弃异常链，日志保留脱敏后的根因用于诊断保存等阶段的失败。
+        options.context.logger.error('matching.score_item_failed', { jobId, error: classified });
         items.set(jobId, {
           jobId,
           status: 'failed',
           result: classified.result ?? null,
           error: classified.safeSummary,
+          errorCategory: classified.category,
+          retryable: isTaskErrorRetryable(classified),
         });
       }
       options.checkpoint({ items: [...items.values()], degraded: degradedCount(items) });

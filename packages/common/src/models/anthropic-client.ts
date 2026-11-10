@@ -1,3 +1,4 @@
+import type { ModelBilling } from '../contracts/model-usage.js';
 import { calculateBilling } from './billing.js';
 import { ModelRequestTrace } from './request-trace.js';
 import { cacheCreationSchema, cacheWriteTotal, optionalTokenCount } from './cache-usage.js';
@@ -186,6 +187,33 @@ export class AnthropicModelClient implements ModelClient {
     }
   }
 
+  /** 正常响应与中断快照共用协议归一化和计价，缺失分项保持未知。 */
+  #billing(value: unknown, requestedAt: number): ModelBilling {
+    // Anthropic 输入为未缓存部分，归一化总量后按互斥分量计价。
+    const raw = responseSchema.shape.usage.parse(value);
+    const totals = usage(raw);
+    return calculateBilling({
+      model: this.#config.model,
+      baseUrl: this.#config.baseUrl,
+      requestedAt,
+      currency: this.#config.costCurrency,
+      inputTokens: raw?.input_tokens === undefined ? null : totals.inputTokens,
+      outputTokens: raw?.output_tokens ?? null,
+      cacheReadTokens: raw?.cache_read_input_tokens ?? null,
+      cacheWriteTokens: cacheWriteTotal(raw?.cache_creation_input_tokens, raw?.cache_creation),
+      cacheWrite5mTokens: raw?.cache_creation?.ephemeral_5m_input_tokens ?? null,
+      cacheWrite1hTokens: raw?.cache_creation?.ephemeral_1h_input_tokens ?? null,
+      serviceTier: raw?.service_tier,
+      uncachedInputTokens: raw?.input_tokens ?? null,
+      inputPrice: this.#config.inputCostPerMillionUsd,
+      outputPrice: this.#config.outputCostPerMillionUsd,
+      cacheReadPrice: this.#config.cacheReadPrice,
+      cacheWritePrice: this.#config.cacheWritePrice,
+      cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
+      autoModelPricing: this.#config.autoModelPricing,
+    });
+  }
+
   /** 保留 Messages 业务解析，统一观测流式内容与失败协商。 */
   async #complete(
     request: ModelRequest,
@@ -248,6 +276,7 @@ export class AnthropicModelClient implements ModelClient {
           signal: combined,
         },
         'anthropic',
+        (value, context) => this.#billing(value, context.requestedAt),
       );
 
     try {
@@ -255,6 +284,7 @@ export class AnthropicModelClient implements ModelClient {
       let structured = this.#negotiatedStructured ?? true;
       let response = await dispatch(structured);
       if (response.status === 400 && structured && this.#negotiatedStructured === null) {
+        trace.noteFailure('接口返回 HTTP 400，正在移除结构化输出参数后重试。');
         structured = false;
         response = await dispatch(structured);
       }
@@ -269,29 +299,7 @@ export class AnthropicModelClient implements ModelClient {
           ? [{ id: call.data.id, toolKey: call.data.name, input: call.data.input }]
           : [];
       });
-      // Anthropic 输入为未缓存部分，归一化总量后按互斥分量计价。
-      const raw = parsed.usage;
-      const totals = usage(raw);
-      const billing = calculateBilling({
-        model: this.#config.model,
-        baseUrl: this.#config.baseUrl,
-        requestedAt: trace.requestedAt,
-        currency: this.#config.costCurrency,
-        inputTokens: raw?.input_tokens === undefined ? null : totals.inputTokens,
-        outputTokens: raw?.output_tokens ?? null,
-        cacheReadTokens: raw?.cache_read_input_tokens ?? null,
-        cacheWriteTokens: cacheWriteTotal(raw?.cache_creation_input_tokens, raw?.cache_creation),
-        cacheWrite5mTokens: raw?.cache_creation?.ephemeral_5m_input_tokens ?? null,
-        cacheWrite1hTokens: raw?.cache_creation?.ephemeral_1h_input_tokens ?? null,
-        serviceTier: raw?.service_tier,
-        uncachedInputTokens: raw?.input_tokens ?? null,
-        inputPrice: this.#config.inputCostPerMillionUsd,
-        outputPrice: this.#config.outputCostPerMillionUsd,
-        cacheReadPrice: this.#config.cacheReadPrice,
-        cacheWritePrice: this.#config.cacheWritePrice,
-        cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
-        autoModelPricing: this.#config.autoModelPricing,
-      });
+      const billing = this.#billing(parsed.usage, trace.requestedAt);
       const responseUsage = trace.usage(billing);
       if (parsed.stop_reason === 'refusal')
         throw new ModelClientError('content_rejected', 'Model provider rejected the content.');
@@ -306,27 +314,38 @@ export class AnthropicModelClient implements ModelClient {
       let output: unknown;
       try {
         output = JSON.parse(content.join('')) as unknown;
-      } catch {
-        throw new ModelClientError('invalid_output', 'Model response content was not JSON.');
+      } catch (error) {
+        throw new ModelClientError(
+          'invalid_output',
+          'Model response content was not JSON.',
+          false,
+          { cause: error },
+        );
       }
       return { kind: 'output', output, usage: responseUsage };
     } catch (error) {
       if (error instanceof ModelClientError) throw error;
       if (error instanceof ModelRequestPersistenceError) throw error;
       if (combined.aborted) {
-        if (signal.aborted) throw new ModelClientError('cancelled', 'Model request was cancelled.');
-        throw new ModelClientError('timeout', 'Model request timed out.', true);
+        if (signal.aborted)
+          throw new ModelClientError('cancelled', 'Model request was cancelled.', false, {
+            cause: error,
+          });
+        throw new ModelClientError('timeout', 'Model request timed out.', true, { cause: error });
       }
       if (error instanceof z.ZodError)
         throw new ModelClientError(
           'invalid_output',
           'Model provider returned an invalid response.',
+          false,
+          { cause: error },
         );
       const reason = networkReason(error);
       throw new ModelClientError(
         'temporary',
         `Model provider request failed${reason ? ` (${reason})` : ''}.`,
         true,
+        { cause: error },
       );
     }
   }

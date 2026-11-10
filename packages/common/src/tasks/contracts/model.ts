@@ -4,16 +4,8 @@ import type { Clock, IdGenerator, TaskId, UtcInstant } from '@jobhunter/common/d
 export type TaskStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
 
 /** 应用层使用的类型约束。 */
-export type TaskErrorCategory =
-  | 'rate_limited'
-  | 'network_temporary'
-  | 'io_temporary'
-  | 'upstream_5xx'
-  | 'parse_changed'
-  | 'invalid_config'
-  | 'validation_failed'
-  | 'cancelled'
-  | 'permanent';
+export type { TaskErrorCategory } from './errors.js';
+import type { TaskErrorCategory } from './errors.js';
 
 /** 应用层数据结构或端口契约。 */
 export interface RuntimeSchema<TValue> {
@@ -35,6 +27,7 @@ export interface TaskLogFields {
 
 /** 应用层数据结构或端口契约。 */
 export interface TaskLogger {
+  debug?(event: string, fields: TaskLogFields): void;
   info(event: string, fields: TaskLogFields): void;
   warn(event: string, fields: TaskLogFields): void;
   error(event: string, fields: TaskLogFields): void;
@@ -62,6 +55,7 @@ export interface TaskHandler<TPayload, TOutput> {
   readonly taskType: string;
   readonly payloadSchema: RuntimeSchema<TPayload>;
   readonly outputSchema: RuntimeSchema<TOutput>;
+  /** 系统按任务类型配置的每轮尝试上限，不允许单条任务覆盖。 */
   readonly defaultMaxAttempts: number;
   readonly leaseDurationMs: number;
   /**
@@ -94,11 +88,8 @@ export interface TaskRecord {
   readonly priority: number;
   readonly idempotencyKey: string;
   readonly concurrencyKey: string | null;
-  readonly retryOfTaskId: TaskId | null;
   /** 任务累计领取次数，手动重试不清零。 */
   readonly attemptCount: number;
-  /** 当前累计尝试上限，手动重试追加本轮预算。 */
-  readonly maxAttempts: number;
   readonly availableAt: UtcInstant;
   readonly leaseOwner: string | null;
   readonly leaseExpiresAt: UtcInstant | null;
@@ -122,8 +113,6 @@ export interface PersistedTaskInput {
   readonly priority: number;
   readonly idempotencyKey: string;
   readonly concurrencyKey: string | null;
-  readonly retryOfTaskId: TaskId | null;
-  readonly maxAttempts: number;
   readonly availableAt: UtcInstant;
   readonly createdAt: UtcInstant;
 }
@@ -226,6 +215,8 @@ export interface TaskQueue {
   get(taskId: TaskId): TaskRecord | null;
   list(filter: TaskListFilter): readonly TaskRecord[];
   count(filter: Omit<TaskListFilter, 'limit' | 'offset'>): number;
+  /** 累计领取次数减最近手动重试日志中的起点，不修改累计审计次数。 */
+  attemptsInCurrentRound(taskId: TaskId): number;
   summary(now: UtcInstant): TaskQueueSummary;
   claim(input: {
     readonly rootTaskIds?: readonly string[];
@@ -267,6 +258,7 @@ export interface TaskQueue {
   }): boolean;
   markCancelled(taskId: TaskId, workerId: string, finishedAt: UtcInstant): boolean;
   cancel(taskId: TaskId, requestedAt: UtcInstant): CancelTaskResult;
+  listSchedules(prefix: string): readonly ScheduleRecord[];
   upsertSchedule(input: PersistedScheduleInput): ScheduleRecord;
   dueSchedules(now: UtcInstant, limit: number): readonly ScheduleRecord[];
   commitScheduleOccurrence(input: {

@@ -22,8 +22,6 @@ Agent 负责语义提取与建议，不负责官网同步正确性、职位生�
 ```ts
 interface AgentDefinition<TInput, TOutput> {
   key: string;
-  version: string;
-  promptVersion: string;
   inputSchema: ZodType<TInput>;
   outputSchema: ZodType<TOutput>;
   tools: readonly ToolDefinition[];
@@ -41,25 +39,25 @@ interface AgentDefinition<TInput, TOutput> {
 
 1. 输入校验与最小化。
 2. 计算 `input_hash` 和完整 `cache_key`。
-3. 命中成功缓存则返回已有结果。
+3. 普通 run 始终新调用；runStep 仅复用同一任务步骤与资源的成功结果。
 4. 创建 `agent_runs.running`。
 5. 调用模型，必要时执行白名单只读工具。
 6. 校验输出；最多执行一次结构化修复。
-7. 成功则保存已校验 JSON，失败则保存分类和脱敏摘要。
+7. 成功保留输出哈希；仅 runStep 暂存恢复 JSON，任务成功、取消、删除时清除。失败保存分类和脱敏摘要。
 8. 应用层在独立短事务中把结果关联到画像、职位语义或独立的匹配建议记录。
 
 缓存键：
 
 ```text
-sha256(agentKey | agentVersion | promptVersion | modelConfigHash | canonicalInputHash)
+sha256(agentKey | definitionHash | outputSchemaVersion | modelConfigHash | inputHash | taskId | stepKey | resourceKey)
 ```
 
-模型供应商、模型名、温度、结构化输出模式和推理强度都属于 `modelConfigHash`。仅 `succeeded` 运行可命中缓存；失败运行保留审计但不得占用成功缓存唯一性，重试会创建新的 AgentRun。若两个相同运行并发成功，数据库部分唯一索引选出唯一缓存结果，另一个运行转为读取该结果而不是覆盖。
+模型供应商、模型名、温度、结构化输出模式和推理强度都属于 `modelConfigHash`。仅 `succeeded` 运行可命中缓存；失败运行保留审计但不得占用成功缓存唯一性，同一步骤失败重试沿用原 AgentRun；新任务、输入或模型变化创建新运行。若两个相同运行并发成功，数据库部分唯一索引选出唯一缓存结果，另一个运行转为读取该结果而不是覆盖。
 
 ## 3. Prompt 与 Schema 版本
 
 - Prompt 存在代码库中，不存数据库作为可随意编辑的正文。
-- Prompt 修改必须提升 `promptVersion`。
+- Prompt 修改自动改变 definitionHash，无需维护 Prompt 版本。
 - 输出结构变化必须提升 Schema 版本，并提供旧数据读取或重算策略。
 - Agent 评测样本引用 Agent、Prompt、Schema 与模型配置版本。
 - Prompt 不得要求模型猜测缺失事实；所有不确定字段允许 `null` 或显式置信度。

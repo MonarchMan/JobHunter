@@ -125,6 +125,7 @@ export function createExperienceResearchTaskHandler(
         const result = await executor.execute(
           {
             requestId,
+            ...(context.taskId ? { taskId: context.taskId } : {}),
             prompt,
             outputSchema,
             collectionPlan: createCommunityResearchCollectionPlan(

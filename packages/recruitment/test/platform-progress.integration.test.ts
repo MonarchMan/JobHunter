@@ -20,8 +20,8 @@ it('BOSS 恢复观察进度持久化并通过 Web 白名单投影', async () => 
     const taskId = ids.generate();
     db.client
       .prepare(
-        `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
-      VALUES (?,'platform.boss',?,'running',?,1,0,0,10000)`,
+        `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at,lease_expires_at)
+      VALUES (?,'platform.boss',?,'running',?,0,0,10000)`,
       )
       .run(taskId, JSON.stringify({ action: 'next', generation }), randomUUID());
     const tasks = new TaskService(
@@ -141,8 +141,8 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
       );
       db.client
         .prepare(
-          `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at)
-      VALUES (?,'platform.liepin',?,'running',?,1,0,0,10000)`,
+          `INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at,lease_expires_at)
+      VALUES (?,'platform.liepin',?,'running',?,0,0,10000)`,
         )
         .run(taskId, JSON.stringify({ action: 'next', generation: 1 }), randomUUID());
       const execution = service.execute(

@@ -2,7 +2,7 @@ import { SqliteJobScoreReader } from '@jobhunter/matching/persistence/job-score-
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { decideJobMerge, type NormalizedJob } from '@jobhunter/recruitment/domain';
-import { parseId, utcInstant } from '@jobhunter/common/domain';
+import { parseId, parseContentHash, utcInstant } from '@jobhunter/common/domain';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { makeNormalizedJob } from '@jobhunter/recruitment/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -61,7 +61,7 @@ function seedSync(handle: SqliteDatabaseHandle): void {
        '018f0000-0000-7000-8200-000000000103', 'fixture', 'fixture',
        'https://example.com', '{}', '1', '{}', 1, 'supported', 'healthy', 1, 1);
     WITH scan_input (id, source_id, trigger, status, coverage, stats_json, started_at) AS (VALUES ('018f0000-0000-7000-8000-000000000010', '018f0000-0000-7000-8000-000000000002', 'manual', 'running', 'unknown', '{}', 1))
-INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,max_attempts,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,1,started_at,started_at,started_at,NULL,NULL,NULL FROM scan_input;
+INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key,attempt_count,available_at,created_at,started_at,finished_at,error_category,error_summary) SELECT id,'source.scan',json_object('sourceId',source_id,'trigger',trigger),json_object('status',status,'coverage',coverage,'stats',json(scan_input.stats_json),'coverageEvidence',json('{}')),CASE WHEN status='partial' THEN 'succeeded' ELSE status END,'source.scan:'||id,1,started_at,started_at,started_at,NULL,NULL,NULL FROM scan_input;
   `);
 }
 
@@ -70,7 +70,7 @@ describe('SqliteUnitOfWork and job repository', () => {
     const handle = await setup();
     seedSync(handle);
     const normalized = makeNormalizedJob();
-    const decision = decideJobMerge(null, normalized);
+    const decision = createDecision(normalized);
     const uow = new SqliteUnitOfWork(handle.client);
     uow.run(({ jobs }) => {
       jobs.persistMutation({
@@ -78,7 +78,7 @@ describe('SqliteUnitOfWork and job repository', () => {
         jobId: parseId('018f0000-0000-7000-8000-000000000003', 'Job'),
         revisionId: '018f0000-0000-7000-8000-000000000004',
         statusEventId: '018f0000-0000-7000-8000-000000000005',
-        sourcePayloadHash: 'a'.repeat(64),
+        sourcePayloadHash: parseContentHash('a'.repeat(64)),
         sourceUrl: 'https://example.com/job/1',
         normalizerVersion: '1',
         syncRunId: parseId('018f0000-0000-7000-8000-000000000010', 'SyncRun'),
@@ -96,20 +96,23 @@ describe('SqliteUnitOfWork and job repository', () => {
     expect(current?.revisionNumber).toBe(1);
   });
 
-  it('rolls back the current projection and status event when revision insertion fails', async () => {
+  it('rolls back the current projection and status event when observation insertion fails', async () => {
     const handle = await setup();
     seedSync(handle);
     const normalized: NormalizedJob = makeNormalizedJob({ externalJobId: 'fixture-job-2' });
+    handle.client.exec(
+      "CREATE TEMP TRIGGER fixture_observation_failure BEFORE INSERT ON job_observations BEGIN SELECT RAISE(ABORT, 'synthetic observation failure'); END",
+    );
     const uow = new SqliteUnitOfWork(handle.client);
 
     expect(() => {
       uow.run(({ jobs }) => {
         jobs.persistMutation({
-          decision: decideJobMerge(null, normalized),
+          decision: createDecision(normalized),
           jobId: parseId('018f0000-0000-7000-8000-000000000020', 'Job'),
           revisionId: '018f0000-0000-7000-8000-000000000021',
           statusEventId: '018f0000-0000-7000-8000-000000000022',
-          sourcePayloadHash: 'invalid',
+          sourcePayloadHash: parseContentHash('a'.repeat(64)),
           sourceUrl: 'https://example.com/job/2',
           normalizerVersion: '1',
           syncRunId: parseId('018f0000-0000-7000-8000-000000000010', 'SyncRun'),
@@ -406,11 +409,11 @@ describe('SqliteJobQueryRepository', () => {
     const normalized = makeNormalizedJob();
     new SqliteUnitOfWork(handle.client).run(({ jobs }) => {
       jobs.persistMutation({
-        decision: decideJobMerge(null, normalized),
+        decision: createDecision(normalized),
         jobId: parseId('018f0000-0000-7000-8000-000000000050', 'Job'),
         revisionId: '018f0000-0000-7000-8000-000000000051',
         statusEventId: '018f0000-0000-7000-8000-000000000052',
-        sourcePayloadHash: 'a'.repeat(64),
+        sourcePayloadHash: parseContentHash('a'.repeat(64)),
         sourceUrl: 'https://example.com/job/1',
         normalizerVersion: '1',
         syncRunId: parseId('018f0000-0000-7000-8000-000000000010', 'SyncRun'),
@@ -453,3 +456,12 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     ).toMatchObject({ total: 1, page: 1, items: page.items });
   });
 });
+
+/** 新职位夹具必须产生创建决策，拒绝将未变更决策交给写入端口。 */
+function createDecision(
+  normalized: NormalizedJob,
+): Extract<ReturnType<typeof decideJobMerge>, { readonly type: 'create' }> {
+  const decision = decideJobMerge(null, normalized);
+  if (decision.type !== 'create') throw new Error('Expected create decision');
+  return decision;
+}

@@ -1,4 +1,5 @@
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
+import { SqliteResumePolishSuggestionStore } from '@jobhunter/user/persistence/resume-polish-suggestion-store';
 import { AgentRunner } from '@jobhunter/common/agent';
 import { createResumePolishTaskHandler } from '@jobhunter/user/profile';
 import type { TaskHandlerContext, TaskLogger } from '@jobhunter/common/tasks';
@@ -91,6 +92,7 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       const runStore = new SqliteAgentRunStore(database.client);
       const handler = createResumePolishTaskHandler({
         runner,
+        suggestions: new SqliteResumePolishSuggestionStore(database.client),
         profiles: new SqliteCandidateProfileRepository(
           database.client,
           new SqliteProfileDerivedDataManager(database.client),
@@ -120,17 +122,17 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       });
       expect(runStore.get(runId)).toMatchObject({
         status: 'succeeded',
-        output: {
-          workExperience: null,
-          projects: [['实现失败任务重试机制，减少人工处理。']],
-        },
+        output: null,
       });
+      expect(
+        new SqliteResumePolishSuggestionStore(database.client).get(suggestionId),
+      ).toMatchObject({ projects: [['实现失败任务重试机制，减少人工处理。']] });
       expect(
         database.client
           .prepare("SELECT count(*) FROM sqlite_master WHERE name = 'resume_polish_suggestions'")
           .pluck()
           .get(),
-      ).toBe(0);
+      ).toBe(1);
     } finally {
       database.close();
       await root.cleanup();

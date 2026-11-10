@@ -12,6 +12,7 @@ import {
   labelTaskType,
   labelAgentErrorCategory,
   labelAgentKey,
+  agentNormallyUsesSingleRequest,
   agentRunStatusLabels,
   taskStatusLabels,
 } from '../components/status-labels.js';
@@ -192,7 +193,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                 <dd>
                   {task.jobDetailBatch
                     ? `${String(task.jobDetailBatch.counts.succeeded)} / ${String(task.jobDetailBatch.counts.total)}`
-                    : `${String(task.attemptCount)} / ${String(task.maxAttempts)}`}
+                    : String(task.attemptCount)}
                 </dd>
               </div>
               <div>
@@ -475,14 +476,24 @@ export function AgentRunDetailsDialog({
                 </dd>
               </div>
             </dl>
-            <AgentBillingDetails calls={detail?.billingCalls ?? run.billingCalls} />
+            {detail ? (
+              <AgentBillingDetails
+                calls={detail.billingCalls}
+                normallySingleRequest={agentNormallyUsesSingleRequest(detail.agentKey)}
+                lastOutputFailure={
+                  detail.errorCategory === 'invalid_output' ? detail.errorSummary : null
+                }
+                hasReportedUsage={(detail.inputTokens ?? 0) > 0 || (detail.outputTokens ?? 0) > 0}
+              />
+            ) : null}
             {run.status === 'failed' ? (
               <section className={styles.failureDetail} aria-labelledby="agent-failure-heading">
                 <h3 id="agent-failure-heading">失败原因</h3>
                 <p>{run.errorCategory ? labelAgentErrorCategory(run.errorCategory) : '未分类'}</p>
+                {run.errorSummary ? <p>{run.errorSummary}</p> : null}
               </section>
             ) : null}
-            {loading ? <p className="muted">正在加载工具调用……</p> : null}
+            {loading || (!detail && !error) ? <p className="muted">正在加载调用详情……</p> : null}
             {error ? <p className="risk">{error}</p> : null}
             {detail && detail.toolCalls.length > 0 ? (
               <div className={dataTableStyles.scroll}>

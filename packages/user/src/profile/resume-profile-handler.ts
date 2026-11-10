@@ -121,12 +121,21 @@ export function createResumeProfileTaskHandler(
         throw new TaskExecutionError('invalid_config', 'Resume profile model is not configured.');
       }
       try {
-        const result = await input.runner.run({
-          ...(context.taskId ? { retryKey: context.taskId } : {}),
+        const request = {
           definition: resumeProfileAgentDefinition,
           value: { extractedText: document.extractedText },
           signal: context.signal,
-        });
+        };
+        const result = await (context.taskId
+          ? input.runner.runStep({
+              ...request,
+              execution: {
+                taskId: context.taskId,
+                stepKey: 'resume-profile',
+                resourceKey: document.id,
+              },
+            })
+          : input.runner.run(request));
         const facts = parseResumeProfileAgentOutput(result.output, document.extractedText);
         const version = input.profiles.applyExtraction({
           profileId,

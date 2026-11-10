@@ -1,11 +1,38 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { ModelClientError, ModelRequestPersistenceError } from '../agent/errors.js';
+import {
+  sanitizeAgentErrorSummary,
+  ModelClientError,
+  ModelRequestPersistenceError,
+} from '../agent/errors.js';
 import type { ModelUsage, ModelRequestObserver } from '../agent/model-client.js';
 import type { ModelBilling } from '../contracts/model-usage.js';
 
 /** SSE 事件只接受对象；供应商字段仍由各自客户端完成最终边界校验。 */
 const object = z.record(z.string(), z.unknown());
+
+/** 累计快照按分项覆盖而非相加，空值不抹掉已上报的输入或缓存等计数。 */
+function mergeReportedUsage(previous: unknown, next: unknown, depth = 0): Record<string, unknown> {
+  const result = { ...(object.safeParse(previous).data ?? {}) };
+  for (const [key, value] of Object.entries(object.parse(next))) {
+    if (value == null) continue;
+    result[key] =
+      depth < 1 && typeof value === 'object' && !Array.isArray(value)
+        ? mergeReportedUsage(result[key], value, depth + 1)
+        : value;
+  }
+  return result;
+}
+
+/** 计量快照交由协议适配器校验和定价；传输层不解释供应商 Token 字段。 */
+type CaptureUsage = (
+  usage: unknown,
+  context: {
+    readonly requestedAt: number;
+    readonly headers: Headers;
+    readonly serviceTier: unknown;
+  },
+) => ModelBilling;
 const openAiChunk = z.object({
   model: z.string().optional(),
   usage: z.unknown().optional(),
@@ -41,6 +68,7 @@ async function readStream(
   response: Response,
   protocol: 'openai' | 'anthropic',
   first: () => void,
+  capture: (usage: unknown, serviceTier: unknown) => void,
 ): Promise<unknown> {
   const reader = response.body?.getReader();
   if (!reader) throw new ModelClientError('invalid_output', 'Model stream has no body.');
@@ -72,8 +100,11 @@ async function readStream(
       if (object.parse(raw).error)
         throw new ModelClientError('temporary', 'Model stream returned an error.', true);
       model = chunk.model ?? model;
-      usage = chunk.usage ?? usage;
       tier = chunk.service_tier ?? tier;
+      if (chunk.usage != null) {
+        usage = mergeReportedUsage(usage, chunk.usage);
+        capture(usage, tier);
+      }
       for (const choice of chunk.choices ?? []) {
         if ((choice.index ?? 0) !== 0) continue;
         if (choice.finish_reason) {
@@ -105,7 +136,10 @@ async function readStream(
       throw new ModelClientError('temporary', 'Model stream returned an error.', true);
     if (type === 'message_start') {
       const message = object.parse(value.message);
-      anthropicUsage = object.parse(message.usage ?? {});
+      if (message.usage != null) {
+        anthropicUsage = mergeReportedUsage(anthropicUsage, message.usage);
+        capture(anthropicUsage, undefined);
+      }
     } else if (type === 'content_block_start') {
       const index = z.number().int().nonnegative().parse(value.index);
       const block = object.parse(value.content_block);
@@ -128,7 +162,10 @@ async function readStream(
     } else if (type === 'message_delta') {
       const delta = object.parse(value.delta);
       finish = z.string().nullable().optional().parse(delta.stop_reason) ?? finish;
-      anthropicUsage = { ...anthropicUsage, ...object.parse(value.usage ?? {}) };
+      if (value.usage != null) {
+        anthropicUsage = mergeReportedUsage(anthropicUsage, value.usage);
+        capture(anthropicUsage, undefined);
+      }
     } else if (type === 'message_stop') state.terminal = true;
   };
   try {
@@ -181,7 +218,7 @@ async function readStream(
 
 /**
  * 单次实际 HTTP 请求快照；不保留完整 URL、Headers 或响应正文。
- * billing 仅在已完成 HTTP 交换并解析出账单后设置；未上报用量的失败请求（网络错误、
+ * billing 在收到有效用量后即可设置，流中断仍保留部分账单；未上报用量的失败请求（网络错误、
  * 400 协商拒绝、超时取消）保持缺省，聚合时以 billing 是否为 undefined 区分
  * “未上报用量”（对运行合计按 0 计入）与“已上报但缺价”（使合计未知）。
  */
@@ -193,6 +230,7 @@ interface Attempt {
   first: number | null;
   status: number | null;
   error: ModelBilling['transportError'];
+  failureReason?: string;
   billing?: ModelBilling;
 }
 
@@ -214,6 +252,7 @@ export class ModelRequestTrace {
     url: string,
     init: RequestInit,
     protocol: 'openai' | 'anthropic',
+    captureUsage?: CaptureUsage,
   ): Promise<Response> {
     const body = object.parse(JSON.parse(z.string().parse(init.body)));
     const send = async (stream: boolean): Promise<Response> => {
@@ -249,11 +288,41 @@ export class ModelRequestTrace {
           return response;
         }
         const streaming = response.headers.get('content-type')?.includes('text/event-stream');
+        // 1、每份有效计量先落账本，后续中断只能改变请求状态，不能清空已知分项。
+        const capture = (usage: unknown, serviceTier: unknown): void => {
+          const billing = captureUsage?.(usage, {
+            requestedAt: attempt.at,
+            headers: response.headers,
+            serviceTier,
+          });
+          if (
+            !billing ||
+            [
+              billing.inputTokens,
+              billing.outputTokens,
+              billing.cacheReadTokens,
+              billing.cacheWriteTokens,
+            ].every((value) => value === null)
+          )
+            return;
+          attempt.billing = billing;
+          this.#publish(attempt);
+        };
         const payload: unknown = streaming
-          ? await readStream(response, protocol, () => {
-              attempt.first ??= this.now();
-            })
+          ? await readStream(
+              response,
+              protocol,
+              () => {
+                attempt.first ??= this.now();
+              },
+              capture,
+            )
           : await response.json();
+        if (!streaming) {
+          const envelope = object.safeParse(payload);
+          if (envelope.success && envelope.data.usage != null)
+            capture(envelope.data.usage, envelope.data.service_tier);
+        }
         attempt.ended = this.now();
         attempt.completed = true;
         return new Response(JSON.stringify(payload), {
@@ -279,7 +348,12 @@ export class ModelRequestTrace {
             ? 'invalid_output'
             : 'network';
         if (error instanceof SyntaxError)
-          throw new ModelClientError('invalid_output', 'Model provider returned invalid JSON.');
+          throw new ModelClientError(
+            'invalid_output',
+            'Model provider returned invalid JSON.',
+            false,
+            { cause: error },
+          );
         throw error;
       }
     };
@@ -289,14 +363,24 @@ export class ModelRequestTrace {
       if (
         /stream/i.test(text) &&
         /unsupported|not.support|unknown|unrecognized|not.allowed/i.test(text)
-      )
+      ) {
+        this.noteFailure('接口不支持流式请求，已改用非流式请求重试。');
         return send(false);
+      }
       return new Response(text, { status: response.status, headers: response.headers });
     }
     return response;
   }
 
-  /** 仅最后一次成功响应拥有已解析账单，协商失败保持用量未知。 */
+  /** 记录已确认的协商失败，原因写入该次请求而非后续成功请求。 */
+  public noteFailure(reason: string): void {
+    const last = this.#attempts.at(-1);
+    if (!last) return;
+    last.failureReason = sanitizeAgentErrorSummary(reason);
+    this.#publish(last);
+  }
+
+  /** 有效用量到达即可拥有账单，失败收尾沿用已保存快照，协商失败保持未知。 */
   public usage(billing?: ModelBilling): ModelUsage {
     const last = this.#attempts.at(-1);
     if (billing && last) last.billing = billing;
@@ -335,6 +419,7 @@ export class ModelRequestTrace {
             ? (base.outputTokens * 1000) / generationMs
             : null,
         transportError: attempt.error,
+        ...(attempt.failureReason ? { failureReason: attempt.failureReason } : {}),
       };
     });
     const latest = calls.at(-1);
@@ -360,8 +445,26 @@ export class ModelRequestTrace {
       if (last && (error.category === 'timeout' || error.category === 'cancelled'))
         last.error = error.category;
       if (last && error.category === 'invalid_output') last.error = 'invalid_output';
+      if (last) last.failureReason ??= sanitizeAgentErrorSummary(error.message);
       error.usage = this.usage();
-      if (last) this.#publish(last, error.usage.billing);
+      if (last) {
+        try {
+          this.#publish(last, error.usage.billing);
+        } catch (persistenceError) {
+          if (!(persistenceError instanceof ModelRequestPersistenceError)) throw persistenceError;
+          // 收尾写入失败仍禁止重发，但必须保留此前调用失败的完整诊断。
+          throw new ModelRequestPersistenceError(
+            persistenceError.requestId,
+            persistenceError.phase,
+            {
+              cause: new AggregateError(
+                [error, persistenceError],
+                'Model request and ledger recording failed.',
+              ),
+            },
+          );
+        }
+      }
     }
     throw error;
   }
@@ -378,8 +481,12 @@ export class ModelRequestTrace {
           state: attempt.completed ? 'completed' : 'running',
           billing: snapshot,
         });
-      } catch {
-        throw new ModelRequestPersistenceError();
+      } catch (error) {
+        throw new ModelRequestPersistenceError(
+          attempt.id,
+          attempt.completed ? 'completed' : 'running',
+          { cause: error },
+        );
       }
     }
   }

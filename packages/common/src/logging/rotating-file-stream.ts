@@ -16,7 +16,7 @@ export class RotatingFileStream extends Writable {
   readonly #path: string;
   readonly #maxBytes: number;
   readonly #maxFiles: number;
-  #descriptor: number;
+  #descriptor: number | undefined;
   #bytes: number;
 
   /** 执行模块组件对外暴露的操作。 */
@@ -47,7 +47,13 @@ export class RotatingFileStream extends Writable {
     try {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, encoding);
       if (this.#bytes > 0 && this.#bytes + buffer.length > this.#maxBytes) this.#rotate();
-      writeSync(this.#descriptor, buffer);
+      if (this.#descriptor === undefined) throw new Error('Log stream is closed');
+      let offset = 0;
+      while (offset < buffer.length) {
+        const written = writeSync(this.#descriptor, buffer, offset);
+        if (written <= 0) throw new Error('Log file write made no progress');
+        offset += written;
+      }
       this.#bytes += buffer.length;
       callback();
     } catch (error) {
@@ -57,12 +63,29 @@ export class RotatingFileStream extends Writable {
 
   /** 在流结束时关闭当前文件句柄。 */
   public override _final(callback: (error?: Error | null) => void): void {
-    closeSync(this.#descriptor);
-    callback();
+    try {
+      if (this.#descriptor !== undefined) closeSync(this.#descriptor);
+      this.#descriptor = undefined;
+      callback();
+    } catch (error) {
+      callback(error instanceof Error ? error : new Error('Log close failed'));
+    }
+  }
+
+  /** 写入失败或显式 destroy 时同样归还文件描述符。 */
+  public override _destroy(error: Error | null, callback: (error?: Error | null) => void): void {
+    try {
+      if (this.#descriptor !== undefined) closeSync(this.#descriptor);
+    } catch {
+      /* 原始写入错误优先。 */
+    }
+    this.#descriptor = undefined;
+    callback(error);
   }
 
   #rotate(): void {
-    closeSync(this.#descriptor);
+    if (this.#descriptor !== undefined) closeSync(this.#descriptor);
+    this.#descriptor = undefined;
     const oldest = `${this.#path}.${String(this.#maxFiles)}`;
     if (existsSync(oldest)) unlinkSync(oldest);
     for (let index = this.#maxFiles - 1; index >= 1; index -= 1) {

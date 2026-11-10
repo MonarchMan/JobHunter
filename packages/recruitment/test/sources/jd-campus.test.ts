@@ -69,6 +69,7 @@ describe('JD campus source adapter', () => {
 
   it('normalizes internship descriptions and requirement locations', async () => {
     const raw = fixture.body.items[0];
+    if (!raw) throw new Error('Expected one fixture job');
     const normalized = await adapter.normalize(
       {
         discovered: {

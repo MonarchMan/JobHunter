@@ -59,7 +59,9 @@ function fixtureHttp(options: { readonly duplicateIntern?: boolean } = {}): Sour
       const start = (page - 1) * pageSize;
       const list = source.slice(start, start + pageSize);
       if (options.duplicateIntern && recruitType === 'INTERN' && page === 2) {
-        list.splice(0, list.length, internJobs[0]);
+        const duplicate = internJobs[0];
+        if (!duplicate) throw new Error('Intern fixture is empty');
+        list.splice(0, list.length, duplicate);
       }
       return Promise.resolve(
         response(
@@ -97,7 +99,7 @@ describe('Baidu campus source adapter', () => {
     const delegate = fixtureHttp();
     const http: SourceHttpClient = {
       request<TBody>(request: SourceHttpRequest): Promise<SourceHttpResponse<TBody>> {
-        expect(request.headers['content-type']).toContain('application/x-www-form-urlencoded');
+        expect(request.headers?.['content-type']).toContain('application/x-www-form-urlencoded');
         requests.push(new URLSearchParams(request.body ?? ''));
         return delegate.request<TBody>(request);
       },

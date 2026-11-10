@@ -202,6 +202,113 @@ function runner(store: MemoryStore, model: ModelClient): AgentRunner {
 }
 
 describe('agent runtime', () => {
+  it('retains execution failure when persisting the final failed state also fails', async () => {
+    const store = new MemoryStore();
+    const original = new ModelClientError('temporary', 'synthetic model failure', true);
+    const persistenceError = new Error('synthetic run audit failure');
+    store.completeFailed = () => {
+      throw persistenceError;
+    };
+    await expect(
+      runner(store, new QueueModel([original])).run({
+        definition: definition(),
+        value: { text: 'fixture' },
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toMatchObject({
+      category: 'temporary',
+      cause: expect.objectContaining({ errors: [original, persistenceError] }) as unknown,
+    });
+  });
+  it.each([false, true])(
+    'preserves tool failures even when failure recording also fails (%s)',
+    async (recordFails) => {
+      const store = new MemoryStore();
+      const original = new Error('synthetic tool failure');
+      const persistenceError = new Error('synthetic tool audit failure');
+      if (recordFails)
+        store.saveToolCall = () => {
+          throw persistenceError;
+        };
+      const model = new QueueModel([
+        { kind: 'tool_calls', calls: [{ id: 'call-1', toolKey: 'lookup', input: {} }], usage },
+      ]);
+      const tool = {
+        key: 'lookup',
+        description: 'Read a synthetic record.',
+        readOnly: true as const,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        summarizeInput: () => ({}),
+        summarizeOutput: () => ({}),
+        execute: () => Promise.reject(original),
+      };
+      await expect(
+        runner(store, model).run({
+          definition: definition({ tools: [tool] }),
+          value: { text: 'fixture' },
+          signal: new AbortController().signal,
+        }),
+      ).rejects.toMatchObject({
+        category: 'tool_error',
+        cause: recordFails
+          ? (expect.objectContaining({ errors: [original, persistenceError] }) as unknown)
+          : original,
+      });
+    },
+  );
+  it('restarts a step whose recovery body was cleared without colliding with its old success', async () => {
+    const store = new MemoryStore();
+    const model = new QueueModel([output('first'), output('fresh')]);
+    const runtime = runner(store, model);
+    const request = {
+      definition: definition(),
+      value: { text: 'same' },
+      signal: new AbortController().signal,
+      execution: { taskId: 'task-1', stepKey: 'step-1', resourceKey: 'resource-1' },
+    };
+    const first = await runtime.runStep(request);
+    store.runs.set(first.run.id, { ...first.run, output: null });
+    const result = await runtime.runStep(request);
+    expect(result.output.answer).toBe('fresh');
+    expect(result.run.id).toBe(first.run.id);
+    expect(model.requests).toHaveLength(2);
+  });
+
+  it('isolates recovery by task, step, resource and input', async () => {
+    const store = new MemoryStore();
+    const model = new QueueModel([
+      output('first'),
+      output('task'),
+      output('step'),
+      output('resource'),
+      output('input'),
+    ]);
+    const runtime = runner(store, model);
+    const request = {
+      definition: definition(),
+      value: { text: 'same' },
+      signal: new AbortController().signal,
+      execution: { taskId: 'task-1', stepKey: 'step-1', resourceKey: 'resource-1' },
+    };
+    const first = await runtime.runStep(request);
+    expect((await runtime.runStep(request)).run.id).toBe(first.run.id);
+    for (const execution of [
+      { ...request.execution, taskId: 'task-2' },
+      { ...request.execution, stepKey: 'step-2' },
+      { ...request.execution, resourceKey: 'resource-2' },
+    ]) {
+      const result = await runtime.runStep({ ...request, execution });
+      expect(result.run.id).not.toBe(first.run.id);
+      expect(result.run.execution).toEqual(execution);
+    }
+    expect((await runtime.runStep({ ...request, value: { text: 'changed' } })).run.id).not.toBe(
+      first.run.id,
+    );
+    expect(model.requests).toHaveLength(5);
+    expect(store.runs.size).toBe(5);
+  });
+
   it('reuses the failed ID and accumulates billable failed attempts', async () => {
     const store = new MemoryStore();
     const runtime = runner(store, new QueueModel([output(42), output(42), output('ok')]));
@@ -209,11 +316,11 @@ describe('agent runtime', () => {
       definition: definition(),
       value: { text: 'retry-priced' },
       signal: new AbortController().signal,
-      retryKey: 'task-1',
+      execution: { taskId: 'task-1', stepKey: 'test', resourceKey: 'one' },
     };
-    await expect(runtime.run(request)).rejects.toMatchObject({ category: 'invalid_output' });
+    await expect(runtime.runStep(request)).rejects.toMatchObject({ category: 'invalid_output' });
     const failed = [...store.runs.values()][0];
-    const succeeded = await runtime.run(request);
+    const succeeded = await runtime.runStep(request);
     expect(succeeded.run.id).toBe(failed?.id);
     expect(store.runs.size).toBe(1);
     expect(succeeded.run.inputTokens).toBe(9);
@@ -221,24 +328,23 @@ describe('agent runtime', () => {
     expect(succeeded.run.errorSummary).toBeNull();
   });
 
-  it('keeps task scopes separate and retries sensitive runs without caching success', async () => {
+  it('never recovers ordinary calls and stores only their output hashes', async () => {
     const store = new MemoryStore();
     const runtime = runner(
       store,
-      new QueueModel([output(42), output(42), output('ok'), output('new'), output('other')]),
+      new QueueModel([output(42), output(42), output('ok'), output('new')]),
     );
     const request = {
-      definition: definition({ resultPolicy: { cache: 'disabled', persistOutput: false } }),
+      definition: definition(),
       value: { text: 'private' },
       signal: new AbortController().signal,
-      retryKey: 'task-1',
     };
     await expect(runtime.run(request)).rejects.toThrow();
     const failedId = [...store.runs.keys()][0];
-    expect((await runtime.run(request)).run.id).toBe(failedId);
+    expect((await runtime.run(request)).run.id).not.toBe(failedId);
     expect((await runtime.run(request)).output.answer).toBe('new');
-    expect((await runtime.run({ ...request, retryKey: 'task-2' })).output.answer).toBe('other');
     expect(store.runs.size).toBe(3);
+    expect([...store.runs.values()].every((record) => record.output === null)).toBe(true);
   });
   it('sums independently priced calls across a repair without losing unknown cache counts', async () => {
     const store = new MemoryStore();
@@ -309,15 +415,16 @@ describe('agent runtime', () => {
       definition: checked,
       value: { text: 'test' },
       signal: new AbortController().signal,
+      execution: { taskId: 'task-1', stepKey: 'test', resourceKey: 'one' },
     };
-    const first = await runtime.run(request);
+    const first = await runtime.runStep(request);
     expect(first.output.answer).toBe('valid');
     expect(model.requests).toHaveLength(2);
     expect(model.requests[1]?.repair?.validationSummary).toContain('ref-99');
-    expect((await runtime.run(request)).cacheHit).toBe(true);
+    expect((await runtime.runStep(request)).cacheHit).toBe(true);
     // 1、模拟历史坏缓存，确认失效保留审计并重新生成。
     store.runs.set(first.run.id, { ...first.run, output: { answer: 'bad' } });
-    expect((await runtime.run(request)).cacheHit).toBe(false);
+    expect((await runtime.runStep(request)).cacheHit).toBe(false);
     expect(store.get(first.run.id)?.status).toBe('succeeded');
     expect(store.runs.size).toBe(1);
     expect(model.requests).toHaveLength(3);
@@ -352,11 +459,17 @@ describe('agent runtime', () => {
     const runtime = runner(store, model);
     const signal = new AbortController().signal;
 
-    const first = await runtime.run({ definition: definition(), value: { text: 'hello' }, signal });
-    const replay = await runtime.run({
+    const first = await runtime.runStep({
       definition: definition(),
       value: { text: 'hello' },
       signal,
+      execution: { taskId: 'task-1', stepKey: 'test', resourceKey: 'one' },
+    });
+    const replay = await runtime.runStep({
+      definition: definition(),
+      value: { text: 'hello' },
+      signal,
+      execution: { taskId: 'task-1', stepKey: 'test', resourceKey: 'one' },
     });
 
     expect(first.cacheHit).toBe(false);
@@ -366,13 +479,11 @@ describe('agent runtime', () => {
     expect(store.runs).toHaveLength(1);
   });
 
-  it('can disable cache and persist only the validated output hash', async () => {
+  it('persists only the validated output hash for ordinary calls', async () => {
     const store = new MemoryStore();
     const model = new QueueModel([output('first'), output('second')]);
     const runtime = runner(store, model);
-    const sensitive = definition({
-      resultPolicy: { cache: 'disabled', persistOutput: false },
-    });
+    const sensitive = definition();
     const request = {
       definition: sensitive,
       value: { text: 'private mail body' },
@@ -399,11 +510,17 @@ describe('agent runtime', () => {
     const model = new QueueModel([output('one'), output('two')]);
     const runtime = runner(store, model);
     const signal = new AbortController().signal;
-    const first = await runtime.run({ definition: definition(), value: { text: 'same' }, signal });
-    const second = await runtime.run({
+    const first = await runtime.runStep({
+      definition: definition(),
+      value: { text: 'same' },
+      signal,
+      execution: { taskId: 'task-1', stepKey: 'test', resourceKey: 'one' },
+    });
+    const second = await runtime.runStep({
       definition: definition({ systemPrompt: 'Changed prompt content.' }),
       value: { text: 'same' },
       signal,
+      execution: { taskId: 'task-1', stepKey: 'test', resourceKey: 'one' },
     });
     expect(second.run.cacheKey).not.toBe(first.run.cacheKey);
     expect(model.requests).toHaveLength(2);
@@ -433,17 +550,19 @@ describe('agent runtime', () => {
       new ModelClientError('rate_limited', 'Rate limited.', true),
     ]);
     await expect(
-      runner(store, failedModel).run({
+      runner(store, failedModel).runStep({
         definition: definition(),
         value: { text: 'retry' },
         signal: new AbortController().signal,
+        execution: { taskId: 'task-1', stepKey: 'test', resourceKey: 'one' },
       }),
     ).rejects.toMatchObject({ category: 'rate_limited', retryable: true });
 
-    const success = await runner(store, new QueueModel([output('ok')])).run({
+    const success = await runner(store, new QueueModel([output('ok')])).runStep({
       definition: definition(),
       value: { text: 'retry' },
       signal: new AbortController().signal,
+      execution: { taskId: 'task-1', stepKey: 'test', resourceKey: 'one' },
     });
     expect(success.output.answer).toBe('ok');
     expect([...store.runs.values()].map((run) => run.status)).toEqual(['succeeded']);

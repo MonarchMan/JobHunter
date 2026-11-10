@@ -15,6 +15,8 @@ const job: JobListItem = {
   title: 'Agent 工程师',
   department: null,
   jobFamily: '研发',
+  jobSubfamily: null,
+  recruitmentCategory: null,
   locations: ['北京'],
   status: 'active',
   detailUrl: 'https://example.test/jobs/1',

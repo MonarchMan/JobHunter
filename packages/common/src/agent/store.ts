@@ -4,11 +4,18 @@ import type { AgentErrorCategory } from './errors.js';
 /** 模块使用的类型约束。 */
 export type AgentRunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled';
 
+/** 持久化执行归属；独立于业务正文和 HTTP 请求账本。 */
+export interface AgentExecution {
+  readonly taskId: string;
+  readonly stepKey: string;
+  readonly resourceKey: string;
+}
 /** 模块数据结构或契约。 */
 export interface AgentRunRecord {
   /** 从请求外键反查，不在运行表重复保存数组。 */
   readonly requestIds?: readonly string[];
   readonly billingCalls?: readonly ModelBilling[] | null;
+  readonly execution?: AgentExecution;
   readonly id: string;
   readonly agentKey: string;
   readonly definitionHash: string;
@@ -61,7 +68,7 @@ export interface AgentRunStore {
   /** 将校验失败的成功缓存失效，保留输出和用量作为审计。 */
   invalidateSucceeded(id: string): void;
   createRunning(record: AgentRunRecord): void;
-  /** 恢复相同执行键的失败记录；返回原用量供累计，禁止接管仍在运行的记录。 */
+  /** 恢复终态失败记录并返回原用量；running 遗留由中央领取事务先关闭，不接管活跃调用。 */
   restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null;
   /** 重试保留历史工具调用，序号继续递增。 */
   nextToolSequence(agentRunId: string): number;

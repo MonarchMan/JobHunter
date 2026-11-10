@@ -1,3 +1,4 @@
+import type { SafeLogger } from '../../logging/index.js';
 import {
   SystemIdGenerator,
   parseId,
@@ -68,6 +69,8 @@ export interface TaskRuntimeOptions {
   readonly maxConcurrentNetworkTasks?: number;
   readonly taskTypeConcurrency?: Readonly<Record<string, number>>;
   readonly logger?: TaskLogger;
+  /** 组合根借用的日志器，所有权仍属于宿主。 */
+  readonly diagnosticLogger?: SafeLogger;
   readonly model?: Parameters<typeof createConfiguredModelClient>[0];
 }
 
@@ -98,10 +101,11 @@ async function closeCapabilities(capabilities: readonly TaskCapability[]): Promi
 function limitModel(client: ModelClient, semaphore: AsyncSemaphore): ModelClient {
   return {
     metadata: client.metadata,
-    async complete(request, signal) {
+    async complete(request, signal, observer) {
       // 1、等待公共网络额度；2、取消排队时转换成模型执行契约错误。
       try {
-        return await semaphore.run(signal, () => client.complete(request, signal));
+        // 观察器必须穿透限流层，否则在途请求直到返回后才会被 Runner 补记。
+        return await semaphore.run(signal, () => client.complete(request, signal, observer));
       } catch (error) {
         if (error instanceof AsyncSemaphoreCancelledError)
           throw new ModelClientError('cancelled', 'Model request was cancelled while queued.');
@@ -124,8 +128,9 @@ export function createTaskRuntime(
   const ids = new SystemIdGenerator();
   const clock: Clock = { now: () => utcInstant(Date.now()) };
   const registry = new HandlerRegistry();
-  const queue = new SqliteTaskRepository(database.client);
-  if (input.recoverPreviousExecutions) queue.revokePreviousExecutions(clock.now());
+  const queue = new SqliteTaskRepository(database.client, (taskType) =>
+    registry.has(taskType) ? registry.get(taskType).defaultMaxAttempts : 1,
+  );
   const tasks = new TaskService({ queue, clock, ids }, registry);
   const schedules = new ScheduleService({ queue, clock, ids }, registry);
   const networkSemaphore =
@@ -161,12 +166,14 @@ export function createTaskRuntime(
   try {
     // 2、先登记全部处理器，再创建计划，防止计划引用尚未注册的任务。
     for (const factory of factories) capabilities.push(factory(context));
+    // 已登记全部系统重试配置后再恢复旧执行，避免用缺失处理器的预算判断。
+    if (input.recoverPreviousExecutions) queue.revokePreviousExecutions(clock.now());
     if (!input.executionOnly) for (const capability of capabilities) capability.initialize?.();
     // 2.a、只记录公共并发和事件循环指标，不记录业务正文或外部地址。
     if (input.logger) {
       eventLoopDelay?.enable();
       metrics = setInterval(() => {
-        input.logger?.info('worker.runtime', {
+        input.logger?.debug?.('worker.runtime', {
           executionRole: input.executionOnly ? 'thread' : 'scheduler',
           ...input.executor?.metrics?.(),
           networkActive: networkSemaphore.activeCount,
@@ -257,6 +264,9 @@ export function createTaskRuntime(
         return withTaskExecution(
           {
             taskId: task.id,
+            taskType: task.taskType,
+            parentTaskId: task.parentTaskId,
+            logger: input.logger,
             owner: task.leaseOwner,
             attempt: task.attemptCount,
             now: () => clock.now(),
@@ -334,11 +344,15 @@ export function createTaskApplication(input: {
   readonly clock?: Clock;
   readonly random?: RandomSource;
   readonly logger?: TaskLogger;
+  /** 组合根借用的日志器，所有权仍属于宿主。 */
+  readonly diagnosticLogger?: SafeLogger;
   readonly workerDelay?: WorkerDelay;
 }): TaskApplication {
   // 1、测试仍使用真实队列与引擎，仅外部执行能力由调用方替换。
   const database = openSqliteDatabase({ dataRoot: input.dataRoot });
-  const queue = new SqliteTaskRepository(database.client);
+  const queue = new SqliteTaskRepository(database.client, (taskType) =>
+    input.registry.has(taskType) ? input.registry.get(taskType).defaultMaxAttempts : 1,
+  );
   const clock = input.clock ?? { now: () => utcInstant(Date.now()) };
   const engine = new WorkerEngine({
     queue,

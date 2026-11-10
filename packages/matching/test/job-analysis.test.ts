@@ -15,6 +15,30 @@ const facts = {
 };
 /** 验证统一输出边界，不接受关闭块被偷偷生成或开启块缺失。 */
 describe('job analysis output sections', () => {
+  it('rejects additional match fields instead of silently dropping them', () => {
+    const input = {
+      title: '工程师',
+      description: '开发平台',
+      experienceText: null,
+      educationText: null,
+      recruitmentCategory: 'social' as const,
+      profile: buildProfileSnapshot(makeCandidateProfile()),
+      outputs: { understanding: true, match: true, advice: false },
+      instructions: '按开关生成',
+    };
+    expect(() =>
+      parseJobAnalysisOutput(
+        {
+          understanding: facts,
+          match: { score: 80, reasons: ['方向匹配'], dimensions: [] },
+          advice: null,
+        },
+        input,
+      ),
+    ).toThrow();
+    expect(jobAnalysisAgentDefinition.systemPrompt).toContain('match 开启时仅允许 score');
+    expect(jobAnalysisAgentDefinition.systemPrompt).toContain('advice 对象内部严格输出');
+  });
   it.each([false, true])('validates score=%s with both advice switch values', (score) => {
     for (const advice of [false, true]) {
       const input = {

@@ -353,7 +353,7 @@ projects 中每项使用稳定 id 和可空 local_path；模型不能覆盖身�
 
 本领域保存 Agent 执行事实和以不可变输入生成的匹配结果。模型输出只能形成新推导结果，不能覆盖职位、画像或用户答案。
 
-**事务边界：**Agent 运行开始先提交 `running`；模型调用在事务外；成功或失败结果用短事务完成。任务随后独立提交 `public_state`；若两次提交间崩溃，重试通过 Agent 缓存恢复。确定性匹配结果及其输入引用在一个事务中创建。
+**事务边界：**Agent 运行开始先提交 `running`；模型调用在事务外；成功或失败结果用短事务完成。任务随后独立提交 `public_state`；若两次提交间崩溃，可恢复后台任务通过同任务步骤结果恢复。确定性匹配结果及其输入引用在一个事务中创建。
 
 #### 3.4.1 `agent_runs`
 
@@ -370,7 +370,7 @@ projects 中每项使用稳定 id 和可空 local_path；模型不能覆盖身�
 | `prompt_version`                   | TEXT    | NOT NULL        | Prompt 版本                                   |
 | `model_config_hash`                | TEXT    | NOT NULL        | 供应商、模型和参数哈希                        |
 | `input_hash`                       | TEXT    | NOT NULL        | 脱敏规范输入哈希                              |
-| `cache_key`                        | TEXT    | NOT NULL        | 完整缓存键                                    |
+| `cache_key`                        | TEXT    | NOT NULL        | 执行恢复键（普通调用使用独立身份）            |
 | `status`                           | TEXT    | CHECK           | `running`、`succeeded`、`failed`、`cancelled` |
 | `output_json`                      | TEXT    | NULL            | 已校验结构化输出                              |
 | `error_category`、`error_summary`  | TEXT    | NULL            | 脱敏错误                                      |
@@ -381,7 +381,7 @@ projects 中每项使用稳定 id 和可空 local_path；模型不能覆盖身�
 
 部分唯一索引：`cache_key WHERE status = 'succeeded'`。相同输入可以保留多次失败，但最多一个成功缓存。
 
-隐私敏感 Agent 可以使用受限输出记录。`recruitment-mail.classify@v1` 禁用持久化输出缓存并使用独立运行身份；其 `output_json` 只允许保存输出哈希和校验状态，不得保存邮件文本、结构化字段或证据。已接受和已忽略结果分别通过 `application_events` 与 `mail_message_refs.processing_status` 实现业务幂等，待确认结果重新读取原邮件，不从 AgentRun 恢复字段结果。
+普通 Agent 调用不保存输出正文；AI 回复仅存 ai_messages。后台任务显式使用 runStep，按任务、步骤、资源与输入定位恢复结果；邮件分类使用邮箱、消息和内容版本隔离。恢复输出仅在任务尚未成功提交时保留，任务成功、取消或删除时清除，诊断及请求账本保留。简历润色建议由 user 模块的 resume_polish_suggestions 保存，不依赖 Agent 输出副本。运行新增 task_id、step_key、resource_key；分派轮次只保存在 tasks，不重复增加 task_attempt；历史关联为空，task_id 不设外键，以便任务删除后仍保留诊断身份。
 
 #### 3.4.2 `job_metadata`
 
@@ -408,6 +408,8 @@ UNIQUE(job_id, name) 保证每职位每类型只保存一份当前结果；覆�
 
 通用异步任务队列，负责执行、租约、重试和结果定位。
 
+每轮尝试上限由 Handler 的系统配置提供，不保存到任务行，也不接受入队覆盖。`attempt_count` 保留累计领取次数，减去最近 `task_retry_logs.attempt_count` 得到本轮次数；手动重试、自动退避和租约恢复使用相同预算语义。
+
 | 列                                        | 类型    | 约束                   | 说明                                                     |
 | ----------------------------------------- | ------- | ---------------------- | -------------------------------------------------------- |
 | `id`                                      | TEXT    | PK                     | 任务 ID                                                  |
@@ -419,9 +421,8 @@ UNIQUE(job_id, name) 保证每职位每类型只保存一份当前结果；覆�
 | `priority`                                | INTEGER | NOT NULL DEFAULT 0     | 越大越优先                                               |
 | `idempotency_key`                         | TEXT    | UNIQUE NOT NULL        | 逻辑幂等键                                               |
 | `concurrency_key`                         | TEXT    | NULL                   | 活动任务互斥键                                           |
-| `retry_of_task_id`                        | TEXT    | FK tasks, NULL         | 手动重试来源                                             |
+| `source_id`、`source_run_id`              | TEXT    | NULL                   | 执行输入中的来源和扫描身份查询投影                       |
 | `attempt_count`                           | INTEGER | NOT NULL DEFAULT 0     | 已领取次数                                               |
-| `max_attempts`                            | INTEGER | NOT NULL               | 最大尝试次数                                             |
 | `available_at`                            | INTEGER | NOT NULL               | 最早执行时间                                             |
 | `lease_owner`                             | TEXT    | NULL                   | Worker ID                                                |
 | `lease_expires_at`、`last_heartbeat_at`   | INTEGER | NULL                   | 租约和心跳                                               |

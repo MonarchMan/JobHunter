@@ -4,6 +4,7 @@ import type {
   DiscoverContext,
   DiscoveryEvent,
   SourceHttpClient,
+  SourceHttpResponse,
   SourcePageCollection,
   SourcePageClient,
 } from '@jobhunter/recruitment/source-contracts';
@@ -300,12 +301,14 @@ describe('script-reference source adapters', () => {
       await readFile(new URL('./fixtures/xiaohongshu/page-1.json', import.meta.url), 'utf8'),
     ) as unknown;
     const http: SourceHttpClient = {
-      request: (request) =>
+      request: <TBody>(
+        request: Parameters<SourceHttpClient['request']>[0],
+      ): Promise<SourceHttpResponse<TBody>> =>
         Promise.resolve({
           status: 200,
           url: request.url,
           headers: new Headers({ 'content-type': 'application/json' }),
-          body: fixture,
+          body: fixture as TBody,
         }),
     };
     const config = scriptedConfigSchema.parse({ pageSize: 10 });

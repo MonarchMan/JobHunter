@@ -212,11 +212,11 @@ describe('community research prompt and normalization', () => {
               ...value.experiences[0],
               questions: [
                 {
-                  ...value.experiences[0].questions[0],
+                  ...value.experiences[0]?.questions[0],
                   text: '如何设计备份策略？',
                 },
                 {
-                  ...value.experiences[0].questions[0],
+                  ...value.experiences[0]?.questions[0],
                   text: '如何验证恢复流程？',
                 },
               ],

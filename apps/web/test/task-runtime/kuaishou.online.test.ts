@@ -98,9 +98,10 @@ describe.skipIf(!enabled)('Kuaishou independent production boundary smoke (SWT-0
         }
         // 3、独立打开一条官方详情，比较 ID、标题和两段正文，不借用另一渠道的成功结果。
         const first = jobs[0].job;
+        const executablePath = resolveBrowserExecutablePath();
         const browser = await chromium.launch({
           headless: true,
-          executablePath: resolveBrowserExecutablePath(),
+          ...(executablePath ? { executablePath } : {}),
         });
         try {
           const detailPage = await browser.newPage();

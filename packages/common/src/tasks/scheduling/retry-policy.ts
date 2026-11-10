@@ -1,13 +1,13 @@
 import { utcInstant, type UtcInstant } from '@jobhunter/common/domain';
+import { hasModelRequestPersistenceError, hasNonRetryableAgentError } from '../../agent/errors.js';
+import { redactCredentials } from '../../logging/redact-credentials.js';
 import type { RandomSource, TaskErrorCategory } from '../contracts/model.js';
 
 const REDACTED = '[redacted]';
 
 /** 脱敏并截断任务错误摘要，避免凭据进入日志或数据库。 */
 export function sanitizeTaskErrorSummary(summary: string): string {
-  return summary
-    .replaceAll(/Bearer\s+[^\s]+/gi, `Bearer ${REDACTED}`)
-    .replaceAll(/(api[-_ ]?key|token|password|cookie)\s*[:=]\s*[^\s,;]+/gi, `$1=${REDACTED}`)
+  return redactCredentials(summary, REDACTED)
     .replaceAll(/[\r\n\t]+/g, ' ')
     .replaceAll(/\s{2,}/g, ' ')
     .trim()
@@ -57,6 +57,17 @@ export interface RetryPolicyOptions {
   readonly jitterRatio?: number;
 }
 
+/** 共用重试语义，避免阶段汇总和队列调度对同一错误做出不同决定。 */
+export function isTaskErrorRetryable(input: {
+  readonly category: TaskErrorCategory;
+  readonly retryable?: boolean | null;
+}): boolean {
+  return (
+    input.retryable ??
+    ['rate_limited', 'network_temporary', 'io_temporary', 'upstream_5xx'].includes(input.category)
+  );
+}
+
 /** 根据错误分类、尝试次数和 Retry-After 计算退避时间。 */
 export class RetryPolicy {
   readonly #random: RandomSource;
@@ -88,12 +99,7 @@ export class RetryPolicy {
     readonly retryable?: boolean | null;
   }): RetryDecision {
     // 1、先判断错误是否可重试及是否耗尽次数，再计算指数退避和抖动。
-    const retryable =
-      input.retryable ??
-      (input.category === 'rate_limited' ||
-        input.category === 'network_temporary' ||
-        input.category === 'io_temporary' ||
-        input.category === 'upstream_5xx');
+    const retryable = isTaskErrorRetryable(input);
     if (!retryable || input.attemptCount >= input.maxAttempts) {
       return { retry: false, availableAt: null };
     }
@@ -110,5 +116,40 @@ export class RetryPolicy {
 /** 将任意处理器异常转换为任务执行错误。 */
 export function classifyTaskError(error: unknown): TaskExecutionError {
   if (error instanceof TaskExecutionError) return error;
+  if (hasModelRequestPersistenceError(error))
+    return new TaskExecutionError('invalid_config', 'Unable to persist model request ledger.', {
+      cause: error,
+      retryable: false,
+    });
+  if (hasNonRetryableAgentError(error))
+    return new TaskExecutionError('permanent', 'Agent execution failed.', {
+      cause: error,
+      retryable: false,
+    });
+  // 未经过不可重试边界的基础设施异常仍可恢复。
+  const visited = new Set<Error>();
+  let cause = error;
+  while (cause instanceof Error && !visited.has(cause)) {
+    visited.add(cause);
+    if ('code' in cause && /^SQLITE_(?:BUSY|LOCKED)(?:_|$)/u.test(String(cause.code))) {
+      return new TaskExecutionError('io_temporary', '数据库暂时繁忙，请稍后重试。', {
+        cause: error,
+        retryable: true,
+      });
+    }
+    cause = cause.cause;
+  }
+  // 数据库结构错误需要升级或修正代码，重发请求无法恢复，摘要不得包含 SQL 或业务内容。
+  if (
+    error instanceof Error &&
+    'code' in error &&
+    error.code === 'SQLITE_ERROR' &&
+    /no such (?:column|table)|has no column named/iu.test(error.message)
+  )
+    return new TaskExecutionError(
+      'invalid_config',
+      '数据库结构与当前代码不一致，请检查数据库迁移。',
+      { cause: error, retryable: false },
+    );
   return new TaskExecutionError('permanent', 'Task handler failed.', { cause: error });
 }

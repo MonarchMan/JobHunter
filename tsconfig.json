@@ -1,5 +1,14 @@
 {
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "customConditions": ["development"],
+    "jsx": "preserve",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"]
+  },
   "files": [],
+  "include": ["packages/*/test/**/*.ts", "apps/*/test/**/*.ts", "apps/*/test/**/*.tsx"],
   "references": [
     {
       "path": "./packages/common"

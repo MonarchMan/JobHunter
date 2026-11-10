@@ -1,4 +1,4 @@
-import type { AgentRunReader } from '@jobhunter/common/agent';
+import type { ResumePolishSuggestionStore } from '../ports/resume-polish.js';
 import { parseId, type IdGenerator } from '@jobhunter/common/domain';
 import {
   resumePolishAgentOutputSchema,
@@ -41,22 +41,22 @@ function presentTaskError(category: string | null): string {
   }
 }
 
-/** 创建润色任务并从 Agent 运行记录恢复只读建议。 */
+/** 创建润色任务并从业务仓储读取用户可选择应用的建议。 */
 export class ResumePolishService {
   readonly #profiles: CandidateProfileRepository;
-  readonly #agentRuns: AgentRunReader;
+  readonly #suggestions: ResumePolishSuggestionStore;
   readonly #tasks: TaskService;
   readonly #ids: IdGenerator;
 
   /** 执行应用组件对外暴露的操作。 */
   public constructor(input: {
     readonly profiles: CandidateProfileRepository;
-    readonly agentRuns: AgentRunReader;
+    readonly suggestions: ResumePolishSuggestionStore;
     readonly tasks: TaskService;
     readonly ids: IdGenerator;
   }) {
     this.#profiles = input.profiles;
-    this.#agentRuns = input.agentRuns;
+    this.#suggestions = input.suggestions;
     this.#tasks = input.tasks;
     this.#ids = input.ids;
   }
@@ -116,7 +116,7 @@ export class ResumePolishService {
     });
   }
 
-  /** 查询润色任务状态，并在成功时恢复经过 Schema 校验的 Agent 输出。 */
+  /** 查询润色任务状态，并读取业务仓储中经过 Schema 校验的建议。 */
   public status(taskIdValue: string, suggestionId: string): WebResumePolishStatus | null {
     const task = this.#tasks.get(parseId(taskIdValue, 'Task'));
     if (task?.taskType !== 'resume.polish') return null;
@@ -127,13 +127,13 @@ export class ResumePolishService {
     };
     if (payload.suggestionId !== suggestionId) return null;
     const taskResult = task.status === 'succeeded' ? resumePolishTaskResult(task.result) : null;
-    const run = taskResult ? this.#agentRuns.get(taskResult.agentRunId) : null;
+    const output = taskResult ? this.#suggestions.get(suggestionId) : null;
     const suggestion =
-      run?.status === 'succeeded' && payload.sourceVersionId && payload.sections
+      output !== null && payload.sourceVersionId && payload.sections
         ? {
             sourceVersionId: payload.sourceVersionId,
             sections: payload.sections,
-            result: resumePolishAgentOutputSchema.parse(run.output),
+            result: resumePolishAgentOutputSchema.parse(output),
           }
         : null;
     const resultUnavailable = task.status === 'succeeded' && suggestion === null;

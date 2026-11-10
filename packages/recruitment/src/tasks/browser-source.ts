@@ -1,3 +1,4 @@
+import { logDiagnostic } from '@jobhunter/common/logging';
 import { resolveBrowserExecutablePath } from '@jobhunter/common/browser/executable';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import {
@@ -34,7 +35,7 @@ const browserDebugEnabled = process.env.JOBHUNTER_BROWSER_DEBUG === '1';
 
 /** Worker 运行时数据结构或执行契约。 */
 function browserDebug(...values: unknown[]): void {
-  if (browserDebugEnabled) console.error('[browser-source]', ...values);
+  if (browserDebugEnabled) logDiagnostic('debug', 'browser.source', { details: values });
 }
 
 /** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */

@@ -50,3 +50,5 @@ ADR 一经 Accepted 通常不直接改写历史结论；后续决策变更通过
 
 - [ADR-0065：单宿主与有界动态任务线程池](./0065-single-host-dynamic-thread-pool.md)
 - [ADR-0066：招聘邮件识别并入邮箱同步任务](./0066-mailbox-task-consolidation.md)
+
+- [ADR-0067：按任务步骤恢复 Agent 执行](./0067-scoped-agent-recovery.md)

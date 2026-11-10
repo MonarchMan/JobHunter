@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { Worker } from 'node:worker_threads';
 import { z } from 'zod';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
@@ -9,6 +9,99 @@ import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
 import { utcInstant } from '@jobhunter/common/domain';
 import { ThreadTaskExecutor } from '../../src/tasks/execution/thread-executor.js';
 import { AsyncSemaphore } from '../../src/tasks/concurrency/async-semaphore.js';
+import { defineAgent } from '../../src/agent/index.js';
+import type { TaskRuntimeContext } from '../../src/tasks/host/runtime.js';
+
+it('persists a running request before a model response crosses the concurrency limiter', async () => {
+  const root = await createTemporaryDataRoot('jobhunter-runtime-model-observer-');
+  const deferred = {
+    started: (): void => undefined,
+    finish: (response: Response): void => {
+      void response;
+    },
+  };
+  const started = new Promise<void>((resolve) => {
+    deferred.started = resolve;
+  });
+  const response = new Promise<Response>((resolve) => {
+    deferred.finish = resolve;
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => {
+      deferred.started();
+      return response;
+    }),
+  );
+  const capture: { context?: TaskRuntimeContext } = {};
+  const application = createTaskRuntime(
+    {
+      dataRoot: root.path,
+      periodicEnabled: false,
+      model: {
+        provider: 'openai-compatible',
+        baseUrl: 'https://fixture.test/v1',
+        apiKey: 'synthetic',
+        model: 'fixture',
+      },
+    },
+    [
+      (context) => {
+        capture.context = context;
+        return { close: () => Promise.resolve() };
+      },
+    ],
+  );
+  const runner = capture.context?.runner;
+  const client = capture.context?.database.client;
+  if (!runner || !client) throw new Error('Missing fixture runtime');
+  const pending = runner.run({
+    definition: defineAgent({
+      key: 'observer-fixture',
+      outputSchemaVersion: '1',
+      outputSchemaName: 'Fixture',
+      systemPrompt: 'Synthetic observer fixture',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      tools: [],
+      limits: {
+        timeoutMs: 10000,
+        maxSteps: 1,
+        maxInputTokens: 1000,
+        maxOutputTokens: 100,
+        maxEstimatedCostMicros: 1000,
+      },
+    }),
+    value: {},
+    signal: new AbortController().signal,
+  });
+  try {
+    await started;
+    const request = client.prepare('SELECT id,state FROM model_requests').get() as {
+      id: string;
+      state: string;
+    };
+    expect(request.state).toBe('running');
+    deferred.finish(
+      Response.json({
+        choices: [{ message: { content: '{"ok":true}' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    );
+    const result = await pending;
+    expect(result.output).toEqual({ ok: true });
+    expect(client.prepare('SELECT id,state FROM model_requests').all()).toEqual([
+      { id: request.id, state: 'completed' },
+    ]);
+    expect(result.run.requestIds).toEqual([request.id]);
+  } finally {
+    deferred.finish(Response.json({ choices: [{ message: { content: '{"ok":true}' } }] }));
+    await pending.catch(() => undefined);
+    await application.close();
+    vi.unstubAllGlobals();
+    await root.cleanup();
+  }
+});
 
 it.each(['SQLITE_BUSY_SNAPSHOT', 'maintenance'])(
   'recovers wrapped storage failures through the real pool instead of permanently failing: %s',

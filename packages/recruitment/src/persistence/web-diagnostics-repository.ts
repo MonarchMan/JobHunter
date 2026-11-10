@@ -74,20 +74,11 @@ const taskEntriesCte = `
     SELECT task.id, task.status, task.created_at, task.started_at, task.finished_at,
            task.cancel_requested_at,
            task.source_run_id AS run_id,
-           task.source_id,
-           task.retry_root_task_id AS retry_root_id
+           task.source_id
     FROM tasks task
     WHERE task.task_type = 'source.job-detail'
       AND task.source_run_id IS NOT NULL
       AND task.source_id IS NOT NULL
-  ),
-  detail_ranked AS (
-    SELECT task.*,
-           ROW_NUMBER() OVER (
-             PARTITION BY task.run_id, task.source_id, task.retry_root_id
-             ORDER BY task.created_at DESC, task.id DESC
-           ) AS retry_rank
-    FROM detail_tasks task
   ),
   detail_groups AS (
     SELECT task.run_id, task.source_id,
@@ -102,8 +93,7 @@ const taskEntriesCte = `
            SUM(CASE WHEN task.status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
            SUM(CASE WHEN task.status = 'failed' THEN 1 ELSE 0 END) AS failed,
            SUM(CASE WHEN task.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled
-    FROM detail_ranked task
-    WHERE task.retry_rank = 1
+    FROM detail_tasks task
     GROUP BY run_id, source_id
   ),
   batch_entries AS (
@@ -181,8 +171,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       SELECT task.private_state, task.public_state, task.started_at AS window_started_at,
         task.finished_at AS window_finished_at, json_object(
         'kind', 'task', 'id', task.id, 'taskType', task.task_type, 'status', task.status,
-        'attemptCount', task.attempt_count, 'maxAttempts', task.max_attempts,
-        'retryOfTaskId', task.retry_of_task_id,
+        'attemptCount', task.attempt_count,
         'errorCategory', task.error_category, 'errorSummary', task.error_summary,
         'cancelRequested', json(CASE WHEN task.cancel_requested_at IS NULL THEN 'false' ELSE 'true' END),
         'createdAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.created_at / 1000.0, 'unixepoch'),

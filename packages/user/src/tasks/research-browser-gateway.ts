@@ -1,3 +1,4 @@
+import { logDiagnostic } from '@jobhunter/common/logging';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns/promises';
 import {
@@ -187,7 +188,7 @@ const researchBrowserDebugEnabled = process.env.JOBHUNTER_BROWSER_DEBUG === '1';
 
 /** Worker 运行时数据结构或执行契约。 */
 function researchBrowserDebug(event: string, details: Readonly<Record<string, unknown>>): void {
-  if (researchBrowserDebugEnabled) console.error('[research-browser]', event, details);
+  if (researchBrowserDebugEnabled) logDiagnostic('debug', `browser.research.${event}`, details);
 }
 
 /** Worker 运行时数据结构或执行契约。 */
@@ -219,8 +220,9 @@ class ResearchBrowserError extends Error {
   public constructor(
     readonly code: string,
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = 'ResearchBrowserError';
   }
 }
@@ -714,6 +716,7 @@ function safeError(error: unknown): ResearchBrowserError {
     : new ResearchBrowserError(
         'browser_unavailable',
         'The restricted browser could not complete the request.',
+        { cause: error },
       );
 }
 
@@ -995,6 +998,7 @@ class ResearchBrowserTools {
       });
     } catch (error) {
       const safe = safeError(error);
+      logDiagnostic('warn', 'browser.tool_failed', { tool: 'search', error: safe });
       this.#record({ tool: 'search', occurredAt, ok: false, query, errorCode: safe.code });
       return toolFailure(safe);
     }
@@ -1073,6 +1077,7 @@ class ResearchBrowserTools {
       });
     } catch (error) {
       const safe = safeError(error);
+      logDiagnostic('warn', 'browser.tool_failed', { tool: 'open', error: safe });
       this.#record({
         tool: 'open',
         occurredAt,
@@ -1146,6 +1151,7 @@ class ResearchBrowserTools {
       });
     } catch (error) {
       const safe = safeError(error);
+      logDiagnostic('warn', 'browser.tool_failed', { tool: 'readPage', pageId, error: safe });
       this.#record({
         tool: 'readPage',
         occurredAt,
@@ -2014,15 +2020,29 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
         urlAttribute: 'href',
       },
     ] as const;
+    const failures: unknown[] = [];
+    let completedProviders = 0;
     for (const provider of providers) {
-      const page = await this.#newPage('infrastructure');
+      assertActive(signal);
+      let page: Page | undefined;
       try {
+        page = await this.#newPage('infrastructure');
         await this.#validateUrl(provider.url, 'infrastructure');
         const response = await page.goto(provider.url, {
           waitUntil: 'domcontentloaded',
           timeout: this.#limits.navigationTimeoutMs,
         });
         assertActive(signal);
+        if (!response || response.status() >= 400)
+          throw new ResearchBrowserError(
+            'http_failed',
+            'Search provider returned an unsuccessful response.',
+            {
+              cause: Object.assign(new Error('Search provider HTTP failure.'), {
+                status: response?.status(),
+              }),
+            },
+          );
         const resultLinks = page.locator(provider.selector);
         await resultLinks
           .first()
@@ -2033,7 +2053,7 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
           .catch(() => undefined);
         researchBrowserDebug('search-provider', {
           provider: new URL(provider.url).hostname,
-          status: response?.status() ?? null,
+          status: response.status(),
           selectorCount: await resultLinks.count(),
         });
         const raw = await resultLinks.evaluateAll(
@@ -2079,18 +2099,24 @@ class PlaywrightResearchBrowserDriver implements ResearchBrowserDriver {
             // A provider with only out-of-policy results must not suppress provider fallback.
           }
         }
+        completedProviders++;
         if (results.length > 0) return results;
       } catch (error) {
-        researchBrowserDebug('search-provider-failed', {
+        assertActive(signal);
+        failures.push(error);
+        logDiagnostic('warn', 'browser.search_provider_failed', {
           provider: new URL(provider.url).hostname,
-          errorCode: safeError(error).code,
-          errorName: error instanceof Error ? error.name : typeof error,
+          error: safeError(error),
         });
         // Try the next fixed public search provider.
       } finally {
-        await page.close().catch(() => undefined);
+        await page?.close().catch(() => undefined);
       }
     }
+    if (completedProviders === 0)
+      throw new ResearchBrowserError('search_unavailable', 'All search providers failed.', {
+        cause: new AggregateError(failures, 'Search provider failures.'),
+      });
     return [];
   }
 

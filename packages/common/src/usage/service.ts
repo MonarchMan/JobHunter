@@ -12,7 +12,7 @@ export interface UsageCall extends ModelBilling {
 export interface UsageRepository {
   read(start: number, end: number): { calls: UsageCall[]; legacyRuns: number };
 }
-/** 外部筛选边界；币种明确分开，避免隐式汇率改变历史费用。 */
+/** 外部筛选边界；币种仅控制换汇显示，不参与请求筛选。 */
 export const usageFilterSchema = z.object({
   range: z.enum(['today', '24h', '7d', '14d', '30d', 'all']).catch('today'),
   application: z.string().max(100).catch(''),
@@ -30,7 +30,9 @@ export const usageFilterSchema = z.object({
 export interface UsageTotals {
   requests: number;
   tokens: number;
-  cost: number;
+  /** 按显示币种换算的已知费用合计，全部未定价时为空。 */
+  cost: number | null;
+  costByCurrency: Partial<Record<ModelBilling['currency'], number | null>>;
   input: number;
   output: number;
   cacheRead: number;
@@ -60,6 +62,7 @@ function empty(): Accumulator {
     requests: 0,
     tokens: 0,
     cost: 0,
+    costByCurrency: {},
     input: 0,
     output: 0,
     cacheRead: 0,
@@ -112,8 +115,13 @@ function add(total: Accumulator, call: UsageCall): void {
   total.output += call.outputTokens ?? 0;
   total.tokens += (call.inputTokens ?? 0) + (call.outputTokens ?? 0);
   if (call.inputTokens === null || call.outputTokens === null) total.unknownTokens++;
-  if (call.totalCostMicros === null) total.unpriced++;
-  else total.cost += call.totalCostMicros;
+  if (call.totalCostMicros === null) {
+    total.unpriced++;
+    total.costByCurrency[call.currency] ??= null;
+  } else {
+    total.costByCurrency[call.currency] =
+      (total.costByCurrency[call.currency] ?? 0) + call.totalCostMicros;
+  }
   if (call.cacheReadTokens === null || call.inputTokens === null) total.unknownCache++;
   else {
     total.cacheRead += call.cacheReadTokens;
@@ -121,8 +129,20 @@ function add(total: Accumulator, call: UsageCall): void {
   }
 }
 /** 去除中间样本；首字取中位数，速度按时间加权，避免短请求放大均值。 */
-function summarize(value: Accumulator): UsageTotals {
+function summarize(
+  value: Accumulator,
+  currency: ModelBilling['currency'],
+  rate: number,
+): UsageTotals {
   const { firstTokens, generationTokens, generationMs, ...total } = value;
+  const costs = (['USD', 'CNY'] as const)
+    .filter((source) => total.costByCurrency[source] != null)
+    .map((source) => convertUsageCost(total.costByCurrency[source] ?? 0, source, currency, rate));
+  total.cost = costs.length
+    ? costs.reduce((sum, cost) => sum + cost, 0)
+    : total.requests
+      ? null
+      : 0;
   firstTokens.sort((a, b) => a - b);
   const middle = Math.floor(firstTokens.length / 2);
   total.firstTokenMs = firstTokens.length
@@ -134,6 +154,8 @@ function summarize(value: Accumulator): UsageTotals {
 }
 /** 页面只读结果；仅当前页请求传往浏览器，总计不受分页影响。 */
 export interface UsageReport {
+  /** 本报告使用的美元兑人民币汇率，仅用于显示，不改写历史账单。 */
+  usdToCnyRate: number;
   filters: z.infer<typeof usageFilterSchema>;
   start: number;
   end: number;
@@ -152,7 +174,13 @@ export interface UsageReport {
 }
 /** 聚合模型请求账本；用例仅依赖仓储端口，不加载数据库运行时。 */
 export class UsageService {
-  public constructor(private readonly repository: UsageRepository) {}
+  public constructor(
+    private readonly repository: UsageRepository,
+    private readonly usdToCnyRate = 7.2,
+  ) {
+    if (!Number.isFinite(usdToCnyRate) || usdToCnyRate <= 0)
+      throw new TypeError('Display exchange rate must be positive and finite.');
+  }
   public query(input: unknown, now = Date.now()): UsageReport {
     // 1、按上海自然日定义窗口，不能依赖服务器所在时区。
     const filters = usageFilterSchema.parse(input);
@@ -169,14 +197,16 @@ export class UsageService {
           ? now - day
           : midnight - (days - 1) * day;
     const snapshot = this.repository.read(start, end);
+    // 网络失败仅从用量视图排除，原始账本仍供 Agent 诊断与审计读取。
+    const visibleCalls = snapshot.calls.filter((call) => call.transportError !== 'network');
     if (filters.range === 'all') {
-      const earliest = snapshot.calls.reduce((at, call) => Math.min(at, call.requestedAt), now);
+      const earliest = visibleCalls.reduce((at, call) => Math.min(at, call.requestedAt), now);
       start = Math.floor((earliest + offset) / day) * day - offset;
     }
     const applications = [
-      ...new Set(snapshot.calls.map((call) => call.application ?? 'JobHunter')),
+      ...new Set(visibleCalls.map((call) => call.application ?? 'JobHunter')),
     ].sort();
-    const scoped = snapshot.calls.filter(
+    const scoped = visibleCalls.filter(
       (call) => !filters.application || (call.application ?? 'JobHunter') === filters.application,
     );
     const models = [
@@ -191,7 +221,7 @@ export class UsageService {
     ].sort();
     const statusCodes = [
       ...new Set(
-        snapshot.calls
+        visibleCalls
           .map((call) => call.statusCode)
           .filter((value): value is number => value != null),
       ),
@@ -199,7 +229,6 @@ export class UsageService {
     const calls = scoped
       .filter(
         (call) =>
-          call.currency === filters.currency &&
           (!filters.model || call.model === filters.model) &&
           (!filters.provider || call.provider === filters.provider) &&
           (!filters.statusCode ||
@@ -246,25 +275,49 @@ export class UsageService {
     const pages = Math.max(1, Math.ceil(calls.length / 20));
     filters.page = Math.min(filters.page, pages);
     return {
+      usdToCnyRate: this.usdToCnyRate,
       filters,
       start,
       end,
       legacyRuns: snapshot.legacyRuns,
-      total: summarize(total),
+      total: summarize(total, filters.currency, this.usdToCnyRate),
       models,
       providers,
       applications,
       prices: [...prices.values()],
       statusCodes,
       providerGroups: [...providerGroups]
-        .map(([provider, value]) => ({ provider, total: summarize(value) }))
+        .map(([provider, value]) => ({
+          provider,
+          total: summarize(value, filters.currency, this.usdToCnyRate),
+        }))
         .sort((a, b) => b.total.requests - a.total.requests),
-      buckets: buckets.map((bucket) => ({ at: bucket.at, total: summarize(bucket.total) })),
+      buckets: buckets.map((bucket) => ({
+        at: bucket.at,
+        total: summarize(bucket.total, filters.currency, this.usdToCnyRate),
+      })),
       groups: [...groups]
-        .map(([model, value]) => ({ model, total: summarize(value) }))
+        .map(([model, value]) => ({
+          model,
+          total: summarize(value, filters.currency, this.usdToCnyRate),
+        }))
         .sort((a, b) => b.total.requests - a.total.requests),
       calls: calls.slice((filters.page - 1) * 20, filters.page * 20),
       pages,
     };
   }
+}
+
+/** 按报告指定汇率换算微单位金额，保留显示精度且不重新定价。 */
+export function convertUsageCost(
+  amount: number,
+  source: ModelBilling['currency'],
+  target: ModelBilling['currency'],
+  usdToCnyRate: number,
+): number {
+  return source === target
+    ? amount
+    : target === 'CNY'
+      ? amount * usdToCnyRate
+      : amount / usdToCnyRate;
 }

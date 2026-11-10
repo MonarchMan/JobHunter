@@ -1,5 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { randomUUID } from 'node:crypto';
+import { hasNonRetryableAgentError } from '../../agent/errors.js';
 import { withTaskExecution } from '../contracts/execution-scope.js';
 import type { Clock, TaskId } from '@jobhunter/common/domain';
 import type { HandlerRegistry } from '../contracts/handler-registry.js';
@@ -120,7 +121,8 @@ export class WorkerEngine implements TaskCancellationNotifier {
     this.#logger = input.logger ?? silentLogger;
     this.#delay = input.workerDelay ?? nativeWorkerDelay;
     this.#periodicWork = input.periodicWork;
-    this.#isQueueBusy = input.isQueueBusy ?? (() => false);
+    this.#isQueueBusy = (error) =>
+      !hasNonRetryableAgentError(error) && (input.isQueueBusy?.(error) ?? false);
     this.#executor = input.executor;
     this.#options = {
       periodicEnabled: input.options.periodicEnabled ?? true,
@@ -213,6 +215,9 @@ export class WorkerEngine implements TaskCancellationNotifier {
       const output = await withTaskExecution(
         {
           taskId: task.id,
+          taskType: task.taskType,
+          parentTaskId: task.parentTaskId,
+          logger: this.#logger,
           owner: executionOwner(task),
           attempt: task.attemptCount,
           now: () => this.#clock.now(),
@@ -369,8 +374,10 @@ export class WorkerEngine implements TaskCancellationNotifier {
     const classified = classifyTaskError(error);
     const decision = this.#retryPolicy.decide({
       category: classified.category,
-      attemptCount: task.attemptCount,
-      maxAttempts: task.maxAttempts,
+      attemptCount: this.#queue.attemptsInCurrentRound(task.id),
+      maxAttempts: this.#registry.has(task.taskType)
+        ? this.#registry.get(task.taskType).defaultMaxAttempts
+        : 1,
       now: this.#clock.now(),
       retryAfterAt: classified.retryAfterAt,
       retryable: classified.retryable,
@@ -391,6 +398,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
         taskType: task.taskType,
         attempt: task.attemptCount,
         errorCategory: classified.category,
+        retryAt: decision.availableAt,
         error: classified,
       });
       return;

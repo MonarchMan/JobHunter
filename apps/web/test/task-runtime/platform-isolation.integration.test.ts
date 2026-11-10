@@ -191,7 +191,7 @@ it('records local activity monotonically, protects viewed jobs and only exposes 
     const taskId = new SystemIdGenerator().generate();
     db.client
       .prepare(
-        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,max_attempts,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,1,0,0,10000)",
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,available_at,created_at,lease_expires_at) VALUES (?,'platform.boss','{}','running',?,0,0,10000)",
       )
       .run(taskId, taskId);
     const jobId = repository.save(

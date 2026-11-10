@@ -1,3 +1,4 @@
+import { sanitizeAgentErrorSummary } from '../agent/errors.js';
 import { currentModelMessage } from '../agent/message-context.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
@@ -53,6 +54,7 @@ export function readModelRequest(
   const billing = modelBillingSchema.parse({
     ...values,
     requestId: row.id,
+    ...(row.failure_reason == null ? {} : { failureReason: row.failure_reason }),
     rates:
       row.rates_json == null ? null : (JSON.parse(z.string().parse(row.rates_json)) as unknown),
   });
@@ -73,11 +75,21 @@ export class SqliteModelRequestRepository {
   public constructor(private readonly client: Database.Database) {}
   public listForRun(id: string): ModelBilling[] {
     return this.client
-      .prepare('SELECT * FROM model_requests WHERE agent_run_id = ? ORDER BY requested_at, rowid')
+      .prepare(
+        "SELECT request.*, json_extract(diagnostic.payload_json,'$.failureReason') AS failure_reason FROM model_requests request LEFT JOIN events diagnostic ON diagnostic.stream_type='model_request' AND diagnostic.stream_id=request.id AND diagnostic.sequence_no=1 AND diagnostic.event_type='model.request.failure' WHERE request.agent_run_id=? ORDER BY request.requested_at,request.rowid",
+      )
       .all(id)
       .map((row) => readModelRequest(row).billing);
   }
+  /** 请求与脱敏诊断同事务落库，重复用量更新不清除先前诊断。 */
   public save(agentRunId: string, input: ModelRequestRecord): void {
+    this.client
+      .transaction(() => {
+        this.#save(agentRunId, input);
+      })
+      .immediate();
+  }
+  #save(agentRunId: string, input: ModelRequestRecord): void {
     const record = modelRequestRecordSchema.parse(input);
     if (record.billing.requestId && record.billing.requestId !== record.id)
       throw new TypeError('Request ID mismatch.');
@@ -119,5 +131,18 @@ export class SqliteModelRequestRepository {
               .get(currentModelMessage()) ?? null),
         ...values,
       );
+    if (record.billing.failureReason) {
+      const failureReason = sanitizeAgentErrorSummary(record.billing.failureReason);
+      this.client
+        .prepare(
+          "INSERT INTO events(id,stream_type,stream_id,sequence_no,event_type,payload_json,occurred_at) VALUES(?,'model_request',?,1,'model.request.failure',?,?) ON CONFLICT(id) DO UPDATE SET payload_json=excluded.payload_json,occurred_at=excluded.occurred_at",
+        )
+        .run(
+          `model-request-failure:${record.id}`,
+          record.id,
+          JSON.stringify({ failureReason }),
+          record.billing.requestedAt + (record.billing.durationMs ?? 0),
+        );
+    }
   }
 }

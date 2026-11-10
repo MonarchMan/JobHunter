@@ -70,9 +70,10 @@ describe('wave-two official protocol research (SWT-002, SWT-003, SWT-004)', () =
     'samples Kuaishou social first/last and one detail',
     async () => {
       // 1、使用临时匿名浏览器，职位数据只来自官网正常请求。
+      const executablePath = resolveBrowserExecutablePath();
       const browser = await chromium.launch({
         headless: true,
-        executablePath: resolveBrowserExecutablePath(),
+        ...(executablePath ? { executablePath } : {}),
       });
       try {
         const page = await browser.newPage();
@@ -151,9 +152,10 @@ describe('wave-two official protocol research (SWT-002, SWT-003, SWT-004)', () =
     'samples Bilibili social first/last and one detail',
     async () => {
       // 1、由官网建立匿名会话，仅在当前浏览器内使用请求头，不记录凭据。
+      const executablePath = resolveBrowserExecutablePath();
       const browser = await chromium.launch({
         headless: true,
-        executablePath: resolveBrowserExecutablePath(),
+        ...(executablePath ? { executablePath } : {}),
       });
       try {
         const page = await browser.newPage();

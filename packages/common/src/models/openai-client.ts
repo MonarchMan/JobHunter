@@ -1,3 +1,4 @@
+import type { ModelBilling } from '../contracts/model-usage.js';
 import { calculateBilling } from './billing.js';
 import { ModelRequestTrace } from './request-trace.js';
 import {
@@ -269,6 +270,69 @@ export class OpenAiCompatibleModelClient implements ModelClient {
     }
   }
 
+  /** 正常响应与中断快照共用协议归一化和计价，缺失分项保持未知。 */
+  #billing(
+    value: unknown,
+    requestedAt: number,
+    headers: Headers,
+    serviceTier: unknown,
+  ): ModelBilling {
+    // 1、优先采用官方缓存字段；显式零必须保留，缺失才回退兼容字段。
+    const raw = responseSchema.shape.usage.parse(value);
+    const headerDurations = kimiCacheDurations(this.#config.baseUrl, headers);
+    const durations = {
+      ephemeral_5m_input_tokens:
+        headerDurations?.ephemeral_5m_input_tokens ??
+        raw?.cache_creation?.ephemeral_5m_input_tokens ??
+        null,
+      ephemeral_1h_input_tokens:
+        headerDurations?.ephemeral_1h_input_tokens ??
+        raw?.cache_creation?.ephemeral_1h_input_tokens ??
+        null,
+    };
+    const read = isDeepSeekApi(this.#config.baseUrl)
+      ? (raw?.prompt_cache_hit_tokens ?? raw?.prompt_tokens_details?.cached_tokens ?? null)
+      : (raw?.cache_read_input_tokens ??
+        raw?.input_tokens_details?.cached_tokens ??
+        raw?.prompt_tokens_details?.cached_tokens ??
+        raw?.prompt_cache_hit_tokens ??
+        null);
+    const write = cacheWriteTotal(
+      raw?.cache_creation_input_tokens ??
+        raw?.input_tokens_details?.cache_write_tokens ??
+        raw?.prompt_tokens_details?.cache_write_tokens,
+      durations,
+    );
+    const inputTokens = raw?.prompt_tokens ?? null;
+    const miss =
+      raw?.prompt_cache_miss_tokens ??
+      (inputTokens !== null && read !== null ? inputTokens - read - (write ?? 0) : null);
+    return calculateBilling({
+      model: this.#config.model,
+      baseUrl: this.#config.baseUrl,
+      requestedAt,
+      currency: this.#config.costCurrency,
+      inputTokens,
+      outputTokens: raw?.completion_tokens ?? null,
+      cacheReadTokens: read,
+      cacheWriteTokens: write,
+      cacheWrite5mTokens: durations.ephemeral_5m_input_tokens,
+      cacheWrite1hTokens: durations.ephemeral_1h_input_tokens,
+      serviceTier: z.string().nullable().optional().parse(serviceTier),
+      thinking:
+        raw?.completion_tokens_details?.reasoning_tokens == null
+          ? null
+          : raw.completion_tokens_details.reasoning_tokens > 0,
+      uncachedInputTokens: miss,
+      inputPrice: this.#config.inputCostPerMillionUsd,
+      outputPrice: this.#config.outputCostPerMillionUsd,
+      cacheReadPrice: this.#config.cacheReadPrice,
+      cacheWritePrice: this.#config.cacheWritePrice,
+      cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
+      autoModelPricing: this.#config.autoModelPricing,
+    });
+  }
+
   /** 保持原响应校验与格式协商，HTTP 传输交给逐请求观测器。 */
   async #complete(
     request: ModelRequest,
@@ -330,6 +394,8 @@ export class OpenAiCompatibleModelClient implements ModelClient {
             signal: combined,
           },
           'openai',
+          (value, context) =>
+            this.#billing(value, context.requestedAt, context.headers, context.serviceTier),
         );
       const deepSeek = isDeepSeekApi(this.#config.baseUrl);
       // 1、协商成功的格式直接复用；未协商时 DeepSeek 直接 json_object，其余网关优先 json_schema。
@@ -345,10 +411,12 @@ export class OpenAiCompatibleModelClient implements ModelClient {
         const next: StructuredFormat | null =
           format === 'json_schema' ? 'json_object' : deepSeek ? null : 'none';
         if (next !== null) {
+          trace.noteFailure(`接口返回 HTTP 400，正在将输出格式从 ${format} 切换为 ${next} 重试。`);
           response = await dispatch(
             next === 'none' ? undefined : responseFormatPayload(next, request),
           );
           if (response.status === 400 && next !== 'none') {
+            trace.noteFailure('接口返回 HTTP 400，正在移除结构化输出参数后重试。');
             response = await dispatch();
             format = 'none';
           } else {
@@ -360,60 +428,8 @@ export class OpenAiCompatibleModelClient implements ModelClient {
         this.#negotiatedFormat = format;
       if (!response.ok) throw await responseError(response);
       const parsed = responseSchema.parse(await response.json());
-      // 1、优先采用官方缓存字段；显式零必须保留，缺失才回退兼容字段。
       const raw = parsed.usage;
-      const headerDurations = kimiCacheDurations(this.#config.baseUrl, response.headers);
-      const durations = {
-        ephemeral_5m_input_tokens:
-          headerDurations?.ephemeral_5m_input_tokens ??
-          raw?.cache_creation?.ephemeral_5m_input_tokens ??
-          null,
-        ephemeral_1h_input_tokens:
-          headerDurations?.ephemeral_1h_input_tokens ??
-          raw?.cache_creation?.ephemeral_1h_input_tokens ??
-          null,
-      };
-      const read = isDeepSeekApi(this.#config.baseUrl)
-        ? (raw?.prompt_cache_hit_tokens ?? raw?.prompt_tokens_details?.cached_tokens ?? null)
-        : (raw?.cache_read_input_tokens ??
-          raw?.input_tokens_details?.cached_tokens ??
-          raw?.prompt_tokens_details?.cached_tokens ??
-          raw?.prompt_cache_hit_tokens ??
-          null);
-      const write = cacheWriteTotal(
-        raw?.cache_creation_input_tokens ??
-          raw?.input_tokens_details?.cache_write_tokens ??
-          raw?.prompt_tokens_details?.cache_write_tokens,
-        durations,
-      );
-      const inputTokens = raw?.prompt_tokens ?? null;
-      const miss =
-        raw?.prompt_cache_miss_tokens ??
-        (inputTokens !== null && read !== null ? inputTokens - read - (write ?? 0) : null);
-      const billing = calculateBilling({
-        model: this.#config.model,
-        baseUrl: this.#config.baseUrl,
-        requestedAt: trace.requestedAt,
-        currency: this.#config.costCurrency,
-        inputTokens,
-        outputTokens: raw?.completion_tokens ?? null,
-        cacheReadTokens: read,
-        cacheWriteTokens: write,
-        cacheWrite5mTokens: durations.ephemeral_5m_input_tokens,
-        cacheWrite1hTokens: durations.ephemeral_1h_input_tokens,
-        serviceTier: parsed.service_tier,
-        thinking:
-          raw?.completion_tokens_details?.reasoning_tokens == null
-            ? null
-            : raw.completion_tokens_details.reasoning_tokens > 0,
-        uncachedInputTokens: miss,
-        inputPrice: this.#config.inputCostPerMillionUsd,
-        outputPrice: this.#config.outputCostPerMillionUsd,
-        cacheReadPrice: this.#config.cacheReadPrice,
-        cacheWritePrice: this.#config.cacheWritePrice,
-        cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
-        autoModelPricing: this.#config.autoModelPricing,
-      });
+      const billing = this.#billing(raw, trace.requestedAt, response.headers, parsed.service_tier);
       const responseUsage = {
         ...usage(raw),
         ...trace.usage(billing),
@@ -433,8 +449,13 @@ export class OpenAiCompatibleModelClient implements ModelClient {
                 toolKey: call.function.name,
                 input: JSON.parse(call.function.arguments) as unknown,
               };
-            } catch {
-              throw new ModelClientError('invalid_output', 'Model tool arguments were not JSON.');
+            } catch (error) {
+              throw new ModelClientError(
+                'invalid_output',
+                'Model tool arguments were not JSON.',
+                false,
+                { cause: error },
+              );
             }
           }),
           usage: responseUsage,
@@ -458,19 +479,25 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       if (error instanceof ModelClientError) throw error;
       if (error instanceof ModelRequestPersistenceError) throw error;
       if (combined.aborted) {
-        if (signal.aborted) throw new ModelClientError('cancelled', 'Model request was cancelled.');
-        throw new ModelClientError('timeout', 'Model request timed out.', true);
+        if (signal.aborted)
+          throw new ModelClientError('cancelled', 'Model request was cancelled.', false, {
+            cause: error,
+          });
+        throw new ModelClientError('timeout', 'Model request timed out.', true, { cause: error });
       }
       if (error instanceof z.ZodError)
         throw new ModelClientError(
           'invalid_output',
           'Model provider returned an invalid response.',
+          false,
+          { cause: error },
         );
       const reason = networkReason(error);
       throw new ModelClientError(
         'temporary',
         `Model provider request failed${reason ? ` (${reason})` : ''}.`,
         true,
+        { cause: error },
       );
     }
   }

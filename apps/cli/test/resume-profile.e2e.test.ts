@@ -3,7 +3,7 @@ import { CandidateProfileService } from '@jobhunter/user/profile';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteCandidateProfileRepository } from '@jobhunter/user/persistence';
 import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
-import type { CandidateProfileData } from '@jobhunter/user/domain';
+import { parseCandidateProfile, type CandidateProfileData } from '@jobhunter/user/domain';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -46,7 +46,7 @@ async function command(
   };
 }
 
-const extracted: CandidateProfileData = {
+const extracted: CandidateProfileData = parseCandidateProfile({
   targetRoles: ['Agent 开发', '大模型应用'],
   preferences: {
     locations: ['深圳'],
@@ -68,7 +68,7 @@ const extracted: CandidateProfileData = {
   domains: ['大模型应用'],
   yearsOfExperience: 3,
   managementExperience: false,
-};
+});
 
 function seedFirstProfileVersion(input: {
   readonly dataRoot: string;

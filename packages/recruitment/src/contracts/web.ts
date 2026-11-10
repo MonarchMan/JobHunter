@@ -1,5 +1,6 @@
 import { modelBillingSchema } from '@jobhunter/common/web-contracts';
 import { z } from 'zod';
+import { taskErrorCategorySchema } from '@jobhunter/common/task-contracts';
 import {
   recruitmentScheduleActivityTypeSchema,
   recruitmentScheduleTimePrecisionSchema,
@@ -256,6 +257,8 @@ export const webSyncScoringProgressSchema = z
           status: z.enum(['succeeded', 'failed']),
           result: z.unknown(),
           error: z.string().nullable(),
+          errorCategory: taskErrorCategorySchema.optional(),
+          retryable: z.boolean().optional(),
         })
         .strict(),
     ),
@@ -280,8 +283,6 @@ export const webTaskSchema = z
     taskType: z.string(),
     status: webTaskStatusSchema,
     attemptCount: z.number().int().nonnegative(),
-    maxAttempts: z.number().int().positive(),
-    retryOfTaskId: z.uuid().nullable(),
     errorCategory: z.string().nullable(),
     errorSummary: z.string().nullable(),
     cancelRequested: z.boolean(),

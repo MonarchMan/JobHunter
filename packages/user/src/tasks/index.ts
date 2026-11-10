@@ -1,3 +1,4 @@
+import { SqliteResumePolishSuggestionStore } from '@jobhunter/user/persistence/resume-polish-suggestion-store';
 import { NodeResearchDelivery } from '@jobhunter/user/persistence/research-delivery';
 import { AiSessionService } from '../ai/service.js';
 import { createAiReplyHandler } from '../ai/handler.js';
@@ -130,7 +131,11 @@ export function createUserTasks(
   registry.register(
     createResumePolishTaskHandler(
       configuredRunner
-        ? { runner: configuredRunner, profiles: profileRepository }
+        ? {
+            runner: configuredRunner,
+            profiles: profileRepository,
+            suggestions: new SqliteResumePolishSuggestionStore(database.client),
+          }
         : { unavailable: true },
     ),
   );
