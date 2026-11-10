@@ -32,6 +32,6 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof ZodError || error instanceof MailboxSettingsError) {
       return badRequestResponse('邮箱配置无效，请检查地址、授权码和 IMAP 参数。');
     }
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

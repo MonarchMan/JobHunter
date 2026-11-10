@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { errorResponse } from '../src/server/http.js';
 import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { createLocalWebContainer } from '../src/server/container.js';
+
+// 日志行为由 http-logging 覆盖；此测试不写工作区运行目录。
+vi.mock('../src/server/logging.js', () => ({
+  getWebLogger: () => Promise.resolve({ warn: vi.fn(), error: vi.fn() }),
+}));
 
 describe('SQLite maintenance HTTP responses', () => {
   it('keeps maintenance audits read-only in the application service', async () => {
@@ -49,7 +54,7 @@ describe('SQLite maintenance HTTP responses', () => {
       new Error('wrapped', { cause: new Error('JOBHUNTER_DATABASE_MAINTENANCE') }),
       Object.assign(new Error('/private/database.sqlite'), { code: 'SQLITE_BUSY' }),
     ]) {
-      const response = errorResponse(error);
+      const response = await errorResponse(error);
       expect(response.status).toBe(503);
       expect(response.headers.get('Retry-After')).toBe('5');
       expect(await response.text()).not.toContain('/private');

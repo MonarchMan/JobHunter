@@ -28,6 +28,6 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof ZodError || error instanceof TypeError) {
       return badRequestResponse('职位批量评分请求无效。');
     }
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

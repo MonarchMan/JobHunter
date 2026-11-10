@@ -28,6 +28,6 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError)
       return badRequestResponse('无法取消该任务。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

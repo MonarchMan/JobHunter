@@ -34,6 +34,6 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     if (error instanceof ZodError || error instanceof TypeError) {
       return badRequestResponse('职位评分请求无效。');
     }
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

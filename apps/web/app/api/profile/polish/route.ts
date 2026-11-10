@@ -25,7 +25,7 @@ export async function POST(request: Request): Promise<Response> {
     if (error instanceof ZodError || error instanceof TypeError) {
       return badRequestResponse('润色请求无效，请检查目标岗位和所选经历。');
     }
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }
 
@@ -40,6 +40,6 @@ export async function GET(request: Request): Promise<Response> {
     return status ? dataResponse(status) : notFoundResponse('润色任务不存在。');
   } catch (error) {
     if (error instanceof TypeError) return notFoundResponse('润色任务不存在。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

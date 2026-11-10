@@ -32,6 +32,6 @@ export async function POST(
       return notFoundResponse('邮箱配置不存在。');
     if (error instanceof MailboxSettingsError)
       return badRequestResponse('该邮箱授权码暂时不可用。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

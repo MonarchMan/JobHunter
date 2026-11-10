@@ -14,6 +14,6 @@ export async function GET(_request: Request, context: RouteContext): Promise<Res
     const run = container.services.diagnostics.getAgentRun(id);
     return run ? dataResponse(run) : notFoundResponse('Agent 运行不存在。');
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, _request);
   }
 }

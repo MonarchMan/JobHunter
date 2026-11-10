@@ -56,6 +56,6 @@ export async function POST(request: Request): Promise<Response> {
     ) {
       return badRequestResponse('简历文件或画像标识无效。');
     }
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

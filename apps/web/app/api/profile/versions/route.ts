@@ -20,6 +20,6 @@ export async function GET(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof CandidateProfileNotFoundError) return notFoundResponse('个人资料不存在。');
     if (error instanceof ZodError || error instanceof TypeError) return badRequestResponse();
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

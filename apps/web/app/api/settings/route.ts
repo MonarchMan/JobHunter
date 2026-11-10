@@ -33,6 +33,6 @@ export async function PATCH(request: Request): Promise<Response> {
     if (error instanceof ZodError || error instanceof TypeError) {
       return badRequestResponse('系统设置无效。');
     }
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

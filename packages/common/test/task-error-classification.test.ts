@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { classifyTaskError } from '../src/tasks/scheduling/retry-policy.js';
-import { ModelRequestPersistenceError } from '../src/agent/errors.js';
+import { AgentRuntimeError, ModelRequestPersistenceError } from '../src/agent/errors.js';
+import { mapAgentRuntimeError } from '../src/tasks/scheduling/error-mapping.js';
 import { threadStorageFailure } from '../src/tasks/execution/thread-storage-error.js';
 import { sqliteMaintenanceMessage } from '../src/persistence/maintenance-gate.js';
 
@@ -24,6 +25,20 @@ it('terminates cyclic cause chains and does not retry unrelated SQLite errors', 
   error.cause = error;
   expect(classifyTaskError(error).category).toBe('permanent');
 });
+
+it.each(['SQLITE_BUSY', 'SQLITE_LOCKED', sqliteMaintenanceMessage])(
+  'does not reinterpret nonretryable tool diagnostics as storage recovery: %s',
+  (code) => {
+    const cause = Object.assign(new Error(code), { code });
+    const toolError = new AgentRuntimeError('tool_error', 'Tool failed.', false, { cause });
+    for (const error of [toolError, mapAgentRuntimeError(toolError, 'test')]) {
+      expect(classifyTaskError(error).category).toBe('permanent');
+      expect(threadStorageFailure(error)).toBeUndefined();
+    }
+    expect(toolError.cause).toBe(cause);
+    expect(threadStorageFailure(cause)).toBe(code);
+  },
+);
 
 it.each(['SQLITE_BUSY', 'SQLITE_LOCKED', sqliteMaintenanceMessage])(
   'retains ledger diagnostics without reclassifying %s as recoverable storage failure',

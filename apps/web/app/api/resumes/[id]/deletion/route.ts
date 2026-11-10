@@ -27,7 +27,7 @@ export async function GET(_request: Request, context: RouteContext): Promise<Res
     if (error instanceof ResumeDeletionNotFoundError) return notFoundResponse('简历不存在。');
     if (error instanceof ZodError || error instanceof TypeError)
       return badRequestResponse('简历 ID 无效。');
-    return errorResponse(error);
+    return errorResponse(error, _request);
   }
 }
 
@@ -44,6 +44,6 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
     if (error instanceof TypeError)
       return conflictResponse('DELETION_IMPACT_CHANGED', '删除影响已变化，请重新预览。', {});
     if (error instanceof ZodError) return badRequestResponse('删除确认信息无效。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

@@ -60,6 +60,8 @@ export interface BootstrapConfig {
 export interface AppConfig {
   readonly bootstrap: BootstrapConfig;
   readonly logLevel: SourcedValue<'debug' | 'info' | 'warn' | 'error'>;
+  readonly consoleLogLevel?: SourcedValue<'debug' | 'info' | 'warn' | 'error'>;
+  readonly logFormat?: SourcedValue<'auto' | 'pretty' | 'json'>;
   readonly platforms: {
     readonly requestIntervalMs: SourcedValue<number>;
     readonly requestIntervalMsByProvider: SourcedValue<
@@ -106,6 +108,8 @@ export interface AppConfig {
 export interface ConfigOverrides {
   readonly dataRoot?: string;
   readonly logLevel?: string;
+  readonly consoleLogLevel?: string;
+  readonly logFormat?: string;
   readonly platformRequestIntervalMs?: number;
   readonly workerPollIntervalMs?: number;
   readonly maxConcurrentNetworkTasks?: number;
@@ -272,6 +276,16 @@ export function resolveAppConfig(input: {
 }): AppConfig {
   const environment = input.environment ?? process.env;
   const logLevel = choose(nonEmpty(input.cli?.logLevel), nonEmpty(environment.LOG_LEVEL), 'info');
+  const consoleLogLevel = choose(
+    nonEmpty(input.cli?.consoleLogLevel),
+    nonEmpty(environment.CONSOLE_LOG_LEVEL),
+    'warn',
+  );
+  const logFormat = choose(
+    nonEmpty(input.cli?.logFormat),
+    nonEmpty(environment.LOG_FORMAT),
+    'auto',
+  );
   const parsedLogLevel = z.enum(['debug', 'info', 'warn', 'error']).parse(logLevel.value);
   const modelApiKey = choose(nonEmpty(input.cli?.modelApiKey), nonEmpty(environment.API_KEY), null);
   const modelBaseUrl = choose(
@@ -405,6 +419,11 @@ export function resolveAppConfig(input: {
   return {
     bootstrap: input.bootstrap,
     logLevel: { ...logLevel, value: parsedLogLevel },
+    consoleLogLevel: {
+      ...consoleLogLevel,
+      value: z.enum(['debug', 'info', 'warn', 'error']).parse(consoleLogLevel.value),
+    },
+    logFormat: { ...logFormat, value: z.enum(['auto', 'pretty', 'json']).parse(logFormat.value) },
     platforms: {
       requestIntervalMs: {
         ...requestIntervalMs,

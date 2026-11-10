@@ -113,39 +113,43 @@ export function createConfiguredTaskApplication(
   // 1、浏览器池属于招聘模块，由宿主负责在任务停止后释放。
   const pageClient = createSourcePageClient();
   try {
-    return createConfiguredTaskHost(config, (options) => {
-      const application = createProductionTaskApplication({
-        ...options,
-        ...runtimeOptions,
-        pageClient,
-        platformRequestIntervalMs: config.platforms.requestIntervalMs.value,
-        platformRequestIntervalMsByProvider: config.platforms.requestIntervalMsByProvider.value,
-        mail: {
-          modelMode: config.mail.classification.modelMode.value,
-          mailboxConfigPath: config.bootstrap.mailboxConfigPath.value,
-          credentialPath: config.bootstrap.mailboxCredentialPath.value,
-          credentialKeyPath: config.bootstrap.mailboxCredentialKeyPath.value,
-          ...(config.mail.credentialMasterKey.value
-            ? { credentialMasterKey: config.mail.credentialMasterKey.value.reveal() }
+    return createConfiguredTaskHost(
+      config,
+      (options) => {
+        const application = createProductionTaskApplication({
+          ...options,
+          ...runtimeOptions,
+          pageClient,
+          platformRequestIntervalMs: config.platforms.requestIntervalMs.value,
+          platformRequestIntervalMsByProvider: config.platforms.requestIntervalMsByProvider.value,
+          mail: {
+            modelMode: config.mail.classification.modelMode.value,
+            mailboxConfigPath: config.bootstrap.mailboxConfigPath.value,
+            credentialPath: config.bootstrap.mailboxCredentialPath.value,
+            credentialKeyPath: config.bootstrap.mailboxCredentialKeyPath.value,
+            ...(config.mail.credentialMasterKey.value
+              ? { credentialMasterKey: config.mail.credentialMasterKey.value.reveal() }
+              : {}),
+          },
+        });
+        return {
+          engine: application.engine,
+          ...(application.request ? { request: application.request.bind(application) } : {}),
+          ...(application.executeAssigned
+            ? { executeAssigned: application.executeAssigned.bind(application) }
             : {}),
-        },
-      });
-      return {
-        engine: application.engine,
-        ...(application.request ? { request: application.request.bind(application) } : {}),
-        ...(application.executeAssigned
-          ? { executeAssigned: application.executeAssigned.bind(application) }
-          : {}),
-        async close() {
-          // 2、任务停止后归还浏览器会话，最后由公共宿主关闭日志。
-          try {
-            await application.close();
-          } finally {
-            await pageClient.close();
-          }
-        },
-      };
-    });
+          async close() {
+            // 2、任务停止后归还浏览器会话，最后由公共宿主关闭日志。
+            try {
+              await application.close();
+            } finally {
+              await pageClient.close();
+            }
+          },
+        };
+      },
+      runtimeOptions.diagnosticLogger,
+    );
   } catch (error) {
     void pageClient.close();
     throw error;

@@ -1,3 +1,4 @@
+import { getWebLogger } from './logging.js';
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server.js';
 import { isSqliteMaintenanceError } from '@jobhunter/common/persistence/maintenance';
@@ -21,16 +22,30 @@ export function dataResponse(data: unknown, init?: ResponseInit): NextResponse {
 }
 
 /** 将未知异常映射为统一 JSON 错误响应。 */
-export function errorResponse(error: unknown): NextResponse {
+export async function errorResponse(error: unknown, request?: Request): Promise<NextResponse> {
+  const correlationId = randomUUID();
+  const logger = await getWebLogger();
+  let requestFields = {};
+  if (request) {
+    try {
+      requestFields = { method: request.method, path: new URL(request.url).pathname };
+    } catch {
+      /* 无效 URL 不影响错误响应。 */
+    }
+  }
+  const unavailable = (message: string): NextResponse => {
+    logger.warn('web.request_failed', { correlationId, ...requestFields, statusCode: 503, error });
+    return serviceUnavailableResponse(message, correlationId);
+  };
   if (
     error instanceof Error &&
     'code' in error &&
     error.code === 'DATABASE_UPGRADE_REQUIRES_STOP'
   ) {
-    return serviceUnavailableResponse('数据库升级需要先关闭当前 Web/CLI 宿主及其他数据库连接。');
+    return unavailable('数据库升级需要先关闭当前 Web/CLI 宿主及其他数据库连接。');
   }
   if (error instanceof HostBridgeConnectionError) {
-    return serviceUnavailableResponse(
+    return unavailable(
       error.code === 'incompatible'
         ? '任务宿主配置已变化，请关闭并重新启动 Web 后重试。'
         : '任务宿主暂不可用，请稍后重试或查看运行日志。',
@@ -38,15 +53,11 @@ export function errorResponse(error: unknown): NextResponse {
   }
   // 1、维护写保护是暂时不可用，保留客户端草稿并允许稍后重试。
   if (isSqliteMaintenanceError(error) || isDatabaseBusy(error)) {
-    const response = serviceUnavailableResponse('数据库正在整理或暂时繁忙，请稍后重试。');
+    const response = unavailable('数据库正在整理或暂时繁忙，请稍后重试。');
     response.headers.set('Retry-After', '5');
     return response;
   }
-  const correlationId = randomUUID();
-  // Detailed failures belong in the redacted server logger; HTTP never exposes stacks.
-  process.stderr.write(
-    `Web request failed [${correlationId}]: ${error instanceof Error ? error.name : 'UnknownError'}\n`,
-  );
+  logger.error('web.request_failed', { correlationId, ...requestFields, statusCode: 500, error });
   return NextResponse.json(
     {
       error: {
@@ -114,13 +125,16 @@ export function conflictResponse(
 }
 
 /** 返回 503 临时能力不可用响应，客户端可以保留上下文后重试。 */
-export function serviceUnavailableResponse(message: string): NextResponse {
+export function serviceUnavailableResponse(
+  message: string,
+  correlationId = randomUUID(),
+): NextResponse {
   return NextResponse.json(
     {
       error: {
         code: 'SERVICE_UNAVAILABLE',
         message,
-        correlationId: randomUUID(),
+        correlationId,
       },
     },
     { status: 503 },

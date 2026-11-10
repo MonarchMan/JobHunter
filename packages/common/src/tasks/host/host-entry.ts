@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { createSafeLogger, createThreadLogChannel, type SafeLogger } from '../../logging/index.js';
 import { parseId } from '../../domain/index.js';
 import { observeTaskEnqueues } from '../contracts/execution-scope.js';
 import { Worker, isMainThread, workerData } from 'node:worker_threads';
@@ -89,8 +92,19 @@ export async function startConfiguredTaskHost(
   const key = canonicalTaskDataRoot(config.bootstrap.dataRoot.value);
   const existing = hosts.get(key);
   if (existing) return existing;
+  let startupLogger: SafeLogger | undefined;
   let cleanupObserver = (): void => undefined;
   const starting = (async (): Promise<LocalTaskHost> => {
+    const hostRunId = randomUUID();
+    const rootLogger = createSafeLogger({
+      context: { hostRunId, component: 'host' },
+      level: config.logLevel.value,
+      consoleLevel: config.consoleLogLevel?.value ?? 'warn',
+      format: config.logFormat?.value ?? 'auto',
+      logFile: path.join(key, 'logs', 'jobhunter.log'),
+    });
+    const logger = rootLogger.child({ hostRunId, component: 'host' });
+    startupLogger = rootLogger;
     const module = (await import(input.entry.href)) as {
       createConfiguredTaskApplication?: (
         config: AppConfig,
@@ -115,10 +129,11 @@ export async function startConfiguredTaskHost(
         const network = new AsyncSemaphore(config.worker.maxConcurrentNetworkTasks.value);
         pool = new ThreadTaskExecutor(
           () => {
+            const logChannel = createThreadLogChannel(logger);
             const worker = new Worker(
               input.entry.pathname.endsWith('.ts')
-                ? "require('tsx/esm/api').tsImport(require('node:worker_threads').workerData.entry, require('node:url').pathToFileURL(process.cwd() + '/').href).catch(() => process.exit(1))"
-                : "import(require('node:worker_threads').workerData.entry).catch(() => process.exit(1))",
+                ? "require('tsx/esm/api').tsImport(require('node:worker_threads').workerData.entry, require('node:url').pathToFileURL(process.cwd() + '/').href).catch(error => { throw error; })"
+                : "import(require('node:worker_threads').workerData.entry).catch(error => { throw error; })",
               {
                 eval: true,
                 stdout: true,
@@ -126,11 +141,20 @@ export async function startConfiguredTaskHost(
                 workerData: {
                   entry: input.entry.href,
                   config: serializeConfig(config),
+                  logPort: logChannel.port,
+                  hostRunId,
                 },
+                transferList: [logChannel.port],
                 execArgv: input.entry.pathname.endsWith('.ts') ? ['--conditions=development'] : [],
               },
             );
-            // 1.b、线程原始输出不进入 CLI JSON 或公开诊断；结构化日志已由业务运行时写入日志文件。
+            // 1.b、原始输出不可信；结构化日志走有界专用通道，未捕获错误由宿主脱敏。
+            worker.on('error', (error) => {
+              logger.error('thread.startup_failed', { error, originThreadId: worker.threadId });
+            });
+            worker.once('exit', () => {
+              logChannel.close();
+            });
             worker.stdout.resume();
             worker.stderr.resume();
             return worker;
@@ -140,6 +164,7 @@ export async function startConfiguredTaskHost(
         );
         try {
           application = createApplication(config, {
+            diagnosticLogger: logger,
             executor: pool,
             networkSemaphore: network,
             recoverPreviousExecutions: true,
@@ -166,7 +191,11 @@ export async function startConfiguredTaskHost(
             try {
               await executor.close();
             } finally {
-              await runtime.close();
+              try {
+                await runtime.close();
+              } finally {
+                await rootLogger.close();
+              }
             }
           },
         };
@@ -216,6 +245,8 @@ export async function startConfiguredTaskHost(
   } catch (error) {
     cleanupObserver();
     hosts.delete(key);
+    startupLogger?.error('host.startup_failed', { error });
+    await startupLogger?.close();
     throw error;
   }
 }

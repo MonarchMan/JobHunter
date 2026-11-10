@@ -1,3 +1,4 @@
+import { logQuerySchema, formatLogLine } from '@jobhunter/common/logging';
 import type { TaskRecord, TaskStatus } from '@jobhunter/common/tasks';
 import { HostBridgeConnectionError } from '@jobhunter/common/task-host-runtime';
 import { Command, CommanderError, Option } from 'commander';
@@ -321,7 +322,54 @@ export function createProgram(input: {
       },
     })
     .addOption(new Option('--json', '输出稳定的机器可读 JSON'))
+    .addOption(new Option('--verbose', '显示详细运行诊断'))
+    .addOption(new Option('--quiet', '控制台仅显示错误'))
     .addOption(new Option('--data-root <path>', '数据目录绝对或相对路径'));
+  program
+    .command('logs')
+    .description('查询脱敏日志时间线；--json 可重定向导出')
+    .option('--task <id>', '按任务 ID 筛选')
+    .option('--correlation <id>', '按请求关联 ID 筛选')
+    .option('--agent <id>', '按 Agent 运行 ID 筛选')
+    .option('--model-request <id>', '按模型请求 ID 筛选')
+    .option('--limit <count>', '最多返回 1–1000 条', '100')
+    .action(
+      async (options: {
+        task?: string;
+        correlation?: string;
+        agent?: string;
+        modelRequest?: string;
+        limit: string;
+      }) => {
+        if (!input.container.logs)
+          throw new CliError({
+            code: 'CONFIGURATION_ERROR',
+            message: '日志查询未装配。',
+            exitCode: cliExitCode.usage,
+          });
+        const parsed = logQuerySchema.safeParse({
+          taskId: options.task,
+          correlationId: options.correlation,
+          agentRunId: options.agent,
+          modelRequestId: options.modelRequest,
+          limit: Number(options.limit),
+        });
+        if (!parsed.success)
+          throw new CliError({
+            code: 'USAGE_ERROR',
+            message: '日志筛选无效；limit 必须为 1–1000。',
+            exitCode: cliExitCode.usage,
+          });
+        const result = await input.container.logs.query(parsed.data);
+        input.onResult({
+          data: result,
+          human:
+            (result.events.map(formatLogLine).join('') || '没有匹配日志。\n') +
+            (result.truncated ? '结果已截断，可缩小筛选范围。\n' : '') +
+            (result.skippedLines ? `已跳过 ${String(result.skippedLines)} 条损坏记录。\n` : ''),
+        });
+      },
+    );
   program
     .command('source')
     .description('查看来源并手动入队同步')

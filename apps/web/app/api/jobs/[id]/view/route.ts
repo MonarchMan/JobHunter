@@ -21,6 +21,6 @@ export async function POST(
     );
   } catch (error) {
     if (error instanceof ZodError) return badRequestResponse('职位标识无效。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

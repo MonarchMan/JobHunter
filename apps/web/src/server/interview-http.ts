@@ -36,7 +36,7 @@ export function presentInterviewTask(result: {
 }
 
 /** 将面试准备领域错误映射为稳定的 HTTP 状态和消息。 */
-export function interviewErrorResponse(error: unknown): Response {
+export function interviewErrorResponse(error: unknown): Response | Promise<Response> {
   if (error instanceof ExperienceDocumentNotFoundError) {
     return notFoundResponse('个人面经文档不存在。');
   }

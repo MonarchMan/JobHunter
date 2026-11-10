@@ -21,6 +21,6 @@ export async function GET(request: Request): Promise<Response> {
     if (error instanceof ZodError || error instanceof TypeError) {
       return badRequestResponse('日历日期范围或时区无效。');
     }
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

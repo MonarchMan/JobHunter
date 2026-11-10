@@ -26,6 +26,6 @@ export async function PATCH(request: Request, context: RouteContext): Promise<Re
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError)
       return badRequestResponse('来源设置无效。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

@@ -6,8 +6,41 @@ import { join } from 'node:path';
 import type { DestinationStream } from 'pino';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createSafeLogger, redactLogValue } from '../src/logging/index.js';
+import { classifyAgentError, sanitizeAgentErrorSummary } from '../src/agent/errors.js';
+import { sanitizeTaskErrorSummary } from '../src/tasks/scheduling/retry-policy.js';
 
 const temporaryDirectories: string[] = [];
+
+it('redacts quoted and escaped credentials in messages, stacks and persisted summaries', () => {
+  const message = JSON.stringify({
+    api_key: 'private-key',
+    password: 'private "quoted" suffix',
+    cookie: 'session=value; private-cookie',
+  });
+  const lines: string[] = [];
+  createSafeLogger({ stderr: { write: (line) => lines.push(line) } }).error('test.failed', {
+    error: new Error('outer', { cause: new Error(message) }),
+  });
+  for (const output of [
+    lines.join(''),
+    sanitizeAgentErrorSummary(message),
+    sanitizeTaskErrorSummary(message),
+  ]) {
+    for (const secret of ['private-key', 'quoted', 'suffix', 'private-cookie', 'session=value'])
+      expect(output).not.toContain(secret);
+  }
+});
+
+it('does not copy parsing input into normalized error messages or persisted summaries', () => {
+  const result = z.object({}).strict().safeParse({ private_input_marker: true });
+  if (result.success) throw new Error('Expected invalid input');
+  for (const original of [result.error, new SyntaxError('Unexpected token private_input_marker')]) {
+    const classified = classifyAgentError(original);
+    expect(classified.cause).toBe(original);
+    expect(JSON.stringify(redactLogValue(classified))).not.toContain('private_input_marker');
+    expect(sanitizeAgentErrorSummary(classified.message)).not.toContain('private_input_marker');
+  }
+});
 
 it('retains bounded aggregate children and reports omissions without leaking credentials', () => {
   const error = new AggregateError(
@@ -148,7 +181,7 @@ describe('safe structured logging', () => {
 describe('logging failure isolation and diagnostic evidence', () => {
   it('keeps stack, error code and nested causes without leaking URL credentials', () => {
     const error = Object.assign(
-      new Error('fetch https://user:pass@example.test/path?token=fixture-secret-token#secret', {
+      new Error('fetch https://user:pass@example.test/path?token=private#secret', {
         cause: new Error('token=hidden'),
       }),
       { code: 'ECONNRESET' },
@@ -156,9 +189,7 @@ describe('logging failure isolation and diagnostic evidence', () => {
     const safe = redactLogValue(error) as Record<string, unknown>;
     expect(safe.code).toBe('ECONNRESET');
     expect(safe.stack).toContain('logging.test.ts');
-    expect(JSON.stringify(safe)).not.toMatch(
-      /user:pass|token=fixture-secret-token|#secret|token=hidden/,
-    );
+    expect(JSON.stringify(safe)).not.toMatch(/user:pass|token=private|#secret|token=hidden/);
     expect(safe.message).toContain('https://example.test/path');
   });
   it('does not evaluate disabled fields and handles undefined, bigint and throwing accessors', async () => {
@@ -296,7 +327,7 @@ it('isolates disk write failures after initialization and emits one degradation 
 it('preserves bounded stacks through repeated redaction at transport boundaries', () => {
   const error = new Error('fixture');
   error.stack =
-    `Error: fixture\n${' at /some/long/path/to/source.ts:42:1 token=fixture-secret-token'.repeat(8)}\n`.repeat(
+    `Error: fixture\n${' at /some/long/path/to/source.ts:42:1 token=private'.repeat(8)}\n`.repeat(
       12,
     );
   const first = redactLogValue(error);

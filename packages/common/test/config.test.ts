@@ -347,3 +347,18 @@ describe('workspace dotenv configuration', () => {
     expect(JSON.stringify({ secret })).toBe('{"secret":"[REDACTED]"}');
   });
 });
+
+it('resolves independent console logging defaults and validates presentation settings', () => {
+  const bootstrap = resolveBootstrapConfig({ cwd: '/tmp', environment: {} });
+  const defaults = resolveAppConfig({ bootstrap, environment: {} });
+  expect(defaults.logLevel.value).toBe('info');
+  expect(defaults.consoleLogLevel?.value).toBe('warn');
+  expect(defaults.logFormat?.value).toBe('auto');
+  const configured = resolveAppConfig({
+    bootstrap,
+    environment: { LOG_LEVEL: 'debug', CONSOLE_LOG_LEVEL: 'error', LOG_FORMAT: 'pretty' },
+  });
+  expect(configured.logLevel.value).toBe('debug');
+  expect(configured.consoleLogLevel?.value).toBe('error');
+  expect(() => resolveAppConfig({ bootstrap, environment: { LOG_FORMAT: 'invalid' } })).toThrow();
+});

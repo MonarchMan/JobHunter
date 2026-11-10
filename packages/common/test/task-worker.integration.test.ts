@@ -1,5 +1,6 @@
 import path from 'node:path';
-import { ModelRequestPersistenceError } from '../src/agent/errors.js';
+import { AgentRuntimeError, ModelRequestPersistenceError } from '../src/agent/errors.js';
+import { mapAgentRuntimeError } from '../src/tasks/scheduling/error-mapping.js';
 import {
   HandlerRegistry,
   RetryPolicy,
@@ -152,6 +153,25 @@ function engine(
 }
 
 describe('persistent task queue', () => {
+  it('terminates a nonretryable tool failure instead of restoring its lease', async () => {
+    const input = await setup();
+    const execute = vi.fn(() => {
+      throw mapAgentRuntimeError(
+        new AgentRuntimeError('tool_error', 'Tool failed.', false, {
+          cause: Object.assign(new Error('locked'), { code: 'SQLITE_BUSY' }),
+        }),
+        'test',
+      );
+    });
+    const registry = registryWith({ execute });
+    const { tasks } = services(input, registry);
+    const task = enqueueSync(tasks, 'tool-lock').task;
+    const worker = engine(input, registry);
+    await worker.runOnce();
+    expect(tasks.get(task.id)?.status).toBe('failed');
+    await worker.runOnce();
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
   it('fails a model ledger write without recovering the lease and replaying the model', async () => {
     const input = await setup();
     const execute = vi.fn(() => {

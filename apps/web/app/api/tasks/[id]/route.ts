@@ -15,6 +15,6 @@ export async function GET(_request: Request, context: RouteContext): Promise<Res
     return task ? dataResponse(task) : notFoundResponse('任务不存在。');
   } catch (error) {
     if (error instanceof TypeError) return notFoundResponse('任务不存在。');
-    return errorResponse(error);
+    return errorResponse(error, _request);
   }
 }

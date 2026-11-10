@@ -1,5 +1,12 @@
 import type { AppConfig } from '../../config/index.js';
-import { createSafeLogger } from '../../logging/index.js';
+import { isMainThread, workerData, type MessagePort } from 'node:worker_threads';
+import { randomUUID } from 'node:crypto';
+import {
+  createThreadLogger,
+  type SafeLogger,
+  createSafeLogger,
+  minimumLogLevel,
+} from '../../logging/index.js';
 import type { TaskApplication, TaskRuntimeOptions } from './runtime.js';
 import path from 'node:path';
 
@@ -7,12 +14,29 @@ import path from 'node:path';
 export function createConfiguredTaskHost(
   config: AppConfig,
   assemble: (options: TaskRuntimeOptions) => TaskApplication,
+  borrowedLogger?: SafeLogger,
 ): TaskApplication {
   // 1、只映射通用配置，common 不解释邮箱、简历或招聘任务。
-  const logger = createSafeLogger({
-    level: config.logLevel.value,
-    logFile: path.join(config.bootstrap.dataRoot.value, 'logs', 'jobhunter.log'),
+  const threadData = workerData as { logPort?: MessagePort; hostRunId?: string } | null;
+  const ownedLogger =
+    borrowedLogger ??
+    (!isMainThread && threadData?.logPort
+      ? createThreadLogger(
+          threadData.logPort,
+          minimumLogLevel(config.logLevel.value, config.consoleLogLevel?.value ?? 'warn'),
+        )
+      : createSafeLogger({
+          level: config.logLevel.value,
+          consoleLevel: config.consoleLogLevel?.value ?? 'warn',
+          format: config.logFormat?.value ?? 'auto',
+          logFile: path.join(config.bootstrap.dataRoot.value, 'logs', 'jobhunter.log'),
+        }));
+  const logger = ownedLogger.child({
+    ...(!borrowedLogger ? { hostRunId: !isMainThread ? threadData?.hostRunId : randomUUID() } : {}),
+    component: !isMainThread ? 'task-thread' : 'scheduler',
   });
+  const closeLogger = (): Promise<void> =>
+    borrowedLogger ? Promise.resolve() : ownedLogger.close();
   let application: TaskApplication;
   try {
     application = assemble({
@@ -51,7 +75,7 @@ export function createConfiguredTaskHost(
         : {}),
     });
   } catch (error) {
-    void logger.close();
+    void closeLogger();
     throw error;
   }
   let closing: Promise<void> | undefined;
@@ -63,7 +87,7 @@ export function createConfiguredTaskHost(
       : {}),
     close() {
       // 2、任务与外部资源回收完成后才关闭日志，重复关闭复用同一结果。
-      return (closing ??= application.close().finally(() => logger.close()));
+      return (closing ??= application.close().finally(() => closeLogger()));
     },
   };
 }

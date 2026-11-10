@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { OpenAiCompatibleModelClient, AnthropicModelClient } from '../src/models/index.js';
-import { ModelClientError } from '../src/agent/errors.js';
+import { ModelClientError, ModelRequestPersistenceError } from '../src/agent/errors.js';
 import { ModelRequestTrace } from '../src/models/request-trace.js';
 
 const request = {
@@ -59,6 +59,42 @@ function openAiFrames(): unknown[] {
 }
 
 describe('model request telemetry (USG-006)', () => {
+  it.each([OpenAiCompatibleModelClient, AnthropicModelClient])(
+    'retains both transport and ledger failures without resending',
+    async (Client) => {
+      const transport = new Error('original connection failure');
+      const storage = Object.assign(new Error('ledger locked'), { code: 'SQLITE_BUSY' });
+      let sent = 0;
+      const client = new Client({
+        ...config,
+        fetchImplementation: () => {
+          sent++;
+          return Promise.reject(transport);
+        },
+      });
+      const error: unknown = await client
+        .complete(request, new AbortController().signal, {
+          save(record) {
+            if (record.state === 'completed') throw storage;
+          },
+        })
+        .catch((failure: unknown) => failure);
+      expect(error).toBeInstanceOf(ModelRequestPersistenceError);
+      if (!(error instanceof ModelRequestPersistenceError))
+        throw new Error('Expected ledger failure');
+      expect(error).toMatchObject({
+        category: 'configuration',
+        retryable: false,
+        phase: 'completed',
+      });
+      expect(error.requestId).toBeTruthy();
+      expect(error.cause).toBeInstanceOf(AggregateError);
+      const causes = (error.cause as AggregateError).errors as unknown[];
+      expect(causes[0]).toMatchObject({ cause: transport });
+      expect(causes[1]).toMatchObject({ cause: storage, requestId: error.requestId });
+      expect(sent).toBe(1);
+    },
+  );
   it('keeps completion ledger failures associated with the request without resending', async () => {
     let sent = 0;
     const original = Object.assign(new Error('synthetic completion write failed'), {

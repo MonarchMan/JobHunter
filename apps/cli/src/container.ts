@@ -1,3 +1,4 @@
+import { queryLogFiles, type LogQuery, type LogQueryResult } from '@jobhunter/common/logging';
 import { createAiReplyHandler } from '@jobhunter/user/ai/handler';
 import { SqliteProfileDerivedDataManager } from '@jobhunter/matching/persistence/profile-derived-data-manager';
 import { agentDefinitionHash } from '@jobhunter/common/agent';
@@ -92,6 +93,7 @@ import { CliError, cliExitCode } from './model.js';
 
 /** 模块数据结构或契约。 */
 export interface CliContainer {
+  readonly logs?: { query(input: LogQuery): Promise<LogQueryResult> };
   readonly version: { get(): Readonly<Record<string, string>> };
   readonly initialize?: { run(): Promise<InitializationResult> };
   readonly doctor?: { run(): Promise<DoctorReport> };
@@ -370,6 +372,7 @@ export function createLocalCliContainer(
     return operational().wait.wait(parseId(taskId, 'Task'), signal);
   }
   return {
+    logs: { query: (input) => queryLogFiles(config.bootstrap.dataRoot.value, input) },
     version: { get: () => ({ ...versions, node: process.versions.node }) },
     initialize: {
       run: async () => {

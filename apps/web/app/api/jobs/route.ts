@@ -15,6 +15,6 @@ export async function GET(request: Request): Promise<Response> {
     return dataResponse(container.services.webJobs.list(query));
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError) return badRequestResponse();
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

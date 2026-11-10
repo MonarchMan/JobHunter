@@ -31,7 +31,7 @@ export async function PATCH(
       return notFoundResponse('邮箱配置不存在。');
     if (error instanceof ZodError || error instanceof MailboxSettingsError)
       return badRequestResponse('邮箱设置无效。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }
 
@@ -48,6 +48,6 @@ export async function DELETE(
   } catch (error) {
     if (error instanceof MailboxSettingsError && error.code === 'not_found')
       return notFoundResponse('邮箱配置不存在。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

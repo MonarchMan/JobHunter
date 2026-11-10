@@ -17,3 +17,7 @@
 - [x] **CLI-T009** 添加 stdout/stderr、退出码、PowerShell/POSIX 路径端到端测试。（CLI-Q04）
 
 - [x] **CLI-T010** 接入中央 TaskClient，验证 CLI/Web 并发启动、等待中断、任务继续运行及维护协调，不新增 worker 命令。（CLI-003, CLI-008, CLI-010, CLI-011）
+
+## 日志诊断
+
+- [x] 接入 logs 时间线、JSON 导出与详细/安静模式，覆盖宿主运行时查询。（OPS-019, OPS-021）

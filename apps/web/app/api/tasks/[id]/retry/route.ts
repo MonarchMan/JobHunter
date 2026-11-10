@@ -33,6 +33,6 @@ export async function POST(request: Request, context: RouteContext): Promise<Res
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError)
       return badRequestResponse('仅失败任务可以重试。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

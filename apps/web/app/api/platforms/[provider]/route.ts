@@ -26,7 +26,7 @@ export async function GET(
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, _request);
   }
 }
 
@@ -54,6 +54,6 @@ export async function POST(
   } catch (error) {
     if (error instanceof ZodError || error instanceof TypeError || error instanceof SyntaxError)
       return badRequestResponse('平台操作参数无效。');
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

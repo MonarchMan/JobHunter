@@ -28,7 +28,13 @@ export async function runLocalCli(input: {
         index++;
         continue;
       }
-      if (argument === '--json' || argument?.startsWith('--data-root=')) continue;
+      if (
+        argument === '--json' ||
+        argument === '--verbose' ||
+        argument === '--quiet' ||
+        argument?.startsWith('--data-root=')
+      )
+        continue;
       command = argument;
       break;
     }
@@ -38,6 +44,7 @@ export async function runLocalCli(input: {
       input.argv.includes('-h') ||
       input.argv.includes('-V') ||
       command === 'version' ||
+      command === 'logs' ||
       input.argv.length === 0;
     const release = lightweight
       ? () => undefined

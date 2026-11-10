@@ -25,6 +25,6 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
   } catch (error) {
     if (error instanceof JobNotFoundError) return notFoundResponse('职位不存在。');
     if (error instanceof ZodError || error instanceof TypeError) return badRequestResponse();
-    return errorResponse(error);
+    return errorResponse(error, request);
   }
 }

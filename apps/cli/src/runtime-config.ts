@@ -18,7 +18,14 @@ export async function loadRuntimeConfig(input: {
   const dataRoot = optionValue(input.argv, '--data-root');
   return loadRuntimeAppConfig({
     workspaceRoot: input.workspaceRoot ?? input.cwd ?? process.cwd(),
-    cli: { ...(dataRoot ? { dataRoot } : {}) },
+    cli: {
+      ...(dataRoot ? { dataRoot } : {}),
+      ...(input.argv.includes('--verbose')
+        ? { consoleLogLevel: 'debug', logLevel: 'debug' }
+        : input.argv.includes('--quiet')
+          ? { consoleLogLevel: 'error' }
+          : {}),
+    },
     ...(input.environment ? { environment: input.environment } : {}),
   });
 }

@@ -1,5 +1,7 @@
 # 008 轻量 Agent 运行时设计
 
+错误归一化不复制未知 Error.message，避免 SyntaxError/ZodError 原文逃逸至外层消息和持久化摘要。请求失败收尾若 observer 写入失败，以 ModelRequestPersistenceError 包装 AggregateError，分别保留调用异常、账本异常和请求身份。任务宿主及线程存储标记均在扫描 SQLite 原因前检查不可重试 Agent 边界。
+
 AgentRuntimeError/ModelClientError 接受 ErrorOptions；模型边界保留原异常。ModelRequestPersistenceError 带 requestId/phase 与 cause；Runner 先记录工具故障，再尝试持久化失败记录，双故障用 AggregateError 保留。公开摘要与重试语义保持独立。
 
 删除 AgentDefinition 的 version/promptVersion，以 definitionHash 替代运行记录及业务结果选择中的版本组合；哈希包含 Prompt、输入输出 Schema、工具定义、业务校验和运行限制。Prompt 注册按功能 key 唯一，只保留当前文件。迁移删除版本列，旧运行保留不可复用的历史内容身份。
