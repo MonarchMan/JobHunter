@@ -1,5 +1,6 @@
 import type { ModelBilling } from '../contracts/model-usage.js';
 import { calculateBilling } from './billing.js';
+import { resolveModelPricing } from '../config/model-pricing.js';
 import { ModelRequestTrace } from './request-trace.js';
 import { cacheCreationSchema, cacheWriteTotal, optionalTokenCount } from './cache-usage.js';
 import {
@@ -36,7 +37,6 @@ const configSchema = z
       .min(1_000)
       .max(10 * 60_000)
       .default(180_000),
-    autoModelPricing: z.boolean().optional(),
     cacheReadPrice: z.number().nonnegative().nullable().optional(),
     cacheWritePrice: z.number().nonnegative().nullable().optional(),
     cacheWrite1hPrice: z.number().nonnegative().nullable().optional(),
@@ -78,7 +78,6 @@ export interface AnthropicClientConfig {
   readonly inputCostPerMillionUsd?: number | null | undefined;
   readonly outputCostPerMillionUsd?: number | null | undefined;
   readonly fetchImplementation?: typeof fetch;
-  readonly autoModelPricing?: boolean | undefined;
   readonly cacheReadPrice?: number | null | undefined;
   readonly cacheWritePrice?: number | null | undefined;
   readonly cacheWrite1hPrice?: number | null | undefined;
@@ -147,7 +146,6 @@ export class AnthropicModelClient implements ModelClient {
   /** 执行模块组件对外暴露的操作。 */
   public constructor(input: AnthropicClientConfig) {
     this.#config = configSchema.parse({
-      autoModelPricing: input.autoModelPricing,
       cacheReadPrice: input.cacheReadPrice,
       cacheWritePrice: input.cacheWritePrice,
       cacheWrite1hPrice: input.cacheWrite1hPrice,
@@ -156,8 +154,8 @@ export class AnthropicModelClient implements ModelClient {
       model: input.model,
       costCurrency: input.costCurrency ?? 'USD',
       ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
-      inputCostPerMillionUsd: input.inputCostPerMillionUsd ?? null,
-      outputCostPerMillionUsd: input.outputCostPerMillionUsd ?? null,
+      inputCostPerMillionUsd: input.inputCostPerMillionUsd,
+      outputCostPerMillionUsd: input.outputCostPerMillionUsd,
     });
     this.#fetch = input.fetchImplementation ?? fetch;
     this.metadata = {
@@ -166,8 +164,7 @@ export class AnthropicModelClient implements ModelClient {
       config: { baseUrl: this.#config.baseUrl, timeoutMs: this.#config.timeoutMs },
       costCurrency: this.#config.costCurrency,
       pricingVersion:
-        this.#config.inputCostPerMillionUsd === null ||
-        this.#config.outputCostPerMillionUsd === null
+        this.#config.inputCostPerMillionUsd == null || this.#config.outputCostPerMillionUsd == null
           ? 'unpriced'
           : 'configured',
     };
@@ -192,7 +189,7 @@ export class AnthropicModelClient implements ModelClient {
     // Anthropic 输入为未缓存部分，归一化总量后按互斥分量计价。
     const raw = responseSchema.shape.usage.parse(value);
     const totals = usage(raw);
-    return calculateBilling({
+    const billingInput = {
       model: this.#config.model,
       baseUrl: this.#config.baseUrl,
       requestedAt,
@@ -205,13 +202,16 @@ export class AnthropicModelClient implements ModelClient {
       cacheWrite1hTokens: raw?.cache_creation?.ephemeral_1h_input_tokens ?? null,
       serviceTier: raw?.service_tier,
       uncachedInputTokens: raw?.input_tokens ?? null,
+    };
+    const quote = resolveModelPricing({
+      ...billingInput,
       inputPrice: this.#config.inputCostPerMillionUsd,
       outputPrice: this.#config.outputCostPerMillionUsd,
       cacheReadPrice: this.#config.cacheReadPrice,
       cacheWritePrice: this.#config.cacheWritePrice,
       cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
-      autoModelPricing: this.#config.autoModelPricing,
     });
+    return calculateBilling(billingInput, quote);
   }
 
   /** 保留 Messages 业务解析，统一观测流式内容与失败协商。 */

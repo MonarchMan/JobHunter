@@ -545,14 +545,6 @@ export class SqliteTaskRepository implements TaskQueue {
       )
       .get(input.workerId, input.now + leaseDurationMs, input.now, input.now, candidate.id) as
       TaskRow | undefined;
-    // 2、只有领取成功后才关闭上一执行者的遗留 Agent；与领取同一事务，失败整体回滚。
-    // 已成功的模型结果保持原样，供业务提交失败后的恢复使用。
-    if (row)
-      this.#client
-        .prepare(
-          "UPDATE agent_runs SET status='failed', error_category='temporary', error_summary='Previous task execution was interrupted.', finished_at=? WHERE task_id=? AND status='running'",
-        )
-        .run(input.now, row.id);
     return row ? taskFromRow(row) : null;
   }
 

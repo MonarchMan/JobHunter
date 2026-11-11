@@ -1,4 +1,4 @@
-/** 报价快照使用原生币种；顺序为输入、输出、缓存读、短时写、1 小时写。 */
+/** 目录使用原生币种，依次记录输入、输出、缓存读、短时写和一小时写。 */
 export type TokenPrices = readonly [
   number | null,
   number | null,

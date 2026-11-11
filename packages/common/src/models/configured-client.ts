@@ -10,10 +10,9 @@ export interface ConfiguredModelClientInput {
   readonly apiKey: string;
   readonly model: string;
   readonly costCurrency?: 'USD' | 'CNY';
-  readonly inputCostPerMillionUsd?: number | null;
-  readonly outputCostPerMillionUsd?: number | null;
+  readonly inputCostPerMillionUsd?: number | null | undefined;
+  readonly outputCostPerMillionUsd?: number | null | undefined;
   readonly timeoutMs?: number;
-  readonly autoModelPricing?: boolean;
   readonly cacheReadPrice?: number | null | undefined;
   readonly cacheWritePrice?: number | null | undefined;
   readonly cacheWrite1hPrice?: number | null | undefined;
@@ -25,7 +24,6 @@ export function createConfiguredModelClient(input: ConfiguredModelClientInput): 
   registerOpenAiCompatibleProvider(registry);
   registerAnthropicProvider(registry);
   return registry.create(input.provider, {
-    autoModelPricing: input.autoModelPricing,
     cacheReadPrice: input.cacheReadPrice,
     cacheWritePrice: input.cacheWritePrice,
     cacheWrite1hPrice: input.cacheWrite1hPrice,

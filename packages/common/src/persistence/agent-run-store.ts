@@ -5,7 +5,6 @@ import {
   type AgentErrorCategory,
   type AgentRunRecord,
   type AgentRunStore,
-  type AgentRunCostCorrectionStore,
   type ToolCallRecord,
 } from '@jobhunter/common/agent';
 import type Database from 'better-sqlite3';
@@ -99,7 +98,7 @@ function isUniqueConstraint(error: unknown): boolean {
 }
 
 /** 保存 Agent 运行状态、缓存键和输出摘要。 */
-export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectionStore {
+export class SqliteAgentRunStore implements AgentRunStore {
   readonly #client: Database.Database;
   readonly #requests: SqliteModelRequestRepository;
 
@@ -134,43 +133,6 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
     };
   }
 
-  /** 仅回填已完成的未定价记录，不覆盖已有金额或修改运行输出。 */
-  public backfillUnpricedCost(
-    input: Parameters<AgentRunCostCorrectionStore['backfillUnpricedCost']>[0],
-  ): boolean {
-    // 1、维护输入必须为合法微单位金额与 Token 数，价格版本记录计算依据。
-    const { usage } = input;
-    if (
-      ![input.startedAt, usage.inputTokens, usage.outputTokens, usage.estimatedCostMicros].every(
-        (value) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0,
-      ) ||
-      !['USD', 'CNY'].includes(usage.costCurrency) ||
-      !usage.pricingVersion.trim() ||
-      usage.pricingVersion === 'unpriced'
-    )
-      throw new TypeError('Invalid cost correction.');
-    // 2、在单条条件更新内核对时间和用量；重复回填或并发变化均不生效。
-    return (
-      this.#client
-        .prepare(
-          `UPDATE agent_runs
-      SET estimated_cost_micros = ?, cost_currency = ?, pricing_version = ?
-      WHERE id = ? AND started_at = ? AND input_tokens = ? AND output_tokens = ?
-        AND status IN ('succeeded', 'failed', 'cancelled')
-        AND pricing_version = 'unpriced' AND estimated_cost_micros IS NULL`,
-        )
-        .run(
-          usage.estimatedCostMicros,
-          usage.costCurrency,
-          usage.pricingVersion,
-          input.id,
-          input.startedAt,
-          usage.inputTokens,
-          usage.outputTokens,
-        ).changes === 1
-    );
-  }
-
   /** 执行数据库组件对外暴露的操作。 */
   public findSucceeded(cacheKey: string): AgentRunRecord | null {
     const row = this.#client
@@ -200,7 +162,7 @@ export class SqliteAgentRunStore implements AgentRunStore, AgentRunCostCorrectio
   public restartFailed(cacheKey: string, startedAt: number): AgentRunRecord | null {
     return this.#client
       .transaction(() => {
-        // 1、中央领取事务已关闭遗留调用；Runner 只恢复终态，绝不抢占活跃调用。
+        // 1、任务结束执行时已关闭遗留调用；Runner 只恢复终态，绝不抢占活跃调用。
         const row = this.#client
           .prepare(
             `SELECT ${columns} FROM agent_runs WHERE cache_key = ? AND status IN ('failed','cancelled') ORDER BY started_at DESC LIMIT 1`,

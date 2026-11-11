@@ -64,11 +64,8 @@ export function createConfiguredTaskHost(
                 config.model.cacheWrite1hPrice.source === 'default'
                   ? undefined
                   : config.model.cacheWrite1hPrice.value,
-              autoModelPricing:
-                config.model.inputCostPerMillionUsd.source === 'default' &&
-                config.model.outputCostPerMillionUsd.source === 'default',
-              inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value,
-              outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value,
+              inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value ?? undefined,
+              outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value ?? undefined,
               costCurrency: config.model.costCurrency.value,
             },
           }

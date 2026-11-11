@@ -87,8 +87,7 @@ export function createAiReplyHandler(input: {
         return { messageId: payload.messageId };
       } catch (error) {
         input.service.fail(payload.messageId);
-        if (error instanceof AgentRuntimeError)
-          throw mapAgentRuntimeError(error, 'AI conversation');
+        if (error instanceof AgentRuntimeError) throw mapAgentRuntimeError(error, 'AI 对话');
         throw error;
       }
     },

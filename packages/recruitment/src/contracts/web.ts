@@ -313,6 +313,8 @@ export const webAgentRunSummarySchema = z
     inputTokens: z.number().int().nonnegative().nullable(),
     outputTokens: z.number().int().nonnegative().nullable(),
     estimatedCostMicros: z.number().int().nonnegative().nullable(),
+    hasUnpricedRequests: z.boolean().optional(),
+    knownCostMicros: z.number().int().nonnegative().nullable().optional(),
     costCurrency: z.string().nullable(),
     pricingVersion: z.string().nullable(),
     billingCalls: z.array(modelBillingSchema).nullable().optional(),

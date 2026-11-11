@@ -368,7 +368,7 @@ describe('resume profile Agent pipeline', () => {
       }),
     ).rejects.toMatchObject({
       category: 'rate_limited',
-      safeSummary: 'Resume profile Agent was rate limited.',
+      safeSummary: '简历画像提取失败：模型请求触发限流。',
     });
   });
 });

@@ -26,7 +26,12 @@ export function taskPresentation(
   const warning = task.status === 'succeeded' && runs.some(incomplete);
   // 2、保留真实摘要；仅已结束且不完整的来源生成兜底提示。
   const errors = [
-    task.errorSummary,
+    task.errorSummary
+      ?.replace(/^同步已提交；(?=评分 \d+\/\d+ 完成。)/u, '')
+      .replace(
+        /^(评分 \d+\/\d+ 完成。)职位分析 is temporarily unavailable\.$/u,
+        '$1职位分析暂时无法完成。',
+      ),
     ...sources.map((source) => {
       if (!source.run) return null;
       const reason =

@@ -1,43 +1,10 @@
 import { modelBillingSchema, type ModelBilling } from '../contracts/model-usage.js';
 import { z } from 'zod';
-import { resolveLegacyDomesticPricing } from './legacy-domestic-pricing.js';
-import {
-  isDomesticModelApi,
-  normalizeModelPricingId,
-  resolveCatalogPricing,
-} from './pricing-catalog.js';
-
-/** 2026 年官方放假日期；调休工作周末仍按 DeepSeek 的周末规则走闲时。 */
-const holidays2026 = [
-  ['01-01', '01-03'],
-  ['02-15', '02-23'],
-  ['04-04', '04-06'],
-  ['05-01', '05-05'],
-  ['06-19', '06-21'],
-  ['09-25', '09-27'],
-  ['10-01', '10-07'],
-];
-
-/** 根据北京时间判断时段；未知年份的工作日忙时返回 unknown，避免猜测节假日。 */
-export function deepSeekPeriod(timestamp: number): ModelBilling['period'] {
-  const local = new Date(timestamp + 8 * 60 * 60 * 1000);
-  const day = local.getUTCDay();
-  const hour = local.getUTCHours();
-  if (day === 0 || day === 6 || !((hour >= 9 && hour < 12) || (hour >= 14 && hour < 18)))
-    return 'off-peak';
-  if (local.getUTCFullYear() !== 2026) return 'unknown';
-  const date = local.toISOString().slice(5, 10);
-  return holidays2026.some(
-    ([start, end]) => start !== undefined && end !== undefined && date >= start && date <= end,
-  )
-    ? 'off-peak'
-    : 'peak';
-}
+import type { ModelPricingQuote } from '../config/model-pricing.js';
 
 /** 输入以总输入量为准，缓存部分互斥；价格单位为每百万 Token 的币种金额。 */
 export interface BillingInput {
   model: string;
-  baseUrl: string;
   requestedAt: number;
   currency: 'USD' | 'CNY';
   inputTokens: number | null;
@@ -45,20 +12,12 @@ export interface BillingInput {
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   uncachedInputTokens: number | null;
-  inputPrice?: number | null | undefined;
-  outputPrice?: number | null | undefined;
-  cacheReadPrice?: number | null | undefined;
-  cacheWritePrice?: number | null | undefined;
-  cacheWrite1hPrice?: number | null | undefined;
   cacheWrite5mTokens?: number | null | undefined;
   cacheWrite1hTokens?: number | null | undefined;
-  thinking?: boolean | null | undefined;
-  serviceTier?: string | null | undefined;
-  autoModelPricing?: boolean | undefined;
 }
 
 /** 分项计算微单位成本；先定点化报价，用整数完成乘法与舍入。 */
-export function calculateBilling(input: BillingInput): ModelBilling {
+export function calculateBilling(input: BillingInput, quote: ModelPricingQuote): ModelBilling {
   // 1、校验计费输入及互斥的缓存分量，冲突数据不进入计价。
   for (const value of [
     input.inputTokens,
@@ -95,73 +54,7 @@ export function calculateBilling(input: BillingInput): ModelBilling {
     throw new z.ZodError([
       { code: 'custom', path: ['usage'], message: 'Conflicting cache duration usage.' },
     ]);
-  let prices = [
-    input.inputPrice,
-    input.outputPrice,
-    input.cacheReadPrice,
-    input.cacheWritePrice,
-    input.cacheWrite1hPrice === undefined ? input.cacheWritePrice : input.cacheWrite1hPrice,
-  ];
-  let period: ModelBilling['period'] = 'fixed';
-  let version = 'configured-v2';
-  const automatic =
-    input.autoModelPricing ?? (input.inputPrice == null && input.outputPrice == null);
-  if (automatic) {
-    const catalog =
-      resolveCatalogPricing(input) ??
-      (input.currency === 'USD' &&
-      (!input.serviceTier || ['default', 'standard'].includes(input.serviceTier))
-        ? resolveLegacyDomesticPricing(input.model, input.baseUrl)
-        : null);
-    if (catalog) {
-      prices = [...catalog.prices];
-      version = catalog.version;
-    } else if (isDomesticModelApi(input.baseUrl)) {
-      prices = [null, null, null, null, null];
-      version = 'unpriced';
-    }
-  }
-  const normalized = normalizeModelPricingId(input.model);
-  const flash = ['deepseek-flash', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'].includes(
-    normalized,
-  );
-  const pro = normalized === 'deepseek-v4-pro';
-  const official = new URL(input.baseUrl).hostname === 'api.deepseek.com' && (flash || pro);
-  // 2、官方入口按每次请求时刻选价，显式自定义报价优先；价格生效前不套用新价。
-  if (
-    official &&
-    automatic &&
-    (!input.serviceTier || ['default', 'standard'].includes(input.serviceTier))
-  ) {
-    period =
-      input.requestedAt >= Date.parse('2026-09-10T04:00:00Z')
-        ? deepSeekPeriod(input.requestedAt)
-        : 'unknown';
-    const factor = period === 'peak' ? 2 : 1;
-    const base =
-      input.currency === 'CNY'
-        ? flash
-          ? [1, 4, 0.02, 0, 0]
-          : [4.5, 13.5, 0.15, 0, 0]
-        : flash
-          ? [0.15, 0.6, 0.003, 0, 0]
-          : [0.66, 1.98, 0.022, 0, 0];
-    prices =
-      period === 'unknown' ? [null, null, null, null, null] : base.map((price) => price * factor);
-    version = `deepseek-2026-09-10-${period}`;
-  }
-  // 明确设置的缓存报价（含零和 null）逐项覆盖，缺省才使用目录。
-  for (const [index, override] of [
-    [2, input.cacheReadPrice],
-    [3, input.cacheWritePrice],
-    [4, input.cacheWrite1hPrice],
-  ] as const) {
-    if (override !== undefined) {
-      prices[index] = override;
-      if (automatic) version += '-cache-override';
-    }
-  }
-  const rates = prices.map((price) => {
+  const rates = quote.prices.map((price) => {
     if (price == null) return null;
     if (!Number.isFinite(price) || price < 0) throw new TypeError('Invalid token price.');
     return Math.round(price * 1_000_000);
@@ -222,8 +115,8 @@ export function calculateBilling(input: BillingInput): ModelBilling {
     cacheReadCostMicros: parts[2],
     cacheWriteCostMicros: parts[3],
     totalCostMicros: sum,
-    pricingVersion: version,
-    period,
+    pricingVersion: quote.version,
+    period: quote.period,
     precision: sum === null ? 'unpriced' : assumed ? 'cache-miss-assumed' : 'reported',
     rates: {
       input: rates[0],

@@ -37,6 +37,15 @@
   backdrop-filter: blur(3px);
 }
 
+.wideDialog {
+  width: min(54rem, calc(100% - 2rem));
+}
+
+.wideDialog .body {
+  grid-template-columns: minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+
 .header {
   display: flex;
   align-items: start;

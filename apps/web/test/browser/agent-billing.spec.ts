@@ -96,12 +96,8 @@ test('shows per-request usage and cost with one value per cell', async ({ page }
     .getByRole('button', { name: '职位分析', exact: true })
     .click();
   const section = page.getByRole('region', { name: '请求用量与费用' });
-  await expect(section).toContainText('共 2 次实际模型请求');
-  await expect(section).toContainText('输出纠正');
-  const reasons = section.getByRole('list', { name: '请求失败与纠正原因' });
-  await expect(reasons.getByRole('listitem')).toHaveCount(1);
-  await expect(reasons).toContainText('第 1 次请求：输出校验未通过：match: unrecognized_keys');
-  await expect(reasons).toContainText('dimensions');
+  await expect(section).not.toContainText('次实际模型请求');
+  await expect(section.getByRole('columnheader', { name: '错误' })).toBeVisible();
   await expect(section.getByRole('columnheader', { name: '时间' })).toBeVisible();
   await expect(section.getByRole('columnheader', { name: '模型' })).toBeVisible();
   await expect(section.getByRole('columnheader', { name: '输入' })).toBeVisible();
@@ -111,26 +107,40 @@ test('shows per-request usage and cost with one value per cell', async ({ page }
   await expect(rows).toHaveCount(3);
   const first = rows.nth(1).getByRole('cell');
   await expect(first.nth(0)).toHaveText('22:49:41');
-  await expect(first.nth(0)).toHaveAttribute('title', '2026/10/30 22:49:41');
+  await expect(first.nth(0).getByRole('group')).toHaveAccessibleName(
+    '22:49:41，2026/10/30 22:49:41',
+  );
   await expect(first.nth(1)).toHaveText('deepseek-flash');
   await expect(first.nth(2)).toHaveText('1000');
   await expect(first.nth(3)).toHaveText('100');
   await expect(first.nth(4)).toHaveText('$0.000210');
+  const error = first.nth(5).getByRole('group', { name: /输出校验未通过/ });
+  const preview = error.locator('[aria-hidden="true"]');
+  await expect(section.locator('[role="tooltip"]')).toHaveCount(0);
+  await expect(preview).toHaveCSS('text-overflow', 'ellipsis');
+  expect(await preview.evaluate((node) => node.scrollWidth > node.clientWidth)).toBe(true);
+  const requestTime = first.nth(0).getByRole('group');
+  await page.keyboard.press('Shift');
+  await requestTime.focus();
+  await expect(requestTime.getByRole('tooltip')).toBeVisible();
+  await error.hover();
+  await expect(error.getByRole('tooltip')).toContainText(
+    '输出校验未通过：match: unrecognized_keys; remove unexpected fields [dimensions]',
+  );
+  await expect(section.getByRole('tooltip')).toHaveCount(1);
+  await expect(error.getByRole('tooltip')).toHaveCSS('color', 'rgb(255, 255, 255)');
   const second = rows.nth(2).getByRole('cell');
   await expect(second.nth(0)).toHaveText('20:00:00');
   await expect(second.nth(1)).toHaveText('kimi-k3');
   await expect(second.nth(2)).toHaveText('2000');
   await expect(second.nth(3)).toHaveText('100');
   await expect(second.nth(4)).toHaveText('¥0.051200');
+  await expect(second.nth(5)).toHaveText('—');
   // 表格不超出弹窗宽度，横向无需滚动。
-  // 同一帧测量，避免入场动画在两次读取之间改变缩放比例。
-  const widths = await section.locator('table').evaluate((table) => ({
-    dialog: table.closest('dialog')?.getBoundingClientRect().width ?? 0,
-    table: table.getBoundingClientRect().width,
-  }));
-  expect(widths.dialog).toBeGreaterThan(0);
-  // CSS 像素经过动画变换后有亚像素舍入误差，保留 1px 容差。
-  expect(widths.table).toBeLessThanOrEqual(widths.dialog + 1);
+  const tableScroll = section.locator('table').locator('..');
+  expect(
+    await tableScroll.evaluate((element) => element.scrollWidth - element.clientWidth),
+  ).toBeLessThanOrEqual(1);
   // 2、运行成本列区分已知金额与真正未知：已知金额（含 0）直接展示，不被价格版本遮挡。
   // 弹窗打开时自动刷新暂停，列表行稳定可读。
   const agentTable = page.getByRole('table', { name: 'Agent 运行列表' });
@@ -151,6 +161,14 @@ test('shows per-request usage and cost with one value per cell', async ({ page }
   await page.goto('/tasks?range=all');
   await page.getByRole('button', { name: '职位分析', exact: true }).click();
   await expect(section.getByRole('heading')).toBeVisible();
+  const dialog = page.getByRole('dialog', { name: 'Agent 运行详情' });
+  expect(
+    await dialog.evaluate((element) => element.scrollWidth - element.clientWidth),
+  ).toBeLessThanOrEqual(1);
+  await tableScroll.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+  });
+  await expect(section.getByRole('columnheader', { name: '错误' })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
@@ -185,7 +203,7 @@ for (const scenario of [
           rates: null,
         };
         body.data.billingCalls = [
-          { ...base, statusCode: scenario.status },
+          { ...base, statusCode: scenario.status, inputTokens: null, outputTokens: null },
           { ...base, requestedAt: 2000, statusCode: 200 },
         ];
         await route.fulfill({ response, json: body });
@@ -195,9 +213,15 @@ for (const scenario of [
         .locator('[data-agent-section]')
         .getByRole('button', { name: '职位分析', exact: true })
         .click();
-      const reasons = page.getByRole('list', { name: '请求失败与纠正原因' });
-      await expect(reasons.getByRole('listitem')).toHaveCount(1);
-      await expect(reasons).toContainText('第 1 次请求：' + scenario.expected);
+      const section = page.getByRole('region', { name: '请求用量与费用' });
+      await expect(
+        section.getByRole('row').nth(1).getByRole('cell').nth(5).getByRole('group', {
+          name: scenario.expected,
+        }),
+      ).toBeVisible();
+      await expect(section.getByRole('row').nth(1).getByRole('cell').nth(4)).toHaveText('—');
+      await expect(section.getByRole('row').nth(2).getByRole('cell').nth(4)).toHaveText('未定价');
+      await expect(section.getByRole('row').nth(2).getByRole('cell').nth(5)).toHaveText('—');
     },
   );
 }

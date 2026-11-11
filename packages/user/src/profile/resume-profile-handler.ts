@@ -155,7 +155,7 @@ export function createResumeProfileTaskHandler(
         };
       } catch (error) {
         if (error instanceof AgentRuntimeError) {
-          throw mapAgentRuntimeError(error, 'Resume profile Agent');
+          throw mapAgentRuntimeError(error, '简历画像提取');
         }
         throw error;
       }

@@ -104,7 +104,7 @@ export function createResumePolishTaskHandler(
         };
       } catch (error) {
         if (error instanceof AgentRuntimeError) {
-          throw mapAgentRuntimeError(error, 'Resume polish Agent');
+          throw mapAgentRuntimeError(error, '简历润色');
         }
         throw error;
       }

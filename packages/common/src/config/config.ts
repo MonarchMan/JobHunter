@@ -2,10 +2,9 @@ import {
   threadPoolOptionsSchema,
   type ThreadPoolOptions,
 } from '../tasks/execution/thread-pool-options.js';
-import { isDomesticModelApi, resolveCatalogPricing } from '../models/pricing-catalog.js';
-import { resolveLegacyPricing } from '../models/legacy-pricing.js';
-import { resolveLegacyDomesticPricing } from '../models/legacy-domestic-pricing.js';
-export { normalizeModelPricingId } from '../models/pricing-catalog.js';
+import { isDomesticModelApi } from './pricing-catalog.js';
+import { resolveLegacyDomesticPricing } from './legacy-domestic-pricing.js';
+export { normalizeModelPricingId } from './pricing-catalog.js';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 /** 运行配置中允许覆盖请求间隔的来源标识。 */
@@ -302,14 +301,6 @@ export function resolveAppConfig(input: {
     environmentCostCurrency(environment.MODEL_COST_CURRENCY),
     oldModelReference ? 'USD' : isDomesticModelApi(modelBaseUrl.value) ? 'CNY' : 'USD',
   );
-  const defaults = modelName.value
-    ? (resolveCatalogPricing({
-        model: modelName.value,
-        baseUrl: modelBaseUrl.value,
-        currency: costCurrency.value,
-        inputTokens: 0,
-      }) ?? (costCurrency.value === 'USD' ? oldModelReference : null))
-    : null;
   const cacheReadPrice = choose(
     undefined,
     environmentNonNegativeNumber(environment.MODEL_CACHE_READ_COST_PER_MILLION, 'cache read price'),
@@ -334,10 +325,7 @@ export function resolveAppConfig(input: {
   const inputCostPerMillionUsd = choose(
     undefined,
     environmentNonNegativeNumber(environment.MODEL_INPUT_COST_PER_MILLION_USD, 'input model price'),
-    defaults?.prices[0] ??
-      (!isDomesticModelApi(modelBaseUrl.value) && costCurrency.value === 'USD'
-        ? (resolveLegacyPricing(modelName.value)?.[0] ?? null)
-        : null),
+    null,
   );
   const outputCostPerMillionUsd = choose(
     undefined,
@@ -345,10 +333,7 @@ export function resolveAppConfig(input: {
       environment.MODEL_OUTPUT_COST_PER_MILLION_USD,
       'output model price',
     ),
-    defaults?.prices[1] ??
-      (!isDomesticModelApi(modelBaseUrl.value) && costCurrency.value === 'USD'
-        ? (resolveLegacyPricing(modelName.value)?.[1] ?? null)
-        : null),
+    null,
   );
   const inferredProvider = inferModelProvider(modelBaseUrl.value);
   const pollIntervalMs = choose(

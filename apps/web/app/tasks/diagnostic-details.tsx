@@ -10,7 +10,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   labelStatus,
   labelTaskType,
-  labelAgentErrorCategory,
   labelAgentKey,
   agentNormallyUsesSingleRequest,
   agentRunStatusLabels,
@@ -74,11 +73,13 @@ function DialogShell({
   children,
   onClose,
   returnFocusTo,
+  wide = false,
 }: Readonly<{
   title: string;
   children: ReactElement;
   onClose: () => void;
   returnFocusTo: HTMLButtonElement | null;
+  wide?: boolean;
 }>): ReactElement {
   const dialogReference = useRef<HTMLDialogElement>(null);
 
@@ -93,7 +94,7 @@ function DialogShell({
   return (
     <dialog
       ref={dialogReference}
-      className={styles.dialog}
+      className={[styles.dialog, wide && styles.wideDialog].filter(Boolean).join(' ')}
       aria-labelledby="diagnostic-dialog-title"
       onCancel={(event) => {
         event.preventDefault();
@@ -444,6 +445,7 @@ export function AgentRunDetailsDialog({
       {open ? (
         <DialogShell
           title="Agent 运行详情"
+          wide
           returnFocusTo={triggerReference.current}
           onClose={() => {
             setOpen(false);
@@ -485,13 +487,6 @@ export function AgentRunDetailsDialog({
                 }
                 hasReportedUsage={(detail.inputTokens ?? 0) > 0 || (detail.outputTokens ?? 0) > 0}
               />
-            ) : null}
-            {run.status === 'failed' ? (
-              <section className={styles.failureDetail} aria-labelledby="agent-failure-heading">
-                <h3 id="agent-failure-heading">失败原因</h3>
-                <p>{run.errorCategory ? labelAgentErrorCategory(run.errorCategory) : '未分类'}</p>
-                {run.errorSummary ? <p>{run.errorSummary}</p> : null}
-              </section>
             ) : null}
             {loading || (!detail && !error) ? <p className="muted">正在加载调用详情……</p> : null}
             {error ? <p className="risk">{error}</p> : null}

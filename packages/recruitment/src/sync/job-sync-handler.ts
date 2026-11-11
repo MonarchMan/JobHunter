@@ -315,7 +315,7 @@ export function createSourceSyncTaskHandler(
           if (!representative) throw new Error('Missing scoring failure.');
           throw new TaskExecutionError(
             representative.errorCategory ?? 'permanent',
-            `同步已提交；评分 ${String(total - failures.length)}/${String(total)} 完成。${representative.error ?? '评分失败，未记录具体原因。'}`,
+            `评分 ${String(total - failures.length)}/${String(total)} 完成。${representative.error ?? '评分失败，未记录具体原因。'}`,
             { retryable: failures.every(canRetry), result: { runs, accJobIds, scoring } },
           );
         }

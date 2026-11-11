@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calculateBilling, deepSeekPeriod } from '../src/models/billing.js';
+import { deepSeekPeriod } from '../src/config/model-pricing.js';
+import { calculateBilling } from './fixtures/calculate-model-billing.js';
 import { OpenAiCompatibleModelClient, AnthropicModelClient } from '../src/models/index.js';
 
 const base = {
@@ -68,7 +69,10 @@ describe('per-request cached billing', () => {
       calculateBilling({ ...base, inputPrice: 1, outputPrice: 2, cacheReadPrice: 0.1 })
         .totalCostMicros,
     ).toBe(660);
-    expect(calculateBilling({ ...base, baseUrl: 'https://proxy.test' }).totalCostMicros).toBeNull();
+    expect(calculateBilling({ ...base, baseUrl: 'https://proxy.test' })).toMatchObject({
+      period: 'fixed',
+      totalCostMicros: 244,
+    });
     expect(
       calculateBilling({ ...base, requestedAt: Date.parse('2027-01-04T02:00:00Z') })
         .totalCostMicros,

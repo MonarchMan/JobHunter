@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calculateBilling } from '../src/models/billing.js';
-import { resolveCatalogPricing } from '../src/models/pricing-catalog.js';
+import { calculateBilling } from './fixtures/calculate-model-billing.js';
+import { resolveCatalogPricing } from '../src/config/pricing-catalog.js';
 import {
   AnthropicModelClient,
   OpenAiCompatibleModelClient,
@@ -152,10 +152,10 @@ describe('multi-provider cache pricing', () => {
     ).toBeNull();
   });
 
-  it('keeps custom pricing isolated and honors explicit zero cache prices', () => {
-    expect(
-      calculateBilling({ ...usage, inputPrice: 1, outputPrice: 2 }).totalCostMicros,
-    ).toBeNull();
+  it('applies custom prices per component and honors explicit zero cache prices', () => {
+    expect(calculateBilling({ ...usage, inputPrice: 1, outputPrice: 2 }).totalCostMicros).toBe(
+      2100,
+    );
     expect(
       calculateBilling({ ...usage, inputPrice: 1, outputPrice: 2, cacheReadPrice: 0 })
         .totalCostMicros,

@@ -36,6 +36,7 @@
   user-select: text;
   text-align: left;
   white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .tooltip:popover-open {

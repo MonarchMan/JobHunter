@@ -31,6 +31,8 @@ interface AgentRunRow {
   readonly estimated_cost_micros: number | null;
   readonly cost_currency: string | null;
   readonly pricing_version: string | null;
+  readonly has_unpriced_requests: number | null;
+  readonly known_cost_micros: number | null;
   readonly started_at: number;
   readonly finished_at: number | null;
 }
@@ -46,7 +48,15 @@ interface ToolCallRow {
 
 const columns = `id, agent_key, definition_hash, model_config_hash, status,
   error_category, error_summary, input_tokens, output_tokens, estimated_cost_micros,
-  cost_currency, pricing_version, started_at, finished_at`;
+  cost_currency, pricing_version, started_at, finished_at,
+  CASE WHEN EXISTS(SELECT 1 FROM model_requests r WHERE r.agent_run_id = agent_runs.id)
+  THEN EXISTS(SELECT 1 FROM model_requests r WHERE r.agent_run_id = agent_runs.id
+    AND r.state = 'completed' AND r.precision = 'unpriced'
+    AND (r.input_tokens > 0 OR r.output_tokens > 0 OR r.cache_read_tokens > 0 OR r.cache_write_tokens > 0))
+  END AS has_unpriced_requests,
+  (SELECT CASE WHEN COUNT(*) = COUNT(CASE WHEN r.currency = agent_runs.cost_currency THEN 1 END)
+    THEN SUM(r.total_cost_micros) END FROM model_requests r WHERE r.agent_run_id = agent_runs.id
+    AND r.state = 'completed' AND r.total_cost_micros IS NOT NULL) AS known_cost_micros`;
 
 /** 数据库查询结果对应的行结构。 */
 interface TaskEntryRow {
@@ -144,6 +154,10 @@ function summary(
     estimatedCostMicros: row.estimated_cost_micros,
     costCurrency: row.cost_currency,
     pricingVersion: row.pricing_version,
+    ...(row.has_unpriced_requests === null
+      ? {}
+      : { hasUnpricedRequests: row.has_unpriced_requests === 1 }),
+    knownCostMicros: row.known_cost_micros,
     billingCalls: billingCalls ?? null,
     ...(billingCalls
       ? { requestIds: billingCalls.flatMap((call) => (call.requestId ? [call.requestId] : [])) }

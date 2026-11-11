@@ -1,5 +1,6 @@
 import type { ModelBilling } from '../contracts/model-usage.js';
 import { calculateBilling } from './billing.js';
+import { resolveModelPricing } from '../config/model-pricing.js';
 import { ModelRequestTrace } from './request-trace.js';
 import {
   cacheCreationSchema,
@@ -42,7 +43,6 @@ const configSchema = z
       .min(1_000)
       .max(10 * 60_000)
       .default(180_000),
-    autoModelPricing: z.boolean().optional(),
     cacheReadPrice: z.number().nonnegative().nullable().optional(),
     cacheWritePrice: z.number().nonnegative().nullable().optional(),
     cacheWrite1hPrice: z.number().nonnegative().nullable().optional(),
@@ -100,7 +100,6 @@ export interface OpenAiCompatibleClientConfig {
   readonly inputCostPerMillionUsd?: number | null | undefined;
   readonly outputCostPerMillionUsd?: number | null | undefined;
   readonly fetchImplementation?: typeof fetch;
-  readonly autoModelPricing?: boolean | undefined;
   readonly cacheReadPrice?: number | null | undefined;
   readonly cacheWritePrice?: number | null | undefined;
   readonly cacheWrite1hPrice?: number | null | undefined;
@@ -229,7 +228,6 @@ export class OpenAiCompatibleModelClient implements ModelClient {
   /** 执行模块组件对外暴露的操作。 */
   public constructor(input: OpenAiCompatibleClientConfig) {
     this.#config = configSchema.parse({
-      autoModelPricing: input.autoModelPricing,
       cacheReadPrice: input.cacheReadPrice,
       cacheWritePrice: input.cacheWritePrice,
       cacheWrite1hPrice: input.cacheWrite1hPrice,
@@ -238,8 +236,8 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       model: input.model,
       costCurrency: input.costCurrency ?? 'USD',
       ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
-      inputCostPerMillionUsd: input.inputCostPerMillionUsd ?? null,
-      outputCostPerMillionUsd: input.outputCostPerMillionUsd ?? null,
+      inputCostPerMillionUsd: input.inputCostPerMillionUsd,
+      outputCostPerMillionUsd: input.outputCostPerMillionUsd,
     });
     this.#fetch = input.fetchImplementation ?? fetch;
     this.#now = input.now ?? Date.now;
@@ -249,8 +247,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
       config: { baseUrl: this.#config.baseUrl, timeoutMs: this.#config.timeoutMs },
       costCurrency: this.#config.costCurrency,
       pricingVersion:
-        this.#config.inputCostPerMillionUsd === null ||
-        this.#config.outputCostPerMillionUsd === null
+        this.#config.inputCostPerMillionUsd == null || this.#config.outputCostPerMillionUsd == null
           ? 'unpriced'
           : 'configured',
     };
@@ -307,7 +304,7 @@ export class OpenAiCompatibleModelClient implements ModelClient {
     const miss =
       raw?.prompt_cache_miss_tokens ??
       (inputTokens !== null && read !== null ? inputTokens - read - (write ?? 0) : null);
-    return calculateBilling({
+    const usage = {
       model: this.#config.model,
       baseUrl: this.#config.baseUrl,
       requestedAt,
@@ -324,13 +321,16 @@ export class OpenAiCompatibleModelClient implements ModelClient {
           ? null
           : raw.completion_tokens_details.reasoning_tokens > 0,
       uncachedInputTokens: miss,
+    };
+    const quote = resolveModelPricing({
+      ...usage,
       inputPrice: this.#config.inputCostPerMillionUsd,
       outputPrice: this.#config.outputCostPerMillionUsd,
       cacheReadPrice: this.#config.cacheReadPrice,
       cacheWritePrice: this.#config.cacheWritePrice,
       cacheWrite1hPrice: this.#config.cacheWrite1hPrice,
-      autoModelPricing: this.#config.autoModelPricing,
     });
+    return calculateBilling(usage, quote);
   }
 
   /** 保持原响应校验与格式协商，HTTP 传输交给逐请求观测器。 */

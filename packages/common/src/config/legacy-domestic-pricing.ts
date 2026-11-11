@@ -4,7 +4,7 @@ import {
   type TokenPrices,
 } from './pricing-catalog.js';
 
-// cc-switch 8be8405 的美元/百万 Token 快照，仅用于国内官网未列价的旧型号。
+// CC Switch 8be8405 的美元参考价，仅用于国内官网未列价的旧型号。
 const minimax: Readonly<Record<string, TokenPrices>> = {
   'minimax-m2': [0.3, 1.2, 0.03, 0.375, 0.375],
   'minimax-m2.1': [0.3, 1.2, 0.03, 0.375, 0.375],

@@ -14,7 +14,7 @@ AgentRuntimeError/ModelClientError 接受 ErrorOptions；模型边界保留原�
 
 本次范围仅为国内按量 API。参考 cc-switch 上游提交 `8be840557bacd89d592f13ddc1bee0586afaea14` 的 parser/calculator 分层与缓存包含关系；缺失值保留 null，不沿用固定汇率折算。海外基础输入/输出估算目录保持既有行为，放在 legacy-pricing.ts，不新增海外缓存报价。
 
-国内目录按入口、币种、模型 ID 和用量选价；国内官网报价在未显式指定 MODEL_COST_CURRENCY 时默认为 CNY，旧型号美元白名单默认为 USD，显式设置优先。除此前已实现的 DeepSeek 双币报价外，国内人民币报价不转换成美元计价。列表的货币展示转换与实际报价币种是两个独立环节。自定义输入输出价格不混入官网缓存价，三项缓存覆盖变量分别为 MODEL_CACHE_READ_COST_PER_MILLION、MODEL_CACHE_WRITE_COST_PER_MILLION、MODEL_CACHE_WRITE_1H_COST_PER_MILLION。
+国内目录按入口、币种、模型 ID 和用量选价；国内官网报价在未显式指定 MODEL_COST_CURRENCY 时默认为 CNY，旧型号美元白名单默认为 USD，显式设置优先。除此前已实现的 DeepSeek 双币报价外，国内人民币报价不转换成美元计价。列表的货币展示转换与实际报价币种是两个独立环节。显式价格逐项覆盖目录价，三项缓存覆盖变量分别为 MODEL_CACHE_READ_COST_PER_MILLION、MODEL_CACHE_WRITE_COST_PER_MILLION、MODEL_CACHE_WRITE_1H_COST_PER_MILLION。
 
 通用协议仍支持 OpenAI 兼容和 Anthropic 兼容接口，国内 Kimi/MiniMax 等同样使用它们。新增 5 分钟和 1 小时写入用量及价格快照使用现有 JSON 列保存，无需改动旧记录。Kimi Chat 的时长从 Msh-Usage-Cache-Write-Tokens-5m / -1h 响应头读取；Messages 从 cache_creation 读取。缺失时长不默认为 5 分钟。显式零不能被低优先级字段覆盖。
 
@@ -31,11 +31,9 @@ AgentRuntimeError/ModelClientError 接受 ErrorOptions；模型边界保留原�
 
 仅自动计算本应用的同步文本按量调用；套餐入口、非标准 service_tier、未核验地域或模型保留未知。旧 moonshot-v1、模糊 kimi-k2 等白名单外的未知型号仍需要显式配置。价格版本是本次核验快照，不回算历史金额。未知缓存可以给出含假设的估算，但缓存写入可能更贵，因此不声称是上界。
 
-common 契约定义请求计费明细 Schema，模型适配器归一化缓存语义并调用纯计价函数，Runner 汇总并通过仓储在完成事务中写入新增 nullable model_usage_json。详情页按请求展示时间、模型、输入输出 Token 与合计费用，缓存分项仅保存不逐列展示。参考 cc-switch 的 parser/calculator 分层，使用定点十进制运算；DeepSeek 官方输入命中字段优先，其他兼容接口使用标准缓存字段。官方忙闲价仅在无显式价格覆盖时启用；CNY 使用官网人民币价，不通过汇率反推。当前日历覆盖 2026 年，未知年份仅在可确定的周末或非忙时计价，潜在忙时返回未知。Schema 迁移仅新增可空字段，旧记录金额保持不变，不推测补齐历史缓存量。
+common 契约定义请求计费明细 Schema，模型适配器归一化缓存语义，从配置模块按请求条件取得报价，再调用纯计价函数，Runner 汇总并通过仓储在完成事务中写入新增 nullable model_usage_json。详情页按请求展示时间、模型、输入输出 Token 与合计费用，缓存分项仅保存不逐列展示。参考 cc-switch 的 parser/calculator 分层，使用定点十进制运算；DeepSeek 官方输入命中字段优先，其他兼容接口使用标准缓存字段。官方忙闲价用于未显式覆盖的分项；CNY 使用官网人民币价，不通过汇率反推。当前日历覆盖 2026 年，未知年份仅在可确定的周末或非忙时计价，潜在忙时返回未知。Schema 迁移仅新增可空字段，旧记录金额保持不变，不推测补齐历史缓存量。
 
 实现参考 [cc-switch 用量解析](https://github.com/farion1231/cc-switch/blob/8be8405/src-tauri/src/proxy/usage/parser.rs) 与同目录 calculator.rs；节假日日历依据 [2026 年放假通知](https://www.beijing.gov.cn/cs/gncs/zcwj/202603/t20260327_4568275.html)。缓存未知时保留 null；界面每个单元格只展示一个值，逐请求明细仍按原口径展示，“未定价”仅出现在明细未知或运行合计未知时，不再逐条标注估算口径。运行合计区分真实未知与真实为零：未上报用量的传输失败请求对运行合计按 0 计入，不再把其他请求的已知成本一起标为未知；已解析账单且缺价的请求（如缓存写入时长缺失、忙闲时段未知）仍使合计未知并展示“未定价”。
-
-通过独立 AgentRunCostCorrectionStore 端口回填已完成且 unpriced、成本为空的运行。仓储用开始时间、输入输出用量作条件更新，只允许更新金额、币种与价格版本；维护前备份数据库并保存脱敏计算依据。DeepSeek Flash 2026-11-01 核验来源：https://api-docs.deepseek.com/quick_start/pricing/ 。闲时每百万 Token 美元价格：缓存命中 0.003、未命中 0.15、输出 0.6；高峰翻倍。北京时间工作日 09–12、14–18 为高峰，周末和法定节假日除外。本次历史记录全程位于闲时，未保存缓存明细，使用全部输入未命中的估算上界。
 
 > 状态：Implemented
 
@@ -45,7 +43,7 @@ AgentDefinition.validateOutput 在 Schema 校验后执行，业务拒绝使用 i
 
 模型价格由统一配置提供，支持 USD 和 CNY 两种货币，价格单位为每百万 Token。适配器在收到供应商 usage 后换算为对应货币的微单位；没有完整价格配置时保留 token 用量，但将成本记为 `null`，避免把未知价格误判为免费。
 
-默认价格按归一化模型 ID 和供应商入口查询。国内采用上述人民币目录；海外原有基础目录本次不扩展。未知计价条件保持 null，显式价格按 MODEL_COST_CURRENCY 解释。
+默认价格按归一化模型 ID 和供应商入口查询。国内采用上述人民币目录，兼容网关使用内置参考报价。未知计价条件保持 null，显式价格按 MODEL_COST_CURRENCY 解释。
 
 智谱国内 open.bigmodel.cn 使用人民币目录，海外旧规则独立保留。Web 诊断页面的 USD/CNY 展示切换按 MODEL_USD_TO_CNY_RATE 换算，不影响逐请求保存的原生报价和币种。
 
@@ -99,7 +97,7 @@ Prompt 以模块内 `prompts/<agent>.ts` 存储，每个功能仅保留当前文
 
 Canonical input hash 在进程内从完整最小输入计算；持久化只保存哈希和已校验输出。若业务必须保留输出，输出 Schema 必须排除联系方式等不必要字段。
 
-步骤运行创建时保存 task_id、step_key、resource_key，不另存 task_attempt。中央调度器在领取 pending 任务的同一事务内，将该任务遗留的 running Agent 标为中断；Runner 只恢复失败记录，不抢占活跃调用。分派身份及累计执行次数由 tasks 统一管理，旧执行者提交由现有门控拒绝。恢复输出在任务终态提交之前清除，与终态更新同属事务，仍接受旧执行者写入门控。简历润色建议是 user 模块拥有的业务事实，保存在 resume_polish_suggestions，画像删除级联清理；0063 从仍有任务及画像关联的旧成功输出迁入，不删除历史副本。
+步骤运行创建时保存 task_id、step_key、resource_key，不另存 task_attempt。任务失去执行权时，同一写入关闭遗留的 running Agent 及其未完成请求，包括最后一次租约过期和取消。请求已记录的 HTTP 状态和用量继续用于诊断。Runner 只恢复终态记录，不抢占活跃调用。分派身份及累计执行次数由 tasks 统一管理，旧执行者提交由现有门控拒绝。恢复输出在任务终态提交之前清除，与终态更新同属事务，仍接受旧执行者写入门控。简历润色建议是 user 模块拥有的业务事实，保存在 resume_polish_suggestions，画像删除级联清理；0063 从仍有任务及画像关联的旧成功输出迁入，不删除历史副本。
 
 对于 unrecognized_keys，纠正提示说明错误所在层级、应删除的额外字段，并要求仅保留 JSON Schema 声明的属性。字段名按标识符字符集和数量、长度约束，避免把输出值或任意模型文本带入诊断。两次 HTTP 200 仍可能对应首次输出不合规及纠正，不应误报为重复任务；历史汇总用量不能反推真实 HTTP 请求身份或次数。
 

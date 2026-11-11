@@ -9,7 +9,7 @@ import { SqliteAgentRunStore } from '@jobhunter/common/persistence/agent-runs';
 import { SqliteTaskRepository } from '../src/persistence/task-repository.js';
 import { parseId, utcInstant } from '../src/domain/index.js';
 import { withTaskExecution } from '../src/tasks/contracts/execution-scope.js';
-import { calculateBilling } from '../src/models/billing.js';
+import { calculateBilling } from './fixtures/calculate-model-billing.js';
 
 const resources: {
   readonly root: Awaited<ReturnType<typeof createTemporaryDataRoot>>;
@@ -67,6 +67,46 @@ const usage: AgentRunUsage = {
 };
 
 describe('SQLite agent run store', () => {
+  it('closes a running Agent and its unfinished request when the final lease expires', async () => {
+    const { handle, store } = await setup();
+    const queue = new SqliteTaskRepository(handle.client, () => 1);
+    const taskId = '018f0000-0000-7000-8000-000000000998';
+    handle.client
+      .prepare(
+        "INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,attempt_count,available_at,created_at,lease_owner,lease_expires_at) VALUES(?,'fixture','{}','running','final-lease',1,0,1,'owner',1000)",
+      )
+      .run(taskId);
+    store.createRunning({
+      ...running('interrupted'),
+      execution: { taskId: parseId(taskId, 'Task'), stepKey: 'step', resourceKey: 'resource' },
+    });
+    handle.client.exec(`
+      INSERT INTO model_requests(id,agent_run_id,agent_key,state,requested_at,model,status_code,input_tokens,currency,pricing_version,period,precision)
+      VALUES('interrupted-http','interrupted','resume-profile','running',5,'fixture',200,12,'USD','unpriced','unknown','unpriced');
+    `);
+
+    expect(queue.recoverExpired(utcInstant(999))).toEqual({ recovered: 0, exhausted: 0 });
+    expect(store.get('interrupted')?.status).toBe('running');
+    expect(queue.recoverExpired(utcInstant(1000))).toEqual({ recovered: 0, exhausted: 1 });
+    expect(store.get('interrupted')).toMatchObject({
+      status: 'failed',
+      errorSummary: '任务执行已结束，Agent 调用中断。',
+      finishedAt: 1000,
+    });
+    expect(
+      handle.client
+        .prepare(
+          "SELECT state, transport_error, status_code, input_tokens FROM model_requests WHERE id='interrupted-http'",
+        )
+        .get(),
+    ).toEqual({
+      state: 'completed',
+      transport_error: 'cancelled',
+      status_code: 200,
+      input_tokens: 12,
+    });
+  });
+
   it('recovers abandoned calls through central claiming without a duplicated attempt column', async () => {
     const { store, handle } = await setup();
     const taskId = parseId('018f0000-0000-7000-8000-000000000999', 'Task');
@@ -118,9 +158,9 @@ describe('SQLite agent run store', () => {
     expect(claim('owner-2', 12)).toBeNull();
     expect(store.get('orphan')?.status).toBe('running');
     expect(withTaskExecution(identity, () => store.restartFailed('cache-key', 13))).toBeNull();
-    // 领取后若遗留记录更新失败，分派身份和 Agent 状态必须一并回滚。
+    // 恢复时若遗留记录更新失败，分派身份和 Agent 状态必须一并回滚。
     handle.client.exec(
-      "CREATE TEMP TRIGGER reject_agent_recovery BEFORE UPDATE ON agent_runs WHEN NEW.error_summary='Previous task execution was interrupted.' BEGIN SELECT RAISE(ABORT,'fixture recovery rejected'); END",
+      "CREATE TEMP TRIGGER reject_agent_recovery BEFORE UPDATE ON agent_runs WHEN NEW.error_summary='任务执行已结束，Agent 调用中断。' BEGIN SELECT RAISE(ABORT,'fixture recovery rejected'); END",
     );
     expect(() => claim('owner-2', 1002)).toThrow('fixture recovery rejected');
     expect(queue.get(taskId)).toMatchObject({
@@ -254,72 +294,6 @@ describe('SQLite agent run store', () => {
         .get('legacy'),
     ).toBe(0);
     expect(store.get('legacy')?.billingCalls).toEqual([]);
-  });
-  it('backfills only matching completed unpriced costs and preserves the run facts', async () => {
-    const { store } = await setup();
-    // 1、构造已完成但未定价的运行，输出与时间必须在回填后保持不变。
-    store.createRunning(running('cost-backfill'));
-    store.completeSucceeded({
-      id: 'cost-backfill',
-      cacheKey: 'cache-key',
-      output: { result: 'synthetic' },
-      outputHash: 'c'.repeat(64),
-      finishedAt: 10,
-      usage: { ...usage, estimatedCostMicros: null, pricingVersion: 'unpriced' },
-    });
-    const before = store.get('cost-backfill');
-    const correction = { id: 'cost-backfill', startedAt: 1, usage };
-    // 2、用量不符时拒绝覆盖；成功后只改变三个计价字段，重复回填无效。
-    expect(store.backfillUnpricedCost({ ...correction, startedAt: 2 })).toBe(false);
-    expect(store.backfillUnpricedCost(correction)).toBe(true);
-    expect(store.get('cost-backfill')).toEqual({
-      ...before,
-      estimatedCostMicros: usage.estimatedCostMicros,
-      costCurrency: usage.costCurrency,
-      pricingVersion: usage.pricingVersion,
-    });
-    expect(store.backfillUnpricedCost(correction)).toBe(false);
-    expect(() =>
-      store.backfillUnpricedCost({
-        ...correction,
-        usage: { ...usage, estimatedCostMicros: -1 },
-      }),
-    ).toThrow(/Invalid cost correction/);
-  });
-  it('keeps zero-cost failed runs known and excludes them from backfill', async () => {
-    const { store } = await setup();
-    // 1、无模型调用的失败运行保存 0 成本与 no-calls 价格版本，不再标记未定价。
-    store.createRunning(running('zero-cost'));
-    store.completeFailed({
-      id: 'zero-cost',
-      status: 'failed',
-      category: 'temporary',
-      summary: 'gateway unreachable',
-      finishedAt: 3,
-      usage: {
-        inputTokens: 0,
-        outputTokens: 0,
-        estimatedCostMicros: 0,
-        costCurrency: 'USD',
-        pricingVersion: 'no-calls',
-      },
-    });
-    expect(store.get('zero-cost')).toMatchObject({
-      status: 'failed',
-      inputTokens: 0,
-      outputTokens: 0,
-      estimatedCostMicros: 0,
-      pricingVersion: 'no-calls',
-    });
-    // 2、0 是已知成本，定向回填只针对 unpriced 且金额为空的记录。
-    expect(
-      store.backfillUnpricedCost({
-        id: 'zero-cost',
-        startedAt: 1,
-        usage,
-      }),
-    ).toBe(false);
-    expect(store.get('zero-cost')).toMatchObject({ estimatedCostMicros: 0 });
   });
   it('invalidates a bad success without deleting its audit and allows a new winner', async () => {
     const { store } = await setup();

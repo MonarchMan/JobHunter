@@ -47,7 +47,7 @@
   min-width: 18rem;
 }
 
-.scroll td:first-child span {
+.scroll td:first-child > span:not([role='group']) {
   display: block;
   margin-top: 0.35rem;
   color: var(--text-tertiary);
@@ -66,8 +66,16 @@
 }
 
 .compact td.model {
+  max-width: 16rem;
   color: var(--text-secondary);
   font-size: 0.82rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.compact td.requestError {
+  width: 10rem;
+  max-width: 10rem;
 }
 
 .scroll tbody tr {

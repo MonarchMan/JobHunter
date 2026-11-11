@@ -17,8 +17,30 @@ for (const width of [1440, 1024]) {
     await expect(cell).not.toHaveAttribute('title');
     await expect(cell.locator('[title]')).toHaveCount(0);
     await expect(tooltip).toBeHidden();
+    await trigger.evaluate((element) => {
+      let enteredAt = 0;
+      element.addEventListener(
+        'pointerenter',
+        () => {
+          enteredAt = performance.now();
+        },
+        { once: true },
+      );
+      element.addEventListener(
+        'beforetoggle',
+        () => {
+          element.dataset.hoverDelay = String(performance.now() - enteredAt);
+        },
+        { capture: true, once: true },
+      );
+    });
     await trigger.hover();
+    await page.waitForTimeout(500);
+    await expect(tooltip).toBeHidden();
     await expect(tooltip).toBeVisible();
+    const delay = Number(await trigger.getAttribute('data-hover-delay'));
+    expect(delay).toBeGreaterThanOrEqual(950);
+    expect(delay).toBeLessThan(1500);
     await expect(tooltip).toContainText(' - ');
     await expect(tooltip).toContainText('2026');
     expect(await tooltip.evaluate((element) => element.matches(':popover-open'))).toBe(true);
@@ -46,6 +68,7 @@ for (const width of [1440, 1024]) {
     await trigger.blur();
     await page.getByRole('heading', { name: '后台任务', exact: true }).hover();
     await expect(tooltip).toBeHidden();
+    await page.keyboard.press('Shift');
     await trigger.focus();
     await expect(tooltip).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);

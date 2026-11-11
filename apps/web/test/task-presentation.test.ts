@@ -2,6 +2,16 @@ import { expect, it } from 'vitest';
 import type { WebSourceSyncTaskDetail } from '@jobhunter/recruitment/contracts/web';
 import { taskPresentation } from '../app/tasks/task-presentation.js';
 
+it('presents a historical sync scoring failure without the old prefix or mixed wording', () => {
+  expect(
+    taskPresentation({
+      status: 'failed',
+      sourceSync: null,
+      errorSummary: '同步已提交；评分 0/1 完成。职位分析 is temporarily unavailable.',
+    }).error,
+  ).toBe('评分 0/1 完成。职位分析暂时无法完成。');
+});
+
 /** 构造部分同步结果，覆盖正常结束但业务部分完成的场景。 */
 const source: WebSourceSyncTaskDetail = {
   companyName: '测试公司',

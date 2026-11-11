@@ -8,31 +8,30 @@ export function mapAgentRuntimeError(
 ): TaskExecutionError {
   switch (error.category) {
     case 'rate_limited':
-      return new TaskExecutionError('rate_limited', `${operation} was rate limited.`, {
+      return new TaskExecutionError('rate_limited', `${operation}失败：模型请求触发限流。`, {
+        cause: error,
+      });
+    case 'timeout':
+      return new TaskExecutionError('network_temporary', `${operation}失败：模型请求超时。`, {
         cause: error,
       });
     case 'temporary':
-    case 'timeout':
-      return new TaskExecutionError(
-        'network_temporary',
-        `${operation} is temporarily unavailable.`,
-        {
-          cause: error,
-        },
-      );
+      return new TaskExecutionError('network_temporary', `${operation}暂时无法完成。`, {
+        cause: error,
+      });
     case 'cancelled':
-      return new TaskExecutionError('cancelled', `${operation} was cancelled.`, { cause: error });
+      return new TaskExecutionError('cancelled', `${operation}已取消。`, { cause: error });
     case 'invalid_auth':
     case 'configuration':
-      return new TaskExecutionError('invalid_config', `${operation} configuration is invalid.`, {
+      return new TaskExecutionError('invalid_config', `${operation}失败：模型配置或认证无效。`, {
         cause: error,
       });
     case 'invalid_output':
     case 'budget_exceeded':
-      return new TaskExecutionError('validation_failed', `${operation} output was rejected.`, {
+      return new TaskExecutionError('validation_failed', `${operation}未生成符合要求的结果。`, {
         cause: error,
       });
     default:
-      return new TaskExecutionError('permanent', `${operation} failed.`, { cause: error });
+      return new TaskExecutionError('permanent', `${operation}失败。`, { cause: error });
   }
 }

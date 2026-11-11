@@ -398,7 +398,7 @@ describe('source.sync handler', () => {
       ).rejects.toMatchObject({
         category: expectedCategory,
         retryable: expectedRetryable,
-        safeSummary: '同步已提交；评分 1/2 完成。评分失败。',
+        safeSummary: '评分 1/2 完成。评分失败。',
       });
     },
   );
@@ -454,7 +454,7 @@ describe('source.sync handler', () => {
       ).rejects.toMatchObject({
         category: 'invalid_config',
         retryable: false,
-        safeSummary: '同步已提交；评分 0/2 完成。配置失败。',
+        safeSummary: '评分 0/2 完成。配置失败。',
       });
     },
   );

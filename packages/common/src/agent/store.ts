@@ -93,12 +93,3 @@ export interface AgentRunStore {
 
 /** 模块使用的类型约束。 */
 export type AgentRunReader = Pick<AgentRunStore, 'get'>;
-
-/** 维护已完成运行的缺失成本；预期时间和用量用于阻止并发覆盖。 */
-export interface AgentRunCostCorrectionStore {
-  backfillUnpricedCost(input: {
-    readonly id: string;
-    readonly startedAt: number;
-    readonly usage: AgentRunUsage;
-  }): boolean;
-}

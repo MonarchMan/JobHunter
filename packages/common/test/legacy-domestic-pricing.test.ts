@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { resolveLegacyDomesticPricing } from '../src/models/legacy-domestic-pricing.js';
-import { calculateBilling } from '../src/models/billing.js';
+import { resolveLegacyDomesticPricing } from '../src/config/legacy-domestic-pricing.js';
+import { calculateBilling } from './fixtures/calculate-model-billing.js';
 import { resolveAppConfig, resolveBootstrapConfig } from '../src/config/index.js';
 import { OpenAiCompatibleModelClient } from '../src/models/index.js';
 
@@ -100,9 +100,6 @@ describe('legacy domestic USD reference pricing', () => {
       baseUrl: usage.baseUrl,
       apiKey: 'fake',
       costCurrency: config.model.costCurrency.value,
-      inputCostPerMillionUsd: config.model.inputCostPerMillionUsd.value,
-      outputCostPerMillionUsd: config.model.outputCostPerMillionUsd.value,
-      autoModelPricing: true,
       fetchImplementation: () =>
         Promise.resolve(
           new Response(
