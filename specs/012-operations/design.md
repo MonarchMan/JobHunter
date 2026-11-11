@@ -68,7 +68,7 @@ Windows 路径使用 `Resolve-Path` 等价的应用逻辑核验：目标必须�
 - `jh --json logs --task <taskId> --limit 1000 > diagnostics.json`：导出重新脱敏的事件及扫描限制。
 - `jh --verbose <command>`：临时提升文件与控制台至 debug；`jh --quiet <command>`：控制台仅显示 error，文件保留原级别。
 
-控制台格式由 `LOG_FORMAT=auto|pretty|json` 指定。默认 TTY 使用简洁中文，非 TTY 使用 JSON；`CONSOLE_LOG_LEVEL` 默认 warn，`LOG_LEVEL` 默认 info。浏览器详细事件还受 `JOBHUNTER_BROWSER_DEBUG=1` 控制，不绕过日志级别和脱敏。
+控制台格式由 `LOG_FORMAT=auto|pretty|json` 指定。默认 TTY 使用可读文本，非 TTY 使用 JSON。文本以 ` - ` 分隔秒级 UTC 时间、英文级别（debug、info、warn、error）、事件摘要及各关联字段。`CONSOLE_LOG_LEVEL` 默认 warn，`LOG_LEVEL` 默认 info。浏览器详细事件还受 `JOBHUNTER_BROWSER_DEBUG=1` 控制，不绕过日志级别和脱敏。
 
 ## 测试类型检查
 

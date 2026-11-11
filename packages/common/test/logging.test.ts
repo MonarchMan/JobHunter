@@ -234,8 +234,11 @@ describe('logging failure isolation and diagnostic evidence', () => {
     const file = await readFile(join(root, 'app.log'), 'utf8');
     expect(file).toContain('fixture.detail');
     expect(file).toContain('secret details');
-    expect(lines.join('')).toContain('任务失败');
-    expect(lines.join('')).toContain('task-1');
+    expect(lines).toEqual([
+      expect.stringMatching(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z - error - task\.failed - taskId=task-1\n$/u,
+      ) as unknown,
+    ]);
     expect(lines.join('')).not.toContain('secret details');
     expect(lines.join('')).not.toContain('fixture.detail');
   });

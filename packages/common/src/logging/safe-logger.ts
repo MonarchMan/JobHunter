@@ -69,7 +69,7 @@ export class PinoSafeLogger implements SafeLogger {
       try {
         this.#logger.error(
           { event: 'logging.serialization_failed', schemaVersion: 1 },
-          '日志序列化失败',
+          'logging.serialization_failed',
         );
       } catch {
         /* 输出失败不能改变业务结果。 */

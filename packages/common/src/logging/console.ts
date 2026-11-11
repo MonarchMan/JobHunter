@@ -1,16 +1,5 @@
 import type { DestinationStream } from 'pino';
 
-const labels: Readonly<Record<string, string>> = {
-  'task.started': '任务开始',
-  'task.finished': '任务完成',
-  'task.failed': '任务失败',
-  'task.retry_scheduled': '任务将重试',
-  'worker.queue_busy': '数据库繁忙',
-  'web.request_failed': '请求处理失败',
-  'thread.execution_failed': '线程任务失败',
-  'thread.startup_failed': '工作线程启动失败',
-  'logging.degraded': '日志文件不可用，已降级至控制台',
-};
 /** 仅显示标量，禁止把未知对象隐式转换成无意义文本。 */
 function scalar(value: unknown): string {
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
@@ -21,12 +10,13 @@ function scalar(value: unknown): string {
 export function formatLogLine(record: Readonly<Record<string, unknown>>): string {
   const level =
     Number(record.level) >= 50
-      ? '错误'
+      ? 'error'
       : Number(record.level) >= 40
-        ? '警告'
+        ? 'warn'
         : Number(record.level) >= 30
-          ? '信息'
-          : '调试';
+          ? 'info'
+          : 'debug';
+  const time = scalar(record.time).replace(/\.\d+Z$/u, 'Z');
   const event = scalar(record.event ?? record.msg) || 'unknown';
   const identity = [
     'taskType',
@@ -37,9 +27,10 @@ export function formatLogLine(record: Readonly<Record<string, unknown>>): string
     'modelRequestId',
   ]
     .filter((key) => record[key] !== undefined)
-    .map((key) => `${key}=${String(record[key])}`)
-    .join(' ');
-  return `${scalar(record.time)} ${level} ${labels[event] ?? event}${identity ? ` · ${identity}` : ''}${record.suppressed ? ` · 合并 ${scalar(record.suppressed)} 条` : ''}\n`;
+    .map((key) => `${key}=${String(record[key])}`);
+  const parts = [time, level, event, ...identity];
+  if (record.suppressed) parts.push(`suppressed=${scalar(record.suppressed)}`);
+  return `${parts.join(' - ')}\n`;
 }
 /** 仅对反复锁忙告警合并；上限与关闭汇总避免静默丢失和无界状态。 */
 export function consoleDestination(
