@@ -30,15 +30,17 @@ function createXiaomiChannelAdapter(
       recruitmentType: options.recruitmentType,
       canonicalEntryUrl: options.entryUrl,
       officialHosts: [...hosts],
-      capabilities: { detail: 'inline', pagination: 'page', transport: 'browser' },
+      capabilities: {
+        detail: 'inline',
+        pagination: 'page',
+        transport: 'json',
+      },
       defaultRateLimit: { requestsPerMinute: 12, burst: 1 },
       externalIdFingerprintVersion: null,
     },
     configSchema: xiaomiInternConfigSchema,
-    browser: {
-      listEndpointPath: '/website/api/agent/searchJobPage',
-      responseShape: 'xiaomi-jobs',
-    },
+    allowDuplicatePageRecords: options.type !== 3,
+    skipRecord: (job) => job.requirement.trim() === '',
     pageSize: (config) => config.pageSize,
     request: ({ config, page, requestId, signal, timeoutMs }) => {
       const url = new URL('https://hr.xiaomi.com/website/api/agent/searchJobPage');

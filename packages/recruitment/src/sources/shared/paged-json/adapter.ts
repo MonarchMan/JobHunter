@@ -54,6 +54,10 @@ export interface InlinePagedJsonDefinition<TConfig, TRecord> {
   readonly parsePage: (body: unknown) => ParsedInlinePage<TRecord>;
   readonly parseRecord: (value: unknown) => TRecord;
   readonly fields: (record: TRecord) => InlineJobFields;
+  /** 页数和原始行数完整时，允许去重后完成采集，重复数据不支持下架推断。 */
+  readonly allowDuplicatePageRecords?: boolean;
+  /** 过滤无法使用的已校验记录，但保留其分页计数并禁用本轮下架推断。 */
+  readonly skipRecord?: (record: TRecord) => boolean;
   readonly browser?: {
     readonly listEndpointPath: string;
     readonly responseShape: SourcePageCollectionResponseShape;
@@ -174,6 +178,8 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
       let totalChanged = false;
       let paginationChanged = false;
       let duplicateIds = 0;
+      let returnedCount = 0;
+      let skippedRecords = 0;
       let discoveredCount = 0;
       let fetchedPages = 0;
 
@@ -181,6 +187,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
         if (context.signal.aborted)
           throw new SourceError('temporary', 'Source discovery was aborted.');
         const parsed = await requestPage(context, page);
+        returnedCount += parsed.records.length;
         fetchedPages = page;
         if (expectedTotal === null) {
           expectedTotal = parsed.total;
@@ -198,6 +205,10 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
         }
         for (const value of parsed.records) {
           const record = definition.parseRecord(value);
+          if (definition.skipRecord?.(record)) {
+            skippedRecords += 1;
+            continue;
+          }
           const fields = definition.fields(record);
           if (seen.has(fields.externalJobId)) {
             duplicateIds += 1;
@@ -220,7 +231,10 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
 
       const complete =
         !paginationChanged &&
-        (actualCount || (duplicateIds === 0 && discoveredCount === expectedTotal)) &&
+        (actualCount ||
+          (definition.allowDuplicatePageRecords
+            ? returnedCount === expectedTotal
+            : duplicateIds === 0 && discoveredCount + skippedRecords === expectedTotal)) &&
         fetchedPages === expectedPages;
       yield {
         type: 'complete',
@@ -237,7 +251,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
                 ? 'duplicate_job_ids'
                 : 'discovered_count_mismatch',
           retryable: paginationChanged,
-          ...(actualCount
+          ...(actualCount || definition.allowDuplicatePageRecords || skippedRecords > 0
             ? {
                 absenceReliable:
                   duplicateIds === 0 && !totalChanged && discoveredCount === expectedTotal,

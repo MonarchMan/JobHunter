@@ -646,8 +646,7 @@ const missingChannelInputs: readonly CatalogInput[] = [
     channel: 'campus',
     recruitmentType: 'campus',
     supportStatus: 'supported',
-    supportNote:
-      '正常匿名浏览器捕获官网 type=2 结构化 JSON；首页/中间页/末页、唯一 jobPostId、深链与 campus 归一化已于 2026-08-28 通过。',
+    supportNote: '直接请求官网 type=2 JSON 分页，按 jobPostId 去重并跳过任职要求为空的职位。',
     config: { pageSize: 100 },
   },
   {
@@ -663,8 +662,7 @@ const missingChannelInputs: readonly CatalogInput[] = [
     channel: 'social',
     recruitmentType: 'social',
     supportStatus: 'supported',
-    supportNote:
-      '正常匿名浏览器捕获官网 type=1 结构化 JSON；首页/中间页/末页、唯一 jobPostId、深链与 social 归一化已于 2026-08-28 通过。',
+    supportNote: '直接请求官网 type=1 JSON 分页，按 jobPostId 去重并跳过任职要求为空的职位。',
     config: { pageSize: 100 },
   },
   {

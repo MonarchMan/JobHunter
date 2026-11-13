@@ -17,7 +17,7 @@ export const xiaomiInternJobSchema = z
     cityZhNames: z.array(z.string()),
     levelOneDeptName: z.string().nullable().optional(),
     description: z.string().min(1),
-    requirement: z.string().min(1),
+    requirement: z.string(),
     publishTime: z.string().nullable().optional(),
     larkJobCode: z.string().nullable().optional(),
     type: z.union([z.literal(1), z.literal(2), z.literal(3)]),

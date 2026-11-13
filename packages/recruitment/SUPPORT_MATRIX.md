@@ -68,7 +68,7 @@ B 站社招：`bilibili.social@1.0.0`，supported，物理来源默认启用。2
 | 百度社招       | supported | 是       | `baidu.social@1.0.0`            | 通过         | 2026-08-28 SOCIAL 匿名表单 JSON 采集 1,639 个岗位、82 页，coverage `complete`，稳定 `postId` 唯一                             |
 | 得物校招       | supported | 是       | `dewu.campus@1.0.0`             | 通过         | 匿名浏览器由官网脚本生成运行时 `_signature`；校招/实习筛选返回 6 条、1 页，稳定 ID、官方详情 URL 和归一化已通过 Smoke         |
 | 华为实习       | supported | 是       | `huawei.intern@1.0.0`           | 通过         | `smoke-20260822-huawei-01`；匿名实习页采集 31 条、4 页，coverage `complete`，31 个稳定 ID，字段归一化通过                     |
-| 小米实习       | supported | 是       | `xiaomi.intern@1.0.0`           | 通过         | 2026-08-28 匿名浏览器捕获官网 JSON 的首页/中间页/末页；样本 `jobPostId` 唯一、深链与 internship 归一化通过                    |
+| 小米实习 | supported | 是 | `xiaomi.intern@1.0.0` | 通过 | 2026-11-13 匿名官网 JSON 全量分页、唯一 `jobPostId`、官方深链与样本归一化通过。 |
 | vivo 社招      | supported | 是       | `vivo.social@1.0.0`             | 通过         | 2026-08-28 匿名 JSON 全量分页、稳定 ID、岗位级深链和归一化通过                                                                |
 | vivo 实习      | supported | 是       | `vivo.intern@1.0.0`             | 通过         | 2026-08-28 校园官网 `Category=3` 返回 92 个岗位；单页全量、唯一 UUID、岗位深链与 internship 归一化通过                        |
 | vivo 校招      | supported | 是       | `vivo.campus@1.0.0`             | 通过         | 2026-08-28 校园官网 `Category=2` 返回 164 个岗位；单页全量、唯一 UUID、岗位深链与 campus 归一化通过                           |
@@ -84,8 +84,8 @@ B 站社招：`bilibili.social@1.0.0`，supported，物理来源默认启用。2
 | 京东校招       | supported | 是       | `jd.campus@1.0.0`               | 通过         | 2026-08-28 正式计划 47/56/57/58 首页/末页 smoke 通过；总数、末页长度、唯一 `publishId` 与 campus 归一化一致                   |
 | 华为校招       | supported | 是       | `huawei.campus@1.0.0`           | 通过         | 2026-08-28 校园入口匿名浏览器首页/中间页/末页 smoke 通过；正式岗位样本 ID 唯一且归一化为 campus                               |
 | 华为社招       | supported | 是       | `huawei.social@1.0.0`           | 通过         | 2026-08-28 `newHr` 匿名 JSON 以 2 条/页完成首页/末页；唯一 `jobId`、详情深链、职责要求和 social 归一化通过                    |
-| 小米校招       | supported | 是       | `xiaomi.campus@1.0.0`           | 通过         | 2026-08-28 匿名浏览器捕获 `type=2` JSON 首页/中间页/末页；唯一 `jobPostId`、深链与 campus 归一化通过                          |
-| 小米社招       | supported | 是       | `xiaomi.social@1.0.0`           | 通过         | 2026-08-28 匿名浏览器捕获 `type=1` JSON 首页/中间页/末页；唯一 `jobPostId`、深链与 social 归一化通过                          |
+| 小米校招 | supported | 是 | `xiaomi.campus@1.0.0` | 通过 | 2026-11-13 匿名官网 `type=2` JSON 全量分页、去重、官方深链与样本归一化通过。 |
+| 小米社招 | supported | 是 | `xiaomi.social@1.0.0` | 通过 | 2026-11-13 匿名官网 `type=1` JSON 全量分页、去重、官方深链与样本归一化通过。 |
 | 阿里巴巴社招   | supported | 是       | `alibaba.social@1.0.0`          | 通过         | 2026-08-28 控股集团官网 off-campus JSON 首页/中间页/末页；唯一 ID、岗位深链与 social 归一化通过                               |
 | 拼多多校招     | supported | 是       | `pinduoduo.campus@1.0.0`        | 通过         | 2026-08-28 校园官网 grad 正式岗位共两页；总数、唯一 ID、岗位深链与 campus 归一化通过                                          |
 | 得物社招       | supported | 是       | `dewu.social@1.0.0`             | 通过         | 2026-08-28 飞书 ATS Experienced 入口首页/中间页/末页；官网动态签名、唯一 ID 与 social 归一化通过                              |

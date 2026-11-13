@@ -10,7 +10,9 @@ import {
   createNeteaseSocialAdapter,
   createOppoInternAdapter,
   createVivoSocialAdapter,
+  createXiaomiCampusAdapter,
   createXiaomiInternAdapter,
+  createXiaomiSocialAdapter,
   neteaseConfigSchema,
   oppoInternConfigSchema,
   vivoSocialConfigSchema,
@@ -63,6 +65,18 @@ async function runOnline<TConfig>(
 }
 
 describe.skipIf(!online || !selected.has('xiaomi'))('Xiaomi controlled online smoke', () => {
+  it.each([
+    ['campus', createXiaomiCampusAdapter, '018f0000-0000-7000-8000-000000000236'],
+    ['social', createXiaomiSocialAdapter, '018f0000-0000-7000-8000-000000000237'],
+  ] as const)('discovers every current %s page via HTTP', (_channel, factory, sourceId) =>
+    runOnline(
+      factory,
+      xiaomiInternConfigSchema.parse({ pageSize: 100 }),
+      '018f0000-0000-7000-8000-000000000111',
+      sourceId,
+    ),
+  );
+
   it('discovers every current internship page', () =>
     runOnline(
       createXiaomiInternAdapter,

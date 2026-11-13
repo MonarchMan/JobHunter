@@ -186,18 +186,29 @@ export class FetchSourceHttpClient implements SourceHttpClient {
         classifyStatus(response.status, response.headers);
         const bytes = await readLimited(response, maximumBytes);
         const text = new TextDecoder().decode(bytes);
-        if (containsAccessChallenge(text)) {
-          throw new SourceError('access_blocked', 'Source returned an access verification page.');
-        }
         let body: unknown = text;
         if (request.responseType === 'json') {
           try {
             body = JSON.parse(text) as unknown;
           } catch (error) {
+            if (containsAccessChallenge(text)) {
+              throw new SourceError(
+                'access_blocked',
+                'Source returned an access verification page.',
+              );
+            }
             throw new SourceError('parse_changed', 'Source returned malformed JSON.', {
               cause: error,
             });
           }
+          // 结构化响应仅检查顶层消息，职位正文可能包含“安全验证”等业务用语。
+          const message =
+            typeof body === 'object' && body !== null && 'message' in body ? body.message : body;
+          if (typeof message === 'string' && containsAccessChallenge(message)) {
+            throw new SourceError('access_blocked', 'Source returned an access verification page.');
+          }
+        } else if (containsAccessChallenge(text)) {
+          throw new SourceError('access_blocked', 'Source returned an access verification page.');
         }
         return {
           status: response.status,

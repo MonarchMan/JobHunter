@@ -366,6 +366,14 @@ describe('FetchSourceHttpClient', () => {
     await expect(request(oversized)).rejects.toMatchObject({ category: 'parse_changed' });
   });
 
+  it('does not mistake verification terms in JSON job descriptions for access challenges', async () => {
+    const body = { data: [{ description: '安全验证' }] };
+    const client = new FetchSourceHttpClient({
+      fetchImplementation: fetchReturning(Response.json(body)),
+    });
+    await expect(request(client)).resolves.toMatchObject({ body });
+  });
+
   it('propagates cancellation without attempting to bypass it', async () => {
     const fetchImplementation: typeof fetch = (_input, init) =>
       new Promise<Response>((_resolve, reject) => {

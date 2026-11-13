@@ -19,7 +19,9 @@ import {
   createVivoSocialAdapter,
   createVivoCampusAdapter,
   createVivoInternAdapter,
+  createXiaomiCampusAdapter,
   createXiaomiInternAdapter,
+  createXiaomiSocialAdapter,
   neteaseConfigSchema,
   oppoInternConfigSchema,
   qihoo360ConfigSchema,
@@ -330,6 +332,32 @@ describe('new official source adapters', () => {
       diagnostics: { reason: 'duplicate_job_ids', duplicateIds: 1 },
     });
   });
+
+  it.each([createXiaomiCampusAdapter, createXiaomiSocialAdapter])(
+    'keeps valid Xiaomi jobs when the official list includes blanks and duplicates',
+    async (createAdapter) => {
+      const body = (await fixture('xiaomi/intern/page-1.json')) as {
+        data: { list: Record<string, unknown>[]; total: number };
+      };
+      const [valid, other] = body.data.list;
+      if (!valid || !other) throw new Error('Xiaomi fixture requires two jobs');
+      body.data.list = [
+        { ...valid, requirement: '  ' },
+        { ...other, requirement: '' },
+        valid,
+        valid,
+      ];
+      body.data.total = 4;
+      const adapter = createAdapter();
+      const config = xiaomiInternConfigSchema.parse({ pageSize: 4 });
+      const discovery = await collectDiscovery(adapter.discover(context(config, body)));
+      expect(discovery.ids).toEqual([valid.jobPostId]);
+      expect(discovery.completion).toMatchObject({
+        coverage: 'complete',
+        diagnostics: { duplicateIds: 1, absenceReliable: false },
+      });
+    },
+  );
 
   it('reports a changing pagination total as partial', async () => {
     const first = (await fixture('xiaomi/intern/page-1.json')) as {
