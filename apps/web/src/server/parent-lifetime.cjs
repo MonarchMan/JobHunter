@@ -9,6 +9,15 @@ const child = spawn(process.execPath, process.argv.slice(2), {
 let stopping = false;
 let force;
 
+/** POSIX 下只向本次创建的 Next 进程组发送信号。 */
+function signalGroup(signal) {
+  try {
+    process.kill(-child.pid, signal);
+  } catch (error) {
+    if (error.code !== 'ESRCH') throw error;
+  }
+}
+
 /** 只回收本次创建的 Next 进程树，宿主强杀时同样执行。 */
 function stop() {
   if (stopping) return;
@@ -20,17 +29,9 @@ function stop() {
       /* 回收由 exit 确认。 */
     });
   } else {
-    try {
-      process.kill(-child.pid, 'SIGTERM');
-    } catch {
-      /* Next 已结束。 */
-    }
+    signalGroup('SIGTERM');
     force = setTimeout(() => {
-      try {
-        process.kill(-child.pid, 'SIGKILL');
-      } catch {
-        /* 进程组已回收。 */
-      }
+      signalGroup('SIGKILL');
     }, 10_000);
     force.unref();
   }
@@ -47,6 +48,8 @@ child.once('error', () => {
 });
 child.once('exit', (code) => {
   if (force) clearTimeout(force);
+  // Next CLI 已退出，剩余服务进程不会再由 CLI 回收，退出包装器前清理整个组。
+  if (process.platform !== 'win32') signalGroup('SIGKILL');
   process.exitCode = stopping ? 0 : (code ?? 1);
   if (process.connected) process.disconnect();
 });

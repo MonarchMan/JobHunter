@@ -10,9 +10,11 @@ export type TokenPrices = readonly [
 /** 统一路由前缀与常见日期后缀；查价仍要求匹配供应商入口。 */
 export function normalizeModelPricingId(model: string): string {
   const basename = model.trim().toLowerCase().split('/').at(-1) ?? '';
-  return (basename.split(':')[0] ?? '')
+  const normalized = (basename.split(':')[0] ?? '')
     .replaceAll('@', '-')
     .replace(/-(?:\d{8}|\d{4}-\d{2}-\d{2})$/u, '');
+  // DeepSeek 官网将 1017 版本归为 Flash，官方入口与网关参考价使用同一报价键。
+  return normalized === 'deepseek-v4.1-flash-1017' ? 'deepseek-flash' : normalized;
 }
 
 // 2026-11-01 核验的国内原生人民币报价，来源见 specs/008。

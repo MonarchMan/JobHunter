@@ -5,7 +5,9 @@ import { expect, it } from 'vitest';
 
 for (const mode of ['shutdown', 'disconnect'] as const) {
   it(`reaps the owned framework process tree on parent ${mode}`, async () => {
-    const server = `require('node:http').createServer((q,s)=>s.end('fixture')).listen(0,'127.0.0.1',function(){console.log('PORT:'+this.address().port)});`;
+    // 复现 Next CLI 已退出而服务子进程卡在关闭流程，仍占用资源的情况。
+    const ignoreTermination = process.platform === 'win32' ? '' : "process.on('SIGTERM',()=>{});";
+    const server = `${ignoreTermination}require('node:http').createServer((q,s)=>s.end('fixture')).listen(0,'127.0.0.1',function(){console.log('PORT:'+this.address().port)});`;
     const framework = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(server)}],{stdio:'inherit',windowsHide:true});`;
     const wrapper = spawn(
       process.execPath,

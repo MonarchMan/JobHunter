@@ -53,6 +53,7 @@ describe('workspace dotenv configuration', () => {
     ['OpenAI/gpt-4o-mini', 0.15, 0.6, 0.075],
     ['anthropic/claude-3-5-sonnet-20241022', 3, 15, 0.3],
     ['deepseek/deepseek-chat', 0.44, 1.32, 0.014],
+    ['deepseek-v4.1-flash-1017', 0.3, 1.2, 0.006],
     ['ZHIPU/GLM-5.3-Flash', 0.15, 0.5, 0.03],
     ['ZHIPU/GLM-5.3-FlashX', 0.37, 1.25, 0.075],
   ])('uses the built-in reference quote for %s', (model, inputPrice, outputPrice, cacheRead) => {
@@ -65,6 +66,22 @@ describe('workspace dotenv configuration', () => {
       outputTokens: 10,
     });
     expect(quote.prices.slice(0, 3)).toEqual([inputPrice, outputPrice, cacheRead]);
+  });
+
+  it.each([
+    ['2026-11-13T01:00:00Z', 'peak', [2, 8, 0.04, 0, 0]],
+    ['2026-11-13T04:00:00Z', 'off-peak', [1, 4, 0.02, 0, 0]],
+  ] as const)('prices the Flash 1017 version at %s on the official API', (time, period, prices) => {
+    expect(
+      resolveModelPricing({
+        model: 'deepseek-v4.1-flash-1017',
+        baseUrl: 'https://api.deepseek.com',
+        currency: 'CNY',
+        requestedAt: Date.parse(time),
+        inputTokens: 100,
+        outputTokens: 10,
+      }),
+    ).toMatchObject({ period, prices });
   });
 
   it('requires explicit mail model consent', () => {
