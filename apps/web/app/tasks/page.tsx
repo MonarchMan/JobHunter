@@ -305,6 +305,7 @@ export default async function TasksPage({
           currentPage={diagnostics.taskPagination.current}
           totalPages={diagnostics.taskPagination.totalPages}
           label="后台任务分页"
+          scrollTargetId="task-heading"
           createHref={(page) => `/tasks${pageHref(parameters, 'taskPage', page)}`}
         />
       </section>
