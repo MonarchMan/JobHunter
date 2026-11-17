@@ -31,7 +31,7 @@ export interface WebDiagnosticsRepository {
   listTaskEntries(input: {
     readonly since?: number;
     readonly before?: number;
-    readonly status?: TaskRecord['status'];
+    readonly status?: TaskRecord['status'] | 'warning';
     readonly taskType?: string;
     readonly limit: number;
     readonly offset: number;
@@ -192,7 +192,7 @@ export class WebDiagnosticsService {
     input: {
       readonly since?: number;
       readonly before?: number;
-      readonly status?: TaskRecord['status'];
+      readonly status?: TaskRecord['status'] | 'warning';
       readonly taskType?: string;
       readonly taskPage?: number;
       readonly agentPage?: number;

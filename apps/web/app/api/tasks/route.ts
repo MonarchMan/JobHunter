@@ -13,7 +13,14 @@ export async function GET(request: Request): Promise<Response> {
     const taskType = search.get('type');
     const { range: _range, ...timeFilter } = taskTimeRange(search.get('range'));
     void _range;
-    const validStatuses = ['pending', 'running', 'failed', 'succeeded', 'cancelled'] as const;
+    const validStatuses = [
+      'pending',
+      'running',
+      'failed',
+      'succeeded',
+      'cancelled',
+      'warning',
+    ] as const;
     // 2、通过诊断服务读取任务和 Agent 运行摘要。
     const container = await getWebContainer();
     return dataResponse(

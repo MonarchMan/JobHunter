@@ -208,7 +208,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       ) AS detail_json
       FROM tasks task
       LEFT JOIN job_sources source ON task.task_type = 'source.sync'
-        AND source.id = task.source_id
+        AND source.id = COALESCE(task.source_id, json_extract(task.private_state, '$.sourceIds[0]'))
         AND json_extract(task.private_state, '$.trigger') IN ('manual', 'schedule', 'retry')
       LEFT JOIN companies company ON company.id = source.company_id
       LEFT JOIN source_channels channel ON channel.id = source.channel_id
@@ -264,7 +264,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
   public listTaskEntries(input: {
     readonly since?: number;
     readonly before?: number;
-    readonly status?: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    readonly status?: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'warning';
     readonly taskType?: string;
     readonly limit: number;
     readonly offset: number;
@@ -281,7 +281,31 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     }
     if (input.status) {
       conditions.push('status = ?');
-      parameters.push(input.status);
+      parameters.push(input.status === 'warning' ? 'succeeded' : input.status);
+      // 与详情使用同一来源范围和最新扫描顺序，旧尝试的失败不影响本次状态。
+      if (input.status === 'warning' || input.status === 'succeeded') {
+        conditions.push(`
+          ${input.status === 'succeeded' ? 'NOT ' : ''}EXISTS (
+            SELECT 1 FROM tasks parent
+            JOIN json_each(COALESCE(json_extract(parent.private_state, '$.sourceIds'),
+                                    json_array(parent.source_id))) source
+            JOIN job_sources official ON official.id = source.value
+            JOIN ${scanTaskProjection} run ON run.id = (
+              SELECT candidate.id FROM ${scanTaskProjection} candidate
+              WHERE candidate.source_id = official.id
+                AND (candidate.parent_task_id = parent.id OR (candidate.parent_task_id IS NULL
+                AND candidate.started_at >= COALESCE(parent.started_at, parent.created_at)
+                AND (parent.finished_at IS NULL OR candidate.started_at <= parent.finished_at)))
+              ORDER BY candidate.started_at DESC, candidate.id DESC LIMIT 1
+            )
+            WHERE task_entries.kind = 'task' AND parent.id = task_entries.id
+              AND parent.task_type = 'source.sync'
+              AND json_extract(parent.private_state, '$.trigger') IN ('manual', 'schedule', 'retry')
+              AND run.status <> 'running'
+              AND (run.status IN ('partial', 'failed') OR run.coverage <> 'complete')
+          )
+        `);
+      }
     }
     if (input.taskType) {
       conditions.push('task_type = ?');

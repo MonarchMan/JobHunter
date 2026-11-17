@@ -5,7 +5,7 @@ export const jobStatusLabels = {
 } as const;
 
 export const taskStatusLabels = {
-  pending: '待处理',
+  pending: '等待中',
   running: '执行中',
   succeeded: '已完成',
   failed: '失败',

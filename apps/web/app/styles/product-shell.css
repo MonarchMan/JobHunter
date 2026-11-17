@@ -151,8 +151,7 @@ input[type='radio'] {
   color: var(--success);
 }
 
-.status-running,
-.status-pending {
+.status-running {
   background: var(--primary-soft);
   color: var(--primary-hover);
 }

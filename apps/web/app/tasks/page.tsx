@@ -119,8 +119,13 @@ export default async function TasksPage({
   const { range, ...timeFilter } = taskTimeRange(firstSearchParameter(parameters, 'range'));
   const diagnostics = container.services.diagnostics.list({
     ...timeFilter,
-    ...(status && ['pending', 'running', 'failed', 'succeeded', 'cancelled'].includes(status)
-      ? { status: status as 'pending' | 'running' | 'failed' | 'succeeded' | 'cancelled' }
+    ...(status === 'warning' ||
+    status === 'pending' ||
+    status === 'running' ||
+    status === 'failed' ||
+    status === 'succeeded' ||
+    status === 'cancelled'
+      ? { status }
       : {}),
     ...(taskType ? { taskType } : {}),
     taskPage,
@@ -161,9 +166,10 @@ export default async function TasksPage({
             defaultValue={status ?? ''}
             options={[
               { value: '', label: '全部' },
-              { value: 'pending', label: '待处理' },
+              { value: 'pending', label: '等待中' },
               { value: 'running', label: '运行中' },
               { value: 'failed', label: '失败' },
+              { value: 'warning', label: '警告' },
               { value: 'succeeded', label: '已完成' },
               { value: 'cancelled', label: '已取消' },
             ]}

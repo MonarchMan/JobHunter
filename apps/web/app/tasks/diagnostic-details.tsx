@@ -87,7 +87,7 @@ function DialogShell({
     const dialog = dialogReference.current;
     if (dialog && !dialog.open) dialog.showModal();
     return () => {
-      returnFocusTo?.focus();
+      returnFocusTo?.focus({ preventScroll: true });
     };
   }, [returnFocusTo]);
 
@@ -124,6 +124,9 @@ function DialogShell({
 
 export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactElement {
   const presentation = taskPresentation(task);
+  // 完整同步也可能隔离个别职位，详情仍需展示来源警告。
+  const showWarning =
+    presentation.warning || (task.status === 'succeeded' && Boolean(presentation.error));
   const [open, setOpen] = useState(false);
   const triggerReference = useRef<HTMLButtonElement>(null);
   const displayName = task.jobDetailBatch ? '职位详情同步' : labelTaskType(task.taskType);
@@ -365,16 +368,15 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                 </dl>
               </section>
             ) : null}
-            {task.status === 'failed' || presentation.warning ? (
+            {task.status === 'failed' || showWarning ? (
               <section
-                className={presentation.warning ? styles.warningDetail : styles.failureDetail}
+                className={showWarning ? styles.warningDetail : styles.failureDetail}
                 aria-labelledby="task-failure-heading"
               >
-                <h3 id="task-failure-heading">{presentation.warning ? '警告信息' : '失败原因'}</h3>
-                <p>
-                  <strong>{presentation.errorCategory ?? '未分类'}</strong>
-                </p>
-                <p>{presentation.error || '系统未记录可展示的失败原因。'}</p>
+                <h3 id="task-failure-heading">
+                  {showWarning ? '警告' : '失败'}：{presentation.errorCategory ?? '未分类'}
+                </h3>
+                <p>{presentation.error || '系统未记录具体原因。'}</p>
               </section>
             ) : null}
             {task.kind === 'task' ? (

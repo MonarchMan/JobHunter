@@ -18,12 +18,18 @@
   transform: none;
 }
 
+/* 原生模态弹窗打开时锁定页面，关闭或卸载后自动解除。 */
+:global(html):has(.dialog:modal) {
+  overflow: hidden;
+}
+
 .dialog {
   width: min(48rem, 100%);
   max-height: min(42rem, 100%);
   margin: auto;
   padding: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--line);
   border-radius: 1rem;
   background: var(--surface);
@@ -130,17 +136,20 @@
 }
 
 .failureDetail h3,
-.failureDetail p {
+.warningDetail h3,
+.failureDetail p,
+.warningDetail p {
   margin: 0;
 }
 
-.failureDetail h3 {
+.failureDetail h3,
+.warningDetail h3 {
   margin-bottom: 0.5rem;
-  color: var(--danger);
+  color: inherit;
 }
 
-.failureDetail p + p {
-  margin-top: 0.35rem;
+.failureDetail p,
+.warningDetail p {
   line-height: 1.6;
 }
 
