@@ -189,3 +189,13 @@
     transform: translateY(-0.25rem);
   }
 }
+.optionLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  vertical-align: middle;
+}
+
+.optionLabel img {
+  border-radius: 0.35rem;
+}

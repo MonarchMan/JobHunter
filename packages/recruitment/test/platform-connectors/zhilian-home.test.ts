@@ -72,6 +72,7 @@ it.each([
   { ...request, postData: '{}' },
   { ...request, postData: JSON.stringify({ ...auth, rt: 'different-secret' }) },
   { ...request, url: `${request.url}&at=another-secret` },
+  { ...request, url: request.url.replace('&rt=fixture-rt', '') },
 ])('不拼接不完整或不一致的上下文，也不泄漏原文', (input) => {
   try {
     zhilianSessionFromHome(input, search);

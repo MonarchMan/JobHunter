@@ -76,7 +76,7 @@ test('Liepin UI keeps explicit batches and uses unified jobs', async ({ page }) 
   await page.goto('/sources?channel=platform&provider=liepin');
   await page.getByText('高级连接设置', { exact: true }).click();
   await expect(page.getByRole('heading', { name: '猎聘', exact: true })).toBeVisible();
-  await expect(page.getByText('后续列表和详情通过独立 HTTP 获取', { exact: false })).toBeVisible();
+  await expect(page.getByLabel('调试描述文件绝对路径')).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();
@@ -88,7 +88,12 @@ test('Liepin UI keeps explicit batches and uses unified jobs', async ({ page }) 
   await expect(next).toBeEnabled({ timeout: 10000 });
   expect(commands[0]?.idempotencyToken).toBe(commands[1]?.idempotencyToken);
   await next.click();
-  await expect(page.getByText('最近成功批次已入库 0 条职位。', { exact: false })).toBeVisible({
+  await expect(
+    page
+      .locator('dl div')
+      .filter({ has: page.getByText('已入库', { exact: true }) })
+      .locator('dd'),
+  ).toHaveText('0', {
     timeout: 10000,
   });
   await expect(next).toBeDisabled({ timeout: 10000 });

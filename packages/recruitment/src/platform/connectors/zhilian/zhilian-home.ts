@@ -34,7 +34,12 @@ export function zhilianSessionFromHome(
   try {
     if (!request.postData || Buffer.byteLength(request.postData) > 32768) throw new Error();
     const auth = authSchema.parse(JSON.parse(request.postData));
-    for (const key of ['at', 'rt', 'platform', 'version'] as const)
+    // 新版首页只在正文发送令牌；旧版查询串若含任一令牌，仍须完整且与正文一致。
+    const queryKeys =
+      url.searchParams.has('at') || url.searchParams.has('rt')
+        ? (['at', 'rt', 'platform', 'version'] as const)
+        : (['platform', 'version'] as const);
+    for (const key of queryKeys)
       if (
         url.searchParams.getAll(key).length !== 1 ||
         url.searchParams.get(key) !== String(auth[key])

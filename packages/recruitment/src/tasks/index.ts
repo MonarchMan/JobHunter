@@ -3,6 +3,7 @@ import type { JobIntakePolicy } from '../contracts/job-intake.js';
 import type { PlatformProfileSearchPlanProvider } from '../contracts/profile-search.js';
 import type { ResourceReferenceReader } from '@jobhunter/common/resource-references';
 import { createPlatformRetentionTaskHandler } from '@jobhunter/recruitment/platform-application/platform-retention';
+import { writePlatformResponseLog } from '../platform/persistence/response-log.js';
 import {
   BossPlatformService,
   PlatformBrowsingService,
@@ -165,6 +166,7 @@ export function createRecruitmentTasks(
   input: {
     readonly pageClient?: SourcePageClient;
     readonly platformRequestIntervalMs?: number;
+    readonly platformBatchesPerRun?: number;
     readonly platformRequestIntervalMsByProvider?: Readonly<
       Partial<Record<'boss' | 'zhilian' | '51job' | 'liepin', number | undefined>>
     >;
@@ -244,62 +246,63 @@ export function createRecruitmentTasks(
   });
   // 1、浏览器传输属于 Worker；平台和关键词只借用隔离的页面租约。
   const cdpConnections = new CdpConnectionManager();
+  const logResponse = writePlatformResponseLog.bind(null, context.dataRoot);
+  /** 自动续批和连接器共用平台的有效间隔，平台覆盖值优先。 */
+  const intervalFor = (provider: 'boss' | 'zhilian' | '51job' | 'liepin'): number =>
+    input.platformRequestIntervalMsByProvider?.[provider] ?? input.platformRequestIntervalMs ?? 0;
   const boss = new BossPlatformService(
     new BossCdpSessionProvider({
       connections: cdpConnections,
-      requestIntervalMs:
-        input.platformRequestIntervalMsByProvider?.boss ?? input.platformRequestIntervalMs ?? 0,
+      requestIntervalMs: intervalFor('boss'),
     }),
     new SqlitePlatformRepository(database.client),
     Date.now,
     input.searchProvider,
+    input.platformBatchesPerRun,
+    intervalFor('boss'),
   );
-  registry.register(createBossPlatformTaskHandler(boss));
+  registry.register(createBossPlatformTaskHandler(boss, logResponse));
   const zhilian = new PlatformBrowsingService(
     new ZhilianCdpSessionProvider({
       connections: cdpConnections,
-      requestIntervalMs:
-        input.platformRequestIntervalMsByProvider?.zhilian ?? input.platformRequestIntervalMs ?? 0,
+      requestIntervalMs: intervalFor('zhilian'),
     }),
     new SqlitePlatformRepository(database.client, 'zhilian'),
     Date.now,
     input.searchProvider,
+    input.platformBatchesPerRun,
+    intervalFor('zhilian'),
   );
-  registry.register(createPlatformTaskHandler('zhilian', zhilian));
+  registry.register(createPlatformTaskHandler('zhilian', zhilian, logResponse));
   const job51 = new PlatformBrowsingService(
     new Job51CdpSessionProvider({
       connections: cdpConnections,
-      requestIntervalMs:
-        input.platformRequestIntervalMsByProvider?.['51job'] ??
-        input.platformRequestIntervalMs ??
-        0,
+      requestIntervalMs: intervalFor('51job'),
     }),
     new SqlitePlatformRepository(database.client, '51job'),
     Date.now,
     input.searchProvider,
+    input.platformBatchesPerRun,
+    intervalFor('51job'),
   );
-  registry.register(createPlatformTaskHandler('51job', job51));
+  registry.register(createPlatformTaskHandler('51job', job51, logResponse));
   const liepin = new PlatformBrowsingService(
     new LiepinCdpSessionProvider({
       connections: cdpConnections,
       // 1、每个平台优先采用自身配置；缺失时沿用统一间隔，避免连接器隐藏常量。
-      requestIntervalMs:
-        input.platformRequestIntervalMsByProvider?.liepin ?? input.platformRequestIntervalMs ?? 0,
+      requestIntervalMs: intervalFor('liepin'),
     }),
     new SqlitePlatformRepository(database.client, 'liepin'),
     Date.now,
     input.searchProvider,
+    input.platformBatchesPerRun,
   );
-  registry.register(createPlatformTaskHandler('liepin', liepin));
+  registry.register(createPlatformTaskHandler('liepin', liepin, logResponse));
   registry.register(
     createPlatformRetentionTaskHandler(
       new SqlitePlatformRetentionRepository(database.client, input.references),
     ),
   );
-  boss.initialize();
-  zhilian.initialize();
-  job51.initialize();
-  liepin.initialize();
   registry.register(
     createSourceSyncTaskHandler(
       sync,
@@ -381,6 +384,11 @@ export function createRecruitmentTasks(
   // 2、所有处理器登记后再协调稳定计划，资源由宿主统一释放。
   return {
     initialize() {
+      // 仅调度宿主启动时重置旧会话；执行线程扩容不能作废其他线程的代次。
+      boss.initialize();
+      zhilian.initialize();
+      job51.initialize();
+      liepin.initialize();
       scheduleService.upsert({
         id: ids.generate(),
         // 保留旧键以原位替换小时计划，避免重启后出现重复清理任务。

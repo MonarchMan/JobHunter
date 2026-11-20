@@ -1,6 +1,9 @@
 import { expect, it, vi, type Mock } from 'vitest';
+import { parseId, SystemIdGenerator, utcInstant } from '@jobhunter/common/domain';
 import {
+  PlatformCompanyIdentityUnavailable,
   PlatformError,
+  PlatformJobPaused,
   PlatformTargetSelectionRequired,
   type PlatformJobDetail,
   type PlatformSession,
@@ -13,6 +16,24 @@ import {
   type BossResult,
   type PlatformRepository,
 } from '@jobhunter/recruitment/platform-application/platforms';
+
+it('平台任务包装入库异常时保留日志所需的原始 cause', async () => {
+  const failure = new Error('fixture storage error');
+  const handler = createPlatformTaskHandler('51job', {
+    execute: vi.fn().mockRejectedValue(failure),
+  });
+  const result = handler.execute(
+    {
+      taskId: parseId(new SystemIdGenerator().generate(), 'Task'),
+      signal: new AbortController().signal,
+      clock: { now: () => utcInstant(1000) },
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      services: {},
+    },
+    { action: 'next', generation: 1 },
+  );
+  await expect(result).rejects.toHaveProperty('cause', failure);
+});
 
 it('正常 Worker 领取不套用手动重连策略', () => {
   const handler = createBossPlatformTaskHandler({ execute: vi.fn() });
@@ -75,6 +96,28 @@ it('动态上游重定向目标不进入任务进度', () => {
   ).toEqual({ category: 'access_blocked', businessCode: 302, reason: null });
 });
 
+it('原始分页和身份对照通过白名单后可持久化，私有字段被拒绝', () => {
+  const evidence = {
+    httpStatus: 200,
+    pageIndex: 3,
+    rowCount: 42,
+    rowIndex: 11,
+    externalJobId: 'job:1234',
+    previousInternalId: '4789',
+    receivedInternalId: '4790',
+  };
+  const error = new PlatformError('parse_changed', null, 'list_identity_conflict', evidence);
+  const failure = platformFailure(error, false);
+  expect(platformProgressSchema.shape.failure.parse(failure)).toMatchObject({ evidence });
+  const unsafe = { ...evidence, requestUrl: 'https://private.example/token' };
+  expect(
+    platformFailure(
+      new PlatformError('parse_changed', null, 'list_identity_conflict', unsafe),
+      false,
+    ),
+  ).not.toHaveProperty('evidence');
+});
+
 it('验证页与非 JSON 响应类型给出明确且不猜测正文的恢复提示', () => {
   expect(
     platformFailureMessage({
@@ -115,7 +158,11 @@ interface BatchFixture {
 }
 
 /** 有界批次替身，不接触浏览器或真实平台。 */
-function batchFixture(now: () => number = Date.now): BatchFixture {
+function batchFixture(
+  now: () => number = Date.now,
+  batchesPerRun = 1,
+  batchIntervalMs = 0,
+): BatchFixture {
   let generation = 0;
   let browserRecovered = false;
   const events: string[] = [];
@@ -164,6 +211,9 @@ function batchFixture(now: () => number = Date.now): BatchFixture {
     { connect: () => Promise.resolve(session) },
     repository,
     now,
+    undefined,
+    batchesPerRun,
+    batchIntervalMs,
   );
   const controller = new AbortController();
   const connect = (): Promise<BossResult> =>
@@ -195,6 +245,69 @@ function batchFixture(now: () => number = Date.now): BatchFixture {
     );
   return { repository, session, save, controller, events, detail, connect, next, resume, acquire };
 }
+
+it.each([true, false])('单轮逐批入库并在配置上限或末页结束，末页=%s', async (lastPage) => {
+  const f = batchFixture(Date.now, lastPage ? 10 : 2);
+  f.session.readNext
+    .mockResolvedValueOnce({ candidates: [f.detail('1')], hasMore: true })
+    .mockResolvedValueOnce({ candidates: [f.detail('1'), f.detail('2')], hasMore: !lastPage });
+  await expect(f.acquire()).resolves.toMatchObject({
+    hasMore: !lastPage,
+    savedCount: 2,
+    progress: { batchNumber: 2, processed: 2, total: 2 },
+  });
+  expect(f.session.readNext).toHaveBeenCalledTimes(2);
+  expect(f.events).toEqual(['detail:1', 'save:1', 'detail:2', 'save:2']);
+});
+
+it('批间等待可取消，保留已入库职位且不再翻页', async () => {
+  const f = batchFixture(Date.now, 2, 5000);
+  const run = f.acquire();
+  await vi.waitFor(() => {
+    expect(f.save).toHaveBeenCalledTimes(3);
+  });
+  f.controller.abort();
+  await expect(run).rejects.toThrow();
+  expect(f.session.readNext).toHaveBeenCalledTimes(1);
+});
+
+it('续批列表失败时保留前批累计进度并停止', async () => {
+  const f = batchFixture(Date.now, 3);
+  f.session.readNext
+    .mockResolvedValueOnce({ candidates: [f.detail('1')], hasMore: true })
+    .mockRejectedValueOnce(new PlatformError('rate_limited'));
+  await expect(f.acquire()).rejects.toMatchObject({ category: 'rate_limited' });
+  expect(f.session.readNext).toHaveBeenCalledTimes(2);
+  expect(f.repository.recordProgress).toHaveBeenLastCalledWith(
+    'task',
+    1,
+    expect.objectContaining({
+      batchNumber: 2,
+      stage: 'list',
+      saved: 1,
+      processed: 1,
+    }),
+    expect.any(Number),
+  );
+});
+
+it.each([
+  [new PlatformJobPaused(), { skippedPaused: 1, skipped: 0 }, undefined],
+  [new PlatformCompanyIdentityUnavailable(), { skipped: 1 }, 1],
+] as const)('跳过不可保存的单条详情并继续后续候选 %#', async (error, skipped, missing) => {
+  const f = batchFixture();
+  await f.connect();
+  f.session.readDetail.mockImplementation((id) =>
+    id === '2' ? Promise.reject(error) : Promise.resolve(f.detail(id)),
+  );
+  await expect(f.next()).resolves.toMatchObject({
+    savedCount: 2,
+    skippedMissingCompanyId: missing,
+    progress: { stage: 'complete', processed: 3, saved: 2, failure: null, ...skipped },
+  });
+  expect(f.events).toEqual(['save:1', 'save:3']);
+  expect(f.session.disconnect).not.toHaveBeenCalled();
+});
 
 it('旧失败任务手动重试不能关闭后续健康代次', async () => {
   const fixture = batchFixture();

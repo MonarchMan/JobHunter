@@ -1,4 +1,9 @@
 import {
+  clearPlatformResponse,
+  discardPlatformResponse,
+  platformResponseText,
+} from '../../application/response-diagnostics.js';
+import {
   PlatformError,
   type PlatformBatch,
   type PlatformCandidate,
@@ -7,6 +12,7 @@ import {
 } from '@jobhunter/recruitment/platform-contracts';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
+import { setTimeout as wait } from 'node:timers/promises';
 import { PlatformRequestPacer } from '../browser/request-pacing.js';
 import { cookieHeaderForUrl, type BrowserCookie } from '../browser/cookies.js';
 import type { BossPageLifecycle } from './boss-page-lifecycle.js';
@@ -161,6 +167,7 @@ export class BossHttpSession {
   readonly #details = new Map<string, DetailContext>();
   readonly #seen = new Set<string>();
   #page = 0;
+  #nextListPageAt = 0;
   #hasMore = true;
   #busy = false;
   #requestCount = 0;
@@ -362,6 +369,18 @@ export class BossHttpSession {
       // 1、工作集上限要求重新开始浏览，不能让私有上下文无界增长。
       if (this.#page >= 20) throw new PlatformError('session_unavailable');
       if (!this.#hasMore) return { candidates: [], hasMore: false };
+      // 只有下一次翻页才等待剩余时间，第五页的结果可以立即返回。
+      if (this.#nextListPageAt > 0) {
+        const remainingMs = this.#nextListPageAt - this.#now();
+        if (remainingMs > 0)
+          await wait(remainingMs, undefined, {
+            signal: AbortSignal.any([
+              signal,
+              this.#abort.signal,
+              ...(this.#lifecycle ? [this.#lifecycle.signal] : []),
+            ]),
+          });
+      }
       this.#resumeCount = 0;
       this.#networkRetries = 0;
       this.#batchExpiresAt = this.#now() + 600_000;
@@ -369,7 +388,7 @@ export class BossHttpSession {
       url.searchParams.set('page', String(this.#page + 1));
       url.searchParams.set('pageSize', '15');
       url.searchParams.set('_', String(this.#now()));
-      const result = listSchema.safeParse(await this.#request(url, signal));
+      const result = listSchema.safeParse(await this.#requestList(url, signal));
       if (!result.success) throw new PlatformError('parse_changed');
       // 2、重复批次和矛盾空结果不可伪装成正常末页。
       const rows = result.data.jobList;
@@ -411,6 +430,8 @@ export class BossHttpSession {
       }
       this.#page += 1;
       this.#hasMore = result.data.hasMore;
+      this.#nextListPageAt =
+        !this.#browserResponse && this.#hasMore && this.#page % 5 === 0 ? this.#now() + 60_000 : 0;
       return { candidates, hasMore: this.#hasMore, skippedMissingCompanyId };
     });
   }
@@ -459,6 +480,31 @@ export class BossHttpSession {
       throw error instanceof PlatformError ? error : new PlatformError('network_error');
     } finally {
       this.#busy = false;
+    }
+  }
+
+  /** 显式 HTTP 列表遇安全检查时只延迟重试当前页一次。 */
+  async #requestList(url: URL, signal: AbortSignal): Promise<unknown> {
+    try {
+      return await this.#request(url, signal);
+    } catch (error) {
+      if (
+        this.#browserResponse ||
+        !(error instanceof BossSecurityCheckError) ||
+        signal.aborted ||
+        this.#abort.signal.aborted ||
+        this.#now() + 5_000 >= this.#batchExpiresAt
+      )
+        throw error;
+      const retrySignal = AbortSignal.any([
+        signal,
+        this.#abort.signal,
+        ...(this.#lifecycle ? [this.#lifecycle.signal] : []),
+        AbortSignal.timeout(Math.max(1, this.#batchExpiresAt - this.#now())),
+      ]);
+      await wait(5_000, undefined, { signal: retrySignal });
+      // 单次请求直接返回，失败后不进入传输重试循环，也不推进页码。
+      return this.#requestAttempt(url, retrySignal);
     }
   }
 
@@ -567,6 +613,7 @@ export class BossHttpSession {
       // 1.c、上下文读取完成后再生成普通缓存时间戳，与官网发送边界一致。
       url.searchParams.set('_', String(this.#now()));
       this.#requestCount += 1;
+      clearPlatformResponse();
       response = await this.#fetch(url, {
         method: 'GET',
         redirect: 'manual',
@@ -576,7 +623,7 @@ export class BossHttpSession {
     }
     // 2、状态异常立即取消正文；最大两 MiB，避免任意响应占满内存。
     if (response.status !== 200) {
-      await response.body?.cancel();
+      await discardPlatformResponse(response, signal);
       // 2.a、只对白名单状态解析服务器等待时间；过长等待由外层批次期限拒绝。
       if ([429, 500, 502, 503, 504].includes(response.status)) {
         const value = response.headers.get('retry-after');
@@ -618,7 +665,7 @@ export class BossHttpSession {
     }
     // 3、37 表示 SECURITY_CHECK，不等于未登录或某条已知触发规则，也不切换传输继续。
     let raw: unknown;
-    const responseText = Buffer.concat(chunks).toString('utf8');
+    const responseText = platformResponseText(response, chunks);
     try {
       raw = JSON.parse(responseText) as unknown;
     } catch {
@@ -627,7 +674,7 @@ export class BossHttpSession {
     const parsed = envelope.safeParse(raw);
     if (!parsed.success) throw new PlatformError('parse_changed');
     if (parsed.data.code === 37) {
-      // 3.a、仅 HTTP 详情允许有界暂停；列表错误、浏览器模式及恢复次数耗尽仍终止。
+      // 3.a、仅 HTTP 详情设置恢复上下文；列表的单次重试由列表入口处理。
       const identity = this.#contextIdentity({ cookies: this.#cookies, token: this.#token });
       if (
         jobId &&

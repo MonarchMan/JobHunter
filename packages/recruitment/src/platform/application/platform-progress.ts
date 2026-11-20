@@ -1,6 +1,34 @@
 import { z } from 'zod';
 import { PlatformError } from '../contracts/index.js';
 
+const evidenceSchema = z
+  .object({
+    httpStatus: z.number().int().min(100).max(599).optional(),
+    pageIndex: z.number().int().nonnegative().optional(),
+    rowCount: z.number().int().min(0).max(200).optional(),
+    rowIndex: z.number().int().min(0).max(199).optional(),
+    seenCount: z.number().int().min(0).max(200).optional(),
+    externalJobId: z
+      .string()
+      .max(64)
+      .regex(/^(job|a|lptjob):[1-9]\d*$/)
+      .optional(),
+    previousInternalId: z
+      .string()
+      .max(40)
+      .regex(/^[1-9]\d*$/)
+      .optional(),
+    receivedInternalId: z
+      .string()
+      .max(40)
+      .regex(/^[1-9]\d*$/)
+      .optional(),
+    linkIssue: z
+      .enum(['invalid_url', 'other_origin', 'query_or_fragment', 'unsupported_path'])
+      .optional(),
+  })
+  .strict();
+
 /** 固定诊断码白名单，禁止动态消息、URL、凭据或任意上游字段进入状态投影。 */
 const reasonSchema = z.enum([
   'browser_disconnected',
@@ -53,12 +81,29 @@ const reasonSchema = z.enum([
   'pagination',
   'detail_url',
   'detail_identity',
+  'detail_job_id',
+  'detail_title',
+  'detail_company',
+  'detail_company_name',
+  'detail_company_url',
+  'detail_company_id',
+  'detail_company_name_and_url',
+  'detail_company_name_and_id',
+  'detail_jsonld_invalid',
+  'detail_posting_missing',
+  'detail_posting_multiple',
+  'detail_posting_schema',
+  'detail_company_identity_unavailable',
+  'job_paused',
   'list',
   'list_envelope',
   'list_main',
   'list_extra',
   'list_pagination',
   'list_job',
+  'list_job_url',
+  'list_duplicate_in_page',
+  'list_identity_conflict',
   'list_company',
   'list_schema',
   'list_empty',
@@ -69,6 +114,9 @@ const reasonSchema = z.enum([
   'redirect_challenge',
   'redirect_job',
   'redirect_internal_other',
+  'browser_response_timeout',
+  'liepin_pagination_control',
+  'browser_response_unavailable',
   'detail',
   'template',
   'identity',
@@ -80,9 +128,12 @@ export const platformProgressSchema = z
   .object({
     stage: z.enum(['connect', 'list', 'detail', 'save', 'complete']),
     total: z.number().int().nonnegative().nullable(),
+    batchNumber: z.number().int().positive().optional(),
+    batchLimit: z.number().int().positive().optional(),
     processed: z.number().int().nonnegative(),
     saved: z.number().int().nonnegative(),
     skipped: z.number().int().nonnegative(),
+    skippedPaused: z.number().int().nonnegative().optional(),
     resumeCount: z.number().int().min(0).max(5).optional(),
     recovery: z
       .object({
@@ -98,6 +149,7 @@ export const platformProgressSchema = z
       // 猎聘身份带资源命名空间，只开放已知前缀，不能放行 URL 或任意冒号载荷。
       .regex(/^(?:[\w~-]+|(?:job|a|lptjob):[1-9]\d*)$/)
       .optional(),
+    detailStartedAt: z.number().int().nonnegative().optional(),
     failure: z
       .object({
         category: z.enum([
@@ -112,6 +164,7 @@ export const platformProgressSchema = z
         ]),
         businessCode: z.number().int().nullable(),
         reason: reasonSchema.nullable(),
+        evidence: evidenceSchema.optional(),
       })
       .strict()
       .nullable(),
@@ -130,10 +183,12 @@ export function platformFailure(
   if (!(error instanceof PlatformError))
     return { category: 'internal_error', businessCode: null, reason: null };
   const reason = reasonSchema.safeParse(error.reason);
+  const evidence = evidenceSchema.safeParse(error.evidence);
   return {
     category: error.category,
     businessCode: Number.isSafeInteger(error.businessCode) ? error.businessCode : null,
     reason: reason.success ? reason.data : null,
+    ...(evidence.success ? { evidence: evidence.data } : {}),
   };
 }
 
@@ -163,6 +218,10 @@ export function platformFailureMessage(failure: NonNullable<PlatformProgress['fa
       return '未取得完整认证上下文。请在官网确认登录状态后重新连接，无需反复刷新或搜索职位。';
     case 'verification_required':
       return '官网页面要求验证，已停止本批请求。请在官网自行完成验证，确认职位页正常后重新连接；已入库职位保留。';
+    case 'redirect_login':
+      return '官网要求登录，已停止本批请求。请在官网登录后重新连接；已入库职位保留。';
+    case 'job_paused':
+      return '官网显示该职位已暂停招聘，未保存详情。';
     case 'content_type':
       return '职位接口未声明 JSON 响应类型，已停止读取。请检查官网是否要求登录或验证，恢复后重新连接；不要连续重试。';
   }

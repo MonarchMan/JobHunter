@@ -62,6 +62,7 @@ export interface AppConfig {
   readonly consoleLogLevel?: SourcedValue<'debug' | 'info' | 'warn' | 'error'>;
   readonly logFormat?: SourcedValue<'auto' | 'pretty' | 'json'>;
   readonly platforms: {
+    readonly batchesPerRun: SourcedValue<number>;
     readonly requestIntervalMs: SourcedValue<number>;
     readonly requestIntervalMsByProvider: SourcedValue<
       Readonly<Partial<Record<PlatformProviderKey, number | undefined>>>
@@ -410,6 +411,19 @@ export function resolveAppConfig(input: {
     },
     logFormat: { ...logFormat, value: z.enum(['auto', 'pretty', 'json']).parse(logFormat.value) },
     platforms: {
+      batchesPerRun: choose(
+        undefined,
+        z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .optional()
+          .parse(
+            environmentInteger(environment.PLATFORM_BATCHES_PER_RUN, 'platform batches per run'),
+          ),
+        10,
+      ),
       requestIntervalMs: {
         ...requestIntervalMs,
         value: z.number().int().min(0).max(60_000).parse(requestIntervalMs.value),

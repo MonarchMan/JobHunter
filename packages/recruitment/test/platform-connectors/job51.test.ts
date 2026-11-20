@@ -58,6 +58,52 @@ it('fetches the exact observed URL and consumes full JSON detail without another
   });
 });
 
+const campusUrl = 'https://campus.51job.com/example/job.html';
+
+it('同一校招专题下的职位按各自 ID 保存来源链接与正文', async () => {
+  const items = ['101', '102'].map((id) => ({
+    ...row(id),
+    jobHref: campusUrl,
+    companyHref: campusUrl,
+    jobScheme: `qiancheng://home/show_job_info?jobid=${id}&property=fixture`,
+    jobDescribe: `岗位职责 ${id}`,
+  }));
+  const session = new Job51HttpSession({ fetch: vi.fn().mockResolvedValue(response(items, 2)) });
+  session.offer(template());
+  const signal = new AbortController().signal;
+  const { candidates } = await session.readNext(signal);
+  expect(candidates.map((job) => job.externalJobId)).toEqual(['101', '102']);
+  for (const job of candidates) {
+    await expect(session.readDetail(job.externalJobId, signal)).resolves.toMatchObject({
+      sourceUrl: campusUrl,
+      description: `岗位职责 ${job.externalJobId}`,
+    });
+  }
+});
+
+it.each([
+  { jobScheme: 'qiancheng://home/show_job_info?jobid=999' },
+  { jobScheme: 'qiancheng://home/show_job_info?jobid=100&jobid=999' },
+  { companyHref: 'https://campus.51job.com/another/job.html' },
+  {
+    jobHref: 'https://example.org/example/job.html',
+    companyHref: 'https://example.org/example/job.html',
+  },
+])('校招入口与职位身份不符时拒绝该链接 %j', async (overrides) => {
+  const item = {
+    ...row(),
+    jobHref: campusUrl,
+    companyHref: campusUrl,
+    jobScheme: 'qiancheng://home/show_job_info?jobid=100',
+    ...overrides,
+  };
+  const session = new Job51HttpSession({ fetch: vi.fn().mockResolvedValue(response([item])) });
+  session.offer(template());
+  await expect(session.readNext(new AbortController().signal)).rejects.toMatchObject({
+    reason: 'detail_url',
+  });
+});
+
 it('资料搜索拒绝其他关键词的官网签名模板，不发送 HTTP', async () => {
   const fetcher = vi.fn<typeof fetch>();
   const session = new Job51HttpSession({ fetch: fetcher, expectedKeyword: 'Python' });
@@ -316,4 +362,50 @@ it('observes only the selected successful search request and clears on detachmen
   expect(fetcher).toHaveBeenCalledTimes(1);
   emit('Target.detachedFromTarget', { sessionId: 'selected' }, '');
   expect(s.active).toBe(false);
+});
+
+const verificationHtml = '<html><head><meta name="aliyun_waf_aa" content="fixture"></head></html>';
+
+it('stops HTTP pagination when the list returns a WAF page with status 200', async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(verificationHtml));
+  const session = new Job51HttpSession({ fetch: fetcher });
+  session.offer(template());
+  const signal = new AbortController().signal;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await expect(session.readNext(signal)).rejects.toMatchObject({
+      category: 'access_blocked',
+      reason: 'verification_required',
+    });
+  }
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  [undefined, 'parse_changed', 'content_type'],
+  ['<html>unknown</html>', 'parse_changed', 'content_type'],
+  [verificationHtml, 'access_blocked', 'verification_required'],
+])('classifies browser HTML without replaying the search (%s)', async (body, category, reason) => {
+  const fetcher = vi.fn<typeof fetch>();
+  const session = new Job51HttpSession({ fetch: fetcher });
+  const observer = new Job51RequestObserver('selected', session, async () => body);
+  observer.accept({
+    sessionId: 'selected',
+    method: 'Network.requestWillBeSent',
+    params: { requestId: 'search', request: { ...template(), method: 'GET' } },
+  });
+  observer.accept({
+    sessionId: 'selected',
+    method: 'Network.responseReceived',
+    params: { requestId: 'search', response: { status: 200, mimeType: 'text/html' } },
+  });
+  observer.accept({
+    sessionId: 'selected',
+    method: 'Network.loadingFinished',
+    params: { requestId: 'search' },
+  });
+  await expect(session.readNext(new AbortController().signal)).rejects.toMatchObject({
+    category,
+    reason,
+  });
+  expect(fetcher).not.toHaveBeenCalled();
 });

@@ -4,6 +4,21 @@ import {
   liepinCookieHeader,
   liepinRequestHeaders,
 } from '../../src/platform/connectors/liepin/liepin.js';
+import { classifyLiepinBrowserResponse } from '../../src/platform/connectors/liepin/liepin-browser.js';
+
+it.each([
+  [200, 'text/html', '<title>短信验证</title>', 'access_blocked', 'verification_required'],
+  [200, 'text/html', '<title>用户登录</title>', 'access_blocked', 'redirect_login'],
+  [200, 'text/html', '<title>猎聘</title>', 'parse_changed', 'content_type'],
+  [429, 'text/html', '', 'rate_limited', null],
+  [503, 'text/html', '', 'upstream_error', null],
+] as const)('浏览器列表响应 %s %s %s 保留失败类型', (status, mime, body, category, reason) => {
+  expect(classifyLiepinBrowserResponse(status, mime, body, true)).toMatchObject({
+    businessCode: status,
+    category,
+    reason,
+  });
+});
 
 const signal = new AbortController().signal;
 const url = 'https://www.liepin.com/job/1980000001.shtml';
@@ -55,6 +70,63 @@ const searchTemplate = {
   }),
 };
 
+it.each([
+  {
+    sameAs: posting.hiringOrganization.sameAs,
+    name: posting.hiringOrganization.name,
+    recovered: true,
+  },
+  { sameAs: undefined, name: posting.hiringOrganization.name, recovered: false },
+  {
+    sameAs: 'https://example.com/company/123/',
+    name: posting.hiringOrganization.name,
+    recovered: false,
+  },
+  { sameAs: posting.hiringOrganization.sameAs, name: '另一家公司', recovered: false },
+])('搜索缺公司 ID 时仅从匹配职位的官方公司链接补齐 %#', async ({ sameAs, name, recovered }) => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(
+      Response.json({
+        flag: 1,
+        data: {
+          data: { jobCardList: [{ ...row, comp: { compName: row.comp.compName } }] },
+          pagination: { currentPage: 0, pageSize: 40, totalPage: 1, hasNext: false },
+          passThroughData: { scene: 'input', skId: '', fkId: '', ckId: 'fixture' },
+        },
+      }),
+    )
+    .mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          `<script type="application/ld+json">${JSON.stringify({ ...posting, hiringOrganization: { name, sameAs } })}</script>`,
+          { headers: { 'content-type': 'text/html' } },
+        ),
+      ),
+    );
+  const session = new LiepinRecommendationHttpSession({
+    template: searchTemplate,
+    expectedKeyword: 'AI应用开发',
+    readHeaders: () => Promise.resolve({}),
+    fetch: fetcher,
+  });
+  const batch = await session.readNext(signal);
+  expect(batch).toMatchObject({
+    candidates: [{ externalCompanyId: '' }],
+    skippedMissingCompanyId: 0,
+  });
+  const detail = () => session.readDetail('job:1980000001', signal);
+  if (recovered) {
+    await expect(detail()).resolves.toMatchObject({
+      externalCompanyId: '123',
+      company: row.comp.compName,
+    });
+  } else {
+    await expect(detail()).rejects.toMatchObject({ reason: 'detail_company_identity_unavailable' });
+    await expect(detail()).rejects.toMatchObject({ reason: 'detail_company_identity_unavailable' });
+  }
+});
+
 it('搜索从零页开始，保持关键词并消费服务端分页与关联上下文', async () => {
   const response = (page: number): Response =>
     Response.json({
@@ -103,6 +175,66 @@ it('搜索从零页开始，保持关键词并消费服务端分页与关联上�
     },
   });
   await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'session_unavailable' });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  ['partial', null],
+  ['full', 'duplicate_list'],
+  ['conflict', 'list_identity_conflict'],
+  ['within-page', 'list_duplicate_in_page'],
+  ['unknown-url', 'list_job_url'],
+] as const)('关键词续页对 %s 使用对应的身份处理', async (mode, reason) => {
+  const next = {
+    ...row,
+    job: {
+      ...row.job,
+      jobId: row.job.jobId + 1,
+      link: 'https://www.liepin.com/job/1980000002.shtml',
+    },
+  };
+  const rows =
+    mode === 'partial'
+      ? [row, next]
+      : mode === 'full'
+        ? [row]
+        : mode === 'conflict'
+          ? [{ ...row, job: { ...row.job, jobId: row.job.jobId + 1 } }, next]
+          : mode === 'within-page'
+            ? [next, next]
+            : [{ ...next, job: { ...next.job, link: 'https://example.com/job/2' } }];
+  const response = (currentPage: number, jobCardList: typeof rows): Response =>
+    Response.json({
+      flag: 1,
+      data: {
+        data: { jobCardList },
+        pagination: { currentPage, pageSize: 40, totalPage: 2, hasNext: currentPage === 0 },
+        passThroughData: { scene: 'input', skId: '', fkId: '', ckId: 'fixture' },
+      },
+    });
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(response(0, [row]))
+    .mockResolvedValueOnce(response(1, rows));
+  const session = new LiepinRecommendationHttpSession({
+    template: searchTemplate,
+    expectedKeyword: 'AI应用开发',
+    readHeaders: () => Promise.resolve({}),
+    fetch: fetcher,
+  });
+  await session.readNext(signal);
+  if (reason) {
+    await expect(session.readNext(signal)).rejects.toMatchObject({
+      category: 'parse_changed',
+      reason,
+      evidence: { httpStatus: 200, pageIndex: 1, rowCount: rows.length },
+    });
+  } else {
+    await expect(session.readNext(signal)).resolves.toMatchObject({
+      hasMore: false,
+      candidates: [{ externalJobId: 'job:1980000002' }],
+    });
+  }
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 
@@ -375,25 +507,59 @@ it('Cookie 按域、路径、过期和同名优先级匹配，不复用浏览器
 });
 
 it.each([
-  { ...posting, identifier: { propertyID: 'liepin.com', value: '999' } },
-  {
-    ...posting,
-    hiringOrganization: { name: '测试企业', sameAs: 'https://www.liepin.com/company/999/' },
-  },
-  { ...posting, url: 'https://evil.test/job/1980000001.shtml' },
-  { ...posting, title: '不同职位' },
-  { ...posting, description: '<p>未经支持的正文</p>' },
-  { ...posting, description: '' },
-])('详情身份或正文异常冻结，不能入库或重试', async (detail) => {
+  ['detail_job_id', { ...posting, identifier: { propertyID: 'liepin.com', value: '999' } }],
+  [
+    'detail_company_id',
+    {
+      ...posting,
+      hiringOrganization: { name: '测试企业', sameAs: 'https://www.liepin.com/company/999/' },
+    },
+  ],
+  [
+    'detail_company_name_and_id',
+    {
+      ...posting,
+      hiringOrganization: { name: '另一家公司', sameAs: 'https://www.liepin.com/company/999/' },
+    },
+  ],
+  [
+    'detail_company_url',
+    {
+      ...posting,
+      hiringOrganization: {
+        ...posting.hiringOrganization,
+        sameAs: 'https://www.liepin.com/company/123',
+      },
+    },
+  ],
+  ['detail_url', { ...posting, url: 'https://evil.test/job/1980000001.shtml' }],
+  ['detail_title', { ...posting, title: '不同职位' }],
+  ['detail_posting_schema', { ...posting, description: '<p>未经支持的正文</p>' }],
+  ['detail_posting_schema', { ...posting, description: '' }],
+] as const)('详情异常 %s 冻结，不能入库或重试', async (reason, detail) => {
   const { session, fetcher } = fixture(undefined, detail);
   await session.readNext(signal);
   await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
     category: 'parse_changed',
+    reason,
   });
   await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
     category: 'session_unavailable',
   });
   expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it('公司链接匹配时接受不同展示名称并沿用列表公司名', async () => {
+  const { session } = fixture(undefined, {
+    ...posting,
+    hiringOrganization: { ...posting.hiringOrganization, name: '测试企业有限公司' },
+  });
+  await session.readNext(signal);
+  await expect(session.readDetail('job:1980000001', signal)).resolves.toMatchObject({
+    company: row.comp.compName,
+    externalCompanyId: String(row.comp.compId),
+    description: posting.description,
+  });
 });
 
 it('重复页和异常空页不能冒充成功', async () => {
@@ -557,8 +723,69 @@ it('详情重试退避可取消，取消后不再发送 HTTP', async () => {
 });
 
 it.each([
+  ['<title>安全中心-风险提示</title>', 'access_blocked', 'verification_required'],
+  ['<title>职位详情</title>', 'parse_changed', 'detail_posting_missing'],
+  [
+    '<script>const template = "<div>该职位已暂停招聘</div>"</script>',
+    'parse_changed',
+    'detail_posting_missing',
+  ],
+  ['<script type="application/ld+json">{</script>', 'parse_changed', 'detail_jsonld_invalid'],
+  [
+    `<script type="application/ld+json">${JSON.stringify(posting)}</script>`.repeat(2),
+    'parse_changed',
+    'detail_posting_multiple',
+  ],
+] as const)('区分验证、缺失和损坏的详情 HTML', async (html, category, reason) => {
+  const { session, fetcher } = fixture();
+  await session.readNext(signal);
+  fetcher
+    .mockReset()
+    .mockResolvedValue(new Response(html, { headers: { 'content-type': 'text/html' } }));
+  await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    category,
+    businessCode: 200,
+    reason,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('暂停招聘的详情不冻结连接，后续有效职位仍可读取', async () => {
+  const nextUrl = 'https://www.liepin.com/job/1980000002.shtml';
+  const next = { ...row, job: { ...row.job, jobId: 80000002, link: nextUrl } };
+  const { session, fetcher } = fixture({
+    flag: 1,
+    data: { data: [row, next], addData: [], hasNextPage: false },
+  });
+  await session.readNext(signal);
+  const nextPosting = {
+    ...posting,
+    url: nextUrl,
+    identifier: { ...posting.identifier, value: '80000002' },
+  };
+  const headers = { 'content-type': 'text/html' };
+  fetcher
+    .mockReset()
+    .mockResolvedValueOnce(new Response('<div>该职位已暂停招聘</div>', { headers }))
+    .mockResolvedValueOnce(
+      new Response(`<script type="application/ld+json">${JSON.stringify(nextPosting)}</script>`, {
+        headers,
+      }),
+    );
+  await expect(session.readDetail('job:1980000001', signal)).rejects.toMatchObject({
+    reason: 'job_paused',
+  });
+  await expect(session.readDetail('job:1980000002', signal)).resolves.toMatchObject({
+    description: posting.description,
+  });
+});
+
+it.each([
   ['https://www.liepin.com/job/1980000002.shtml?token=secret', 'redirect_job'],
   ['https://www.liepin.com/security/verify?token=secret', 'redirect_challenge'],
+  ['https://safe.liepin.com/v/intercept/verifysms?token=secret', 'verification_required'],
+  ['https://safe.liepin.com/v/intercept/verifySms/?token=secret', 'verification_required'],
+  ['https://safe.liepin.com/v/intercept/other?token=secret', 'redirect_challenge'],
   ['https://www.liepin.com/other?token=secret', 'redirect_internal_other'],
   ['https://evil.test/steal?token=secret', 'redirect_external'],
   ['/job/1980000002.shtml', 'redirect_job'],

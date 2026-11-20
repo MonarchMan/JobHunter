@@ -110,7 +110,7 @@ test('Job51 UI completes explicit browsing, preserves idempotency and separates 
   await page.goto('/sources?channel=platform&provider=51job');
   await page.getByText('高级连接设置', { exact: true }).click();
   await expect(page.getByRole('heading', { name: '前程无忧' })).toBeVisible();
-  await expect(page.getByText('专用页提供官网自然生成的请求模板', { exact: false })).toBeVisible();
+  await expect(page.getByLabel('调试描述文件绝对路径')).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: '连接 Chrome' }).click();
   await expect(page.getByLabel('调试描述文件绝对路径')).toBeFocused();
@@ -124,7 +124,12 @@ test('Job51 UI completes explicit browsing, preserves idempotency and separates 
   });
   expect(commands[0]?.idempotencyToken).toBe(commands[1]?.idempotencyToken);
   await page.getByRole('button', { name: '获取职位' }).click();
-  await expect(page.getByText('最近成功批次已入库 1 条职位。', { exact: false })).toBeVisible({
+  await expect(
+    page
+      .locator('dl div')
+      .filter({ has: page.getByText('已入库', { exact: true }) })
+      .locator('dd'),
+  ).toHaveText('1', {
     timeout: 10000,
   });
   await expect(page.getByRole('button', { name: '获取职位' })).toBeDisabled();
@@ -159,7 +164,8 @@ test('Job51 UI completes explicit browsing, preserves idempotency and separates 
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await expect.poll(() => reads).toBeGreaterThan(before);
-  await page.getByRole('link', { name: 'BOSS 直聘', exact: true }).click();
+  await page.getByRole('combobox', { name: '招聘平台选择' }).click();
+  await page.getByRole('option', { name: 'BOSS 直聘', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'BOSS 直聘' })).toBeVisible();
   await expect(page.getByRole('heading', { name: candidate.title })).toHaveCount(0);
   expect(commands).toHaveLength(3);

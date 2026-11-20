@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { setTimeout as delay } from 'node:timers/promises';
+import type * as timers from 'node:timers/promises';
 import {
   BossCdpSessionProvider,
   ZhilianCdpSessionProvider,
@@ -7,6 +9,13 @@ import {
 } from '../../src/platform/connectors/browser/cdp.js';
 import type { PlatformSession } from '@jobhunter/recruitment/platform-contracts';
 import { zhilianSearchFixture as fixture } from './fixtures/zhilian-search-fixture.js';
+import { LiepinBrowserNavigation } from '../../src/platform/connectors/liepin/liepin-browser.js';
+import { PlatformRequestPacer } from '../../src/platform/connectors/browser/request-pacing.js';
+
+vi.mock('node:timers/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof timers>();
+  return { ...actual, setTimeout: vi.fn(actual.setTimeout) };
+});
 
 vi.mock('node:fs/promises', () => ({
   readFile: () => Promise.resolve('9222\n/devtools/browser/test'),
@@ -98,16 +107,23 @@ class FakeSocket extends EventTarget {
       'Target.attachToTarget': {
         sessionId: this.attachedCount === 1 ? 'attached' : `attached-${String(this.attachedCount)}`,
       },
-      'Target.createTarget': { targetId: 'worker-owned' },
+      'Target.createTarget': {
+        targetId: this.ownedUrl?.startsWith('https://www.liepin.com/zhaopin/')
+          ? 'worker-detail'
+          : 'worker-owned',
+      },
       'Target.closeTarget': { success: true },
       'Page.navigate': {},
       'Network.getResponseBody': {
-        body: JSON.stringify(
-          FakeSocket.responseBodies.get(String(request.params?.requestId)) ?? {
-            code: 0,
-            zpData: { hasMore: false, lid: 'fixture', jobList: [] },
-          },
-        ),
+        body:
+          typeof FakeSocket.responseBodies.get(String(request.params?.requestId)) === 'string'
+            ? FakeSocket.responseBodies.get(String(request.params?.requestId))
+            : JSON.stringify(
+                FakeSocket.responseBodies.get(String(request.params?.requestId)) ?? {
+                  code: 0,
+                  zpData: { hasMore: false, lid: 'fixture', jobList: [] },
+                },
+              ),
         base64Encoded: false,
       },
       'Runtime.evaluate': {
@@ -191,6 +207,184 @@ class FakeSocket extends EventTarget {
     this.dispatchEvent(new Event('close'));
   }
 }
+
+it('猎聘使用独立后台窗口读取详情，并在原搜索页点击下一页', async () => {
+  vi.spyOn(Math, 'random')
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(0.999999)
+    .mockReturnValueOnce(0);
+  const virtualDelay: typeof delay = (milliseconds, value) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds, value));
+  vi.mocked(delay)
+    .mockImplementationOnce(virtualDelay)
+    .mockImplementationOnce(virtualDelay)
+    .mockImplementationOnce(virtualDelay);
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  const signal = new AbortController().signal;
+  const keyword = '算法工程师';
+  const pending = new LiepinCdpSessionProvider().connect({ search: { keyword, city: '' } }, signal);
+  await vi.advanceTimersByTimeAsync(1);
+  const socket = FakeSocket.instances[0];
+  if (!socket) throw new Error('Missing socket');
+  const emit = (method: string, params: unknown, sessionId = 'attached'): void => {
+    socket.dispatchEvent(
+      new MessageEvent('message', {
+        data: JSON.stringify({ method, sessionId, params }),
+      }),
+    );
+  };
+  const response = (id: string, mimeType: string, body: unknown, sessionId = 'attached'): void => {
+    FakeSocket.responseBodies.set(id, body);
+    emit(
+      'Network.responseReceived',
+      { requestId: id, response: { status: 200, mimeType } },
+      sessionId,
+    );
+    emit('Network.loadingFinished', { requestId: id }, sessionId);
+  };
+  const jobUrl = (page: number): string =>
+    `https://www.liepin.com/job/${String(1980000001 + page)}.shtml`;
+  const context = { scene: 'input', skId: '', fkId: '', ckId: 'fixture' };
+  const list = (page: number): void => {
+    const id = `list-${String(page)}`;
+    emit('Network.requestWillBeSent', {
+      requestId: id,
+      request: {
+        method: 'POST',
+        url: 'https://api-c.liepin.com/api/com.liepin.searchfront4c.pc-search-job',
+        postData: JSON.stringify({
+          data: {
+            mainSearchPcConditionForm: { key: keyword, currentPage: page, pageSize: 40 },
+            passThroughForm: context,
+          },
+        }),
+      },
+    });
+    response(id, 'application/json', {
+      flag: 1,
+      data: {
+        data: {
+          jobCardList: [
+            {
+              job: {
+                jobId: 80000001 + page,
+                title: keyword,
+                link: jobUrl(page),
+                dq: '上海',
+                salary: '面议',
+              },
+              comp: { compId: 123, compName: '测试企业' },
+            },
+          ],
+        },
+        pagination: { currentPage: page, pageSize: 40, totalPage: 2, hasNext: page === 0 },
+        passThroughData: context,
+      },
+    });
+  };
+  list(0);
+  const session = await pending;
+  await expect(session.readNext(signal)).resolves.toMatchObject({
+    hasMore: true,
+    candidates: [{ externalJobId: 'job:1980000001' }],
+  });
+  const detail = session.readDetail('job:1980000001', signal);
+  await vi.advanceTimersByTimeAsync(9_999);
+  expect(socket.ownedUrl).not.toBe(jobUrl(0));
+  await vi.advanceTimersByTimeAsync(1);
+  expect(socket.ownedUrl).toBe(jobUrl(0));
+  emit(
+    'Network.requestWillBeSent',
+    {
+      requestId: 'detail',
+      type: 'Document',
+      request: { url: jobUrl(0), method: 'GET' },
+    },
+    'attached-2',
+  );
+  const posting = {
+    '@type': 'JobPosting',
+    title: keyword,
+    url: jobUrl(0),
+    identifier: { propertyID: 'liepin.com', value: '80000001' },
+    hiringOrganization: { name: '测试企业', sameAs: 'https://www.liepin.com/company/123/' },
+    description: '负责算法开发和模型评估，并维护训练流程和技术文档。',
+  };
+  response(
+    'detail',
+    'text/html',
+    `<script type="application/ld+json">${JSON.stringify(posting)}</script>`,
+    'attached-2',
+  );
+  await expect(detail).resolves.toMatchObject({ description: posting.description });
+  const next = session.readNext(signal);
+  await vi.advanceTimersByTimeAsync(34_999);
+  expect(socket.methods).not.toContain('Runtime.evaluate');
+  await vi.advanceTimersByTimeAsync(1);
+  expect(
+    socket.commands.find((command) => command.method === 'Runtime.evaluate')?.params?.expression,
+  ).toContain('next.click()');
+  expect(socket.methods.filter((method) => method === 'Page.navigate')).toHaveLength(2);
+  list(1);
+  await expect(next).resolves.toMatchObject({
+    hasMore: false,
+    candidates: [{ externalJobId: 'job:1980000002' }],
+  });
+  expect(
+    socket.commands
+      .filter((command) => command.method === 'Target.createTarget')
+      .map((command) => command.params),
+  ).toEqual(Array(2).fill({ url: 'about:blank', newWindow: true, background: true }));
+  expect(socket.methods).not.toContain('Network.getCookies');
+  expect(socket.methods).not.toContain('Target.detachFromTarget');
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(FakeSocket.instances).toHaveLength(1);
+  const blocked = expect(session.readDetail('job:1980000002', signal)).rejects.toMatchObject({
+    category: 'access_blocked',
+    businessCode: 302,
+    reason: 'verification_required',
+  });
+  await vi.advanceTimersByTimeAsync(10_000);
+  emit(
+    'Network.requestWillBeSent',
+    {
+      requestId: 'blocked',
+      type: 'Document',
+      request: { url: jobUrl(1), method: 'GET' },
+    },
+    'attached-2',
+  );
+  emit(
+    'Network.requestWillBeSent',
+    {
+      requestId: 'blocked',
+      type: 'Document',
+      request: { url: 'https://safe.liepin.com/v/intercept/verifysms', method: 'GET' },
+      redirectResponse: { status: 302 },
+    },
+    'attached-2',
+  );
+  await blocked;
+  await expect(session.readNext(signal)).rejects.toMatchObject({ category: 'session_unavailable' });
+  session.disconnect();
+});
+
+it('猎聘网页等待详情期间断线不会发送导航', async () => {
+  const call = vi.fn();
+  const browser = new LiepinBrowserNavigation({
+    sessionId: 'attached',
+    call,
+    pacer: new PlatformRequestPacer(),
+  });
+  const pending = browser.read(
+    'https://www.liepin.com/job/1980000001.shtml',
+    new AbortController().signal,
+  );
+  browser.disconnect();
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  expect(call).not.toHaveBeenCalled();
+});
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -519,10 +713,7 @@ it.each(['zhilian', 'liepin'] as const)('%s 专用页初始化取消只关闭自
   const connector =
     provider === 'zhilian' ? new ZhilianCdpSessionProvider() : new LiepinCdpSessionProvider();
   const pending = connector
-    .connect(
-      provider === 'zhilian' ? { search: { keyword: '研发', city: '' } } : {},
-      controller.signal,
-    )
+    .connect({ search: { keyword: '研发', city: '' } }, controller.signal)
     .catch((error: unknown) => error);
   await vi.advanceTimersByTimeAsync(1);
   const socket = FakeSocket.instances[0];
@@ -590,10 +781,10 @@ it.each([
   vi.stubGlobal('fetch', fetcher);
   const pending = new LiepinCdpSessionProvider().connect(
     search
-      ? { search: { keyword: '算法工程师', city: '' } }
+      ? { acquisitionMode: 'http', search: { keyword: '算法工程师', city: '' } }
       : owned
-        ? {}
-        : { portFile: '/fixture/DevToolsActivePort', targetId: 'valid' },
+        ? { acquisitionMode: 'http' }
+        : { acquisitionMode: 'http', portFile: '/fixture/DevToolsActivePort', targetId: 'valid' },
     new AbortController().signal,
   );
   await vi.advanceTimersByTimeAsync(1);
@@ -643,6 +834,7 @@ it.each([
   expect(socket.methods).toEqual([
     owned ? 'Target.createTarget' : 'Target.getTargets',
     'Target.attachToTarget',
+    'Page.enable',
     'Network.enable',
     ...(owned ? ['Page.navigate'] : []),
     'Target.detachFromTarget',
@@ -1079,7 +1271,7 @@ it.each(['before', 'inflight'] as const)(
 );
 
 it('freezes HTTP failure without closing or reconnecting CDP', async () => {
-  const fetcher = vi.fn().mockResolvedValue(Response.json({ code: 37 }));
+  const fetcher = vi.fn<typeof fetch>(() => Promise.resolve(Response.json({ code: 37 })));
   vi.stubGlobal('fetch', fetcher);
   const session = await connected();
   await expect(session.readNext(new AbortController().signal)).rejects.toMatchObject({
@@ -1088,7 +1280,11 @@ it('freezes HTTP failure without closing or reconnecting CDP', async () => {
   await expect(session.readNext(new AbortController().signal)).rejects.toMatchObject({
     category: 'session_unavailable',
   });
-  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  const [firstRequest, secondRequest] = fetcher.mock.calls.map(([request]) =>
+    request instanceof Request ? request.url : request.toString(),
+  );
+  expect(secondRequest).toBe(firstRequest);
   expect(FakeSocket.instances).toHaveLength(1);
   expect(FakeSocket.instances[0]?.readyState).toBe(1);
   session.disconnect();
@@ -1248,6 +1444,33 @@ function emitCampus(
   );
 }
 
+it.each([
+  ['verifySms/', 'verification_required'],
+  ['other', 'redirect_challenge'],
+])('猎聘专用窗口进入安全中心 %s 时立即结束模板等待', async (path, reason) => {
+  const pending = new LiepinCdpSessionProvider().connect(
+    { search: { keyword: '算法工程师', city: '' } },
+    new AbortController().signal,
+  );
+  const result = expect(pending).rejects.toMatchObject({
+    category: 'access_blocked',
+    reason,
+  });
+  await vi.advanceTimersByTimeAsync(1);
+  const socket = FakeSocket.instances[0];
+  socket?.dispatchEvent(
+    new MessageEvent('message', {
+      data: JSON.stringify({
+        sessionId: 'attached',
+        method: 'Page.frameNavigated',
+        params: { frame: { url: `https://safe.liepin.com/v/intercept/${path}` } },
+      }),
+    }),
+  );
+  await result;
+  expect(socket?.methods).toContain('Target.closeTarget');
+});
+
 it('智联自动连接只打开首页，以同一次认证请求初始化 HTTP，缺少查询不启动浏览器', async () => {
   const connector = new ZhilianCdpSessionProvider();
   const signal = new AbortController().signal;
@@ -1257,7 +1480,7 @@ it('智联自动连接只打开首页，以同一次认证请求初始化 HTTP�
   await vi.advanceTimersByTimeAsync(1);
   const request = {
     method: 'POST',
-    url: 'https://fe-api.zhaopin.com/c/i/resume/preview-standardnode?at=test-at&rt=test-rt&platform=13&version=0.0.0',
+    url: 'https://fe-api.zhaopin.com/c/i/resume/preview-standardnode?platform=13&version=0.0.0',
     headers: {},
     postData: JSON.stringify({
       at: 'test-at',
@@ -1268,6 +1491,7 @@ it('智联自动连接只打开首页，以同一次认证请求初始化 HTTP�
     }),
   };
   emitCampus(request, 'foreign');
+  emitCampus({ ...request, postData: '{}' });
   await vi.advanceTimersByTimeAsync(1);
   expect(FakeSocket.instances[0]?.methods).not.toContain('Network.disable');
   emitCampus(request);

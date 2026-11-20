@@ -570,11 +570,7 @@ test.describe('校招实习管理台核心流程', () => {
 
     await page.getByRole('link', { name: /招聘平台来源/ }).click();
     await expect(page).toHaveURL(/channel=platform/);
-    const platformTabs = page.getByRole('navigation', { name: '招聘平台选择' });
-    await expect(platformTabs).toBeVisible();
-    await expect(
-      platformTabs.getByRole('link', { name: 'BOSS 直聘', exact: true }),
-    ).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('combobox', { name: '招聘平台选择' })).toHaveText('BOSS 直聘');
     await expect(page.getByRole('heading', { name: 'BOSS 直聘', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: /招聘平台来源/ })).toHaveAttribute(
       'aria-current',

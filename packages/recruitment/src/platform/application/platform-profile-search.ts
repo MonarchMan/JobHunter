@@ -30,7 +30,6 @@ class PlatformProfileSearchSession implements PlatformSession {
   public async readNext(signal: AbortSignal): Promise<PlatformBatch> {
     // 1、上一批详情在应用层处理完毕后，才允许覆盖职位到词级会话的映射。
     this.#current.clear();
-    const candidates: PlatformBatch['candidates'][number][] = [];
     const byId = new Map<string, PlatformBatch['candidates'][number]>();
     const batches: NonNullable<PlatformBatch['searchBatches']>[number][] = [];
     let skipped = 0;
@@ -52,26 +51,38 @@ class PlatformProfileSearchSession implements PlatformSession {
         withinBatch.add(candidate.externalJobId);
         const previous = byId.get(candidate.externalJobId);
         if (previous) {
-          if (previous.externalCompanyId !== candidate.externalCompanyId)
+          if (
+            previous.externalCompanyId &&
+            candidate.externalCompanyId &&
+            previous.externalCompanyId !== candidate.externalCompanyId
+          )
             throw new PlatformError('parse_changed', null, 'duplicate_identity');
-          // 2.b、浏览器批次保留待处理集合；重复详情不请求，但须释放其分页门槛。
-          session.discardDetail?.(candidate.externalJobId);
-          continue;
+          // 2.b、优先使用公司身份完整的候选，释放另一词级会话的重复详情。
+          if (previous.externalCompanyId || !candidate.externalCompanyId) {
+            session.discardDetail?.(candidate.externalJobId);
+            continue;
+          }
+          this.#current.get(candidate.externalJobId)?.discardDetail?.(candidate.externalJobId);
         }
-        candidates.push(candidate);
         byId.set(candidate.externalJobId, candidate);
         this.#current.set(candidate.externalJobId, session);
       }
     }
     return {
-      candidates,
+      candidates: [...byId.values()],
       hasMore: this.#ended.some((ended) => !ended),
       searchBatches: batches,
       skippedMissingCompanyId: skipped,
     };
   }
 
-  /** 只向本批首次出现该职位的词级会话请求完整详情。 */
+  /** 跨批重复的已入库职位只释放所属会话的待处理状态。 */
+  public discardDetail(externalJobId: string): void {
+    this.#current.get(externalJobId)?.discardDetail?.(externalJobId);
+    this.#current.delete(externalJobId);
+  }
+
+  /** 从持有当前候选的词级会话读取详情。 */
   public readDetail(externalJobId: string, signal: AbortSignal): Promise<PlatformJobDetail> {
     const session = this.#current.get(externalJobId);
     if (!session) throw new PlatformError('session_unavailable');

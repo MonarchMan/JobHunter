@@ -1,3 +1,8 @@
+import {
+  clearPlatformResponse,
+  discardPlatformResponse,
+  platformResponseText,
+} from '../../application/response-diagnostics.js';
 import { PlatformRequestPacer } from '../browser/request-pacing.js';
 import {
   PlatformError,
@@ -421,6 +426,7 @@ export class ZhilianSearchHttpSession implements PlatformSession {
     signal: AbortSignal,
   ): Promise<unknown> {
     // 1、固定端点执行一次请求，流式读取仍受同一取消信号和大小上限约束。
+    clearPlatformResponse();
     const response = await this.#fetch(url.href, {
       method: body === undefined ? 'GET' : 'POST',
       headers,
@@ -429,7 +435,7 @@ export class ZhilianSearchHttpSession implements PlatformSession {
       redirect: 'manual',
     });
     if (response.status !== 200) {
-      await response.body?.cancel();
+      await discardPlatformResponse(response, signal);
       throw new PlatformError(
         response.status === 429
           ? 'rate_limited'
@@ -439,7 +445,7 @@ export class ZhilianSearchHttpSession implements PlatformSession {
       );
     }
     if (!response.headers.get('content-type')?.includes('json')) {
-      await response.body?.cancel();
+      await discardPlatformResponse(response, signal);
       throw new PlatformError('parse_changed');
     }
     const reader = response.body?.getReader();
@@ -462,7 +468,7 @@ export class ZhilianSearchHttpSession implements PlatformSession {
     // 2、封装码和详情／列表数据分别校验，业务失败不当空列表。
     let raw: unknown;
     try {
-      raw = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+      raw = JSON.parse(platformResponseText(response, chunks)) as unknown;
     } catch {
       throw new PlatformError('parse_changed');
     }

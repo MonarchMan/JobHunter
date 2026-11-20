@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { AxeBuilder } from '@axe-core/playwright';
 import { z } from 'zod';
 
 const jobId = '018f0000-0000-7000-8000-000000000401';
@@ -79,28 +78,16 @@ test('hidden detail waits for visibility, records once and exposes explicit reco
   );
 });
 
-test('retention copy follows actual settings and fails visibly instead of claiming disabled', async ({
-  page,
-}) => {
-  let enabled = false;
-  let failure = false;
-  await page.route('**/api/platforms/retention', (route) =>
-    route.fulfill({
-      status: failure ? 503 : 200,
-      json: { data: { enabled, policy: { retentionDays: 14, intervalHours: 3 } } },
-    }),
-  );
-  await page.goto('/sources?channel=platform');
-  await expect(page.getByText('平台自动保留清理未启用。', { exact: true })).toBeVisible();
-  enabled = true;
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  await expect(page.getByText('平台自动保留清理已启用', { exact: false })).toContainText('14 天');
-  await expect(page.getByText('平台自动保留清理已启用', { exact: false })).toContainText('3 小时');
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({ path: 'test-results/platform-retention-mobile.png', fullPage: true });
-  failure = true;
-  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-  await expect(page.getByText('平台清理状态读取失败', { exact: false })).toBeVisible();
-  await expect(page.getByText('平台自动保留清理未启用。', { exact: true })).toHaveCount(0);
+test('来源卡片不展示或请求职位保留策略', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/platforms/retention')
+      requests.push(request.url());
+  });
+  await Promise.all([
+    page.waitForResponse('**/api/platforms/boss'),
+    page.goto('/sources?channel=platform'),
+  ]);
+  await expect(page.getByText('职位保留策略', { exact: true })).toHaveCount(0);
+  expect(requests).toEqual([]);
 });

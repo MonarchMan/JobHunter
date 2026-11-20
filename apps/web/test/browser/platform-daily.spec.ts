@@ -4,7 +4,7 @@ import type { WebBossSnapshot } from '@jobhunter/recruitment/platform-applicatio
 
 /** 日常入口使用本地状态替身；不连接用户浏览器，也不访问招聘网站。 */
 for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
-  test(`${provider} 在职位页自动连接获取，复用会话并保留筛选`, async ({ page }) => {
+  test(`${provider} 在来源页获取并复用会话，职位列表仅展示本地职位`, async ({ page }) => {
     let state: WebBossSnapshot = {
       connection: null,
       batch: null,
@@ -38,15 +38,18 @@ for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
     });
     // 1、进入和筛选只读本地数据；高级参数默认不可见。
     await page.goto(`/jobs?source=platform&provider=${provider}&q=existing-filter`);
+    await expect(page.getByRole('button', { name: '获取职位' })).toHaveCount(0);
+    await page.goto(`/sources?channel=platform&provider=${provider}`);
+    await expect(
+      page.locator(`header img[src="/assets/company-logos/${provider}.jpg"]`),
+    ).toBeVisible();
     await expect(page.getByLabel('调试描述文件绝对路径')).not.toBeVisible();
     await expect(page.getByLabel('目标标签页 ID')).toHaveCount(0);
     await expect(page.getByRole('combobox', { name: '选择平台页面' })).toHaveCount(0);
     await expect(page.getByText(/创建平台专用页/)).toBeVisible();
     await expect(page.getByRole('button', { name: '获取职位', exact: true })).toBeDisabled();
     expect(commands).toEqual([]);
-    await expect(
-      page.getByText('默认第一份资料的意向岗位：后端开发工程师、算法工程师。', { exact: false }),
-    ).toBeVisible();
+    await expect(page.getByText('后端开发工程师', { exact: true })).toBeVisible();
     await expect(page.getByLabel('搜索关键词')).toHaveCount(0);
     await page.getByRole('checkbox', { name: /允许自动连接/ }).check();
     await page.getByRole('button', { name: '获取职位', exact: true }).click();
@@ -84,9 +87,14 @@ for (const provider of ['boss', 'zhilian', '51job', 'liepin']) {
         },
       },
     };
-    await expect(page.getByText('有效候选 2 条', { exact: false })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('算法工程师（1 条，已到末批）', { exact: false })).toBeVisible();
-    await expect(page).toHaveURL(new RegExp(`provider=${provider}&q=existing-filter`));
+    await expect(
+      page
+        .locator('dl div')
+        .filter({ has: page.getByText('已处理', { exact: true }) })
+        .locator('dd'),
+    ).toContainText('/ 2', { timeout: 10000 });
+    await expect(page.getByText('按意向岗位查看上次结果', { exact: true })).toHaveCount(0);
+    await expect(page).toHaveURL(`/sources?channel=platform&provider=${provider}`);
     expect(commands).toHaveLength(1);
     await page.getByRole('button', { name: '获取职位', exact: true }).click();
     await expect
@@ -126,7 +134,7 @@ test('连接失败可原地重试，不选择已有页面，窄屏键盘可操�
     return route.fulfill({ status: 202, json: { data: { taskId: 'missing-browser' } } });
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/jobs?source=platform&provider=boss');
+  await page.goto('/sources?channel=platform&provider=boss');
   await page.getByRole('checkbox', { name: /允许自动连接/ }).check();
   await page.getByRole('button', { name: '获取职位', exact: true }).click();
   await expect(page.getByText('未找到 Chrome 调试连接。', { exact: false })).toBeVisible({

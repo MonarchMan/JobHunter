@@ -111,7 +111,7 @@ test('platform empty recovery and filter clearing preserve the selected provider
     await page.getByRole('link', { name: '管理招聘来源', exact: true }).click();
     await expect(page).toHaveURL(`/sources?channel=platform&provider=${provider}`);
     await expect(
-      page.getByRole('navigation', { name: '招聘平台选择' }).locator('[aria-current="page"]'),
-    ).toHaveAttribute('href', `/sources?channel=platform&provider=${provider}`);
+      page.getByRole('combobox', { name: '招聘平台选择' }).locator('img'),
+    ).toHaveAttribute('src', `/assets/company-logos/${provider}.jpg`);
   }
 });

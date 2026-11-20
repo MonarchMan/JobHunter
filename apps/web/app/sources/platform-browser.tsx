@@ -1,12 +1,11 @@
 'use client';
-import { PlatformRetentionStatus } from './platform-retention-status.js';
 
 import { useEffect, useRef, useState, type ReactElement, type SyntheticEvent } from 'react';
-import { useRouter } from 'next/navigation.js';
 import type { BossCommand } from '@jobhunter/recruitment/platform-application/platforms';
 import type { WebBossSnapshot } from '@jobhunter/recruitment/platform-application/web-platforms';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import styles from './boss-browser.module.css';
+import { Icon } from '../components/ui-icon.js';
 
 const statusLabels: Record<string, string> = {
   connected: '已连接',
@@ -21,13 +20,10 @@ const statusLabels: Record<string, string> = {
 export function PlatformBrowser({
   initial,
   provider,
-  placement = 'sources',
 }: {
   readonly initial: WebBossSnapshot;
   readonly provider: 'boss' | 'zhilian' | '51job' | 'liepin';
-  readonly placement?: 'sources' | 'jobs';
 }): ReactElement {
-  const router = useRouter();
   const label =
     provider === 'boss'
       ? 'BOSS 直聘'
@@ -35,8 +31,7 @@ export function PlatformBrowser({
         ? '前程无忧'
         : provider === 'liepin'
           ? '猎聘'
-          : '智联招聘 · 校园／社招';
-  const batchLabel = '职位';
+          : '智联招聘';
   const endpoint = `/api/platforms/${provider}`;
   const [state, setState] = useState(initial);
   const [portFile, setPortFile] = useState('');
@@ -50,7 +45,6 @@ export function PlatformBrowser({
   const submitting = useRef(false);
   const lifetime = useRef<AbortController | null>(null);
   const mutationVersion = useRef(0);
-  const refreshedTask = useRef(initial.task?.id);
   const generation = state.connection?.generation;
   const progress = state.task?.progress;
   const stageLabels = {
@@ -76,14 +70,6 @@ export function PlatformBrowser({
     '51job': 'https://we.51job.com/pc/search',
     liepin: 'https://c.liepin.com/',
   }[provider];
-
-  useEffect(() => {
-    // 1、只在新任务终态刷新本地职位列表，失败已入库部分同样可见；绝不自动采集。
-    if (placement !== 'jobs' || !state.task || active || state.task.id === refreshedTask.current)
-      return;
-    refreshedTask.current = state.task.id;
-    router.refresh();
-  }, [placement, state.task, active, router]);
 
   useEffect(() => {
     // 1、串行轮询本地数据库；卸载中止请求，不自动触发采集或连接。
@@ -191,257 +177,250 @@ export function PlatformBrowser({
     if (consent && !disabled) void submit({ action: 'connect', portFile: portFile.trim() });
   };
 
+  const connectionConsent = (
+    <label className={styles.consent}>
+      <input
+        type="checkbox"
+        checked={consent}
+        disabled={disabled}
+        onChange={(event) => {
+          setConsent(event.target.checked);
+        }}
+      />
+      允许自动连接本机 Chrome，创建平台专用页并使用登录态
+    </label>
+  );
+
   return (
     <section className={styles.workspace} aria-labelledby={`${provider}-title`}>
       <header className={styles.header}>
-        <div>
-          <h2 id={`${provider}-title`}>{label}</h2>
-          <p>每个意向岗位各读取一批，合并去重后补齐详情并入库。不遍历全部结果、投递或发消息。</p>
-        </div>
-        <span
-          role="status"
-          className={styles.status}
-          data-state={usable ? 'available' : (state.connection?.status ?? 'disconnected')}
-        >
-          {statusLabels[state.connection?.status ?? 'disconnected'] ?? '状态未知'}
-        </span>
-      </header>
-      <p className={styles.guidance}>
-        在本机 Chrome 打开并登录{' '}
-        <a href={website} target="_blank" rel="noreferrer noopener">
-          {label}官网
-        </a>
-        ，启用远程调试。获取时由 Worker
-        新建独立后台窗口的专用页，共享当前配置的登录态，不接管已有页面；后续复用专用页。Chrome
-        如提示授权，请点击允许，不需要刷新。
-      </p>
-      <p className={styles.guidance}>
-        默认第一份资料的意向岗位：
-        {state.profileSearch?.keywords.length
-          ? state.profileSearch.keywords.join('、')
-          : '尚未填写具体岗位'}
-        。<a href="/my?tab=profile#resume-intention">编辑意向岗位</a>；修改后请重新连接。
-      </p>
-      {state.profileSearch?.error && <p role="alert">{state.profileSearch.error}</p>}
-      {
-        <label className={styles.consent}>
-          <input
-            type="checkbox"
-            checked={consent}
-            disabled={disabled}
-            onChange={(event) => {
-              setConsent(event.target.checked);
-            }}
+        <div className={styles.title}>
+          <img
+            className={styles.logo}
+            src={`/assets/company-logos/${provider}.jpg`}
+            alt=""
+            width={32}
+            height={32}
           />
-          允许自动连接 Chrome 并创建平台专用页，读取最小登录上下文，仅在 Worker 内存使用，不保存
-          Cookie。
-          {provider === '51job' ? '连接期间持续观察该页的职位请求，直到断开。' : ''}
-        </label>
-      }
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className="button-primary"
-          disabled={
-            disabled ||
-            !!state.profileSearch?.error ||
-            (!usable && !consent) ||
-            (usable && state.batch?.hasMore === false)
-          }
-          onClick={() =>
-            void submit(
-              frozen
-                ? { action: 'connect' }
-                : {
-                    action: 'acquire',
-                    generation: generation ?? null,
-                  },
-            )
-          }
-        >
-          {frozen ? '重新连接' : '获取职位'}
-        </button>
-        {usable && <span>复用当前连接，每个关键词各获取一批</span>}
-        {usable && (
+          <h2 id={`${provider}-title`}>{label}</h2>
+          <span
+            className={styles.status}
+            role="status"
+            data-state={usable ? 'available' : state.connection?.status}
+          >
+            {statusLabels[state.connection?.status ?? 'disconnected']}
+          </span>
+        </div>
+        <a className={styles.link} href={website} target="_blank" rel="noreferrer noopener">
+          平台官网 <Icon name="external" size={14} />
+        </a>
+      </header>
+      <div className={styles.body}>
+        <div className={styles.fieldHeader}>
+          <h3>意向岗位</h3>
+        </div>
+        <div className={styles.keywords}>
+          {state.profileSearch?.keywords.length
+            ? state.profileSearch.keywords.map((keyword) => <span key={keyword}>{keyword}</span>)
+            : '尚未填写具体岗位'}
+        </div>
+        {state.profileSearch?.error && (
+          <p role="alert" className={styles.error}>
+            {state.profileSearch.error}
+          </p>
+        )}
+        {!usable && connectionConsent}
+        <div className={styles.actions}>
           <button
             type="button"
-            className="button-secondary"
-            disabled={disabled || !!state.profileSearch?.error || !consent}
-            onClick={() => void submit({ action: 'connect' })}
+            className="button-primary"
+            disabled={
+              disabled ||
+              !!state.profileSearch?.error ||
+              (!usable && !consent) ||
+              (usable && state.batch?.hasMore === false)
+            }
+            onClick={() =>
+              void submit(
+                frozen
+                  ? { action: 'connect' }
+                  : {
+                      action: 'acquire',
+                      generation: generation ?? null,
+                    },
+              )
+            }
           >
-            按当前资料重新连接
+            {frozen ? '重新连接' : '获取职位'}
           </button>
+          <a className="button-secondary" href={`/jobs?source=platform&provider=${provider}`}>
+            查看平台职位
+          </a>
+        </div>
+        {readError && (
+          <p className={styles.error} role="alert">
+            本地状态读取失败，操作暂时禁用；正在重新读取，不会请求招聘平台。
+          </p>
+        )}
+        {error && (
+          <p className={styles.error} role="alert">
+            {error}{' '}
+            {intent.current && (
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={busy || readError}
+                onClick={() => void submit()}
+              >
+                确认上次提交
+              </button>
+            )}
+          </p>
         )}
       </div>
-      {frozen && (
-        <p className={styles.guidance}>
-          当前连接已暂停，不会自动重试。请先确认官网状态；重新连接会开始新的查询，已入库职位保留。
-        </p>
-      )}
-      {/* 4、技术参数仅用于自动发现失败时的高级备用，不再是日常获取前置条件。 */}
-      <details className={styles.connection}>
-        <summary>高级连接设置</summary>
-        <p id={`${provider}-help`}>
-          默认无需填写。仅在无法自动找到 Chrome 时填写调试描述文件路径；仍由 Worker
-          新建专用页，不需要标签页 ID。连接时请在 Chrome 确认授权。同一活动连接内不会逐次授权，重启
-          Worker 后需要重新连接。断开连接只关闭 Worker 自己创建的页，不关闭你的其他页面。
-          {provider === 'zhilian'
-            ? '授权后仅打开首页提取认证上下文，列表与详情使用 HTTP 获取，无需在官网搜索或点击详情。初始化最多等待 120 秒；未取得上下文会明确提示，不会自动反复刷新。'
-            : ''}
-          {provider === '51job'
-            ? '专用页提供官网自然生成的请求模板，职位仍通过独立 HTTP 获取。点击获取下一批时，Worker 只执行一次正常分页；最多等待新模板 90 秒，不自行生成签名。更换查询请重新连接。'
-            : ''}
-          {provider === 'liepin'
-            ? '专用搜索页提供固定关键词的请求模板；后续列表和详情通过独立 HTTP 获取。初始化最多等待 120 秒，不需要手动切换推荐排序。'
-            : ''}
-        </p>
-        <form
-          noValidate
-          onSubmit={connect}
-          className={styles.form}
-          aria-describedby={`${provider}-help`}
-        >
-          <label>
-            调试描述文件绝对路径
-            <input
-              ref={portInput}
-              aria-invalid={fieldError === 'portFile'}
-              aria-describedby={fieldError === 'portFile' ? `${provider}-path-error` : undefined}
-              required
-              value={portFile}
-              onChange={(event) => {
-                setPortFile(event.target.value);
-              }}
-              placeholder="…/DevToolsActivePort"
-              disabled={busy || active}
-            />
-          </label>
-          {fieldError === 'portFile' && (
-            <p id={`${provider}-path-error`} role="alert">
-              请输入以 DevToolsActivePort 结尾的绝对文件路径。
-            </p>
+      {(state.task ?? state.batch) && (
+        <section className={styles.results} aria-label="采集记录">
+          <div className={styles.fieldHeader}>
+            <h3>{active ? '本次采集' : '最近记录'}</h3>
+            <a className={styles.link} href={`/tasks?type=platform.${provider}`}>
+              {active ? '查看任务或取消' : '查看任务'} <Icon name="chevronRight" size={14} />
+            </a>
+          </div>
+          <div role="status">
+            {active && <p>{progress ? stageLabels[progress.stage] : '等待执行'}</p>}
+            {state.task?.status === 'cancelled' && <p>任务已取消</p>}
+            {state.task?.error && <p className={styles.error}>{state.task.error}</p>}
+            {(progress ?? (!active && state.batch)) && (
+              <dl className={styles.metrics}>
+                <div>
+                  <dt>批次</dt>
+                  <dd>
+                    {progress?.batchNumber ?? '—'}
+                    {progress?.batchLimit && <small> / {progress.batchLimit}</small>}
+                  </dd>
+                </div>
+                <div>
+                  <dt>已处理</dt>
+                  <dd>
+                    {progress?.processed ?? '—'}
+                    {progress?.total != null && <small> / {progress.total}</small>}
+                  </dd>
+                </div>
+                <div>
+                  <dt>
+                    {!progress && state.task?.status !== 'succeeded' ? '上次成功入库' : '已入库'}
+                  </dt>
+                  <dd>{progress?.saved ?? state.batch?.savedCount ?? '—'}</dd>
+                </div>
+              </dl>
+            )}
+            {progress && (progress.skipped > 0 || !!progress.skippedPaused) && (
+              <p>
+                {[
+                  progress.skipped > 0 && `缺少公司身份 ${String(progress.skipped)} 条`,
+                  !!progress.skippedPaused && `暂停招聘 ${String(progress.skippedPaused)} 条`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            )}
+            {!active && state.batch?.hasMore === false && <p>已到末页</p>}
+          </div>
+          {progress?.failure && (
+            <details className={styles.details}>
+              <summary>失败诊断</summary>
+              <p>
+                停止阶段：{stageLabels[progress.stage]} · 类别：{progress.failure.category}
+                {progress.failure.businessCode !== null &&
+                  ` · 业务码：${String(progress.failure.businessCode)}`}
+                {progress.failure.reason && ` · 原因码：${progress.failure.reason}`}
+              </p>
+              {progress.currentExternalJobId && (
+                <p>
+                  职位 ID：<code>{progress.currentExternalJobId}</code>
+                </p>
+              )}
+              {progress.detailStartedAt !== undefined && (
+                <p>
+                  读取时间：
+                  {new Date(progress.detailStartedAt).toLocaleString('zh-CN', {
+                    timeZone: 'Asia/Shanghai',
+                  })}
+                </p>
+              )}
+              {progress.failure.evidence && (
+                <code>{JSON.stringify(progress.failure.evidence)}</code>
+              )}
+              <p>
+                任务编号：<code>{state.task?.id}</code>
+              </p>
+            </details>
           )}
-          <button
-            className="button-primary"
-            disabled={disabled || !consent || !!state.profileSearch?.error}
-            type="submit"
+        </section>
+      )}
+      <footer className={styles.footer}>
+        <details className={styles.details}>
+          <summary>高级连接设置</summary>
+          {usable && connectionConsent}
+          <p id={`${provider}-help`}>自动连接失败时，可指定 Chrome 调试文件。</p>
+          <form
+            noValidate
+            onSubmit={connect}
+            className={styles.form}
+            aria-describedby={`${provider}-help`}
           >
-            {usable ? '重新连接' : '连接 Chrome'}
-          </button>
-        </form>
-      </details>
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className="button-secondary"
-          disabled={disabled || !generation || state.connection?.status === 'disconnected'}
-          onClick={() => {
-            if (generation) void submit({ action: 'disconnect', generation });
-          }}
-        >
-          断开连接
-        </button>
-      </div>
-      <p className={styles.guidance}>
-        只使用意向岗位原词搜索，不额外搜索职位大类或细分岗位。排序与页面默认条件随词级连接固定，不继承你原标签页的手动筛选。
-        详情失败或取消会停止后续请求，已入库职位保留；每次网络请求沿用平台连接器的间隔限制。
-      </p>
-      {provider === 'zhilian' && (
-        <p className={styles.guidance}>
-          首页只提供必要认证上下文，认证失效时请先在官网确认登录，再重新连接。
-        </p>
-      )}
-      {provider === '51job' && (
-        <p className={styles.guidance}>
-          首批需要官网产生请求模板；后续获取会在 Worker 专用页正常翻页一次。详情使用该批 JSON
-          中的完整正文，不额外请求详情接口；长期稳定性尚未验证。
-        </p>
-      )}
-      {state.task && (
-        <p role="status" className={styles.taskStatus}>
-          {active
-            ? progress && progress.stage !== 'connect'
-              ? '后台正在处理本批职位，无需刷新官网页面。'
-              : provider === 'zhilian'
-                ? '后台正在从首页初始化认证上下文；如 Chrome 提示授权，请允许，无需搜索或点击职位。'
-                : '后台任务执行中；连接任务可能正在等待 Chrome 授权。'
-            : state.task.status === 'succeeded'
-              ? '上次操作已完成。'
-              : state.task.status === 'cancelled'
-                ? '上次操作已取消。'
-                : state.task.error}{' '}
-          <a href={`/tasks?type=platform.${provider}`}>查看任务{active ? '或取消' : ''}</a>
-        </p>
-      )}
-      {progress && (
-        <div className={styles.progress} role="status" aria-live="polite">
-          <p>
-            本次任务：{stageLabels[progress.stage]}。有效候选 {progress.total ?? '待确定'}{' '}
-            条，已处理 {progress.processed} 条，已入库 {progress.saved} 条，排除缺少公司身份{' '}
-            {progress.skipped} 条。
-          </p>
-          {progress.failure && (
-            <p className={styles.diagnostic}>
-              停止阶段：{stageLabels[progress.stage]}；类别：{progress.failure.category}
-              {progress.failure.businessCode !== null
-                ? `；业务码：${String(progress.failure.businessCode)}`
-                : ''}
-              {progress.failure.reason ? `；原因码：${progress.failure.reason}` : ''}
-              。已入库职位保留，可在职位页查看。任务编号：<code>{state.task?.id}</code>。
-            </p>
-          )}
-        </div>
-      )}
-      {readError && (
-        <p className={styles.error} role="alert">
-          本地状态读取失败，操作暂时禁用；正在重新读取，不会请求招聘平台。
-        </p>
-      )}
-      {error && (
-        <p className={styles.error} role="alert">
-          {error}{' '}
-          {intent.current && (
+            <label>
+              调试描述文件绝对路径
+              <input
+                ref={portInput}
+                aria-invalid={fieldError === 'portFile'}
+                aria-describedby={fieldError === 'portFile' ? `${provider}-path-error` : undefined}
+                required
+                value={portFile}
+                onChange={(event) => {
+                  setPortFile(event.target.value);
+                }}
+                placeholder="…/DevToolsActivePort"
+                disabled={busy || active}
+              />
+            </label>
+            {fieldError === 'portFile' && (
+              <p id={`${provider}-path-error`} role="alert">
+                请输入以 DevToolsActivePort 结尾的绝对文件路径。
+              </p>
+            )}
+            <button
+              className="button-primary"
+              disabled={disabled || !consent || !!state.profileSearch?.error}
+              type="submit"
+            >
+              {usable ? '重新连接' : '连接 Chrome'}
+            </button>
+          </form>
+          <div className={styles.actions}>
+            {usable && (
+              <button
+                type="button"
+                className="button-secondary"
+                disabled={disabled || !!state.profileSearch?.error || !consent}
+                onClick={() => void submit({ action: 'connect' })}
+              >
+                按当前资料重新连接
+              </button>
+            )}
             <button
               type="button"
               className="button-secondary"
-              disabled={busy || readError}
-              onClick={() => void submit()}
+              disabled={disabled || !generation || state.connection?.status === 'disconnected'}
+              onClick={() => {
+                if (generation) void submit({ action: 'disconnect', generation });
+              }}
             >
-              确认上次提交
+              断开连接
             </button>
-          )}
-        </p>
-      )}
-      {state.batch && (
-        <p className={styles.taskStatus}>
-          {state.batch.savedCount === undefined
-            ? '历史批次未记录自动入库数量，请到职位页查看实际结果。'
-            : `最近成功批次已入库 ${String(state.batch.savedCount)} 条职位。`}
-          排除缺少公司身份的记录 {state.batch.skippedMissingCompanyId ?? 0} 条。
-          {state.batch.hasMore === false ? `已无更多${batchLabel}。` : ''}
-        </p>
-      )}
-      {state.batch?.searchBatches && (
-        <p className={styles.guidance}>
-          最近成功批次搜索词：
-          {state.batch.searchBatches
-            .map(
-              ({ keyword, count, hasMore }) =>
-                `${keyword}（${String(count)} 条${hasMore ? '' : '，已到末批'}）`,
-            )
-            .join('；')}
-          。 各词数量为合并前候选，入库数量已去重。
-        </p>
-      )}
-      {placement !== 'jobs' && (
-        <a className="button-secondary" href={`/jobs?source=platform&provider=${provider}`}>
-          查看平台职位
-        </a>
-      )}
-      <p className={styles.note}>
-        已保存职位进入统一职位库，可继续使用现有详情和匹配功能。不会因本次结果未出现而标记职位下架。
-      </p>
-      {placement !== 'jobs' && <PlatformRetentionStatus />}
+          </div>
+        </details>
+      </footer>
     </section>
   );
 }

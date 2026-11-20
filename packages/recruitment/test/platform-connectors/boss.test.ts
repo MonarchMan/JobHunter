@@ -53,7 +53,10 @@ const detail = (
 });
 
 /** 使用合成响应与递增时钟测试，不连接真实浏览器或招聘平台。 */
-function session(responses: unknown[]): {
+function session(
+  responses: unknown[],
+  clock?: () => number,
+): {
   client: BossHttpSession;
   requests: { url: URL; init?: RequestInit }[];
 } {
@@ -72,7 +75,7 @@ function session(responses: unknown[]): {
       cookies: [cookie],
       observedListUrl,
       fetch: fetcher,
-      now: () => (now += 6_000),
+      now: clock ?? (() => (now += 6_000)),
     }),
     requests,
   };
@@ -714,8 +717,39 @@ describe('BOSS HTTP 会话', () => {
     expect(requests.every((r) => r.init?.redirect === 'manual')).toBe(true);
   });
 
-  it('环境异常 37 分类为访问受限，冻结会话且不泄露错误原文', async () => {
-    const { client, requests } = session([{ code: 37, message: '您的环境存在异常. test-secret' }]);
+  it('HTTP 每五页后等待剩余时间，保留原会话并继续翻页', async () => {
+    let now = 1_800_000_000_000;
+    const wait = vi.spyOn(timers, 'setTimeout').mockImplementation((delay) => {
+      now += Number(delay);
+      return Promise.resolve(undefined);
+    });
+    wait.mockClear();
+    const { client, requests } = session(
+      Array.from({ length: 11 }, (_, i) => page([String(i + 1)])),
+      () => now,
+    );
+    const signal = new AbortController().signal;
+    try {
+      for (let i = 0; i < 5; i++) await client.readNext(signal);
+      expect(wait).not.toHaveBeenCalled();
+      now += 7_000;
+      await client.readNext(signal);
+      expect(wait).toHaveBeenCalledExactlyOnceWith(53_000, undefined, expect.anything());
+      for (let i = 0; i < 4; i++) await client.readNext(signal);
+      now += 60_000;
+      await client.readNext(signal);
+      expect(wait).toHaveBeenCalledTimes(1);
+      expect(requests.map((r) => r.url.searchParams.get('page'))).toEqual(
+        Array.from({ length: 11 }, (_, i) => String(i + 1)),
+      );
+    } finally {
+      wait.mockRestore();
+    }
+  });
+
+  it('同页两次 37 后冻结会话且不泄露错误原文', async () => {
+    const blocked = { code: 37, message: '您的环境存在异常. test-secret' };
+    const { client, requests } = session([blocked, blocked]);
     const error: unknown = await client
       .readNext(new AbortController().signal)
       .catch((e: unknown) => e);
@@ -725,7 +759,7 @@ describe('BOSS HTTP 会话', () => {
     await expect(client.readNext(new AbortController().signal)).rejects.toMatchObject({
       category: 'session_unavailable',
     });
-    expect(requests).toHaveLength(1);
+    expect(requests.map((r) => r.url.searchParams.get('page'))).toEqual(['1', '1']);
   });
 
   it('未知业务码不归为未登录', async () => {
@@ -736,35 +770,22 @@ describe('BOSS HTTP 会话', () => {
     });
   });
 
-  it('后续页 37 保留本会话现场，检查字段值不泄露且禁止继续请求', async () => {
-    // 1、首批成功后模拟安全检查，不把不同会话的历史成功混入计数。
-    const { client, requests } = session([
-      page(['a']),
-      {
-        code: 37,
-        zpData: {
-          seed: 'private-seed',
-          name: 'private-name',
-          ts: 'private-ts',
-          secret: 'private-value',
-        },
-      },
-    ]);
-    await client.readNext(new AbortController().signal);
-    const error: unknown = await client
-      .readNext(new AbortController().signal)
-      .catch((e: unknown) => e);
-    expect(error).toMatchObject({ category: 'access_blocked', businessCode: 37 });
-    const message = error instanceof Error ? error.message : '';
-    expect(message).toContain(
-      'boss:http:list;request=2;priorCode0=1;check=seed+name+ts;browserState=unknown',
-    );
-    expect(message).not.toMatch(/private|secret/);
-    // 2、安全检查不是空末页，后续调用冻结而非使用旧参数重试。
-    await expect(client.readNext(new AbortController().signal)).rejects.toMatchObject({
-      category: 'session_unavailable',
-    });
-    expect(requests).toHaveLength(2);
+  it('后续页 37 等待五秒只重试该页，成功后才推进游标', async () => {
+    const wait = vi.spyOn(timers, 'setTimeout').mockResolvedValue(undefined);
+    wait.mockClear();
+    const { client, requests } = session([page(['a']), { code: 37 }, page(['b']), page(['c'])]);
+    const signal = new AbortController().signal;
+    try {
+      await client.readNext(signal);
+      await expect(client.readNext(signal)).resolves.toMatchObject({
+        candidates: [{ externalJobId: 'b' }],
+      });
+      await client.readNext(signal);
+      expect(wait).toHaveBeenCalledExactlyOnceWith(5_000, undefined, expect.anything());
+      expect(requests.map((r) => r.url.searchParams.get('page'))).toEqual(['1', '2', '2', '3']);
+    } finally {
+      wait.mockRestore();
+    }
   });
 
   it.each([page(['a', 'a']), page([])])('拒绝重复 ID 或矛盾空页', async (response) => {

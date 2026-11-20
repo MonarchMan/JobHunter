@@ -30,7 +30,11 @@ export function createProductionTaskApplication(
     Partial<
       Pick<
         Parameters<typeof createRecruitmentTasks>[1],
-        'mail' | 'pageClient' | 'platformRequestIntervalMs' | 'platformRequestIntervalMsByProvider'
+        | 'mail'
+        | 'pageClient'
+        | 'platformBatchesPerRun'
+        | 'platformRequestIntervalMs'
+        | 'platformRequestIntervalMsByProvider'
       >
     >,
 ): TaskApplication {
@@ -121,6 +125,7 @@ export function createConfiguredTaskApplication(
           ...runtimeOptions,
           pageClient,
           platformRequestIntervalMs: config.platforms.requestIntervalMs.value,
+          platformBatchesPerRun: config.platforms.batchesPerRun.value,
           platformRequestIntervalMsByProvider: config.platforms.requestIntervalMsByProvider.value,
           mail: {
             modelMode: config.mail.classification.modelMode.value,

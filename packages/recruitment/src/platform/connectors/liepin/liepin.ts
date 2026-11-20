@@ -1,14 +1,23 @@
+import {
+  clearPlatformResponse,
+  discardPlatformResponse,
+  platformResponseText,
+} from '../../application/response-diagnostics.js';
 import { PlatformRequestPacer } from '../browser/request-pacing.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import {
+  PlatformCompanyIdentityUnavailable,
   PlatformError,
+  PlatformJobPaused,
   type PlatformSession,
   type PlatformBatch,
   type PlatformCandidate,
   type PlatformJobDetail,
+  type PlatformErrorEvidence,
 } from '@jobhunter/recruitment/platform-contracts';
 import type { BrowserCookie } from '../browser/cookies.js';
+import { liepinVerificationReason } from './liepin-verification.js';
 
 const endpoint = 'https://api-c.liepin.com/api/com.liepin.csearch.home-recommend-job-new';
 const searchEndpoint = 'https://api-c.liepin.com/api/com.liepin.searchfront4c.pc-search-job';
@@ -44,7 +53,7 @@ const postingSchema = z.object({
   title: text.min(1),
   url: z.string(),
   identifier: z.object({ propertyID: z.literal('liepin.com'), value: id }),
-  hiringOrganization: z.object({ name: text.min(1), sameAs: z.string() }),
+  hiringOrganization: z.object({ name: text.min(1), sameAs: z.string().nullish() }),
   description: z
     .string()
     .trim()
@@ -226,11 +235,25 @@ class LiepinParseError extends PlatformError {
       | 'list_company'
       | 'list_schema'
       | 'list_empty'
-      | 'identity'
-      | 'detail'
+      | 'list_job_url'
+      | 'list_duplicate_in_page'
+      | 'list_identity_conflict'
+      | 'duplicate_list'
+      | 'detail_job_id'
+      | 'detail_url'
+      | 'detail_title'
+      | 'detail_company_url'
+      | 'detail_company_id'
+      | 'detail_company_name_and_url'
+      | 'detail_company_name_and_id'
+      | 'detail_jsonld_invalid'
+      | 'detail_posting_missing'
+      | 'detail_posting_multiple'
+      | 'detail_posting_schema'
       | 'body',
+    evidence?: PlatformErrorEvidence,
   ) {
-    super('parse_changed', null, stage);
+    super('parse_changed', stage.startsWith('detail_') ? 200 : null, stage, evidence);
     this.message += ` [liepin:${stage}]`;
   }
 }
@@ -250,34 +273,58 @@ function listSchemaStage(
 }
 
 /** 只接受官网已返回的稳定职位 URL；不同公开路径空间不合并身份。 */
-function jobIdentity(value: string): string {
+function jobIdentity(value: string, evidence: PlatformErrorEvidence): string {
   // 1、搜索还包含 lptjob 命名空间；实测其 JSON-LD 同样提供完整的双重身份。
   const campus = /^https:\/\/www\.liepin\.com\/lptjob\/([1-9]\d*)$/.exec(value);
   if (campus?.[1]) return `lptjob:${campus[1]}`;
   const match = /^https:\/\/www\.liepin\.com\/(job|a)\/([1-9]\d*)\.shtml$/.exec(value);
-  if (!match?.[1] || !match[2]) throw new LiepinParseError('identity');
+  if (!match?.[1] || !match[2]) {
+    const url = URL.parse(value);
+    const linkIssue = !url
+      ? 'invalid_url'
+      : url.origin !== 'https://www.liepin.com'
+        ? 'other_origin'
+        : url.search || url.hash
+          ? 'query_or_fragment'
+          : 'unsupported_path';
+    throw new LiepinParseError('list_job_url', { ...evidence, linkIssue });
+  }
   return `${match[1]}:${match[2]}`;
 }
 
 /** 将成功信封中的主推荐和补充推荐合并，未知结构不能当作末页。 */
-function parseList(raw: unknown): { batch: PlatformBatch; ids: Map<string, string> } {
+function parseList(
+  raw: unknown,
+  pageIndex?: number,
+): { batch: PlatformBatch; ids: Map<string, string> } {
   const parsed = listSchema.safeParse(raw);
   if (!parsed.success) throw new LiepinParseError(listSchemaStage(parsed.error.issues));
   const candidates: PlatformCandidate[] = [];
   const ids = new Map<string, string>();
-  let skipped = 0;
   // 1、先核验所有原始身份，包含无公司身份的条目；重复不能静默去重掩盖协议变化。
-  for (const row of [...parsed.data.data.data, ...parsed.data.data.addData]) {
-    const externalJobId = jobIdentity(row.job.link);
-    if (ids.has(externalJobId)) throw new LiepinParseError('identity');
+  const rows = [...parsed.data.data.data, ...parsed.data.data.addData];
+  for (const [rowIndex, row] of rows.entries()) {
+    const evidence = {
+      httpStatus: 200,
+      ...(pageIndex === undefined ? {} : { pageIndex }),
+      rowCount: rows.length,
+      rowIndex,
+    };
+    const externalJobId = jobIdentity(row.job.link, evidence);
+    const previousInternalId = ids.get(externalJobId);
+    if (previousInternalId !== undefined)
+      throw new LiepinParseError('list_duplicate_in_page', {
+        ...evidence,
+        externalJobId,
+        previousInternalId,
+        receivedInternalId: row.job.jobId,
+      });
     ids.set(externalJobId, row.job.jobId);
-    if (!row.comp.compId) {
-      skipped++;
-      continue;
-    }
+    // 搜索候选可到详情核验公司身份，推荐流仍在列表阶段排除无 ID 的条目。
+    if (!row.comp.compId && pageIndex === undefined) continue;
     candidates.push({
       externalJobId,
-      externalCompanyId: row.comp.compId,
+      externalCompanyId: row.comp.compId === 0 ? '' : (row.comp.compId ?? ''),
       title: row.job.title,
       company: row.comp.compName,
       city: row.job.dq,
@@ -289,7 +336,7 @@ function parseList(raw: unknown): { batch: PlatformBatch; ids: Map<string, strin
   }
   if (!ids.size && parsed.data.data.hasNextPage) throw new LiepinParseError('list_empty');
   return {
-    batch: { candidates, hasMore: parsed.data.data.hasNextPage, skippedMissingCompanyId: skipped },
+    batch: { candidates, hasMore: parsed.data.data.hasNextPage },
     ids,
   };
 }
@@ -300,8 +347,11 @@ function parseDetail(
   candidate: PlatformCandidate,
   internalId: string,
 ): PlatformJobDetail {
+  // 1、验证中心也可能返回 200，先检查官网已观察到的固定页面标题。
+  if (/<title\b[^>]*>\s*安全中心\s*-\s*风险提示\s*<\/title\s*>/i.test(html))
+    throw new PlatformError('access_blocked', 200, 'verification_required');
   const postings: unknown[] = [];
-  // 1、只读取 JSON-LD 数据块；普通脚本、账号信息与推荐职位不参与正文解析。
+  // 2、只读取 JSON-LD 数据块；普通脚本、账号信息与推荐职位不参与正文解析。
   for (const match of html.matchAll(
     /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi,
   )) {
@@ -309,7 +359,7 @@ function parseDetail(
     try {
       value = JSON.parse(match[1] ?? '');
     } catch {
-      throw new LiepinParseError('detail');
+      throw new LiepinParseError('detail_jsonld_invalid');
     }
     if (
       typeof value === 'object' &&
@@ -319,20 +369,54 @@ function parseDetail(
     )
       postings.push(value);
   }
-  if (postings.length !== 1) throw new LiepinParseError('detail');
+  if (!postings.length) {
+    // 官网明确展示暂停文案才跳过，脚本或注释中的模板文本不作为页面状态。
+    const visibleMarkup = html.replace(
+      /<!--[\s\S]*?-->|<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/gi,
+      '',
+    );
+    if (/>\s*该职位已暂停招聘\s*</.test(visibleMarkup)) throw new PlatformJobPaused();
+    throw new LiepinParseError('detail_posting_missing');
+  }
+  if (postings.length > 1) throw new LiepinParseError('detail_posting_multiple');
   const parsed = postingSchema.safeParse(postings[0]);
-  if (!parsed.success) throw new LiepinParseError('detail');
+  if (!parsed.success) throw new LiepinParseError('detail_posting_schema');
   const posting = parsed.data;
-  // 2、公开 URL 与内部职位 ID 同时核验；公司名称一致仍不能代替公司 ID 一致。
-  if (
-    posting.identifier.value !== internalId ||
-    posting.url !== candidate.sourceUrl ||
-    posting.title !== candidate.title ||
-    posting.hiringOrganization.name !== candidate.company ||
-    posting.hiringOrganization.sameAs !==
-      `https://www.liepin.com/company/${candidate.externalCompanyId}/`
-  )
-    throw new LiepinParseError('identity');
+  // 3、公开 URL 与内部职位 ID 同时核验；公司名称一致仍不能代替公司 ID 一致。
+  if (posting.identifier.value !== internalId) throw new LiepinParseError('detail_job_id');
+  if (posting.url !== candidate.sourceUrl) throw new LiepinParseError('detail_url');
+  if (posting.title !== candidate.title) throw new LiepinParseError('detail_title');
+  const companyNameMatches = posting.hiringOrganization.name === candidate.company;
+  const companyLink = posting.hiringOrganization.sameAs;
+  if (!candidate.externalCompanyId) {
+    // 3.a、无列表 ID 时，名称和无附加参数的官方公司链接必须同时匹配。
+    const externalCompanyId = /^https:\/\/www\.liepin\.com\/company\/([1-9]\d*)\/$/.exec(
+      companyLink ?? '',
+    )?.[1];
+    if (!externalCompanyId || !companyNameMatches) throw new PlatformCompanyIdentityUnavailable();
+    return { ...candidate, externalCompanyId, description: posting.description };
+  }
+  if (companyLink == null) throw new LiepinParseError('detail_posting_schema');
+  const companyUrlMatches =
+    companyLink === `https://www.liepin.com/company/${candidate.externalCompanyId}/`;
+  if (!companyUrlMatches) {
+    // 相同 ID 的 URL 格式变化与确实出现不同公司 ID 分开报告。
+    const companyUrl = URL.parse(companyLink);
+    const detailCompanyId =
+      companyUrl?.origin === 'https://www.liepin.com'
+        ? /^\/company\/([1-9]\d*)\/?$/.exec(companyUrl.pathname)?.[1]
+        : undefined;
+    const companyIdDiffers =
+      detailCompanyId !== undefined && detailCompanyId !== candidate.externalCompanyId;
+    if (companyIdDiffers)
+      throw new LiepinParseError(
+        companyNameMatches ? 'detail_company_id' : 'detail_company_name_and_id',
+      );
+    throw new LiepinParseError(
+      companyNameMatches ? 'detail_company_url' : 'detail_company_name_and_url',
+    );
+  }
+  // 公司身份已由规范链接确认；列表展示名可能是简称，继续使用列表名称。
   return { ...candidate, description: posting.description };
 }
 
@@ -351,6 +435,8 @@ function redirectReason(location: string | null, sourceUrl: string): string {
   )
     return 'redirect_external';
   const path = target.pathname.toLowerCase();
+  const verification = liepinVerificationReason(target);
+  if (verification) return verification;
   if (/(^|\/)(login|passport|signin|register)(\/|$)/.test(path)) return 'redirect_login';
   if (/(^|\/)(verify|verification|security|captcha|risk|safe)(\/|$)/.test(path))
     return 'redirect_challenge';
@@ -358,21 +444,21 @@ function redirectReason(location: string | null, sourceUrl: string): string {
   return 'redirect_internal_other';
 }
 
-/** 猎聘固定条件的 HTTP 会话；搜索按零基页码，兼容推荐流 LOGIN→UP。 */
+/** 猎聘固定条件的协议会话；输入来自官网浏览器响应或显式 HTTP。 */
 export class LiepinRecommendationHttpSession implements PlatformSession {
   readonly #fetch: typeof fetch;
   readonly #pacer: PlatformRequestPacer;
-  readonly #readHeaders: (
-    url: string,
-    signal: AbortSignal,
-  ) => Promise<Readonly<Record<string, string>>>;
+  readonly #readHeaders:
+    ((url: string, signal: AbortSignal) => Promise<Readonly<Record<string, string>>>) | undefined;
+  readonly #browserResponse:
+    ((url: string, list: boolean, signal: AbortSignal) => Promise<Response>) | undefined;
   #template: LiepinRecommendationTemplate | null;
   #closed = false;
   #busy = false;
   #consumed = false;
   readonly #search: boolean;
   #hasMore = true;
-  readonly #seen = new Set<string>();
+  readonly #seen = new Map<string, string>();
   readonly #abort = new AbortController();
   #candidates = new Map<string, PlatformCandidate>();
   #ids = new Map<string, string>();
@@ -380,7 +466,8 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
   /** 上下文读取回调只能为传入的已校验目标提供适用字段；不得持久化凭据。 */
   public constructor(input: {
     template: LiepinRecommendationTemplate;
-    readHeaders: (url: string, signal: AbortSignal) => Promise<Readonly<Record<string, string>>>;
+    readHeaders?: (url: string, signal: AbortSignal) => Promise<Readonly<Record<string, string>>>;
+    browserResponse?: (url: string, list: boolean, signal: AbortSignal) => Promise<Response>;
     fetch?: typeof fetch;
     now?: () => number;
     requestIntervalMs?: number;
@@ -407,6 +494,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     }
     this.#template = { ...input.template };
     this.#readHeaders = input.readHeaders;
+    this.#browserResponse = input.browserResponse;
     this.#fetch = input.fetch ?? fetch;
     // 1、间隔下限由 Worker 配置合成；连接器只执行传入值，不隐含平台常量。
     this.#pacer = new PlatformRequestPacer(input.requestIntervalMs, input.now);
@@ -444,12 +532,14 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
       // 1.a、搜索响应使用显式页码；推荐仍保持 LOGIN→UP，不能混用两个协议。
       let nextTemplate: string | undefined;
       let parsed: ReturnType<typeof parseList>;
+      let pageIndex: number | undefined;
       if (this.#search) {
         const result = searchListSchema.safeParse(raw);
         if (!result.success) throw new LiepinParseError('list_schema');
         const request = searchRequestSchema.parse(payload);
         const { pagination, passThroughData, data } = result.data.data;
         const conditions = request.data.mainSearchPcConditionForm;
+        pageIndex = conditions.currentPage;
         if (
           pagination.currentPage !== conditions.currentPage ||
           pagination.pageSize !== conditions.pageSize ||
@@ -457,14 +547,17 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
         )
           throw new LiepinParseError('list_pagination');
         // 官网分页控件依据 totalPage；真实首批 hasNext=false 但仍显示多个页码。
-        parsed = parseList({
-          flag: 1,
-          data: {
-            data: data.jobCardList,
-            addData: [],
-            hasNextPage: pagination.currentPage + 1 < pagination.totalPage,
+        parsed = parseList(
+          {
+            flag: 1,
+            data: {
+              data: data.jobCardList,
+              addData: [],
+              hasNextPage: pagination.currentPage + 1 < pagination.totalPage,
+            },
           },
-        });
+          pageIndex,
+        );
         nextTemplate = JSON.stringify({
           data: {
             mainSearchPcConditionForm: { ...conditions, currentPage: conditions.currentPage + 1 },
@@ -472,19 +565,50 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
           },
         });
       } else parsed = parseList(raw);
-      // 2、全批核验成功后推进工作集；异常与重复批次不能覆盖已完成批次。
-      for (const key of parsed.ids.keys())
-        if (this.#seen.has(key)) throw new LiepinParseError('identity');
-      if (this.#seen.size + parsed.ids.size > 2000) throw new PlatformError('session_unavailable');
-      for (const key of parsed.ids.keys()) this.#seen.add(key);
-      this.#ids = parsed.ids;
+      // 2、关键词续页可包含已见职位；只在身份一致且仍有新职位时推进。
+      const newIds = new Map<string, string>();
+      const evidence = {
+        httpStatus: 200,
+        ...(pageIndex === undefined ? {} : { pageIndex }),
+        rowCount: parsed.ids.size,
+      };
+      let seenCount = 0;
+      for (const [rowIndex, [key, internalId]] of [...parsed.ids].entries()) {
+        const previous = this.#seen.get(key);
+        if (previous === undefined) newIds.set(key, internalId);
+        else {
+          seenCount++;
+          const identityEvidence = {
+            ...evidence,
+            rowIndex,
+            externalJobId: key,
+            previousInternalId: previous,
+            receivedInternalId: internalId,
+          };
+          if (previous !== internalId)
+            throw new LiepinParseError('list_identity_conflict', identityEvidence);
+          if (!this.#search) throw new LiepinParseError('duplicate_list', identityEvidence);
+        }
+      }
+      if (parsed.ids.size > 0 && newIds.size === 0)
+        throw new LiepinParseError('duplicate_list', { ...evidence, seenCount });
+      if (this.#seen.size + newIds.size > 2000) throw new PlatformError('session_unavailable');
+      const candidates = parsed.batch.candidates.filter((candidate) =>
+        newIds.has(candidate.externalJobId),
+      );
+      for (const [key, internalId] of newIds) this.#seen.set(key, internalId);
+      this.#ids = newIds;
       this.#candidates = new Map(
-        parsed.batch.candidates.map((candidate) => [candidate.externalJobId, candidate]),
+        candidates.map((candidate) => [candidate.externalJobId, candidate]),
       );
       this.#consumed = true;
       if (nextTemplate) this.#template = { ...this.#template, body: nextTemplate };
       this.#hasMore = parsed.batch.hasMore;
-      return parsed.batch;
+      return {
+        ...parsed.batch,
+        candidates,
+        skippedMissingCompanyId: newIds.size - candidates.length,
+      };
     });
   }
 
@@ -521,13 +645,22 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
       throw new PlatformError('session_unavailable');
     this.#busy = true;
     try {
-      // 1、二十秒操作截止时间覆盖详情传输重试；每次实际发送单独执行节流。
-      const combined = AbortSignal.any([signal, this.#abort.signal, AbortSignal.timeout(20000)]);
+      // 1、HTTP 截止时间覆盖传输重试。网页导航在节流后启动自己的响应截止时间。
+      const combined = AbortSignal.any([
+        signal,
+        this.#abort.signal,
+        ...(this.#browserResponse ? [] : [AbortSignal.timeout(20_000)]),
+      ]);
       const result = await action(combined);
       combined.throwIfAborted();
       return result;
     } catch (error) {
       const cancelled = isAborted(signal) || isAborted(this.#abort.signal);
+      if (
+        !cancelled &&
+        (error instanceof PlatformJobPaused || error instanceof PlatformCompanyIdentityUnavailable)
+      )
+        throw error;
       this.disconnect();
       if (cancelled) throw new PlatformError('session_unavailable');
       if (error instanceof PlatformError) throw error;
@@ -539,6 +672,15 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
 
   /** 只对已知瞬时传输故障重试详情 GET；有状态列表 POST 一律不重放。 */
   async #request(url: string, body: string | null, signal: AbortSignal): Promise<string> {
+    if (this.#browserResponse) {
+      clearPlatformResponse();
+      return this.#readResponse(
+        await this.#browserResponse(url, body !== null, signal),
+        url,
+        body,
+        signal,
+      );
+    }
     // 1、每次失败重新读取适用认证头，不跨请求保留上下文。
     for (let attempt = 1; ; attempt += 1) {
       try {
@@ -559,6 +701,8 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
   /** 固定目标、统一节流、有界正文；禁止自动重定向转发认证信息。 */
   async #requestAttempt(url: string, body: string | null, signal: AbortSignal): Promise<string> {
     // 1、只读当前目标适用上下文，实际 HTTP 由统一发送边界节流。
+    if (!this.#readHeaders)
+      throw new PlatformError('session_unavailable', null, 'auth_context_missing');
     const supplied = await this.#readHeaders(url, signal);
     const headers: Record<string, string> = {};
     for (const [key, value] of Object.entries(supplied)) {
@@ -571,6 +715,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
     if (body !== null) headers['content-type'] = 'application/json';
     signal.throwIfAborted();
     await this.#pacer.before(signal);
+    clearPlatformResponse();
     const response = await this.#fetch(url, {
       method: body === null ? 'GET' : 'POST',
       headers,
@@ -578,12 +723,22 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
       redirect: 'manual',
       signal,
     });
+    return this.#readResponse(response, url, body, signal);
+  }
+
+  /** 两种传输共享状态码、正文边界和原始响应诊断。 */
+  async #readResponse(
+    response: Response,
+    url: string,
+    body: string | null,
+    signal: AbortSignal,
+  ): Promise<string> {
     // 2、重定向／认证墙不当作正文；状态码与业务码分别分类。
     if (response.status !== 200) {
       const reason = [301, 302, 303, 307, 308].includes(response.status)
         ? redirectReason(response.headers.get('location'), url)
         : null;
-      await response.body?.cancel();
+      await discardPlatformResponse(response, signal);
       throw new PlatformError(
         response.status === 429
           ? 'rate_limited'
@@ -599,7 +754,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
       !(body === null ? /text\/html/i : /application\/json/i).test(contentType) ||
       !response.body
     ) {
-      await response.body?.cancel();
+      await discardPlatformResponse(response, signal);
       throw new LiepinParseError('body');
     }
     // 3、与请求共享截止信号；任何超限正文仅保留固定诊断。
@@ -615,7 +770,7 @@ export class LiepinRecommendationHttpSession implements PlatformSession {
         if (size > 2 * 1024 * 1024) throw new LiepinParseError('body');
         chunks.push(value);
       }
-      return Buffer.concat(chunks).toString('utf8');
+      return platformResponseText(response, chunks);
     } finally {
       await reader.cancel().catch(() => undefined);
     }

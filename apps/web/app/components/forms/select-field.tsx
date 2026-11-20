@@ -14,6 +14,7 @@ const decode = (value: string): string => value.slice(valuePrefix.length);
 export interface SelectFieldOption {
   readonly label: string;
   readonly value: string;
+  readonly iconSrc?: string;
   readonly children?: readonly { readonly label: string; readonly value: string }[];
 }
 
@@ -177,7 +178,16 @@ export function SelectField({
                   value={encode(option.value)}
                   title={option.label}
                 >
-                  <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                  <SelectPrimitive.ItemText>
+                    {'iconSrc' in option && typeof option.iconSrc === 'string' ? (
+                      <span className={styles.optionLabel}>
+                        <img src={option.iconSrc} alt="" width={22} height={22} />
+                        {option.label}
+                      </span>
+                    ) : (
+                      option.label
+                    )}
+                  </SelectPrimitive.ItemText>
                   <SelectPrimitive.ItemIndicator className={styles.indicator}>
                     <Icon name="check" />
                   </SelectPrimitive.ItemIndicator>

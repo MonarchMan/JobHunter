@@ -1,3 +1,8 @@
+import {
+  clearPlatformResponse,
+  discardPlatformResponse,
+  platformResponseText,
+} from '../../application/response-diagnostics.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PlatformRequestPacer } from '../browser/request-pacing.js';
 import { z } from 'zod';
@@ -39,6 +44,8 @@ const row = z.object({
   workYearString: text,
   degreeString: text,
   jobHref: z.string().max(4096),
+  companyHref: z.unknown().optional(),
+  jobScheme: z.unknown().optional(),
   jobDescribe: z
     .string()
     .trim()
@@ -70,6 +77,45 @@ class Job51ParseError extends PlatformError {
     super('parse_changed', null, stage);
     this.message = `${this.message} [51job:${stage}]`;
   }
+}
+
+/** 普通职位核对详情路径；共用校招专题入口时，从同条 App 链接独立核对职位身份。 */
+function job51SourceUrl(item: z.infer<typeof row>): string {
+  const url = URL.parse(item.jobHref);
+  if (!url || url.username || url.password) throw new Job51ParseError('detail_url');
+  if (url.origin === 'https://jobs.51job.com' && url.pathname.endsWith(`/${item.jobId}.html`)) {
+    url.search = '';
+    url.hash = '';
+    return url.href;
+  }
+  if (
+    url.origin === 'https://campus.51job.com' &&
+    /^\/[\w-]+\/job\.html$/.test(url.pathname) &&
+    !url.search &&
+    !url.hash &&
+    item.companyHref === item.jobHref &&
+    typeof item.jobScheme === 'string'
+  ) {
+    const scheme = URL.parse(item.jobScheme);
+    if (
+      scheme?.protocol === 'qiancheng:' &&
+      scheme.host === 'home' &&
+      !scheme.username &&
+      !scheme.password &&
+      scheme.pathname === '/show_job_info' &&
+      scheme.searchParams.getAll('jobid').length === 1 &&
+      scheme.searchParams.get('jobid') === item.jobId
+    )
+      return url.href;
+  }
+  throw new Job51ParseError('detail_url');
+}
+
+/** 列表端点可能以 HTTP 200 返回官网验证页，只有明确的 WAF 标记才报告访问受限。 */
+export function job51ContentTypeError(body: string): PlatformError {
+  return /<meta\s+name=["']aliyun_waf_aa["']/i.test(body)
+    ? new PlatformError('access_blocked', 200, 'verification_required')
+    : new Job51ParseError('content_type');
 }
 
 /** 官网当前页已观察的原始请求；只留内存，禁止写任务或日志。 */
@@ -224,13 +270,14 @@ export class Job51HttpSession implements PlatformSession {
       signal.throwIfAborted();
       // 2、原样发送已观察 URL，禁止跳转、自动重试或修改签名。
       const active = AbortSignal.any([signal, AbortSignal.timeout(20_000)]);
+      clearPlatformResponse();
       const response = await this.#fetch(selected.template.url, {
         headers: selected.template.headers,
         signal: active,
         redirect: 'manual',
       });
       if (response.status !== 200) {
-        await response.body?.cancel();
+        await discardPlatformResponse(response, active);
         throw new PlatformError(
           response.status === 429
             ? 'rate_limited'
@@ -239,11 +286,9 @@ export class Job51HttpSession implements PlatformSession {
               : 'upstream_error',
         );
       }
-      if (!response.headers.get('content-type')?.includes('json')) {
-        await response.body?.cancel();
-        throw new Job51ParseError('content_type');
-      }
+      const isJson = response.headers.get('content-type')?.includes('json');
       const reader = response.body?.getReader();
+      if (!reader && !isJson) throw new Job51ParseError('content_type');
       if (!reader) throw new Job51ParseError('missing_body');
       const chunks: Uint8Array[] = [];
       let size = 0;
@@ -260,9 +305,11 @@ export class Job51HttpSession implements PlatformSession {
         await reader.cancel();
         reader.releaseLock();
       }
+      const responseText = platformResponseText(response, chunks);
+      if (!isJson) throw job51ContentTypeError(responseText);
       let raw: unknown;
       try {
-        raw = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        raw = JSON.parse(responseText);
       } catch {
         throw new Job51ParseError('json');
       }
@@ -291,21 +338,6 @@ export class Job51HttpSession implements PlatformSession {
           skippedMissingCompanyId++;
           continue;
         }
-        let url: URL;
-        try {
-          url = new URL(item.jobHref);
-        } catch {
-          throw new Job51ParseError('detail_url');
-        }
-        if (
-          url.origin !== 'https://jobs.51job.com' ||
-          url.username ||
-          url.password ||
-          !url.pathname.endsWith(`/${item.jobId}.html`)
-        )
-          throw new Job51ParseError('detail_url');
-        url.search = '';
-        url.hash = '';
         const detail: PlatformJobDetail = {
           externalJobId: item.jobId,
           externalCompanyId: item.coId,
@@ -315,7 +347,7 @@ export class Job51HttpSession implements PlatformSession {
           salary: item.provideSalaryString,
           experience: item.workYearString,
           education: item.degreeString,
-          sourceUrl: url.href,
+          sourceUrl: job51SourceUrl(item),
           description: item.jobDescribe,
         };
         const old = this.#details.get(item.jobId);

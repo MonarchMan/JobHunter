@@ -141,6 +141,19 @@ describe('workspace dotenv configuration', () => {
     ).toEqual({ value: { boss: 0, liepin: 1000 }, source: 'environment' });
   });
 
+  it('读取单轮批数并拒绝超出支持范围的配置', () => {
+    const bootstrap = resolveBootstrapConfig({ environment: {} });
+    expect(resolveAppConfig({ bootstrap, environment: {} }).platforms.batchesPerRun.value).toBe(10);
+    expect(
+      resolveAppConfig({ bootstrap, environment: { PLATFORM_BATCHES_PER_RUN: '3' } }).platforms
+        .batchesPerRun.value,
+    ).toBe(3);
+    for (const value of ['0', '21', '1.5'])
+      expect(() =>
+        resolveAppConfig({ bootstrap, environment: { PLATFORM_BATCHES_PER_RUN: value } }),
+      ).toThrow();
+  });
+
   it.each(['-1', '1.5', '60001', 'invalid'])('rejects invalid platform interval %s', (value) => {
     const bootstrap = resolveBootstrapConfig({ environment: {} });
     expect(() =>

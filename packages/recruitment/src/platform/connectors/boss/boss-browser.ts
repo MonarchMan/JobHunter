@@ -1,3 +1,4 @@
+import { associateBrowserFailure } from '../../application/response-diagnostics.js';
 import {
   PlatformError,
   type PlatformBatch,
@@ -223,13 +224,16 @@ export class BossBrowserSession implements PlatformSession {
 
   /** loadingFinished 后读取有界正文；不监听响应头或 Cookie。 */
   async #finish(requestId: string, request: ObservedRequest): Promise<void> {
+    const status = request.status;
+    const statusError =
+      status === 200
+        ? undefined
+        : new PlatformError(
+            status === 429 ? 'rate_limited' : status === 403 ? 'access_blocked' : 'upstream_error',
+            status,
+          );
+    let responseText: string | undefined;
     try {
-      // 1、非成功状态无需读取正文，直接保留标准错误分类。
-      const status = request.status;
-      if (status !== 200)
-        throw new PlatformError(
-          status === 429 ? 'rate_limited' : status === 403 ? 'access_blocked' : 'upstream_error',
-        );
       let rawResult: unknown;
       try {
         rawResult = await this.input.call(
@@ -238,7 +242,9 @@ export class BossBrowserSession implements PlatformSession {
           AbortSignal.any([this.#abort.signal, AbortSignal.timeout(10_000)]),
         );
       } catch {
-        throw new PlatformError('session_unavailable', null, 'response_body_unavailable');
+        throw (
+          statusError ?? new PlatformError('session_unavailable', null, 'response_body_unavailable')
+        );
       }
       // 1.a、旧文档的异步正文不可回写，也不可用其错误冻结新文档。
       if (request.epoch !== this.#lifecycle.epoch) return;
@@ -247,11 +253,13 @@ export class BossBrowserSession implements PlatformSession {
         .parse(rawResult);
       const bytes = Buffer.from(result.body, result.base64Encoded ? 'base64' : 'utf8');
       if (bytes.length > maxBytes) throw new PlatformError('parse_changed');
+      responseText = bytes.toString('utf8');
+      if (statusError) throw statusError;
       this.#abort.signal.throwIfAborted();
       // 2、风险响应立即冻结；业务内容仍由统一协议校验，不能用 DOM 摘要替代。
       const envelope = z
         .object({ code: z.number().int() })
-        .parse(JSON.parse(bytes.toString('utf8')) as unknown);
+        .parse(JSON.parse(responseText) as unknown);
       if (envelope.code !== 0)
         throw new PlatformError(
           envelope.code === 37 ? 'access_blocked' : 'upstream_error',
@@ -275,8 +283,14 @@ export class BossBrowserSession implements PlatformSession {
         }
       }
     } catch (error) {
-      if (request.epoch === this.#lifecycle.epoch)
-        this.#fail(error instanceof PlatformError ? error : new PlatformError('parse_changed'));
+      if (request.epoch === this.#lifecycle.epoch) {
+        const failure =
+          statusError ??
+          (error instanceof PlatformError ? error : new PlatformError('parse_changed'));
+        if (status !== undefined && responseText !== undefined)
+          associateBrowserFailure(failure, status, responseText);
+        this.#fail(failure);
+      }
     } finally {
       if (this.#requests.get(requestId) === request) this.#requests.delete(requestId);
     }

@@ -46,18 +46,29 @@ test('平台进度与错误可读，断线禁用采集，窄屏和键盘保留�
     return route.fulfill({ json: { data: state } });
   });
   await page.goto('/sources?channel=platform&provider=liepin');
-  await expect(page.getByText('有效候选 24 条', { exact: false })).toBeVisible();
-  await expect(page.getByText('后台正在处理本批职位，无需刷新官网页面。')).toBeVisible();
+  await expect(
+    page
+      .locator('dl div')
+      .filter({ has: page.getByText('已处理', { exact: true }) })
+      .locator('dd'),
+  ).toContainText('/ 24');
+  await expect(page.getByText('校验详情')).toBeVisible();
   await expect(page.getByRole('button', { name: '获取职位' })).toBeDisabled();
   state.task.status = 'failed';
   state.task.error =
     '职位数据格式或身份校验未通过，已停止请求。请保留任务编号供排查，无需反复登录。';
   progress.failure = { category: 'parse_changed', businessCode: 123, reason: 'detail_identity' };
   state.connection.status = 'unavailable';
+  await page.getByText('失败诊断', { exact: true }).click();
   await expect(page.getByText('原因码：detail_identity', { exact: false })).toBeVisible({
     timeout: 10000,
   });
-  await expect(page.getByText('已入库 1 条', { exact: false })).toBeVisible();
+  await expect(
+    page
+      .locator('dl div')
+      .filter({ has: page.getByText('已入库', { exact: true }) })
+      .locator('dd'),
+  ).toHaveText('1');
   await expect(page.getByText('连接不可用', { exact: true })).toBeVisible();
   await expect(page.getByText('高级连接设置', { exact: true }).locator('..')).not.toHaveAttribute(
     'open',
@@ -69,13 +80,18 @@ test('平台进度与错误可读，断线禁用采集，窄屏和键盘保留�
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
       true,
     );
-    const platformLinks = page.getByRole('navigation', { name: '招聘平台选择' }).getByRole('link');
-    await expect(platformLinks).toHaveCount(4);
-    for (const link of await platformLinks.all()) {
-      const box = await link.boundingBox();
-      expect(box?.height).toBeGreaterThanOrEqual(40);
-      expect(box?.width).toBeGreaterThanOrEqual(140);
-    }
+    const selector = page.getByRole('combobox', { name: '招聘平台选择' });
+    const panel = page.getByRole('region', { name: '猎聘', exact: true });
+    const box = await selector.boundingBox();
+    const body = await panel.boundingBox();
+    if (!box || !body) throw new Error('招聘平台选择器或面板不可见');
+    expect(box.y + box.height).toBeLessThanOrEqual(body.y);
+    expect(Math.abs(box.x + box.width - body.x - body.width)).toBeLessThan(2);
+    await selector.click();
+    await expect(page.getByRole('option')).toHaveCount(4);
+    await page.keyboard.press('Escape');
+    await expect(selector).toBeFocused();
+    await expect(page.getByRole('main')).toBeVisible();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await page.screenshot({
       path: `test-results/platform-progress-${String(width)}.png`,

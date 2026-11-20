@@ -22,6 +22,8 @@ import {
   liepinCookieHeader,
   liepinRequestHeaders,
 } from '../liepin/liepin.js';
+import { liepinVerificationReason } from '../liepin/liepin-verification.js';
+import { LiepinBrowserNavigation } from '../liepin/liepin-browser.js';
 
 const cookieSchema = z.object({
   name: z.string(),
@@ -53,6 +55,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
   ): Promise<PlatformSession> {
     // 1、只读取用户选择的调试描述文件，不扫描浏览器配置或磁盘凭据。
     const browserMode = this.provider === 'boss' && input.acquisitionMode !== 'http';
+    const liepinBrowserMode = this.provider === 'liepin' && input.acquisitionMode !== 'http';
     const browserPacer = new PlatformRequestPacer(this.requestIntervalMs);
     // 1.a、自建智联页必须先有明确条件，不把实验关键词或用户旧页面条件当默认值。
     const homeSearch = this.provider === 'zhilian' && !input.targetId;
@@ -60,12 +63,17 @@ class CdpSessionProvider implements PlatformSessionProvider {
       throw new PlatformError('session_unavailable', null, 'search_unsupported');
     if (input.search && input.targetId)
       throw new PlatformError('session_unavailable', null, 'query_changed');
+    if (liepinBrowserMode && (!input.search || input.targetId))
+      throw new PlatformError('session_unavailable', null, 'query_required');
     if (homeSearch && !zhilianHomeSearchSchema.safeParse(input.search).success)
       throw new PlatformError('session_unavailable', null, 'query_required');
     const portFile = input.portFile ?? chromePortFile();
-    const keepObservation = this.provider === '51job' || this.provider === 'boss';
+    const keepObservation =
+      this.provider === '51job' || this.provider === 'boss' || liepinBrowserMode;
     if (
-      (input.acquisitionMode !== undefined && this.provider !== 'boss') ||
+      (input.acquisitionMode !== undefined &&
+        this.provider !== 'boss' &&
+        this.provider !== 'liepin') ||
       !path.isAbsolute(portFile) ||
       path.basename(portFile) !== 'DevToolsActivePort' ||
       (input.targetId !== undefined && !/^[\w-]{1,128}$/.test(input.targetId))
@@ -132,18 +140,21 @@ class CdpSessionProvider implements PlatformSessionProvider {
                 : entryUrl;
         // 2.b、默认只创建自己的页，共享默认配置，不枚举或接管用户页面。
         let ownedTarget: string | undefined;
+        let ownedDetailTarget: string | undefined;
         let releasing: Promise<void> | undefined;
         lease.setCleanup(async () => {
           // 2.c、只关闭本租约自建页；借用页和临时 attach 由租约统一 detach。
           clearObservation?.();
           http?.disconnect();
-          if (ownedTarget)
+          for (const targetId of [ownedTarget, ownedDetailTarget]) {
+            if (!targetId) continue;
             await call(
               'Target.closeTarget',
-              { targetId: ownedTarget },
+              { targetId },
               undefined,
               AbortSignal.timeout(5_000),
             ).catch(() => undefined);
+          }
         });
         release = () => {
           releasing ??= (async () => {
@@ -314,11 +325,96 @@ class CdpSessionProvider implements PlatformSessionProvider {
             attached.sessionId,
           );
           await openOwnedPage();
+        } else if (liepinBrowserMode && input.search) {
+          // 3.a、保留搜索页的官网分页状态，详情在另一后台窗口读取。
+          const observePage = async (sessionId: string): Promise<LiepinBrowserNavigation> => {
+            await call('Page.enable', {}, sessionId);
+            await call(
+              'Network.enable',
+              {
+                maxTotalBufferSize: 4 * 1024 * 1024,
+                maxResourceBufferSize: 2 * 1024 * 1024,
+                maxPostDataSize: 20_000,
+              },
+              sessionId,
+            );
+            return new LiepinBrowserNavigation({
+              sessionId,
+              pacer: browserPacer,
+              call: (method, params, operationSignal) =>
+                call(method, params, sessionId, operationSignal),
+            });
+          };
+          const browser = await observePage(attached.sessionId);
+          onEvent = (message) => {
+            browser.accept(message);
+          };
+          clearObservation = () => {
+            onEvent = undefined;
+            browser.disconnect();
+          };
+          const keyword = input.search.keyword;
+          const endpoint = 'https://api-c.liepin.com/api/com.liepin.searchfront4c.pc-search-job';
+          const first = await browser.read(ownedEntryUrl, signal, { endpoint, keyword, page: 0 });
+          if (!first.template) throw new PlatformError('parse_changed', null, 'template');
+          creatingOwned = true;
+          try {
+            ownedDetailTarget = z
+              .object({ targetId: z.string().min(1) })
+              .parse(
+                await call(
+                  'Target.createTarget',
+                  { url: 'about:blank', newWindow: true, background: true },
+                  undefined,
+                  AbortSignal.timeout(5_000),
+                ),
+              ).targetId;
+          } finally {
+            creatingOwned = false;
+          }
+          signal.throwIfAborted();
+          const detailAttached = z
+            .object({ sessionId: z.string() })
+            .parse(
+              await call('Target.attachToTarget', { targetId: ownedDetailTarget, flatten: true }),
+            );
+          const detailPage = await observePage(detailAttached.sessionId);
+          onEvent = (message) => {
+            browser.accept(message);
+            detailPage.accept(message);
+          };
+          const clearSearchObservation = clearObservation;
+          clearObservation = () => {
+            clearSearchObservation();
+            detailPage.disconnect();
+          };
+          let firstResponse: Response | undefined = first.response;
+          let page = 1;
+          http = new LiepinRecommendationHttpSession({
+            expectedKeyword: keyword,
+            template: { url: endpoint, body: first.template },
+            browserResponse: async (url, list, operationSignal) => {
+              if (!list) return (await detailPage.read(url, operationSignal)).response;
+              if (firstResponse) {
+                const response = firstResponse;
+                firstResponse = undefined;
+                return response;
+              }
+              // 3.a.i、只按官网控件续页，并匹配官网自行发送的列表请求。
+              const result = await browser.read(ownedEntryUrl, operationSignal, {
+                endpoint,
+                keyword,
+                page,
+              });
+              page += 1;
+              return result.response;
+            },
+          });
         } else if (this.provider === 'liepin') {
           // 3.a、只观察所选搜索或推荐协议，后续 HTTP 借用 Cookie 而不持续操作页面。
           const observed = new Promise<PlatformSession>((resolve, reject) => {
             rejectObservation = () => {
-              reject(new PlatformError('session_unavailable'));
+              reject(new PlatformError('session_unavailable', null, 'template_required'));
             };
             onEvent = (raw) => {
               const event = z
@@ -326,6 +422,9 @@ class CdpSessionProvider implements PlatformSessionProvider {
                   sessionId: z.string(),
                   method: z.string(),
                   params: z.object({
+                    frame: z
+                      .object({ url: z.string(), parentId: z.string().optional() })
+                      .optional(),
                     request: z
                       .object({
                         method: z.string(),
@@ -337,12 +436,14 @@ class CdpSessionProvider implements PlatformSessionProvider {
                   }),
                 })
                 .safeParse(raw);
-              if (
-                !event.success ||
-                event.data.sessionId !== attached.sessionId ||
-                event.data.method !== 'Network.requestWillBeSent'
-              )
-                return;
+              if (!event.success || event.data.sessionId !== attached.sessionId) return;
+              const { frame } = event.data.params;
+              if (event.data.method === 'Page.frameNavigated' && frame && !frame.parentId) {
+                const url = URL.parse(frame.url);
+                const reason = url && liepinVerificationReason(url);
+                if (reason) reject(new PlatformError('access_blocked', null, reason));
+              }
+              if (event.data.method !== 'Network.requestWillBeSent') return;
               const request = event.data.params.request;
               if (
                 request?.method !== 'POST' ||
@@ -420,7 +521,8 @@ class CdpSessionProvider implements PlatformSessionProvider {
             };
           });
           void observed.catch(() => undefined);
-          await call('Network.enable', {}, attached.sessionId);
+          await call('Page.enable', {}, attached.sessionId);
+          await call('Network.enable', { maxPostDataSize: 20_000 }, attached.sessionId);
           await openOwnedPage();
           http = await observed;
         } else if (this.provider === '51job') {
@@ -459,7 +561,24 @@ class CdpSessionProvider implements PlatformSessionProvider {
               : {}),
           });
           http = session;
-          const observer = new Job51RequestObserver(attached.sessionId, session);
+          const observer = new Job51RequestObserver(
+            attached.sessionId,
+            session,
+            async (requestId) => {
+              const response = z
+                .object({ body: z.string().max(4 * 1024 * 1024), base64Encoded: z.boolean() })
+                .parse(
+                  await call(
+                    'Network.getResponseBody',
+                    { requestId },
+                    attached.sessionId,
+                    AbortSignal.timeout(5_000),
+                  ),
+                );
+              const bytes = Buffer.from(response.body, response.base64Encoded ? 'base64' : 'utf8');
+              return bytes.length <= 2 * 1024 * 1024 ? bytes.toString('utf8') : undefined;
+            },
+          );
           onEvent = (message) => {
             observer.accept(message);
           };
@@ -526,7 +645,7 @@ class CdpSessionProvider implements PlatformSessionProvider {
                       resolve(session);
                     }
                   } catch {
-                    rejectObservation?.();
+                    // 首页可能先发出不完整请求，继续等待独立通过校验的下一事件。
                   }
                   return;
                 }

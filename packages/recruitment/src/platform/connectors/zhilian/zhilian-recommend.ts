@@ -1,3 +1,8 @@
+import {
+  clearPlatformResponse,
+  discardPlatformResponse,
+  platformResponseText,
+} from '../../application/response-diagnostics.js';
 import { PlatformRequestPacer } from '../browser/request-pacing.js';
 import {
   PlatformError,
@@ -270,6 +275,7 @@ export class ZhilianCampusHttpSession implements PlatformSession {
   async #list(body: z.infer<typeof bodySchema>, caller: AbortSignal): Promise<unknown> {
     const signal = AbortSignal.any([caller, this.#abort.signal, AbortSignal.timeout(20_000)]);
     if (!this.#url) throw new PlatformError('session_unavailable');
+    clearPlatformResponse();
     const response = await this.#fetch(this.#url, {
       method: 'POST',
       redirect: 'manual',
@@ -278,7 +284,7 @@ export class ZhilianCampusHttpSession implements PlatformSession {
       body: JSON.stringify(body),
     });
     if (response.status !== 200) {
-      await response.body?.cancel();
+      await discardPlatformResponse(response, signal);
       throw new PlatformError(
         response.status === 429
           ? 'rate_limited'
@@ -305,7 +311,7 @@ export class ZhilianCampusHttpSession implements PlatformSession {
       reader.releaseLock();
     }
     try {
-      return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+      return JSON.parse(platformResponseText(response, chunks)) as unknown;
     } catch {
       throw new PlatformError('parse_changed');
     }

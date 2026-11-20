@@ -100,7 +100,7 @@ async function run(): Promise<void> {
     .addOption(
       new Option(
         '--acquisition-mode <mode>',
-        '仅 BOSS：默认 browser 观察官网列表并点击详情；http 仅供显式调试',
+        'BOSS／猎聘：默认 browser 使用官网页面；http 仅供显式调试',
       ).choices(['http', 'browser']),
     )
     .action(
@@ -111,16 +111,18 @@ async function run(): Promise<void> {
         city?: string;
         acquisitionMode?: 'http' | 'browser';
       }) => {
-        // 1、BOSS 默认由连接器选择浏览器辅助，不改变其他平台原有连接方式。
-        if (options.acquisitionMode && provider() !== 'boss')
-          throw new Error('acquisition-mode is only available for BOSS');
+        // 1、BOSS 和猎聘由连接器默认选择浏览器模式，独立 HTTP 须显式选择。
+        if (options.acquisitionMode && provider() !== 'boss' && provider() !== 'liepin')
+          throw new Error('acquisition-mode is only available for BOSS and Liepin');
         // 2、日常从资料取得词集；显式调试词不能与借用旧标签页混用。
         const { keyword, city, ...connection } = options;
         if ((keyword !== undefined || city !== undefined) && options.targetId)
           throw new Error('Search options require automatic connection');
+        if (provider() === 'liepin' && options.targetId && options.acquisitionMode !== 'http')
+          throw new Error('Liepin --target-id requires --acquisition-mode http');
         if (city !== undefined && (provider() !== 'zhilian' || keyword === undefined))
           throw new Error('--city requires Zhilian --keyword');
-        if (options.acquisitionMode === 'http' && keyword !== undefined)
+        if (provider() === 'boss' && options.acquisitionMode === 'http' && keyword !== undefined)
           throw new Error('BOSS keyword search requires browser mode');
         await submit({
           action: 'connect',

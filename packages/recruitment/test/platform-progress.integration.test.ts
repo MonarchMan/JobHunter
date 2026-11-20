@@ -88,7 +88,7 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
       externalCompanyId: 'company',
       title: '开发工程师',
       company: '测试公司',
-      city: '上海',
+      city: id === 'a:2' ? '  ' : '上海',
       salary: '',
       experience: '',
       education: '',
@@ -154,6 +154,12 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
         await expect(execution).resolves.toMatchObject({ savedCount: 2 });
         expect(repository.verifyObservedBatch(taskId, 2)).toBe(true);
         expect(saved).toHaveBeenCalledTimes(2);
+        expect(
+          db.client
+            .prepare("SELECT locations_json FROM jobs WHERE external_job_id='a:2'")
+            .pluck()
+            .get(),
+        ).toBe('[]');
         return;
       }
       await expect(execution).rejects.toThrow();

@@ -58,7 +58,7 @@ test('BOSS browsing preserves results on failure and exposes saved jobs at narro
   });
   await page.goto('/sources?channel=platform');
   await page.getByText('高级连接设置', { exact: true }).click();
-  await expect(page.getByText('每个意向岗位各读取一批', { exact: false })).toBeVisible();
+  await expect(page.getByLabel('调试描述文件绝对路径')).toBeVisible();
   await expect(page.getByRole('button', { name: '连接 Chrome' })).toBeDisabled();
   await page.getByLabel('调试描述文件绝对路径').fill('/fixture/DevToolsActivePort');
   await page.getByRole('checkbox').check();
@@ -97,7 +97,12 @@ test('BOSS browsing preserves results on failure and exposes saved jobs at narro
     saved: {},
     task: { id: 'test', status: 'succeeded', error: null },
   };
-  await expect(page.getByText('最近成功批次已入库 1 条职位。', { exact: false })).toBeVisible({
+  await expect(
+    page
+      .locator('dl div')
+      .filter({ has: page.getByText('已入库', { exact: true }) })
+      .locator('dd'),
+  ).toHaveText('1', {
     timeout: 10000,
   });
   await expect(page.getByRole('button', { name: '读取详情并保存' })).toHaveCount(0);

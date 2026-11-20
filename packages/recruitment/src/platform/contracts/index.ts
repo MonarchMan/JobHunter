@@ -24,17 +24,45 @@ export type PlatformErrorCategory =
   | 'network_error'
   | 'session_unavailable';
 
+/** 解析失败可携带原响应中允许持久化的列表位置和身份对照。 */
+export interface PlatformErrorEvidence {
+  readonly httpStatus?: number;
+  readonly pageIndex?: number;
+  readonly rowCount?: number;
+  readonly rowIndex?: number;
+  readonly seenCount?: number;
+  readonly externalJobId?: string;
+  readonly previousInternalId?: string;
+  readonly receivedInternalId?: string;
+  readonly linkIssue?: 'invalid_url' | 'other_origin' | 'query_or_fragment' | 'unsupported_path';
+}
+
 /** 仅暴露脱敏代码，禁止携带平台原始响应、请求地址或凭据。 */
 export class PlatformError extends Error {
   public constructor(
     public readonly category: PlatformErrorCategory,
     public readonly businessCode: number | null = null,
     public readonly reason: string | null = null,
+    public readonly evidence?: PlatformErrorEvidence,
   ) {
     super(
       `Platform request failed: ${category}${businessCode === null ? '' : ` (${String(businessCode)})`}`,
     );
     this.name = 'PlatformError';
+  }
+}
+
+/** 官网明确暂停该职位，本条没有可入库详情，批次可继续。 */
+export class PlatformJobPaused extends PlatformError {
+  public constructor() {
+    super('upstream_error', 200, 'job_paused');
+  }
+}
+
+/** 列表没有公司 ID，详情也无法确认同一公司。批次可跳过此职位。 */
+export class PlatformCompanyIdentityUnavailable extends PlatformError {
+  public constructor() {
+    super('parse_changed', 200, 'detail_company_identity_unavailable');
   }
 }
 
@@ -48,6 +76,7 @@ export class PlatformTargetSelectionRequired extends PlatformError {
 /** 列表候选是尚未取得必需正文的摘要，不冒充正式职位。 */
 export interface PlatformCandidate {
   readonly externalJobId: string;
+  /** 搜索列表暂缺公司 ID 时为空，正式详情必须补齐。 */
   readonly externalCompanyId: string;
   readonly title: string;
   readonly company: string;
@@ -102,7 +131,7 @@ export interface PlatformSessionProvider {
     input: {
       readonly portFile?: string | undefined;
       readonly targetId?: string | undefined;
-      /** 仅 BOSS 支持显式浏览器辅助；省略时保持原平台行为。 */
+      /** BOSS 与猎聘默认使用浏览器，独立 HTTP 仅显式选择。 */
       readonly acquisitionMode?: 'http' | 'browser' | undefined;
       /** 单个词的非敏感搜索条件；认证字段只能来自浏览器内存。 */
       readonly search?: { readonly keyword: string; readonly city: string } | undefined;

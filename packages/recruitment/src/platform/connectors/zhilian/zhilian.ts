@@ -1,4 +1,9 @@
 import {
+  clearPlatformResponse,
+  discardPlatformResponse,
+  platformResponseText,
+} from '../../application/response-diagnostics.js';
+import {
   PlatformError,
   type PlatformJobDetail,
   type PlatformSession,
@@ -168,6 +173,7 @@ export class ZhilianCampusSelectionSession implements PlatformSession {
       // 1、固定官网只读端点，认证仅进请求头／正文，不允许 Cookie 导出或任意 URL。
       signal.throwIfAborted();
       const { at, rt, d } = this.#auth;
+      clearPlatformResponse();
       const response = await this.#fetch(
         'https://cgate.zhaopin.com/positionbusiness/exposure/getPositionDetail',
         {
@@ -197,7 +203,7 @@ export class ZhilianCampusSelectionSession implements PlatformSession {
       );
       // 2、状态、大小和协议均受限；不跟随重定向，不执行 HTML 或校验脚本。
       if (response.status !== 200) {
-        await response.body?.cancel();
+        await discardPlatformResponse(response, signal);
         throw new PlatformError(
           response.status === 429
             ? 'rate_limited'
@@ -225,7 +231,7 @@ export class ZhilianCampusSelectionSession implements PlatformSession {
       }
       let raw: unknown;
       try {
-        raw = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
+        raw = JSON.parse(platformResponseText(response, chunks)) as unknown;
       } catch {
         throw new PlatformError('parse_changed');
       }

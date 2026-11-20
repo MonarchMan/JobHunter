@@ -3,7 +3,8 @@ import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
-import { PlatformTabs, SourceTabs, type SourceChannel } from './source-tabs.js';
+import { SourceTabs, type SourceChannel } from './source-tabs.js';
+import { PlatformSelect } from './platform-select.js';
 import { Pagination } from '../components/lists/pagination.js';
 import { webPagination } from '@jobhunter/common/web-contracts';
 import type { WebSourceChannel } from '@jobhunter/recruitment/contracts/web';
@@ -85,14 +86,14 @@ export default async function SourcesPage({
         </section>
       ) : null}
       {channel === 'platform' ? (
-        <>
-          <PlatformTabs active={provider} />
+        <div className={styles.platformLayout}>
+          <PlatformSelect active={provider} />
           <PlatformBrowser
             key={provider}
             provider={provider}
             initial={container.services[provider].snapshot()}
           />
-        </>
+        </div>
       ) : officialCompanies.length === 0 ? (
         <section className="empty-state page-empty-state" aria-labelledby="sources-empty-title">
           <span className="empty-state-icon" aria-hidden="true">

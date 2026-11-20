@@ -20,7 +20,6 @@ import {
 import styles from './page.module.css';
 import { JobsFilterMemory } from './jobs-filter-memory.js';
 import { JobSourceFilter } from './job-source-filter.js';
-import { PlatformBrowser } from '../sources/platform-browser.js';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '职位' };
@@ -79,14 +78,6 @@ export default async function JobsPage({
           {...(query.providerKey ? { providerKey: query.providerKey } : {})}
         />
       </PageHeader>
-      {query.sourceKind === 'platform' && query.providerKey && (
-        <PlatformBrowser
-          key={query.providerKey}
-          provider={query.providerKey}
-          initial={container.services[query.providerKey].snapshot()}
-          placement="jobs"
-        />
-      )}
       <details className={styles.filterPanel} open={hasFilters}>
         <summary>筛选职位{hasFilters ? ' · 已设置条件' : ''}</summary>
         <form
@@ -252,7 +243,7 @@ export default async function JobsPage({
           <h2 id="jobs-empty-title">没有符合条件的职位</h2>
           <p>
             {query.sourceKind === 'platform'
-              ? '尝试减少筛选条件，或在本页选择具体平台并获取一批职位；详情将自动补齐后入库。'
+              ? '尝试减少筛选条件，或前往招聘来源获取职位。'
               : '尝试减少筛选条件，或先同步官网来源。'}
           </p>
           <div className="inline-actions">

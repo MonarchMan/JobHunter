@@ -9,6 +9,7 @@ import {
   LiepinCdpSessionProvider,
 } from '@jobhunter/recruitment/platform-connectors';
 import { HandlerRegistry, TaskService } from '@jobhunter/common/tasks';
+import type { PlatformCandidate } from '@jobhunter/recruitment/platform-contracts';
 import { createPlatformTaskHandler } from '@jobhunter/recruitment/platform-application/platforms';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
@@ -23,6 +24,34 @@ const pacingCases: readonly [
   [0, { boss: 0, zhilian: 0, '51job': 0, liepin: 1000 }],
   [50, { boss: 100, liepin: 0 }],
 ];
+
+it('启动新的执行线程时保留宿主中所有平台的连接代次和状态', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'platform-generation-'));
+  const host = createProductionTaskApplication({ dataRoot: root, periodicEnabled: false });
+  const db = openSqliteDatabase({ dataRoot: root, runMigrations: false });
+  try {
+    const select = db.client.prepare(
+      'SELECT provider_key, generation, status FROM platform_connections ORDER BY provider_key',
+    );
+    expect(select.all()).toHaveLength(4);
+    db.client
+      .prepare("UPDATE platform_connections SET generation = generation + 1, status = 'available'")
+      .run();
+    const active = select.all();
+    const thread = createProductionTaskApplication({ dataRoot: root, executionOnly: true });
+    try {
+      expect(select.all()).toEqual(active);
+    } finally {
+      await thread.close();
+    }
+    expect(select.all()).toEqual(active);
+  } finally {
+    await host.close();
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 it.each(pacingCases)('生产统一间隔 %s 与平台覆盖分别传递', async (interval, overrides) => {
   const root = await mkdtemp(path.join(tmpdir(), 'platform-pacing-'));
   const providers = [
@@ -33,19 +62,36 @@ it.each(pacingCases)('生产统一间隔 %s 与平台覆盖分别传递', async 
   ] as const;
   const received: unknown[] = [];
   const connectionManagers: unknown[] = [];
-  for (const [, Provider] of providers)
+  for (const [provider, Provider] of providers)
     vi.spyOn(Provider.prototype, 'connect').mockImplementation(function (this: object) {
       received.push(Reflect.get(this, 'requestIntervalMs'));
       connectionManagers.push(Reflect.get(this, 'connections'));
+      let page = 0;
+      const candidate = (id: string): PlatformCandidate => ({
+        externalJobId: id,
+        externalCompanyId: 'company',
+        title: '测试岗位',
+        company: '测试公司',
+        city: '',
+        salary: '',
+        experience: '',
+        education: '',
+        sourceUrl: `https://example.test/jobs/${id}`,
+      });
       return Promise.resolve({
-        readNext: () => Promise.resolve({ candidates: [], hasMore: false }),
-        readDetail: () => Promise.reject(new Error('Unexpected detail')),
+        readNext: () =>
+          Promise.resolve({
+            candidates: [candidate(`${provider}-${String(++page)}`)],
+            hasMore: true,
+          }),
+        readDetail: (id) => Promise.resolve({ ...candidate(id), description: '完整岗位正文' }),
         disconnect: () => undefined,
       });
     });
   const worker = createProductionTaskApplication({
     dataRoot: root,
     platformRequestIntervalMs: interval,
+    platformBatchesPerRun: 2,
     platformRequestIntervalMsByProvider: overrides,
   });
   const db = openSqliteDatabase({ dataRoot: root });
@@ -74,6 +120,27 @@ it.each(pacingCases)('生产统一间隔 %s 与平台覆盖分别传递', async 
       });
       await worker.engine.runOnce(`platform.${provider}`);
       expect(queue.get(submitted.task.id)?.status).toBe('succeeded');
+      const generation = db.client
+        .prepare('SELECT generation FROM platform_connections WHERE provider_key=?')
+        .pluck()
+        .get(provider);
+      const run = tasks.enqueue({
+        taskType: `platform.${provider}`,
+        payload: { action: 'acquire', generation },
+        idempotencyKey: `${provider}:acquire:${String(interval)}`,
+      });
+      await worker.engine.runOnce(`platform.${provider}`);
+      expect(queue.get(run.task.id)?.result).toMatchObject({
+        savedCount: 2,
+        hasMore: true,
+        progress: { batchNumber: 2, batchLimit: 2 },
+      });
+      expect(
+        db.client
+          .prepare('SELECT count(*) FROM job_observations WHERE platform_task_id=?')
+          .pluck()
+          .get(run.task.id),
+      ).toBe(2);
     }
     expect(received).toEqual([
       overrides.boss ?? interval,
