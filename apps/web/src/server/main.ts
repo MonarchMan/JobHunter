@@ -47,6 +47,8 @@ try {
       ],
       {
         stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
+        // 关闭终端或任务可能杀掉启动器整个进程组，包装器必须存活到 IPC 断开后完成回收。
+        detached: process.platform !== 'win32',
         // 1、Windows 上子进程默认新建控制台窗口；Next 由 Web 宿主管理，窗口必须隐藏。
         windowsHide: true,
         env: {
@@ -72,6 +74,7 @@ try {
     });
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
+    if (process.platform !== 'win32') process.once('SIGHUP', stop);
     // 3、级联关闭只发起一次；停止分派并等待线程退出，不允许超时后留下业务写入者。
     let cascade: Promise<void> | undefined;
     function closeTaskHost(): Promise<void> {
@@ -107,6 +110,7 @@ try {
       await closeTaskHost();
       process.off('SIGINT', stop);
       process.off('SIGTERM', stop);
+      if (process.platform !== 'win32') process.off('SIGHUP', stop);
       process.off('message', onShutdownMessage);
     }
   });

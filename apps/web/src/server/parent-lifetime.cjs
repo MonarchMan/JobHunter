@@ -39,6 +39,7 @@ function stop() {
 process.once('disconnect', stop);
 process.once('SIGINT', stop);
 process.once('SIGTERM', stop);
+if (process.platform !== 'win32') process.once('SIGHUP', stop);
 process.on('message', (message) => {
   if (message === 'shutdown') stop();
 });
