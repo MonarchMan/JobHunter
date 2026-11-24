@@ -141,6 +141,13 @@ export interface DiscoveryDiagnostics {
   }[];
   readonly recheckedPages?: readonly number[];
   readonly totalChanged?: boolean;
+  /** 官网完整列表的逐页证据，渠道筛选不改变这里的数值。 */
+  readonly pageCounts?: readonly {
+    readonly page: number;
+    readonly total: number;
+    readonly returned: number;
+    readonly duplicateIds: number;
+  }[];
   /** 已知但不属于目标招聘类型的记录数，不计入目标职位发现数。 */
   readonly skippedRecruitmentType?: number;
 }

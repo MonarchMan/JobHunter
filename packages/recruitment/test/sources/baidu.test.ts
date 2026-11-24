@@ -107,7 +107,7 @@ describe('Baidu campus source adapter', () => {
     const discovery = await collectDiscovery(adapter.discover(context(http)));
     expect(discovery.completion).toMatchObject({
       coverage: 'complete',
-      pages: 3,
+      pages: 5,
       discoveredCount: 3,
     });
     expect(discovery.ids).toEqual([
@@ -118,7 +118,9 @@ describe('Baidu campus source adapter', () => {
     expect(requests.map((body) => [body.get('recruitType'), body.get('curPage')])).toEqual([
       ['INTERN', '1'],
       ['INTERN', '2'],
+      ['INTERN', '3'],
       ['GRADUATE', '1'],
+      ['GRADUATE', '2'],
     ]);
   });
 

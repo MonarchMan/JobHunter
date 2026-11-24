@@ -145,13 +145,12 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
         () => parseCount(countResponse.body),
         'JD count response no longer matches the verified schema.',
       );
-      const expectedPages = Math.ceil(expectedCount / context.config.pageSize);
       const seen = new Set<string>();
       let discoveredCount = 0;
       let coverage: 'complete' | 'partial' = 'complete';
       let page = 1;
 
-      for (; page <= expectedPages; page += 1) {
+      for (;;) {
         if (context.signal.aborted) {
           throw new SourceError('temporary', 'JD discovery was aborted.');
         }
@@ -171,10 +170,7 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
           () => parseList(response.body),
           'JD list response no longer matches the verified schema.',
         );
-        if (
-          parsed.length > context.config.pageSize ||
-          (parsed.length === 0 && page < expectedPages)
-        ) {
+        if (parsed.length > context.config.pageSize) {
           coverage = 'partial';
         }
         for (const raw of parsed) {
@@ -191,19 +187,26 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
           };
         }
         yield { type: 'page', page, discoveredCount };
-        if (parsed.length < context.config.pageSize && page < expectedPages) {
+        if (parsed.length < context.config.pageSize) break;
+        if (coverage === 'partial' || page >= 1_000) {
           coverage = 'partial';
           break;
         }
+        page += 1;
       }
 
-      if (discoveredCount !== expectedCount || page - 1 !== expectedPages) coverage = 'partial';
       yield {
         type: 'complete',
         coverage,
         cursor: null,
-        pages: Math.max(0, page - 1),
+        pages: page,
         discoveredCount,
+        diagnostics: {
+          reason: coverage === 'complete' ? null : 'invalid_page_boundary',
+          retryable: false,
+          expectedCount,
+          absenceReliable: coverage === 'complete' && discoveredCount === expectedCount,
+        },
       };
     },
     /** 执行来源适配器的该项操作。 */
@@ -258,19 +261,6 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
     async healthCheck(context): Promise<SourceHealth> {
       const startedAt = Date.now();
       try {
-        const countResponse = await context.http.request<string>({
-          sourceKey: 'jd.social',
-          requestId: context.requestId,
-          url: countEndpoint,
-          allowedHosts: hosts,
-          signal: context.signal,
-          method: 'POST',
-          headers: requestHeaders(entryUrl),
-          body: countBody(context.config),
-          responseType: 'text',
-          timeoutMs: context.timeoutMs,
-        });
-        const count = parseCount(countResponse.body);
         const listResponse = await context.http.request<string>({
           sourceKey: 'jd.social',
           requestId: context.requestId,
@@ -284,7 +274,7 @@ export function createJdAdapter(): JobSourceAdapter<JdConfig, never> {
           timeoutMs: context.timeoutMs,
         });
         const list = parseList(listResponse.body);
-        const ok = count > 0 && list.length > 0;
+        const ok = list.length > 0;
         return {
           status: ok ? 'healthy' : 'degraded',
           checkedAt: Date.now(),

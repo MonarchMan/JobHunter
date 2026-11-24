@@ -7,6 +7,7 @@ import type {
   UtcInstant,
 } from '@jobhunter/common/domain';
 import type { CurrentJobRecord } from '../ports/jobs.js';
+import type { HealthStatus } from '../domain/sync/index.js';
 
 /** 应用层使用的类型约束。 */
 export type SyncTrigger = 'manual' | 'schedule' | 'retry';
@@ -34,6 +35,8 @@ export interface SyncSourceRecord {
   readonly enabled: boolean;
   readonly cursor: unknown;
   readonly consecutiveFailures: number;
+  readonly healthStatus: HealthStatus;
+  readonly lastSuccessAt: UtcInstant | null;
 }
 
 /** 应用层数据结构或端口契约。 */
@@ -82,7 +85,7 @@ export interface FinishSyncRunInput {
   readonly errorCategory: string | null;
   readonly errorSummary: string | null;
   readonly finishedAt: UtcInstant;
-  readonly sourceHealth: 'healthy' | 'degraded' | 'unhealthy';
+  readonly sourceHealth: HealthStatus;
   readonly consecutiveFailures: number;
   readonly coverageEvidence: unknown;
 }

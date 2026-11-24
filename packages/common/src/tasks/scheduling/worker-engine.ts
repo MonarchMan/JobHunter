@@ -384,20 +384,26 @@ export class WorkerEngine implements TaskCancellationNotifier {
     });
     // 3、可重试错误进入退避队列，否则写入最终失败状态。
     if (decision.retry && decision.availableAt !== null) {
-      this.#queue.reschedule({
+      const occurredAt = this.#clock.now();
+      const rescheduled = this.#queue.reschedule({
         taskId: task.id,
         workerId: executionOwner(task),
         availableAt: decision.availableAt,
-        occurredAt: this.#clock.now(),
-        category: classified.category,
-        summary: classified.safeSummary,
+        occurredAt,
         result: classified.result,
+        retryPayload: this.#registry.get(task.taskType).retryPayload,
       });
+      if (!rescheduled) {
+        this.#finalizeRequestedCancellation(task);
+        return;
+      }
       this.#logger.warn('task.retry_scheduled', {
         taskId: task.id,
         taskType: task.taskType,
         attempt: task.attemptCount,
         errorCategory: classified.category,
+        startedAt: task.startedAt,
+        finishedAt: occurredAt,
         retryAt: decision.availableAt,
         error: classified,
       });

@@ -98,8 +98,8 @@ function validatedCollection(
     totalChanged ||= page.total !== total;
     invalidBoundary ||=
       pageNumbers.has(page.page) ||
-      page.page > expectedPages ||
-      page.records.length !== Math.min(pageSize, Math.max(0, total - (page.page - 1) * pageSize));
+      (collection.coverage === 'complete' && page.page !== pages.length + 1) ||
+      page.records.length > pageSize;
     pageNumbers.add(page.page);
     const records = page.records.map((value) => {
       const job = parseJob(value);
@@ -109,26 +109,25 @@ function validatedCollection(
     });
     pages.push({ ...page, records });
   }
-  // 3、仅在页数、记录数、两端总数均闭合时保留 complete；采样不会被升级。
-  const missing = pageNumbers.size !== expectedPages || ids.size !== total;
-  const reason = totalChanged
-    ? 'pagination_total_changed'
+  // 3、校验实际页序和职位身份；参考总数只影响下架判定。
+  const reason = invalidBoundary
+    ? 'invalid_page_boundary'
     : duplicateIds
       ? 'duplicate_job_ids'
-      : invalidBoundary
-        ? 'invalid_page_boundary'
-        : (collection.diagnostics?.reason ?? (missing ? 'discovered_count_mismatch' : null));
+      : (collection.diagnostics?.reason ?? null);
   return {
     ...collection,
     pages,
-    coverage:
-      totalChanged || duplicateIds > 0 || invalidBoundary || missing
-        ? 'partial'
-        : collection.coverage,
+    coverage: duplicateIds > 0 || invalidBoundary ? 'partial' : collection.coverage,
     diagnostics: {
       ...collection.diagnostics,
       reason,
-      retryable: totalChanged,
+      retryable: collection.diagnostics?.retryable ?? false,
+      absenceReliable:
+        collection.diagnostics?.absenceReliable !== false &&
+        reason === null &&
+        !totalChanged &&
+        ids.size === total,
       expectedCount: total,
       discoveredCount: ids.size,
       expectedPages,

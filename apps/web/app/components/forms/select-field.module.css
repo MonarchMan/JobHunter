@@ -127,6 +127,35 @@
   padding: 0.2rem;
 }
 
+/* Radix 默认隐藏滚动条，恢复选项超出视口时的原生滚动位置反馈。 */
+.viewport[data-radix-select-viewport] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-ink) var(--surface-muted);
+}
+
+/* Chromium 和 Safari 使用自定义尺寸的滚动条，避免系统自动隐藏滑块。 */
+@supports selector(::-webkit-scrollbar) {
+  .viewport[data-radix-select-viewport] {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+
+  .viewport[data-radix-select-viewport]::-webkit-scrollbar {
+    display: block;
+    width: 0.5rem;
+  }
+
+  .viewport::-webkit-scrollbar-track {
+    background: var(--surface-muted);
+  }
+
+  .viewport::-webkit-scrollbar-thumb {
+    border: 1px solid var(--surface-muted);
+    border-radius: 999px;
+    background: var(--muted-ink);
+  }
+}
+
 .item {
   position: relative;
   display: flex;

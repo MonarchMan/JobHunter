@@ -118,6 +118,7 @@ function createPinduoduoChannelAdapter(
       const firstPage = 1;
       let page = firstPage;
       let expectedCount = 0;
+      let totalChanged = false;
       let discoveredCount = 0;
       let coverage: 'complete' | 'partial' = 'complete';
       const seen = new Set<string>();
@@ -143,7 +144,7 @@ function createPinduoduoChannelAdapter(
           'Pinduoduo intern list response no longer matches the verified schema.',
         );
         if (page === firstPage) expectedCount = parsed.result.total;
-        if (expectedCount !== parsed.result.total) coverage = 'partial';
+        totalChanged ||= expectedCount !== parsed.result.total;
         if (parsed.result.list.length > context.config.pageSize) coverage = 'partial';
 
         for (const raw of parsed.result.list) {
@@ -160,21 +161,28 @@ function createPinduoduoChannelAdapter(
         }
         yield { type: 'page', page, discoveredCount };
 
-        if (discoveredCount >= expectedCount || parsed.result.list.length === 0) break;
-        if (parsed.result.list.length < context.config.pageSize) {
+        if (parsed.result.list.length < context.config.pageSize) break;
+        if (coverage === 'partial' || page >= 1_000) {
           coverage = 'partial';
           break;
         }
         page += 1;
       }
 
-      if (discoveredCount !== expectedCount) coverage = 'partial';
       yield {
         type: 'complete',
         coverage,
         cursor: null,
         pages: page,
         discoveredCount,
+        diagnostics: {
+          reason: coverage === 'complete' ? null : 'invalid_page_boundary',
+          retryable: false,
+          expectedCount,
+          totalChanged,
+          absenceReliable:
+            coverage === 'complete' && !totalChanged && discoveredCount === expectedCount,
+        },
       };
     },
     /** 执行来源适配器的该项操作。 */
@@ -240,7 +248,7 @@ function createPinduoduoChannelAdapter(
           timeoutMs: context.timeoutMs,
         });
         const parsed = pinduoduoListResponseSchema.parse(response.body);
-        const ok = parsed.result.total > 0 && parsed.result.list.length > 0;
+        const ok = parsed.result.list.length > 0;
         return {
           status: ok ? 'healthy' : 'degraded',
           checkedAt: Date.now(),

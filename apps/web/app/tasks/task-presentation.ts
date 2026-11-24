@@ -47,7 +47,8 @@ export function taskPresentation(
         ? '完成'
         : labelStatus(taskStatusLabels, task.status),
     status: warning ? 'warning' : task.status,
-    error: [...new Set(errors)].join('；'),
+    // 等待重试时，任务和来源仍可能带有上次执行的摘要。
+    error: task.status === 'pending' ? '' : [...new Set(errors)].join('；'),
     warning,
     errorCategory:
       task.errorCategory ??

@@ -36,6 +36,7 @@ function fixture(
     else if (options.sharedJob) ids = number === 1 ? ['a', 'b'] : ['c', 'd'];
     else if (count > 1 && options.recovery)
       ids = number === 1 ? ['a', 'c'] : options.recovery === 'missing' ? ['b'] : ['b', 'd'];
+    if (number > (options.pageCount ?? (options.many ? 5 : 2))) ids = [];
     return {
       data: {
         total:
@@ -108,7 +109,7 @@ describe('Xiaomi publication identity and bounded pagination recovery', () => {
     const result = await h.run();
     expect(result.coverage).toBe('complete');
     expect(result.diagnostics).toMatchObject({ duplicateIds: 0, discoveredCount: 4 });
-    expect(h.calls).toEqual([2]);
+    expect(h.calls).toEqual([2, 3]);
   });
   it('replaces affected pages once and recomputes completeness', async () => {
     const h = fixture({ recovery: 'stable' });
@@ -125,7 +126,7 @@ describe('Xiaomi publication identity and bounded pagination recovery', () => {
       duplicateIds: 0,
       recheckedPages: [1, 2],
     });
-    expect(h.calls).toEqual([2, 1, 2]);
+    expect(h.calls).toEqual([2, 3, 1, 2]);
   });
   it('preserves persistent duplicates and their page evidence', async () => {
     const h = fixture();
@@ -137,16 +138,14 @@ describe('Xiaomi publication identity and bounded pagination recovery', () => {
       discoveredCount: 3,
       duplicateJobSamples: [{ id: 'b', pages: [1, 2] }],
     });
-    expect(h.calls).toEqual([2, 1, 2]);
+    expect(h.calls).toEqual([2, 3, 1, 2]);
   });
   it.each(['missing', 'changed'] as const)(
-    'does not call an incomplete %s snapshot complete',
+    'ignores reference total discrepancies after valid pagination: %s',
     async (recovery) => {
       const result = await fixture({ recovery }).run();
-      expect(result.coverage).toBe('partial');
-      expect(result.diagnostics?.reason).toBe(
-        recovery === 'missing' ? 'discovered_count_mismatch' : 'pagination_total_changed',
-      );
+      expect(result.coverage).toBe('complete');
+      expect(result.diagnostics).toMatchObject({ reason: null, absenceReliable: false });
     },
   );
   it('does not recover sampled collections', async () => {
@@ -160,7 +159,7 @@ describe('Xiaomi publication identity and bounded pagination recovery', () => {
     const result = await h.run();
     expect(result.coverage).toBe('partial');
     expect(result.diagnostics?.recheckedPages).toEqual([1, 2, 3, 4]);
-    expect(h.calls).toEqual([2, 3, 4, 5, 1, 2, 3, 4]);
+    expect(h.calls).toEqual([2, 3, 4, 5, 6, 1, 2, 3, 4]);
   });
 });
 
@@ -168,7 +167,7 @@ describe('Netease actual unique count policy', () => {
   it('accepts duplicate records without replay or count warnings', async () => {
     const h = fixture({ netease: true });
     const result = await h.run();
-    expect(h.calls).toEqual([2]);
+    expect(h.calls).toEqual([2, 3]);
     expect(result.coverage).toBe('complete');
     expect(result.diagnostics).toMatchObject({
       reason: null,
@@ -181,8 +180,8 @@ describe('Netease actual unique count policy', () => {
   });
   it.each([3, 5])('uses total %s only as a page-count reference', async (secondTotal) => {
     const result = await fixture({ netease: true, secondTotal }).run();
-    expect(result.coverage).toBe(secondTotal === 3 ? 'complete' : 'partial');
-    expect(result.diagnostics?.reason).toBe(secondTotal === 3 ? null : 'pagination_total_changed');
+    expect(result.coverage).toBe('complete');
+    expect(result.diagnostics?.reason).toBeNull();
     expect(result.diagnostics?.absenceReliable).toBe(false);
   });
   it('does not replay even when many pages contain duplicates', async () => {
@@ -190,7 +189,7 @@ describe('Netease actual unique count policy', () => {
     const result = await h.run();
     expect(result.coverage).toBe('complete');
     expect(result.diagnostics?.recheckedPages).toBeUndefined();
-    expect(h.calls).toHaveLength(33);
+    expect(h.calls).toHaveLength(34);
   });
   it('does not recheck truncated collections', async () => {
     const h = fixture({ netease: true, pageCount: 3, maximumPages: 2 });

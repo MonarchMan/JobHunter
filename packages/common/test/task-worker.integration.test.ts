@@ -190,6 +190,15 @@ describe('persistent task queue', () => {
   });
   it('persists checkpoints through lease recovery and rejects stale writers', async () => {
     const input = await setup();
+    const progress = { items: [{ id: 'job-1', status: 'succeeded' }] };
+    const queue = new SqliteTaskRepository(
+      input.handle.client,
+      () => 3,
+      (_type, payload, result) => {
+        expect(result).toEqual(progress);
+        return { ...z.object({ sourceId: z.string() }).parse(payload), resume: true };
+      },
+    );
     const { tasks } = services(input, registryWith({ execute: () => undefined }));
     const task = enqueueSync(tasks, 'checkpoint').task;
     const claimed = input.queue.claim({
@@ -199,13 +208,68 @@ describe('persistent task queue', () => {
       leaseDurationMsFor: () => 1000,
     });
     expect(claimed).not.toBeNull();
-    const progress = { items: [{ id: 'job-1', status: 'succeeded' }] };
     expect(input.queue.checkpoint(task.id, 'first', 1, input.clock.now(), progress)).toBe(true);
     expect(input.queue.checkpoint(task.id, 'wrong', 1, input.clock.now(), {})).toBe(false);
     input.clock.advance(1001);
-    input.queue.recoverExpired(input.clock.now());
-    expect(input.queue.get(task.id)?.result).toEqual(progress);
+    queue.recoverExpired(input.clock.now());
+    const pending = queue.get(task.id);
+    expect(pending).toMatchObject({
+      status: 'pending',
+      startedAt: null,
+      errorSummary: null,
+      payload: { sourceId: 'source-1', resume: true },
+    });
+    expect(pending?.result).toBeNull();
     expect(input.queue.checkpoint(task.id, 'first', 1, input.clock.now(), {})).toBe(false);
+  });
+
+  it('自动重试清空公开状态，并用私有输入继续已提交的检查点', async () => {
+    const input = await setup();
+    const registry = new HandlerRegistry();
+    const payloadSchema = z.object({ resume: z.boolean().optional() });
+    const outputSchema = z.object({ committed: z.literal(true) });
+    registry.register({
+      taskType: 'test.checkpoint',
+      payloadSchema,
+      outputSchema,
+      defaultMaxAttempts: 2,
+      leaseDurationMs: 1_000,
+      retryPayload: (payload, result) =>
+        outputSchema.safeParse(result).success ? { resume: true } : payload,
+      execute: (context, payload) => {
+        if (payload.resume) return Promise.resolve({ committed: true });
+        context.checkpoint?.({ committed: true });
+        throw new TaskExecutionError('network_temporary', '上次执行的错误');
+      },
+    });
+    const { tasks } = services(input, registry);
+    const { task } = tasks.enqueue({
+      taskType: 'test.checkpoint',
+      payload: {},
+      idempotencyKey: 'retry-checkpoint',
+    });
+    const worker = engine(input, registry);
+    await worker.runOnce();
+    const pending = tasks.get(task.id);
+    expect(pending).toMatchObject({
+      status: 'pending',
+      attemptCount: 1,
+      startedAt: null,
+      finishedAt: null,
+      errorSummary: null,
+      errorCategory: null,
+      payload: { resume: true },
+    });
+    expect(pending?.result).toBeNull();
+    expect(input.queue.attemptsInCurrentRound(task.id)).toBe(1);
+    input.clock.advance(1000);
+    await worker.runOnce();
+    expect(tasks.get(task.id)).toMatchObject({
+      status: 'succeeded',
+      attemptCount: 2,
+      startedAt: 2000,
+      result: { committed: true },
+    });
   });
   it('orders recent terminal activity by finish time without changing default creation order', async () => {
     const input = await setup();
@@ -927,7 +991,7 @@ describe('worker execution', () => {
     expect(retryInput.queue.get(retryTask.task.id)).toMatchObject({
       status: 'pending',
       availableAt: 10_000,
-      errorCategory: 'rate_limited',
+      errorCategory: null,
     });
 
     const permanentInput = await setup();

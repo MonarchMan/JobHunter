@@ -221,7 +221,7 @@ async function setup(
   const policy = {
     staleAfterMisses: 1,
     closeAfterMisses: 2,
-    degradedAfterFailures: 1,
+    degradedAfterFailures: 2,
     unhealthyAfterFailures: 3,
     enrichNewRevisions: true,
     requestTimeoutMs: 1_000,
@@ -827,6 +827,33 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     });
     expect(count(fixture.handle, 'jobs')).toBe(3);
     expect(count(fixture.handle, 'tasks')).toBe(0);
+  });
+
+  it('连续两次失败才退化，达到异常阈值后可通过完整扫描恢复', async () => {
+    const fixture = await setup();
+    const health = fixture.handle.client.prepare(
+      'SELECT health_status, consecutive_failures FROM job_sources WHERE id = ?',
+    );
+    fixture.scenario.throwAfter = 2;
+    await run(fixture);
+    expect(health.get(sourceId)).toEqual({ health_status: 'unknown', consecutive_failures: 1 });
+    fixture.scenario.throwAfter = null;
+    await run(fixture);
+    fixture.scenario.throwAfter = 2;
+    for (const [index, status] of ['healthy', 'degraded', 'unhealthy'].entries()) {
+      await run(fixture);
+      expect(health.get(sourceId)).toEqual({
+        health_status: status,
+        consecutive_failures: index + 1,
+      });
+    }
+    const abort = new AbortController();
+    abort.abort();
+    await run(fixture, 'manual', abort.signal);
+    expect(health.get(sourceId)).toEqual({ health_status: 'unhealthy', consecutive_failures: 3 });
+    fixture.scenario.throwAfter = null;
+    await run(fixture);
+    expect(health.get(sourceId)).toEqual({ health_status: 'healthy', consecutive_failures: 0 });
   });
 
   it('does not increase missing counts after pagination failure or cancellation', async () => {

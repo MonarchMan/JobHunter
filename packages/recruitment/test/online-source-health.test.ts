@@ -26,6 +26,8 @@ const source: SyncSourceRecord = {
   enabled: true,
   cursor: null,
   consecutiveFailures: 0,
+  healthStatus: 'unknown',
+  lastSuccessAt: null,
 };
 
 describe('explicit online source health', () => {

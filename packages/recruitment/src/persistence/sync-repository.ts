@@ -64,6 +64,8 @@ interface SourceRow {
   readonly sync_policy_json: string;
   readonly enabled: number;
   readonly consecutive_failures: number;
+  readonly health_status: SyncSourceRecord['healthStatus'];
+  readonly last_success_at: number | null;
   readonly cursor_out_json: string | null;
 }
 
@@ -119,7 +121,7 @@ export class SqliteSyncRepository implements SyncRepository {
                 s.sync_policy_json,
                 CASE WHEN s.enabled = 1 AND company.enabled = 1 AND channel.enabled = 1
                      THEN 1 ELSE 0 END AS enabled,
-                s.consecutive_failures,
+                s.consecutive_failures, s.health_status, s.last_success_at,
                 (SELECT r.cursor_out_json FROM ${scanTaskProjection} r
                  WHERE r.source_id = s.id AND r.status = 'succeeded'
                    AND r.cursor_out_json IS NOT NULL
@@ -141,6 +143,8 @@ export class SqliteSyncRepository implements SyncRepository {
       enabled: row.enabled === 1,
       cursor: row.cursor_out_json === null ? null : (JSON.parse(row.cursor_out_json) as unknown),
       consecutiveFailures: row.consecutive_failures,
+      healthStatus: row.health_status,
+      lastSuccessAt: row.last_success_at === null ? null : utcInstant(row.last_success_at),
     };
   }
 
@@ -388,7 +392,7 @@ export class SqliteSyncRepository implements SyncRepository {
       .prepare(
         `UPDATE job_sources SET health_status = ?, consecutive_failures = ?,
            last_success_at = CASE WHEN ? = 'succeeded' THEN ? ELSE last_success_at END,
-           last_failure_at = CASE WHEN ? != 'succeeded' THEN ? ELSE last_failure_at END,
+           last_failure_at = CASE WHEN ? IN ('failed', 'partial') THEN ? ELSE last_failure_at END,
            updated_at = ? WHERE id = ?`,
       )
       .run(

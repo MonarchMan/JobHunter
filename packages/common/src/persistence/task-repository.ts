@@ -174,10 +174,15 @@ export class SqliteTaskRepository implements TaskQueue {
     readonly now: UtcInstant;
   }) => EnqueueTaskResult | null;
 
-  /** 注入按任务类型读取系统重试上限的查询；独立队列采用系统默认三次。 */
+  /** 注入重试上限与租约恢复的纯输入转换；独立队列默认最多领取三次。 */
   public constructor(
     client: Database.Database,
     maxAttemptsFor: (taskType: string) => number = () => 3,
+    private readonly recoverPayload?: (
+      taskType: string,
+      payload: unknown,
+      checkpoint: unknown,
+    ) => unknown,
   ) {
     this.#client = client;
     this.#maxAttemptsFor = maxAttemptsFor;
@@ -238,14 +243,7 @@ export class SqliteTaskRepository implements TaskQueue {
           )
           .run(input.idempotencyKey, input.createdAt, input.id);
         // 3、保留业务身份、原始幂等键和累计次数；上方日志的累计次数即新一轮预算起点。
-        this.#client
-          .prepare(
-            `UPDATE tasks SET status = 'pending', private_state = ?,
-        available_at = ?, lease_owner = NULL, lease_expires_at = NULL,
-        last_heartbeat_at = NULL, cancel_requested_at = NULL, error_category = NULL,
-        error_summary = NULL, public_state = NULL, started_at = NULL, finished_at = NULL WHERE id = ?`,
-          )
-          .run(canonicalJson(input.payload), input.availableAt, input.id);
+        this.#requeue(input.id, input.availableAt, input.payload);
         const task = this.get(input.id);
         if (!task) throw new TypeError('Retried task was not found.');
         return { kind: 'enqueued', task };
@@ -432,10 +430,10 @@ export class SqliteTaskRepository implements TaskQueue {
     // 2、只读取已过期执行，按系统配置和最近手动重试起点判断本轮预算。
     const expired = this.#client
       .prepare(
-        `SELECT id, task_type FROM tasks
+        `SELECT id, task_type, private_state, public_state FROM tasks
          WHERE status = 'running' AND lease_expires_at <= ? AND cancel_requested_at IS NULL`,
       )
-      .all(now) as { id: string; task_type: string }[];
+      .all(now) as Pick<TaskRow, 'id' | 'task_type' | 'private_state' | 'public_state'>[];
     let recovered = 0;
     let exhausted = 0;
     for (const task of expired) {
@@ -452,16 +450,39 @@ export class SqliteTaskRepository implements TaskQueue {
           )
           .run(now, task.id).changes;
       } else {
-        recovered += this.#client
-          .prepare(
-            `UPDATE tasks SET status = 'pending', available_at = ?, lease_owner = NULL,
-           lease_expires_at = NULL, last_heartbeat_at = NULL
-             WHERE id = ?`,
-          )
-          .run(now, task.id).changes;
+        const payload: unknown = JSON.parse(task.private_state);
+        const checkpoint: unknown =
+          task.public_state === null ? undefined : JSON.parse(task.public_state);
+        const resume = this.recoverPayload?.(task.task_type, payload, checkpoint) ?? payload;
+        recovered += this.#requeue(task.id, now, resume === payload ? undefined : resume);
       }
     }
     return { recovered, exhausted };
+  }
+
+  /** 调用方持有写事务并已校验领取条件；仅把当前执行字段重置为空。 */
+  #requeue(taskId: string, availableAt: UtcInstant, resume: unknown): number {
+    if (resume !== undefined) {
+      this.#client
+        .prepare('UPDATE tasks SET private_state = ? WHERE id = ?')
+        .run(canonicalJson(resume), taskId);
+      // 更新触发器投影单来源；多来源恢复输入仍按首个来源建立诊断索引。
+      this.#client
+        .prepare(
+          `UPDATE tasks SET source_id = json_extract(private_state, '$.sourceIds[0]')
+         WHERE id = ? AND source_id IS NULL AND json_type(private_state, '$.sourceIds[0]') = 'text'`,
+        )
+        .run(taskId);
+    }
+    return this.#client
+      .prepare(
+        `UPDATE tasks SET status = 'pending', available_at = ?,
+         lease_owner = NULL, lease_expires_at = NULL, last_heartbeat_at = NULL,
+         started_at = NULL, finished_at = NULL, cancel_requested_at = NULL,
+         error_category = NULL, error_summary = NULL, public_state = NULL
+         WHERE id = ?`,
+      )
+      .run(availableAt, taskId).changes;
   }
 
   /** 手动重试日志提供本轮起点，累计次数持续用于执行身份和审计。 */
@@ -636,34 +657,32 @@ export class SqliteTaskRepository implements TaskQueue {
     );
   }
 
-  /** 执行数据库组件对外暴露的操作。 */
-  public reschedule(input: {
-    readonly result?: unknown;
-    readonly taskId: TaskId;
-    readonly workerId: string;
-    readonly availableAt: UtcInstant;
-    readonly occurredAt: UtcInstant;
-    readonly category: TaskErrorCategory;
-    readonly summary: string;
-  }): boolean {
-    return (
-      this.#client
-        .prepare(
-          `UPDATE tasks SET status = 'pending', available_at = ?, lease_owner = NULL,
-             lease_expires_at = NULL, last_heartbeat_at = NULL,
-             error_category = ?, error_summary = ?, public_state = COALESCE(?, public_state)
-           WHERE id = ? AND status = 'running' AND lease_owner = ? AND lease_expires_at > ?`,
+  /** 自动重试原子转移恢复输入并清空本次执行状态，旧失败由 Worker 日志记录。 */
+  public reschedule(input: Parameters<TaskQueue['reschedule']>[0]): boolean {
+    return this.#client
+      .transaction(() => {
+        const task = this.get(input.taskId);
+        if (
+          task?.status !== 'running' ||
+          task.leaseOwner !== input.workerId ||
+          (task.leaseExpiresAt ?? 0) <= input.occurredAt ||
+          task.cancelRequestedAt !== null
         )
-        .run(
-          input.availableAt,
-          input.category,
-          input.summary,
-          input.result === undefined ? null : canonicalJson(input.result),
-          input.taskId,
-          input.workerId,
-          input.occurredAt,
-        ).changes === 1
-    );
+          return false;
+        const payload =
+          input.retryPayload?.(
+            task.payload,
+            input.result === undefined ? task.result : input.result,
+          ) ?? task.payload;
+        return (
+          this.#requeue(
+            input.taskId,
+            input.availableAt,
+            payload === task.payload ? undefined : payload,
+          ) === 1
+        );
+      })
+      .immediate();
   }
 
   /** 执行数据库组件对外暴露的操作。 */

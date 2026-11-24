@@ -565,14 +565,18 @@ export class JobSyncService {
         coverage = 'partial';
       }
     }
-    const listFailed = status === 'failed' || coverage !== 'complete';
-    const failures = listFailed ? source.consecutiveFailures + 1 : 0;
-    const health =
-      status === 'succeeded'
-        ? 'healthy'
-        : failures >= source.syncPolicy.unhealthyAfterFailures
-          ? 'unhealthy'
-          : 'degraded';
+    // 以实际完成的扫描更新连续失败计数，主动取消不影响来源健康。
+    let failures = source.consecutiveFailures;
+    let health = source.healthStatus;
+    if (status === 'succeeded') {
+      failures = 0;
+      health = 'healthy';
+    } else if (status !== 'cancelled') {
+      failures += 1;
+      if (failures >= source.syncPolicy.unhealthyAfterFailures) health = 'unhealthy';
+      else if (failures >= source.syncPolicy.degradedAfterFailures) health = 'degraded';
+      else health = source.lastSuccessAt === null ? 'unknown' : 'healthy';
+    }
     const completionDiagnostics = completion?.diagnostics ?? null;
     const errorCategory = cancelled
       ? 'cancelled'

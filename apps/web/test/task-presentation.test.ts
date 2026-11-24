@@ -83,6 +83,16 @@ it('运行中的未知覆盖不生成错误或警告，真实摘要仍保留', (
   expect(combined.error).toBe('finished：第二页获取失败');
 });
 
+it('等待重试时隐藏任务和来源的上次错误摘要', () => {
+  expect(
+    taskPresentation({
+      status: 'pending',
+      errorSummary: 'Browser operation failed.',
+      sourceSync: source,
+    }),
+  ).toMatchObject({ status: 'pending', error: '', warning: false });
+});
+
 it('终态且覆盖未知时仍保留不完整提示', () => {
   if (!source.run) throw new Error('Missing fixture run');
   const result = taskPresentation({

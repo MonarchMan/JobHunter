@@ -8,11 +8,11 @@
 
 已确认三条物理来源：social（hireType=0，不过滤性质）、intern（校园 hireType=1/jobNatures=[3]）、campus（hireType=1/jobNatures=[1]），均 channelDetailIds=[1]。jobNatures 是官网公开详情推荐列表使用的字段，已独立验证它将校园 262 拆为实习 144 与应届 118；不固定项目 ID/年份，覆盖对应性质全部在招项目。社招包括 nature=1 全职和 nature=5 第三方编制，不能用全职筛选遗漏后者，归一化保留原始 employmentType，不冒充米哈游直聘。社招入口实习筛选当前返回合法零，不注册无详情证据的占位来源；实习支持范围为校园实习专项，不声称其他独立入口已接入。
 
-POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、data.list/total/pageNo/pageSize；固定每页 10，严格核对回显和 nature/channelDetailIds。POST /v1/job/info 用 id、channelDetailIds、hireType 读取详情，核对 id、hireType、性质与开放 status=1。真实 description/jobRequire 必须非空，不使用 jobSummary 代替。无发布日期则 publishedAt=null，不猜测；地点直接使用 addressDetailList 的公开名称。分页采样、重复、短页、总数漂移保留 partial；健康仅首页，生产 HTTP 每分钟 12 次，详情限流复用同一 sourceKey。无浏览器或登录态依赖，不需要新 ADR。
+POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、data.list/total/pageNo/pageSize；固定每页 10，严格核对回显和 nature/channelDetailIds。POST /v1/job/info 用 id、channelDetailIds、hireType 读取详情，核对 id、hireType、性质与开放 status=1。真实 description/jobRequire 必须非空，不使用 jobSummary 代替。无发布日期则 publishedAt=null，不猜测；地点直接使用 addressDetailList 的公开名称。分页采样、重复、实际边界错误保留 partial，参考总数偏差只限制下架推断；健康仅首页，生产 HTTP 每分钟 12 次，详情限流复用同一 sourceKey。无浏览器或登录态依赖，不需要新 ADR。
 
 携程采用统一官网 careers.ctrip.com 的匿名 HTTP，不需要浏览器、账号或签名。三条 required 物理来源分别为社会正式岗位（category=1/kind=1）、日常实习（category=1/kind=3）及应届校招（category=2/kind=1）。客服导航只是社招类别筛选，已包含；留用实习当前官网明确未开启，后续独立验证，不注册占位 adapter，也不宣称覆盖其他品牌或 Global Recruitment 独立站。
 
-协议置于 companies/ctrip，渠道入口分别放入 social/intern/campus。固定官网容量 10，生产串行顺序分页，maximumPages 上限 1000；显式 first-last 用于两页 smoke。响应不回显页码，不能将请求页号当作响应证据；以各页长度、稳定总数、唯一 ID 及全量计数闭合判断 complete。采样、短页、重复、总数漂移均为 partial，保护旧岗位。健康检查仅首页，请求复用 SourceHttpClient 限流（12/min，burst=1）。
+协议置于 companies/ctrip，渠道入口分别放入 social/intern/campus。固定官网容量 10，生产串行顺序分页，maximumPages 上限 1000；显式 first-last 用于两页 smoke。响应不回显页码，不能将请求页号当作响应证据；以实际短页结束，校验容量与唯一 ID。采样、实际边界错误和重复均为 partial，保护旧岗位。健康检查仅首页，请求复用 SourceHttpClient 限流（12/min，burst=1）。
 
 仅 head.language=zh_CN 会返回英文城市。正常官网设置固定展示偏好 Cookie `language=zh-CN`；匿名 HTTP 仅携带该常量即可返回中文，不使用任何用户、登录、追踪或风控 Cookie，不需要 c-sign。城市直接采用官网字段，避免引入不完整的人工英文城市映射。
 
@@ -58,7 +58,7 @@ POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、
 
 每个来源默认每页 50（允许 1–100），从不触发职位列表的官网首页初始化，按总数计算末页，并检查一条独立详情。smoke 仅两次列表请求；所有采样报告 partial / sampled_pages。元数据和列表请求间隔至少 5 秒，单次调用 30 秒、整次采集 300 秒截止；健康检查最多一页。所有正常/异常出口释放页面，外层池释放 context/browser。无浏览器时 access_blocked，不降级为裸 HTTP。旧的通用 fetch 重放失败不作为否定官网原生请求路径的证据。
 
-职责和要求以纯文本内联拼接，城市和经验按官网字典解码；不把 updateTime 当发布日期，当前 publishedAt 为 null。浏览器驱动和适配器两层校验完整性，缺页、短页、重复、总数漂移不能触发旧岗位下线。公开字段白名单在 SourcePageClient 返回前剔除无关内部字段。
+职责和要求以纯文本内联拼接，城市和经验按官网字典解码；不把 updateTime 当发布日期，当前 publishedAt 为 null。浏览器驱动和适配器两层校验完整性，实际缺页、重复或参考总数有差异时禁止旧岗位下线。公开字段白名单在 SourcePageClient 返回前剔除无关内部字段。
 
 ## 滴滴接入协议
 

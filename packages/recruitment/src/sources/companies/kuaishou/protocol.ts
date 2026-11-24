@@ -213,9 +213,9 @@ export function validateKuaishouCollection(
     invalidBoundary ||=
       !Number.isSafeInteger(page.page) ||
       page.page < 1 ||
-      page.page > expectedPages ||
       numbers.has(page.page) ||
-      page.records.length !== Math.min(pageSize, Math.max(0, total - (page.page - 1) * pageSize));
+      (collection.coverage === 'complete' && page.page !== pages.length + 1) ||
+      page.records.length > pageSize;
     numbers.add(page.page);
     const records = page.records.map((value) => {
       const job = parseKuaishouJob(value, key);
@@ -238,23 +238,24 @@ export function validateKuaishouCollection(
   if (kuaishouSite(key).campus && projects.size > 1)
     throw new SourceError('parse_changed', 'Kuaishou collection mixes campus projects.');
   // 2、异常优先于采样原因；已标 partial 的集合永远不会被升级为 complete。
-  const missing = numbers.size !== expectedPages || ids.size !== total;
-  const reason = totalChanged
-    ? 'pagination_total_changed'
+  const reason = invalidBoundary
+    ? 'invalid_page_boundary'
     : duplicateIds
       ? 'duplicate_job_ids'
-      : invalidBoundary
-        ? 'invalid_page_boundary'
-        : (collection.diagnostics?.reason ?? (missing ? 'discovered_count_mismatch' : null));
+      : (collection.diagnostics?.reason ?? null);
   return {
     ...collection,
     pages,
-    coverage:
-      totalChanged || duplicateIds || invalidBoundary || missing ? 'partial' : collection.coverage,
+    coverage: duplicateIds > 0 || invalidBoundary ? 'partial' : collection.coverage,
     diagnostics: {
       ...collection.diagnostics,
       reason,
-      retryable: totalChanged,
+      retryable: collection.diagnostics?.retryable ?? false,
+      absenceReliable:
+        collection.diagnostics?.absenceReliable !== false &&
+        reason === null &&
+        !totalChanged &&
+        ids.size === total,
       expectedCount: total,
       discoveredCount: ids.size,
       expectedPages,

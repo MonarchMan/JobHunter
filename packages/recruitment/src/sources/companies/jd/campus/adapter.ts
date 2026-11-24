@@ -140,9 +140,8 @@ function createJdChannelAdapter(
     configSchema: jdCampusConfigSchema,
     /** 执行来源适配器的该项操作。 */
     async *discover(context): AsyncIterable<DiscoveryEvent> {
-      const expectedPages = (total: number): number =>
-        total === 0 ? 0 : Math.ceil(total / context.config.pageSize);
       let expectedCount = 0;
+      let totalChanged = false;
       let discoveredCount = 0;
       let coverage: 'complete' | 'partial' = 'complete';
       const seen = new Set<string>();
@@ -169,7 +168,7 @@ function createJdChannelAdapter(
           'JD campus list response no longer matches the verified schema.',
         );
         if (pageIndex === 0) expectedCount = parsed.body.totalNumber;
-        if (expectedCount !== parsed.body.totalNumber) coverage = 'partial';
+        totalChanged ||= expectedCount !== parsed.body.totalNumber;
         if (parsed.body.items.length > context.config.pageSize) coverage = 'partial';
 
         for (const raw of parsed.body.items) {
@@ -187,22 +186,28 @@ function createJdChannelAdapter(
         }
         yield { type: 'page', page: pageIndex + 1, discoveredCount };
 
-        const pages = expectedPages(expectedCount);
-        if (discoveredCount >= expectedCount || parsed.body.items.length === 0) break;
-        if (parsed.body.items.length < context.config.pageSize || pageIndex + 1 >= pages) {
+        if (parsed.body.items.length < context.config.pageSize) break;
+        if (coverage === 'partial' || pageIndex + 1 >= 1_000) {
           coverage = 'partial';
           break;
         }
         pageIndex += 1;
       }
 
-      if (discoveredCount !== expectedCount) coverage = 'partial';
       yield {
         type: 'complete',
         coverage,
         cursor: null,
         pages: pageIndex + 1,
         discoveredCount,
+        diagnostics: {
+          reason: coverage === 'complete' ? null : 'invalid_page_boundary',
+          retryable: false,
+          expectedCount,
+          totalChanged,
+          absenceReliable:
+            coverage === 'complete' && !totalChanged && discoveredCount === expectedCount,
+        },
       };
     },
     /** 执行来源适配器的该项操作。 */
@@ -271,7 +276,7 @@ function createJdChannelAdapter(
           timeoutMs: context.timeoutMs,
         });
         const parsed = jdCampusListResponseSchema.parse(response.body);
-        const ok = parsed.body.totalNumber > 0 && parsed.body.items.length > 0;
+        const ok = parsed.body.items.length > 0;
         return {
           status: ok ? 'healthy' : 'degraded',
           checkedAt: Date.now(),

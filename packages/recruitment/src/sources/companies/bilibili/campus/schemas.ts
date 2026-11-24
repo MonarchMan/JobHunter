@@ -57,8 +57,6 @@ export function bilibiliCampusProtocol(channel: 'campus' | 'intern'): BilibiliCa
         .safeParse(value);
       if (!parsed.success)
         throw new SourceError('parse_changed', 'Bilibili campus list schema changed.');
-      if (parsed.data.data.list.length > parsed.data.data.total)
-        throw new SourceError('parse_changed', 'Bilibili list length exceeds its total.');
       return { records: parsed.data.data.list, total: parsed.data.data.total };
     },
     /** 空筛选确保同步覆盖全渠道；不接受热门或单一实习项目过滤。 */

@@ -5,7 +5,7 @@ import {
   type ScriptedAdapterDefinition,
 } from '../../../shared/scripted/adapter.js';
 import type { ScriptedConfig } from '../../../shared/scripted/schemas.js';
-import { xiaohongshuCampusJobSchema } from './schemas.js';
+import { xiaohongshuCampusJobSchema, xiaohongshuListResponseSchema } from './schemas.js';
 
 /** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function definition(
@@ -20,6 +20,19 @@ function definition(
     entryUrl,
     hosts: ['job.xiaohongshu.com'],
     recordSchema: xiaohongshuCampusJobSchema,
+    ...(recruitType === 'campus'
+      ? {
+          readCountedHttpPage: (body: unknown) => {
+            const { data } = xiaohongshuListResponseSchema.parse(body);
+            return {
+              items: data.list,
+              total: data.total,
+              page: data.pageNum,
+              pageSize: data.pageSize,
+            };
+          },
+        }
+      : {}),
     jobUrl: (_record, id) => `${entryUrl}/${encodeURIComponent(id)}`,
     request: ({ config, page, requestId, signal, timeoutMs }) =>
       jsonRequest({

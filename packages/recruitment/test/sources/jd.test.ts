@@ -139,12 +139,16 @@ describe('JD source adapter contract', () => {
     expect(normalized.job.applyUrl).toBe('https://zhaopin.jd.com/web/job/job_info_list/3');
   });
 
-  it('reports partial when a later page is empty before the advertised count', async () => {
+  it('accepts the actual empty page before the reference total', async () => {
     const emptySecond: unknown[] = [];
     const discovery = await collectDiscovery(
       adapter.discover(context(fixtureHttp({ secondPage: emptySecond }))),
     );
-    expect(discovery.completion).toMatchObject({ coverage: 'partial', discoveredCount: 2 });
+    expect(discovery.completion).toMatchObject({
+      coverage: 'complete',
+      discoveredCount: 2,
+      diagnostics: { absenceReliable: false },
+    });
   });
 
   it('preserves access-blocked classification and health diagnostics', async () => {

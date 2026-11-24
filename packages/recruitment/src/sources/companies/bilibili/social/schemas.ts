@@ -76,9 +76,6 @@ export function parseBilibiliSocialPage(value: unknown): {
   const parsed = listSchema.safeParse(value);
   if (!parsed.success)
     throw new SourceError('parse_changed', 'Bilibili social list schema changed.');
-  if (parsed.data.data.list.length > parsed.data.data.total) {
-    throw new SourceError('parse_changed', 'Bilibili list length exceeds its total.');
-  }
   return { records: parsed.data.data.list, total: parsed.data.data.total };
 }
 

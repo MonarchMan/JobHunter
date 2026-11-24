@@ -201,7 +201,7 @@ export interface PersistedScheduleInput {
 
 /** 应用层数据结构或端口契约。 */
 export interface TaskQueue {
-  /** 仅当前租约与尝试能保存进度，进度在取消及租约恢复时保留。 */
+  /** 仅当前租约与尝试能保存进度，重新入队时可将检查点转为私有恢复输入。 */
   checkpoint(
     taskId: TaskId,
     workerId: string,
@@ -245,8 +245,8 @@ export interface TaskQueue {
     readonly workerId: string;
     readonly availableAt: UtcInstant;
     readonly occurredAt: UtcInstant;
-    readonly category: TaskErrorCategory;
-    readonly summary: string;
+    /** 纯转换函数，使用失败结果或事务内读取的最后一个检查点生成恢复输入。 */
+    readonly retryPayload?: ((payload: unknown, result: unknown) => unknown) | undefined;
   }): boolean;
   fail(input: {
     readonly result?: unknown;

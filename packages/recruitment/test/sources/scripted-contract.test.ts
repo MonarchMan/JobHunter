@@ -101,6 +101,8 @@ describe('scripted adapters common source contract', () => {
 
   it('covers Xiaohongshu campus JSON', async () => {
     const loaded = await fixture('xiaohongshu/page-1.json');
+    const first = loaded.value as { data: { list: Record<string, unknown>[] } };
+    const empty = { ...first, data: { ...first.data, pageNum: 2, list: [] } };
     const http: SourceHttpClient = {
       request: <TBody>(
         request: Parameters<SourceHttpClient['request']>[0],
@@ -109,11 +111,11 @@ describe('scripted adapters common source contract', () => {
           status: 200,
           url: request.url,
           headers: new Headers({ 'content-type': 'application/json' }),
-          body: loaded.value as TBody,
+          body: (String(request.body).includes('"pageNum":1') ? first : empty) as TBody,
         }),
     };
     const contractContext = context(http);
-    const raw = (loaded.value as { data: { list: Record<string, unknown>[] } }).data.list[0];
+    const raw = first.data.list[0];
     if (!raw) throw new Error('Contract fixture must contain one job.');
     const cases = defineSourceContractSuite(createXiaohongshuAdapter, {
       context: contractContext,

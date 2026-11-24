@@ -33,6 +33,13 @@ export interface ScriptedAdapterDefinition {
   };
   readonly requiresRuntimeToken?: 'signature' | 'xiaohongshu';
   readonly recordSchema: { parse(value: unknown): RecordValue };
+  /** 官网总数只用于诊断；校验实际分页，读至空页后按职位 ID 去重。 */
+  readonly readCountedHttpPage?: (body: unknown) => {
+    readonly items: RecordValue[];
+    readonly total: number;
+    readonly page: number;
+    readonly pageSize: number;
+  };
   readonly jobUrl?: (record: RecordValue, externalJobId: string) => string;
   readonly request: (context: {
     readonly config: ScriptedConfig;
@@ -125,10 +132,7 @@ function findNumber(value: unknown, keys: readonly string[], depth = 0): number 
 }
 
 /** 执行来源数据的解析、转换、请求或分页逻辑。 */
-function parsePage(
-  body: unknown,
-  pageSize: number,
-): { readonly items: RecordValue[]; readonly total: number } {
+function parsePage(body: unknown): { readonly items: RecordValue[]; readonly total: number } {
   const items = findArray(body);
   if (!items)
     throw new SourceError('parse_changed', 'Scripted source returned no recognizable job list.');
@@ -141,7 +145,7 @@ function parsePage(
       'totalNum',
       'job_post_list_count',
     ]) ?? items.length;
-  return { items, total: Math.max(total, items.length > pageSize ? 0 : items.length) };
+  return { items, total };
 }
 
 /** 执行来源数据的解析、转换、请求或分页逻辑。 */
@@ -359,11 +363,12 @@ export function createScriptedAdapter(
         const seen = new Set<string>();
         let discoveredCount = 0;
         let expectedCount: number | null = null;
+        let totalChanged = false;
         let coverage: 'complete' | 'partial' | 'unknown' = collection.coverage;
         for (const collectedPage of collection.pages) {
           if (collectedPage.total !== null) {
             expectedCount ??= collectedPage.total;
-            if (expectedCount !== collectedPage.total) coverage = 'partial';
+            totalChanged ||= expectedCount !== collectedPage.total;
           }
           for (const value of collectedPage.records) {
             const raw = parseRecord(value);
@@ -389,14 +394,23 @@ export function createScriptedAdapter(
           }
           yield { type: 'page', page: collectedPage.page, discoveredCount };
         }
-        if (expectedCount !== null && discoveredCount !== expectedCount) coverage = 'partial';
         yield {
           type: 'complete',
           coverage,
           cursor: null,
           pages: collection.pages.length,
           discoveredCount,
-          ...(collection.diagnostics ? { diagnostics: collection.diagnostics } : {}),
+          diagnostics: {
+            reason: null,
+            retryable: false,
+            ...collection.diagnostics,
+            totalChanged: totalChanged || (collection.diagnostics?.totalChanged ?? false),
+            absenceReliable:
+              collection.diagnostics?.absenceReliable !== false &&
+              coverage === 'complete' &&
+              !totalChanged &&
+              discoveredCount === expectedCount,
+          },
         };
         return;
       }
@@ -406,6 +420,15 @@ export function createScriptedAdapter(
       let total = 0;
       let discoveredCount = 0;
       let coverage: 'complete' | 'partial' = 'complete';
+      const readCountedPage = definition.readCountedHttpPage;
+      const pageCounts: { page: number; total: number; returned: number; duplicateIds: number }[] =
+        [];
+      const firstPages = new Map<string, number>();
+      const duplicateSamples = new Map<string, Set<number>>();
+      let duplicateIds = 0;
+      let paginationIssue: string | null = null;
+      let totalChanged = false;
+      let returnedCount = 0;
 
       for (;;) {
         if (context.signal.aborted)
@@ -420,10 +443,43 @@ export function createScriptedAdapter(
           }),
           responseType: 'json',
         });
-        const parsed = parsePage(response.body, context.config.pageSize);
+        let countedPage: ReturnType<NonNullable<typeof readCountedPage>> | undefined;
+        try {
+          countedPage = readCountedPage?.(response.body);
+        } catch (error) {
+          throw new SourceError(
+            'parse_changed',
+            'Official list response has an invalid page shape.',
+            {
+              cause: error,
+            },
+          );
+        }
+        const parsed = countedPage ?? parsePage(response.body);
         if (page === 1) total = parsed.total;
-        if (parsed.total !== total || parsed.items.length > context.config.pageSize)
-          coverage = 'partial';
+        if (countedPage) {
+          const pageSize = context.config.pageSize;
+          totalChanged ||= parsed.total !== total;
+          if (
+            countedPage.page !== page ||
+            countedPage.pageSize !== pageSize ||
+            parsed.items.length > pageSize
+          ) {
+            paginationIssue = 'pagination_page_mismatch';
+            pageCounts.push({
+              page: countedPage.page,
+              total: parsed.total,
+              returned: parsed.items.length,
+              duplicateIds: 0,
+            });
+            break;
+          }
+          returnedCount += parsed.items.length;
+        } else {
+          totalChanged ||= parsed.total !== total;
+          if (parsed.items.length > context.config.pageSize) coverage = 'partial';
+        }
+        const previousDuplicates = duplicateIds;
         for (const value of parsed.items) {
           const raw = parseRecord(value);
           const id = externalId(raw);
@@ -433,10 +489,17 @@ export function createScriptedAdapter(
               `${definition.company.name} returned a job without a stable ID.`,
             );
           if (seen.has(id)) {
-            coverage = 'partial';
+            if (countedPage) {
+              duplicateIds += 1;
+              const pages = duplicateSamples.get(id);
+              if (pages) pages.add(page);
+              else if (duplicateSamples.size < 20)
+                duplicateSamples.set(id, new Set([firstPages.get(id) ?? page, page]));
+            } else coverage = 'partial';
             continue;
           }
           seen.add(id);
+          if (countedPage) firstPages.set(id, page);
           discoveredCount += 1;
           const sourceUrl = canonicalizeOfficialUrl(
             definition.jobUrl?.(raw, id) ?? entryUrl,
@@ -445,15 +508,73 @@ export function createScriptedAdapter(
           yield { type: 'job', job: { externalJobId: id, sourceUrl, raw } };
         }
         yield { type: 'page', page, discoveredCount };
-        if (discoveredCount >= total || parsed.items.length === 0) break;
-        if (parsed.items.length < context.config.pageSize) {
+        if (countedPage) {
+          pageCounts.push({
+            page,
+            total: parsed.total,
+            returned: parsed.items.length,
+            duplicateIds: duplicateIds - previousDuplicates,
+          });
+          // 短页也可能仍有后续数据，只有实际空页才能结束计数。
+          if (parsed.items.length === 0) break;
+          if (page >= 1_000) {
+            paginationIssue = 'maximum_pages_reached';
+            break;
+          }
+          page += 1;
+          continue;
+        }
+        if (parsed.items.length < context.config.pageSize) break;
+        if (coverage === 'partial' || page >= 1_000) {
           coverage = 'partial';
           break;
         }
         page += 1;
       }
-      if (discoveredCount !== total) coverage = 'partial';
-      yield { type: 'complete', coverage, cursor: null, pages: page, discoveredCount };
+      if (readCountedPage) {
+        yield {
+          type: 'complete',
+          coverage: paginationIssue === null ? 'complete' : 'partial',
+          cursor: null,
+          pages: page,
+          discoveredCount,
+          diagnostics: {
+            reason: paginationIssue,
+            retryable: false,
+            expectedCount: total,
+            expectedPages: Math.max(1, Math.ceil(total / context.config.pageSize)),
+            fetchedPages: pageCounts.length,
+            discoveredCount,
+            totalChanged,
+            duplicateIds,
+            absenceReliable:
+              paginationIssue === null &&
+              !totalChanged &&
+              returnedCount === total &&
+              duplicateIds === 0,
+            pageCounts,
+            duplicateJobSamples: [...duplicateSamples].map(([id, pages]) => ({
+              id,
+              pages: [...pages],
+            })),
+          },
+        };
+        return;
+      }
+      yield {
+        type: 'complete',
+        coverage,
+        cursor: null,
+        pages: page,
+        discoveredCount,
+        diagnostics: {
+          reason: coverage === 'complete' ? null : 'invalid_page_boundary',
+          retryable: false,
+          expectedCount: total,
+          totalChanged,
+          absenceReliable: coverage === 'complete' && !totalChanged && discoveredCount === total,
+        },
+      };
     },
     /** 执行来源适配器的该项操作。 */
     normalize(input, context) {
@@ -553,7 +674,7 @@ export function createScriptedAdapter(
           }),
           responseType: 'json',
         });
-        const parsed = parsePage(response.body, 1);
+        const parsed = parsePage(response.body);
         const ok = parsed.items.length > 0;
         return {
           status: ok ? 'healthy' : 'degraded',

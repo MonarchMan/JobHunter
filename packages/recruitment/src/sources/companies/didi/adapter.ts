@@ -98,28 +98,27 @@ export function createDidiAdapter(key: DidiKey): JobSourceAdapter<DidiConfig, Di
       return parsed.total;
     };
     const total = await read(1);
-    const numbers = didiPageNumbers(
-      total,
-      16,
-      health ? 1 : context.config.maximumPages,
-      context.config.pageSampling,
-    );
+    const maximum = health ? 1 : context.config.maximumPages;
+    const sampled =
+      context.config.pageSampling === 'first-last' &&
+      Math.ceil(total / 16) > maximum &&
+      maximum >= 2;
+    const numbers = sampled
+      ? didiPageNumbers(total, 16, maximum, 'first-last')
+      : Array.from({ length: maximum }, (_, index) => index + 1);
     // 2、请求由 SourceHttpClient 的来源限流门控制；逐页串行而非并发扫描。
     for (const page of numbers.slice(1)) {
+      if (!sampled && (pages.at(-1)?.records.length ?? 0) < 16) break;
       if (context.signal.aborted) throw new SourceError('temporary', 'Didi discovery was aborted.');
       await read(page);
     }
-    const partial = numbers.length < Math.max(1, Math.ceil(total / 16));
+    const partial = sampled || (pages.at(-1)?.records.length ?? 0) >= 16;
     return validateDidiCollection(
       {
         pages,
         coverage: partial ? 'partial' : 'complete',
         diagnostics: {
-          reason: partial
-            ? context.config.pageSampling === 'first-last'
-              ? 'sampled_pages'
-              : 'maximum_pages_reached'
-            : null,
+          reason: partial ? (sampled ? 'sampled_pages' : 'maximum_pages_reached') : null,
           retryable: false,
         },
       },

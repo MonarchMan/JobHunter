@@ -72,22 +72,25 @@ function harness(
             total: 3,
             pageNum: input.pageNum,
             pageSize: 1,
-            list: [
-              {
-                id: input.pageNum,
-                name: '测试岗位',
-                description: '测试职责',
-                positionDemand: '测试要求',
-                positionNatureCode: site.nature,
-                recruitProjectCode: site.campus ? 'schoolr' : 'socialr',
-                ...(site.campus
-                  ? {
-                      recruitSubProjectCode: 'current',
-                      workLocationDicts: [{ code: 'beijing', name: '北京' }],
-                    }
-                  : { workLocationsCode: ['beijing'] }),
-              },
-            ],
+            list:
+              Number(input.pageNum) > 3
+                ? []
+                : [
+                    {
+                      id: input.pageNum,
+                      name: '测试岗位',
+                      description: '测试职责',
+                      positionDemand: '测试要求',
+                      positionNatureCode: site.nature,
+                      recruitProjectCode: site.campus ? 'schoolr' : 'socialr',
+                      ...(site.campus
+                        ? {
+                            recruitSubProjectCode: 'current',
+                            workLocationDicts: [{ code: 'beijing', name: '北京' }],
+                          }
+                        : { workLocationsCode: ['beijing'] }),
+                    },
+                  ],
           },
         });
       }),
@@ -131,7 +134,7 @@ describe('Kuaishou native browser lifecycle (ADR-0023)', () => {
         mode === 'sampled' ? { maximumPages: 2, pageSampling: 'first-last' } : {},
       );
       expect(result.coverage).toBe(mode === 'recover' ? 'complete' : 'partial');
-      expect(result.pages).toHaveLength(mode === 'sampled' ? 2 : 3);
+      expect(result.pages).toHaveLength(mode === 'sampled' ? 2 : 4);
       if (mode === 'sampled') {
         expect([...calls.values()]).toEqual([1, 1]);
         expect(result.diagnostics?.recheckedPages).toBeUndefined();

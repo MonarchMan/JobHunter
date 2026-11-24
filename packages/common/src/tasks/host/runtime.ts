@@ -128,8 +128,11 @@ export function createTaskRuntime(
   const ids = new SystemIdGenerator();
   const clock: Clock = { now: () => utcInstant(Date.now()) };
   const registry = new HandlerRegistry();
-  const queue = new SqliteTaskRepository(database.client, (taskType) =>
-    registry.has(taskType) ? registry.get(taskType).defaultMaxAttempts : 1,
+  const queue = new SqliteTaskRepository(
+    database.client,
+    (taskType) => (registry.has(taskType) ? registry.get(taskType).defaultMaxAttempts : 1),
+    (taskType, payload, checkpoint) =>
+      registry.has(taskType) ? registry.get(taskType).retryPayload?.(payload, checkpoint) : payload,
   );
   const tasks = new TaskService({ queue, clock, ids }, registry);
   const schedules = new ScheduleService({ queue, clock, ids }, registry);
@@ -350,8 +353,14 @@ export function createTaskApplication(input: {
 }): TaskApplication {
   // 1、测试仍使用真实队列与引擎，仅外部执行能力由调用方替换。
   const database = openSqliteDatabase({ dataRoot: input.dataRoot });
-  const queue = new SqliteTaskRepository(database.client, (taskType) =>
-    input.registry.has(taskType) ? input.registry.get(taskType).defaultMaxAttempts : 1,
+  const queue = new SqliteTaskRepository(
+    database.client,
+    (taskType) =>
+      input.registry.has(taskType) ? input.registry.get(taskType).defaultMaxAttempts : 1,
+    (taskType, payload, checkpoint) =>
+      input.registry.has(taskType)
+        ? input.registry.get(taskType).retryPayload?.(payload, checkpoint)
+        : payload,
   );
   const clock = input.clock ?? { now: () => utcInstant(Date.now()) };
   const engine = new WorkerEngine({

@@ -107,15 +107,7 @@ function descriptions(detail: MeituanDetail): string {
 
 function hasOnlyDuplicateMeituanRecords(collection: SourcePageCollection): boolean {
   const diagnostics = collection.diagnostics;
-  const duplicateIds = diagnostics?.duplicateIds ?? 0;
-  return (
-    collection.coverage === 'partial' &&
-    diagnostics?.reason === 'duplicate_job_ids' &&
-    duplicateIds > 0 &&
-    diagnostics.totalChanged === false &&
-    diagnostics.expectedPages === diagnostics.fetchedPages &&
-    diagnostics.expectedCount === (diagnostics.discoveredCount ?? -1) + duplicateIds
-  );
+  return collection.coverage === 'partial' && diagnostics?.reason === 'duplicate_job_ids';
 }
 
 /** 执行来源数据的解析、转换、请求或分页逻辑。 */
@@ -197,6 +189,7 @@ function createMeituanChannelAdapter(options: {
             ...collection.diagnostics,
             reason: duplicateOnly ? null : (collection.diagnostics?.reason ?? null),
             retryable: collection.diagnostics?.retryable ?? false,
+            absenceReliable: !duplicateOnly && collection.diagnostics?.absenceReliable !== false,
             discoveredCount,
             duplicateIds:
               collection.diagnostics?.duplicateIds ??
@@ -237,13 +230,15 @@ function createMeituanChannelAdapter(options: {
         const pageInfo = parsed.data.page;
         expectedCount ??= pageInfo.totalCount;
         expectedPages ??= pageInfo.totalPage;
+        totalChanged ||=
+          expectedCount !== pageInfo.totalCount || expectedPages !== pageInfo.totalPage;
         if (
-          expectedCount !== pageInfo.totalCount ||
-          expectedPages !== pageInfo.totalPage ||
-          pageInfo.pageNo !== page
+          pageInfo.pageNo !== page ||
+          pageInfo.pageSize !== context.config.pageSize ||
+          parsed.data.list.length > pageInfo.pageSize
         ) {
           coverage = 'partial';
-          totalChanged = true;
+          break;
         }
 
         for (const raw of parsed.data.list) {
@@ -265,16 +260,14 @@ function createMeituanChannelAdapter(options: {
         }
         yield { type: 'page', page, discoveredCount };
 
-        if (page >= expectedPages || discoveredCount >= expectedCount) break;
-        if (parsed.data.list.length === 0) {
+        if (parsed.data.list.length < pageInfo.pageSize) break;
+        if (coverage === 'partial' || page >= 1_000) {
           coverage = 'partial';
           break;
         }
-        if (parsed.data.list.length < pageInfo.pageSize) coverage = 'partial';
         page += 1;
       }
 
-      if (discoveredCount !== expectedCount || page !== expectedPages) coverage = 'partial';
       yield {
         type: 'complete',
         coverage,
@@ -285,12 +278,12 @@ function createMeituanChannelAdapter(options: {
           reason:
             coverage === 'complete'
               ? null
-              : totalChanged
-                ? 'pagination_total_changed'
-                : duplicateIds > 0
-                  ? 'duplicate_job_ids'
-                  : 'discovered_count_mismatch',
-          retryable: totalChanged,
+              : duplicateIds > 0
+                ? 'duplicate_job_ids'
+                : 'invalid_page_boundary',
+          retryable: false,
+          absenceReliable:
+            coverage === 'complete' && !totalChanged && discoveredCount === expectedCount,
           expectedCount,
           discoveredCount,
           expectedPages,
@@ -454,7 +447,7 @@ function createMeituanChannelAdapter(options: {
           timeoutMs: context.timeoutMs,
         });
         const parsed = meituanListResponseSchema.parse(response.body);
-        const hasJobs = parsed.data.page.totalCount > 0 && parsed.data.list.length > 0;
+        const hasJobs = parsed.data.list.length > 0;
         return {
           status: hasJobs ? 'healthy' : 'degraded',
           checkedAt: Date.now(),

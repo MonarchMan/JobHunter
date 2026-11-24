@@ -136,7 +136,7 @@ describe('Kuaishou physical source contracts (SWT-009..011)', () => {
       expect((await adapter.healthCheck(without)).errorCategory).toBe('access_blocked');
     });
     it.each(['duplicate', 'short', 'missing', 'total', 'page'])(
-      `${key} rejects complete coverage for %s`,
+      `${key} checks actual pagination for %s`,
       async (kind) => {
         const original = collection(key);
         const first = original.pages[0];
@@ -161,7 +161,7 @@ describe('Kuaishou physical source contracts (SWT-009..011)', () => {
               createKuaishouAdapter(key).discover(context(key, { ...original, pages })),
             )
           ).completion.coverage,
-        ).toBe('partial');
+        ).toBe(kind === 'short' || kind === 'total' ? 'complete' : 'partial');
       },
     );
     it(`${key} preserves sampled coverage and verified zero`, () => {

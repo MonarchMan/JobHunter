@@ -162,13 +162,14 @@ function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<Baid
       let discoveredCount = 0;
       let emittedPages = 0;
       let coverage: 'complete' | 'partial' = 'complete';
+      let absenceReliable = true;
 
       for (const recruitType of variant.recruitTypes ?? context.config.recruitTypes) {
         const seenForType = new Set<string>();
         let expectedCount: number | null = null;
-        let expectedPages: number | null = null;
+        let totalChanged = false;
 
-        for (let page = 1; expectedPages === null || page <= expectedPages; page += 1) {
+        for (let page = 1; page <= 1_000; page += 1) {
           if (context.signal.aborted) {
             throw new SourceError('temporary', 'Baidu campus discovery was aborted.');
           }
@@ -186,15 +187,14 @@ function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<Baid
           });
           const parsed = parseList(response.body);
           expectedCount ??= parsed.data.total;
-          expectedPages ??=
-            expectedCount === 0 ? 1 : Math.ceil(expectedCount / context.config.pageSize);
+          totalChanged ||= parsed.data.total !== expectedCount;
           if (
-            parsed.data.total !== expectedCount ||
             parsed.data.pageNum !== page ||
             parsed.data.pageSize !== context.config.pageSize ||
             parsed.data.list.length > context.config.pageSize
           ) {
             coverage = 'partial';
+            break;
           }
 
           for (const raw of parsed.data.list) {
@@ -218,13 +218,14 @@ function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<Baid
           emittedPages += 1;
           yield { type: 'page', page: emittedPages, discoveredCount };
 
-          if (page < expectedPages && parsed.data.list.length < context.config.pageSize) {
+          if (parsed.data.list.length < context.config.pageSize) break;
+          if (coverage === 'partial' || page === 1_000) {
             coverage = 'partial';
             break;
           }
         }
 
-        if (expectedCount === null || seenForType.size !== expectedCount) coverage = 'partial';
+        absenceReliable &&= !totalChanged && seenForType.size === expectedCount;
       }
 
       yield {
@@ -233,6 +234,11 @@ function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<Baid
         cursor: null,
         pages: emittedPages,
         discoveredCount,
+        diagnostics: {
+          reason: coverage === 'complete' ? null : 'invalid_page_boundary',
+          retryable: false,
+          absenceReliable: coverage === 'complete' && absenceReliable,
+        },
       };
     },
     /** 执行来源适配器的该项操作。 */
@@ -308,7 +314,7 @@ function createBaiduVariant(variant: BaiduAdapterVariant): JobSourceAdapter<Baid
           timeoutMs: context.timeoutMs,
         });
         const parsed = parseList(response.body);
-        const ok = parsed.data.total > 0 && parsed.data.list.length > 0;
+        const ok = parsed.data.list.length > 0;
         return {
           status: ok ? 'healthy' : 'degraded',
           checkedAt: Date.now(),

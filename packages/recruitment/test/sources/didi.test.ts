@@ -136,7 +136,7 @@ describe('Didi contracts and public schemas (SWT-013, SWT-014)', () => {
       });
       expect(
         validateDidiCollection({ ...collection, pages: [{ ...page, total: 2 }] }, key, 30).coverage,
-      ).toBe('partial');
+      ).toBe(coverage);
       expect(
         validateDidiCollection(
           {
@@ -274,7 +274,7 @@ describe('Didi contracts and public schemas (SWT-013, SWT-014)', () => {
       ).rejects.toMatchObject({ category: 'parse_changed' });
     });
     it.each(['short', 'missing', 'duplicate', 'total', 'page'])(
-      `${key}: %s never completes`,
+      `${key}: checks actual pagination for %s`,
       (kind) => {
         const job = listed(key);
         const first = {
@@ -308,7 +308,7 @@ describe('Didi contracts and public schemas (SWT-013, SWT-014)', () => {
                 },
               ];
         expect(validateDidiCollection({ coverage: 'complete', pages }, key, 1).coverage).toBe(
-          'partial',
+          kind === 'short' || kind === 'total' ? 'complete' : 'partial',
         );
       },
     );

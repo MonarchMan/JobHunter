@@ -155,7 +155,7 @@ describe('script-reference source adapters', () => {
     )) {
       events.push(event);
     }
-    expect(events.at(-1)).toEqual({
+    expect(events.at(-1)).toMatchObject({
       type: 'complete',
       coverage: 'complete',
       cursor: null,
@@ -296,10 +296,112 @@ describe('script-reference source adapters', () => {
     });
   });
 
+  it.each([
+    {
+      total: 4,
+      secondTotal: 4,
+      secondPage: 2,
+      duplicate: false,
+      reason: null,
+      coverage: 'complete',
+    },
+    {
+      total: 0,
+      secondTotal: 0,
+      secondPage: 2,
+      duplicate: false,
+      reason: null,
+      coverage: 'complete',
+    },
+    {
+      total: 3,
+      secondTotal: 4,
+      secondPage: 2,
+      duplicate: false,
+      reason: null,
+      coverage: 'complete',
+    },
+    {
+      total: 3,
+      secondTotal: 3,
+      secondPage: 2,
+      duplicate: true,
+      reason: null,
+      coverage: 'complete',
+    },
+    {
+      total: 3,
+      secondTotal: 3,
+      secondPage: 1,
+      duplicate: true,
+      reason: 'pagination_page_mismatch',
+      coverage: 'partial',
+    },
+  ])('validates Xiaohongshu pages independently of reported total (%j)', async (testCase) => {
+    const first = { positionId: 'first', positionName: '实习生', duty: '执行数据分析' };
+    const second = { ...first, positionId: 'second' };
+    const pages = [
+      { total: testCase.total, pageNum: 1, list: [first, second] },
+      {
+        total: testCase.secondTotal,
+        pageNum: testCase.secondPage,
+        list: [testCase.duplicate ? first : { ...first, positionId: 'third' }],
+      },
+      { total: testCase.secondTotal, pageNum: 3, list: [] },
+    ];
+    const http: SourceHttpClient = {
+      request: <TBody>(
+        request: Parameters<SourceHttpClient['request']>[0],
+      ): Promise<SourceHttpResponse<TBody>> =>
+        Promise.resolve({
+          status: 200,
+          url: request.url,
+          headers: new Headers(),
+          body: { success: true, data: { ...pages.shift(), totalPage: 2, pageSize: 2 } } as TBody,
+        }),
+    };
+    const adapter = createXiaohongshuAdapter();
+    const events = [];
+    for await (const event of adapter.discover(
+      context(http, scriptedConfigSchema.parse({ pageSize: 2 })),
+    )) {
+      events.push(event);
+    }
+    const discoveredCount = testCase.duplicate ? 2 : 3;
+    expect(events.filter((event) => event.type === 'job')).toHaveLength(discoveredCount);
+    expect(events.at(-1)).toMatchObject({
+      type: 'complete',
+      coverage: testCase.coverage,
+      discoveredCount,
+      diagnostics: {
+        reason: testCase.reason,
+        absenceReliable: false,
+        duplicateJobSamples:
+          testCase.duplicate && !testCase.reason ? [{ id: 'first', pages: [1, 2] }] : [],
+        pageCounts: testCase.reason
+          ? [
+              { page: 1, total: testCase.total, returned: 2, duplicateIds: 0 },
+              { page: 1, total: testCase.secondTotal, returned: 1, duplicateIds: 0 },
+            ]
+          : [
+              { page: 1, total: testCase.total, returned: 2, duplicateIds: 0 },
+              {
+                page: 2,
+                total: testCase.secondTotal,
+                returned: 1,
+                duplicateIds: Number(testCase.duplicate),
+              },
+              { page: 3, total: testCase.secondTotal, returned: 0, duplicateIds: 0 },
+            ],
+      },
+    });
+  });
+
   it('normalizes the anonymous Xiaohongshu campus response shape', async () => {
     const fixture = JSON.parse(
       await readFile(new URL('./fixtures/xiaohongshu/page-1.json', import.meta.url), 'utf8'),
-    ) as unknown;
+    ) as { success: boolean; data: { pageNum: number; list: unknown[] } };
+    const pages = [fixture, { ...fixture, data: { ...fixture.data, pageNum: 2, list: [] } }];
     const http: SourceHttpClient = {
       request: <TBody>(
         request: Parameters<SourceHttpClient['request']>[0],
@@ -308,7 +410,7 @@ describe('script-reference source adapters', () => {
           status: 200,
           url: request.url,
           headers: new Headers({ 'content-type': 'application/json' }),
-          body: fixture as TBody,
+          body: pages.shift() as TBody,
         }),
     };
     const config = scriptedConfigSchema.parse({ pageSize: 10 });

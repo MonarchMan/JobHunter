@@ -159,12 +159,16 @@ describe('Tencent source adapter contract', () => {
     });
   });
 
-  it('reports partial when the advertised total cannot be reached', async () => {
+  it('accepts an actual terminal page when the reference total is too high', async () => {
     const emptySecond = { Code: 200, Data: { Count: 3, Posts: [] } };
     const discovery = await collectDiscovery(
       adapter.discover(context(fixtureHttp({ secondPage: emptySecond }))),
     );
-    expect(discovery.completion).toMatchObject({ coverage: 'partial', discoveredCount: 2 });
+    expect(discovery.completion).toMatchObject({
+      coverage: 'complete',
+      discoveredCount: 2,
+      diagnostics: { absenceReliable: false },
+    });
   });
 
   it('preserves access-blocked classification and health diagnostics', async () => {

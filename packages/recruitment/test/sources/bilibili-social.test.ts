@@ -118,7 +118,7 @@ describe('Bilibili social contract (SWT-007, SWT-008)', () => {
   });
 
   it.each(['duplicate', 'short', 'missing', 'total', 'page'] as const)(
-    'never completes a %s collection',
+    'validates the actual boundary of a %s collection',
     async (kind) => {
       const original = collection();
       const first = original.pages[0];
@@ -140,8 +140,10 @@ describe('Bilibili social contract (SWT-007, SWT-008)', () => {
       const result = await collectDiscovery(
         createBilibiliSocialAdapter().discover(context({ ...original, pages })),
       );
-      expect(result.completion.coverage).toBe('partial');
-      expect(result.completion.diagnostics?.reason).toBeTruthy();
+      expect(result.completion.coverage).toBe(
+        kind === 'short' || kind === 'total' ? 'complete' : 'partial',
+      );
+      expect(result.completion.diagnostics?.absenceReliable).toBe(false);
     },
   );
 
@@ -185,9 +187,10 @@ describe('Bilibili social contract (SWT-007, SWT-008)', () => {
       'schema changed',
     );
     expect(() => parseBilibiliSocialPage('<html>verification</html>')).toThrow('schema changed');
-    expect(() => parseBilibiliSocialPage({ code: 0, data: { total: 0, list: [job] } })).toThrow(
-      'exceeds its total',
-    );
+    expect(parseBilibiliSocialPage({ code: 0, data: { total: 0, list: [job] } })).toMatchObject({
+      total: 0,
+      records: [{ id: job.id }],
+    });
     const { page: _page, ...withoutBrowser } = context();
     expect(_page).toBeDefined();
     await expect(async () =>

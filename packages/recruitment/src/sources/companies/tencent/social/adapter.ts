@@ -146,10 +146,7 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
           'Tencent list response no longer matches the verified schema.',
         );
         expectedCount ??= parsed.Data.Count;
-        if (expectedCount !== parsed.Data.Count) {
-          coverage = 'partial';
-          totalChanged = true;
-        }
+        totalChanged ||= expectedCount !== parsed.Data.Count;
 
         for (const raw of parsed.Data.Posts) {
           if (seen.has(raw.PostId)) {
@@ -170,15 +167,14 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
         }
         yield { type: 'page', page, discoveredCount };
 
-        if (parsed.Data.Posts.length === 0 || discoveredCount >= expectedCount) break;
-        if (parsed.Data.Posts.length < context.config.pageSize) {
+        if (parsed.Data.Posts.length < context.config.pageSize) break;
+        if (coverage === 'partial' || page >= 1_000) {
           coverage = 'partial';
           break;
         }
         page += 1;
       }
 
-      if (discoveredCount !== expectedCount) coverage = 'partial';
       yield {
         type: 'complete',
         coverage,
@@ -189,12 +185,12 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
           reason:
             coverage === 'complete'
               ? null
-              : totalChanged
-                ? 'pagination_total_changed'
-                : duplicateIds > 0
-                  ? 'duplicate_job_ids'
-                  : 'discovered_count_mismatch',
-          retryable: totalChanged,
+              : duplicateIds > 0
+                ? 'duplicate_job_ids'
+                : 'maximum_pages_reached',
+          retryable: false,
+          absenceReliable:
+            coverage === 'complete' && !totalChanged && discoveredCount === expectedCount,
           expectedCount,
           discoveredCount,
           expectedPages: Math.ceil(expectedCount / context.config.pageSize),
@@ -311,13 +307,13 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
         });
         const parsed = tencentListResponseSchema.parse(response.body);
         return {
-          status: parsed.Data.Count > 0 && parsed.Data.Posts.length > 0 ? 'healthy' : 'degraded',
+          status: parsed.Data.Posts.length > 0 ? 'healthy' : 'degraded',
           checkedAt: Date.now(),
           latencyMs: Date.now() - startedAt,
           signals: [
             {
               key: 'anonymous_list_schema',
-              ok: parsed.Data.Count > 0 && parsed.Data.Posts.length > 0,
+              ok: parsed.Data.Posts.length > 0,
               diagnostic: parsed.Data.Count > 0 ? null : 'Tencent returned an empty public list.',
             },
           ],

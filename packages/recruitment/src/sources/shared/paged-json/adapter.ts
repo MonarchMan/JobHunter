@@ -54,8 +54,6 @@ export interface InlinePagedJsonDefinition<TConfig, TRecord> {
   readonly parsePage: (body: unknown) => ParsedInlinePage<TRecord>;
   readonly parseRecord: (value: unknown) => TRecord;
   readonly fields: (record: TRecord) => InlineJobFields;
-  /** 页数和原始行数完整时，允许去重后完成采集，重复数据不支持下架推断。 */
-  readonly allowDuplicatePageRecords?: boolean;
   /** 过滤无法使用的已校验记录，但保留其分页计数并禁用本轮下架推断。 */
   readonly skipRecord?: (record: TRecord) => boolean;
   readonly browser?: {
@@ -77,7 +75,6 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
   definition: InlinePagedJsonDefinition<TConfig, TRecord>,
 ): JobSourceAdapter<TConfig, never> {
   const officialHosts = definition.metadata.officialHosts;
-  const actualCount = definition.browser?.responseShape === 'netease-jobs';
   const browserRequest = (context: {
     readonly requestId: string;
     readonly signal: AbortSignal;
@@ -139,13 +136,13 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
         const collection = await context.page.collect(browserRequest(context));
         const seen = new Set<string>();
         let discoveredCount = 0;
-        let coverage = collection.coverage;
+        let duplicates = false;
         for (const page of collection.pages) {
           for (const value of page.records) {
             const record = definition.parseRecord(value);
             const fields = definition.fields(record);
             if (seen.has(fields.externalJobId)) {
-              if (!actualCount) coverage = 'partial';
+              duplicates = true;
               continue;
             }
             seen.add(fields.externalJobId);
@@ -163,11 +160,22 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
         }
         yield {
           type: 'complete',
-          coverage,
+          coverage: collection.coverage,
           cursor: null,
           pages: collection.pages.length,
           discoveredCount,
-          ...(collection.diagnostics ? { diagnostics: collection.diagnostics } : {}),
+          ...(duplicates
+            ? {
+                diagnostics: {
+                  reason: null,
+                  retryable: false,
+                  ...collection.diagnostics,
+                  absenceReliable: false,
+                },
+              }
+            : collection.diagnostics
+              ? { diagnostics: collection.diagnostics }
+              : {}),
         };
         return;
       }
@@ -176,14 +184,15 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
       let expectedTotal: number | null = null;
       let expectedPages = 1;
       let totalChanged = false;
-      let paginationChanged = false;
+      let reason: string | null = null;
       let duplicateIds = 0;
       let returnedCount = 0;
       let skippedRecords = 0;
       let discoveredCount = 0;
       let fetchedPages = 0;
+      let previousFullPage = '';
 
-      for (let page = 1; page <= expectedPages; page += 1) {
+      for (let page = 1; page <= 1_000; page += 1) {
         if (context.signal.aborted)
           throw new SourceError('temporary', 'Source discovery was aborted.');
         const parsed = await requestPage(context, page);
@@ -194,8 +203,6 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
           expectedPages = Math.max(1, Math.ceil(expectedTotal / pageSize));
         } else if (parsed.total !== expectedTotal) {
           totalChanged = true;
-          if (!actualCount || Math.max(1, Math.ceil(parsed.total / pageSize)) !== expectedPages)
-            paginationChanged = true;
         }
         if (parsed.records.length > pageSize) {
           throw new SourceError(
@@ -203,13 +210,15 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
             'Source returned more jobs than the requested page size.',
           );
         }
+        const rawIds: string[] = [];
         for (const value of parsed.records) {
           const record = definition.parseRecord(value);
+          const fields = definition.fields(record);
+          rawIds.push(fields.externalJobId);
           if (definition.skipRecord?.(record)) {
             skippedRecords += 1;
             continue;
           }
-          const fields = definition.fields(record);
           if (seen.has(fields.externalJobId)) {
             duplicateIds += 1;
             continue;
@@ -226,37 +235,32 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
           };
         }
         yield { type: 'page', page, discoveredCount };
-        if (parsed.records.length === 0 && page < expectedPages) break;
+        // 短页确认列表边界；连续两个相同的满页表明列表没有推进。
+        if (parsed.records.length < pageSize) break;
+        const fullPage = JSON.stringify(rawIds.sort());
+        if (fullPage === previousFullPage) {
+          reason = 'pagination_not_advanced';
+          break;
+        }
+        previousFullPage = fullPage;
+        if (page === 1_000) reason = 'maximum_pages_reached';
       }
 
-      const complete =
-        !paginationChanged &&
-        (actualCount ||
-          (definition.allowDuplicatePageRecords
-            ? returnedCount === expectedTotal
-            : duplicateIds === 0 && discoveredCount + skippedRecords === expectedTotal)) &&
-        fetchedPages === expectedPages;
       yield {
         type: 'complete',
-        coverage: complete ? 'complete' : 'partial',
+        coverage: reason === null ? 'complete' : 'partial',
         cursor: null,
         pages: fetchedPages,
         discoveredCount,
         diagnostics: {
-          reason: complete
-            ? null
-            : paginationChanged
-              ? 'pagination_total_changed'
-              : duplicateIds > 0
-                ? 'duplicate_job_ids'
-                : 'discovered_count_mismatch',
-          retryable: paginationChanged,
-          ...(actualCount || definition.allowDuplicatePageRecords || skippedRecords > 0
-            ? {
-                absenceReliable:
-                  duplicateIds === 0 && !totalChanged && discoveredCount === expectedTotal,
-              }
-            : {}),
+          reason,
+          retryable: false,
+          absenceReliable:
+            reason === null &&
+            duplicateIds === 0 &&
+            skippedRecords === 0 &&
+            !totalChanged &&
+            returnedCount === expectedTotal,
           expectedCount: expectedTotal,
           discoveredCount,
           expectedPages,
@@ -325,7 +329,7 @@ export function createInlinePagedJsonAdapter<TConfig, TRecord>(
           };
         }
         const page = await requestPage({ ...context, cursor: null }, 1);
-        const ok = page.total > 0 && page.records.length > 0;
+        const ok = page.records.length > 0;
         return {
           status: ok ? 'healthy' : 'degraded',
           checkedAt: Date.now(),

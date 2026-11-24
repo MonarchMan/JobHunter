@@ -316,9 +316,9 @@ export function validateDidiCollection(
     invalid ||=
       !Number.isSafeInteger(page.page) ||
       page.page < 1 ||
-      page.page > expectedPages ||
       numbers.has(page.page) ||
-      page.records.length !== Math.min(size, Math.max(0, total - (page.page - 1) * size));
+      (value.coverage === 'complete' && page.page !== pages.length + 1) ||
+      page.records.length > size;
     numbers.add(page.page);
     const records = page.records.map((v) => {
       const job = parseDidiJob(v, key);
@@ -328,22 +328,24 @@ export function validateDidiCollection(
     });
     pages.push({ ...page, records });
   }
-  // 2、仅全页数、全 ID 与边界同时闭合才可能完成。
-  const missing = numbers.size !== expectedPages || ids.size !== total;
-  const reason = totalChanged
-    ? 'pagination_total_changed'
+  // 2、由采集器确认终页；这里只核验实际边界和身份。
+  const reason = invalid
+    ? 'invalid_page_boundary'
     : duplicateIds
       ? 'duplicate_job_ids'
-      : invalid
-        ? 'invalid_page_boundary'
-        : (value.diagnostics?.reason ?? (missing ? 'discovered_count_mismatch' : null));
+      : (value.diagnostics?.reason ?? null);
   return {
     ...value,
     pages,
-    coverage: totalChanged || duplicateIds || invalid || missing ? 'partial' : value.coverage,
+    coverage: duplicateIds > 0 || invalid ? 'partial' : value.coverage,
     diagnostics: {
       reason,
-      retryable: totalChanged,
+      retryable: value.diagnostics?.retryable ?? false,
+      absenceReliable:
+        value.diagnostics?.absenceReliable !== false &&
+        reason === null &&
+        !totalChanged &&
+        ids.size === total,
       expectedCount: total,
       discoveredCount: ids.size,
       expectedPages,

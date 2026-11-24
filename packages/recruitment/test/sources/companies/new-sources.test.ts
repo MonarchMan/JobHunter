@@ -183,7 +183,7 @@ describe('new official source adapters', () => {
   it('normalizes Xiaomi internship jobs from the official inline JSON', async () => {
     const body = await fixture('xiaomi/intern/page-1.json');
     const adapter = createXiaomiInternAdapter();
-    const config = xiaomiInternConfigSchema.parse({ pageSize: 2 });
+    const config = xiaomiInternConfigSchema.parse({ pageSize: 3 });
     const ctx = context(config, body);
     const discovery = await collectDiscovery(adapter.discover(ctx));
     expect(discovery).toMatchObject({ ids: ['7559917443185379634', '7559917443185379635'] });
@@ -319,19 +319,31 @@ describe('new official source adapters', () => {
     expect(discovery.completion.coverage).toBe('complete');
   });
 
-  it('reports duplicate IDs as partial instead of claiming complete coverage', async () => {
-    const body = (await fixture('xiaomi/intern/page-1.json')) as {
-      data: { list: unknown[] };
-    };
-    body.data.list[1] = body.data.list[0];
-    const adapter = createXiaomiInternAdapter();
-    const config = xiaomiInternConfigSchema.parse({ pageSize: 2 });
-    const discovery = await collectDiscovery(adapter.discover(context(config, body)));
-    expect(discovery.completion).toMatchObject({
-      coverage: 'partial',
-      diagnostics: { reason: 'duplicate_job_ids', duplicateIds: 1 },
-    });
-  });
+  it.each([1, 3, 4])(
+    'deduplicates Xiaomi internship pages with reported total %s',
+    async (total) => {
+      const first = (await fixture('xiaomi/intern/page-1.json')) as {
+        data: { list: { jobPostId: string }[]; total: number };
+      };
+      first.data.total = total;
+      const second = structuredClone(first);
+      second.data.list = second.data.list.slice(0, 1);
+      const config = xiaomiInternConfigSchema.parse({ pageSize: 2 });
+      const discovery = await collectDiscovery(
+        createXiaomiInternAdapter().discover({
+          ...context(config, first),
+          http: httpSequence([first, second]),
+        }),
+      );
+      expect(discovery.ids).toEqual(first.data.list.map((job) => job.jobPostId));
+      expect(discovery.completion).toMatchObject({
+        coverage: 'complete',
+        pages: 2,
+        discoveredCount: 2,
+        diagnostics: { reason: null, duplicateIds: 1, absenceReliable: false },
+      });
+    },
+  );
 
   it.each([createXiaomiCampusAdapter, createXiaomiSocialAdapter])(
     'keeps valid Xiaomi jobs when the official list includes blanks and duplicates',
@@ -349,7 +361,7 @@ describe('new official source adapters', () => {
       ];
       body.data.total = 4;
       const adapter = createAdapter();
-      const config = xiaomiInternConfigSchema.parse({ pageSize: 4 });
+      const config = xiaomiInternConfigSchema.parse({ pageSize: 5 });
       const discovery = await collectDiscovery(adapter.discover(context(config, body)));
       expect(discovery.ids).toEqual([valid.jobPostId]);
       expect(discovery.completion).toMatchObject({
@@ -359,7 +371,7 @@ describe('new official source adapters', () => {
     },
   );
 
-  it('reports a changing pagination total as partial', async () => {
+  it('keeps a changing reference total as diagnostics', async () => {
     const first = (await fixture('xiaomi/intern/page-1.json')) as {
       data: { list: Record<string, unknown>[]; total: number };
     };
@@ -378,8 +390,8 @@ describe('new official source adapters', () => {
     };
     const discovery = await collectDiscovery(createXiaomiInternAdapter().discover(discoverContext));
     expect(discovery.completion).toMatchObject({
-      coverage: 'partial',
-      diagnostics: { reason: 'pagination_total_changed', totalChanged: true },
+      coverage: 'complete',
+      diagnostics: { reason: null, totalChanged: true, absenceReliable: false },
     });
   });
 });

@@ -117,15 +117,18 @@ export async function collectKuaishouPages(
     // 4、生产顺序翻页；smoke 只读首页和末页（可加中间页），且显式标记 partial。
     const numbers = sampled
       ? [...new Set([1, ...(limit >= 3 ? [Math.ceil(count / 2)] : []), count])]
-      : Array.from({ length: Math.min(count, limit) }, (_, index) => index + 1);
-    for (const number of numbers.slice(1)) await read(number);
+      : Array.from({ length: limit }, (_, index) => index + 1);
+    for (const number of numbers.slice(1)) {
+      if (!sampled && (pages.at(-1)?.records.length ?? 0) < size) break;
+      await read(number);
+    }
+    const complete = !sampled && (pages.at(-1)?.records.length ?? 0) < size;
     const result = validateKuaishouCollection(
       {
         pages,
-        coverage: numbers.length < count ? 'partial' : 'complete',
+        coverage: complete ? 'complete' : 'partial',
         diagnostics: {
-          reason:
-            numbers.length < count ? (sampled ? 'sampled_pages' : 'maximum_pages_reached') : null,
+          reason: complete ? null : sampled ? 'sampled_pages' : 'maximum_pages_reached',
           retryable: false,
         },
       },
@@ -133,7 +136,7 @@ export async function collectKuaishouPages(
       size,
     );
     // 4、仅完整抓取的重复异常有限重读；替换旧页，绝不靠历史结果并集补齐计数。
-    if (numbers.length === count && result.diagnostics?.reason === 'duplicate_job_ids') {
+    if (complete && result.diagnostics?.reason === 'duplicate_job_ids') {
       const recheckedPages = [
         ...new Set(result.diagnostics.duplicateJobSamples?.flatMap((sample) => sample.pages) ?? []),
       ].slice(0, 4);

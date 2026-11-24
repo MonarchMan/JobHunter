@@ -135,15 +135,18 @@ function meituanSyncHttp(input: {
     request<TBody>(request: SourceHttpRequest): Promise<SourceHttpResponse<TBody>> {
       const url = new URL(request.url);
       if (url.pathname.endsWith('/getJobList')) {
-        const body = JSON.parse(request.body ?? '{}') as { page?: { pageNo?: number } };
+        const body = JSON.parse(request.body ?? '{}') as {
+          page?: { pageNo?: number; pageSize?: number };
+        };
         const pageNo = body.page?.pageNo ?? 1;
-        if (pageNo === 2 && input.partial) {
+        const pageSize = body.page?.pageSize ?? 1;
+        if (pageNo === 2) {
           return Promise.resolve(
             response(
               {
                 data: {
                   list: [],
-                  page: { pageNo: 2, pageSize: 1, totalPage: 2, totalCount: 2 },
+                  page: { pageNo: 2, pageSize, totalPage: 2, totalCount: input.partial ? 2 : 1 },
                 },
                 status: 1,
                 message: '成功',
@@ -159,7 +162,7 @@ function meituanSyncHttp(input: {
                 list: [input.listJob],
                 page: {
                   pageNo: 1,
-                  pageSize: 1,
+                  pageSize,
                   totalPage: input.partial ? 2 : 1,
                   totalCount: input.partial ? 2 : 1,
                 },
@@ -228,7 +231,7 @@ describe('first-party source seed and sync', () => {
       const sourceId = parseId(source.source.id, 'JobSource');
       await service.run({ sourceId, trigger: 'manual' }, new AbortController().signal);
       expect(handle.client.prepare('SELECT count(*) FROM jobs').pluck().get()).toBe(0);
-      // 2、取得真实详情后才能入库；后续缺页保持 partial，不增加缺失计数。
+      // 2、取得真实详情后才能入库；后续计数差异不会增加缺失计数。
       detailFailure = false;
       await expect(
         service.run({ sourceId, trigger: 'manual' }, new AbortController().signal),
@@ -236,7 +239,7 @@ describe('first-party source seed and sync', () => {
       partial = true;
       await expect(
         service.run({ sourceId, trigger: 'manual' }, new AbortController().signal),
-      ).resolves.toMatchObject({ kind: 'completed', status: 'partial', coverage: 'partial' });
+      ).resolves.toMatchObject({ kind: 'completed', status: 'succeeded', coverage: 'complete' });
       expect(
         handle.client
           .prepare('SELECT source_id, external_job_id, status, missing_count FROM jobs')
@@ -301,11 +304,11 @@ describe('first-party source seed and sync', () => {
       await expect(
         service.run({ sourceId, trigger: 'manual' }, new AbortController().signal),
       ).resolves.toMatchObject({ kind: 'completed', status: 'succeeded', stats: { created: 1 } });
-      // 2、即使客户端声称 complete，短页也必须降级，旧岗位不增加缺失计数。
+      // 2、官网总数高报时保留完整覆盖，旧岗位不增加缺失计数。
       partial = true;
       await expect(
         service.run({ sourceId, trigger: 'manual' }, new AbortController().signal),
-      ).resolves.toMatchObject({ kind: 'completed', status: 'partial', coverage: 'partial' });
+      ).resolves.toMatchObject({ kind: 'completed', status: 'succeeded', coverage: 'complete' });
       expect(
         handle.client.prepare('SELECT external_job_id, status, missing_count FROM jobs').get(),
       ).toEqual({ external_job_id: String(job.id), status: 'active', missing_count: 0 });
@@ -378,11 +381,11 @@ describe('first-party source seed and sync', () => {
         coverage: 'complete',
         stats: { created: 1 },
       });
-      // 2、缺页仍报告 partial，不增加旧岗位 missing_count，也不创建占位正文。
+      // 2、官网总数高报不会降低健康，也不会增加旧岗位缺失计数。
       partial = true;
       await expect(
         service.run({ sourceId, trigger: 'manual' }, new AbortController().signal),
-      ).resolves.toMatchObject({ kind: 'completed', status: 'partial', coverage: 'partial' });
+      ).resolves.toMatchObject({ kind: 'completed', status: 'succeeded', coverage: 'complete' });
       expect(
         handle.client
           .prepare('SELECT source_id, external_job_id, status, missing_count FROM jobs')
@@ -602,11 +605,15 @@ describe('first-party source seed and sync', () => {
         coverage: 'complete',
         stats: { created: 1 },
       });
-      // 2、尾页/计数异常保留 partial，不能把旧岗位下线。
+      // 2、社招按实际空页结束，实习保留浏览器报告的部分覆盖，两者都保护旧职位。
       partial = true;
       await expect(
         service.run({ sourceId, trigger: 'manual' }, new AbortController().signal),
-      ).resolves.toMatchObject({ kind: 'completed', status: 'partial', coverage: 'partial' });
+      ).resolves.toMatchObject({
+        kind: 'completed',
+        status: key === 'didi.social' ? 'succeeded' : 'partial',
+        coverage: key === 'didi.social' ? 'complete' : 'partial',
+      });
       expect(
         handle.client
           .prepare('SELECT source_id, external_job_id, status, missing_count FROM jobs')
@@ -625,7 +632,7 @@ describe('first-party source seed and sync', () => {
           .get('partial') as string;
         expect(JSON.parse(evidence)).toMatchObject({
           skippedRecruitmentType: 1,
-          reason: 'invalid_page_boundary',
+          absenceReliable: false,
         });
       }
     },
@@ -794,7 +801,7 @@ describe('first-party source seed and sync', () => {
     ]);
   });
 
-  it('runs the supported Meituan adapter and preserves jobs after a partial page', async () => {
+  it('runs Meituan with a reference total mismatch without degrading the source', async () => {
     const { handle } = await database();
     seedSourceCatalog(handle.client, firstPartySourceCatalog, { now: 1 });
     const meituan = firstPartyPhysicalSourceCatalog.find(
@@ -845,12 +852,20 @@ describe('first-party source seed and sync', () => {
       createService(true).run({ sourceId, trigger: 'manual' }, new AbortController().signal),
     ).resolves.toMatchObject({
       kind: 'completed',
-      status: 'partial',
-      coverage: 'partial',
+      status: 'succeeded',
+      coverage: 'complete',
       stats: { discovered: 1, unchanged: 1 },
     });
     expect(
       handle.client.prepare("SELECT count(*) FROM jobs WHERE status = 'active'").pluck().get(),
     ).toBe(1);
+    expect(
+      handle.client
+        .prepare('SELECT health_status, consecutive_failures FROM job_sources WHERE id = ?')
+        .get(sourceId),
+    ).toEqual({
+      health_status: 'healthy',
+      consecutive_failures: 0,
+    });
   });
 });

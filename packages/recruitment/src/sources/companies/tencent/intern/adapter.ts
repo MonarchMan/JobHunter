@@ -112,10 +112,7 @@ function createTencentCampusVariant(
         });
         const parsed = tencentCampusListResponseSchema.parse(response.body);
         count ??= parsed.data.count;
-        if (count !== parsed.data.count) {
-          coverage = 'partial';
-          totalChanged = true;
-        }
+        totalChanged ||= count !== parsed.data.count;
         for (const raw of parsed.data.positionList) {
           if (seen.has(raw.postId)) {
             coverage = 'partial';
@@ -130,10 +127,13 @@ function createTencentCampusVariant(
           };
         }
         yield { type: 'page', page, discoveredCount };
-        if (discoveredCount >= count || parsed.data.positionList.length === 0) break;
+        if (parsed.data.positionList.length < context.config.pageSize) break;
+        if (coverage === 'partial' || page >= 1_000) {
+          coverage = 'partial';
+          break;
+        }
         page += 1;
       }
-      if (discoveredCount !== count) coverage = 'partial';
       yield {
         type: 'complete',
         coverage,
@@ -144,12 +144,11 @@ function createTencentCampusVariant(
           reason:
             coverage === 'complete'
               ? null
-              : totalChanged
-                ? 'pagination_total_changed'
-                : duplicateIds > 0
-                  ? 'duplicate_job_ids'
-                  : 'discovered_count_mismatch',
-          retryable: totalChanged,
+              : duplicateIds > 0
+                ? 'duplicate_job_ids'
+                : 'maximum_pages_reached',
+          retryable: false,
+          absenceReliable: coverage === 'complete' && !totalChanged && discoveredCount === count,
           expectedCount: count,
           discoveredCount,
           expectedPages: Math.ceil(count / context.config.pageSize),
@@ -263,7 +262,7 @@ function createTencentCampusVariant(
           timeoutMs: context.timeoutMs,
         });
         const parsed = tencentCampusListResponseSchema.parse(response.body);
-        const ok = parsed.data.count > 0 && parsed.data.positionList.length > 0;
+        const ok = parsed.data.positionList.length > 0;
         return {
           status: ok ? 'healthy' : 'degraded',
           checkedAt: Date.now(),

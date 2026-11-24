@@ -108,18 +108,13 @@ describe('Ctrip production protocol (SWT-018)', () => {
   }
   it.each([
     ['complete', 21, (p: number) => envelope(rows((p - 1) * 10, p === 3 ? 1 : 10), 21), null],
-    [
-      'partial',
-      21,
-      (p: number) => envelope(rows((p - 1) * 10, p === 3 ? 0 : 10), 21),
-      'invalid_page_boundary',
-    ],
+    ['complete', 21, (p: number) => envelope(rows((p - 1) * 10, p === 3 ? 0 : 10), 21), null],
     ['partial', 21, (p: number) => envelope(rows(0, p === 3 ? 1 : 10), 21), 'duplicate_job_ids'],
     [
-      'partial',
+      'complete',
       21,
       (p: number) => envelope(rows((p - 1) * 10, p === 3 ? 1 : 10), p === 1 ? 21 : 22),
-      'pagination_total_changed',
+      null,
     ],
   ] as const)('pagination %s / %s / %s / %s', async (coverage, _total, response, reason) => {
     const result = await collectDiscovery(

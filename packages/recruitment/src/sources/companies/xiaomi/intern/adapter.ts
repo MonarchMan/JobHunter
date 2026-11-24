@@ -39,7 +39,6 @@ function createXiaomiChannelAdapter(
       externalIdFingerprintVersion: null,
     },
     configSchema: xiaomiInternConfigSchema,
-    allowDuplicatePageRecords: options.type !== 3,
     skipRecord: (job) => job.requirement.trim() === '',
     pageSize: (config) => config.pageSize,
     request: ({ config, page, requestId, signal, timeoutMs }) => {

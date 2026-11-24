@@ -103,7 +103,7 @@ export async function collectDidiMoka(
       };
     }
     const pages: SourcePageCollection['pages'][number][] = [];
-    const read = async (number: number): Promise<number> => {
+    const read = async (number: number): Promise<ReturnType<typeof parseDidiPage>> => {
       const parsed = parseDidiPage(await invoke({ key, operation: 'list', page: number }), key);
       pages.push({
         page: number,
@@ -112,25 +112,44 @@ export async function collectDidiMoka(
         total: parsed.total,
         capturedAt: Date.now(),
       });
-      return parsed.total;
+      return parsed;
     };
-    // 3、总数与固定容量驱动页码，健康检查最多首页，smoke 保留首尾并标 partial。
-    const total = await read(1);
+    // 3、总数用于首尾采样，顺序采集以返回的短页为终点。
+    let current = await read(1);
+    const total = current.total;
     const maximum = Math.min(request.maximumPages, options.maximumPages ?? request.maximumPages);
     const sampling = request.pageSampling ?? options.pageSampling ?? 'sequential';
-    const numbers = didiPageNumbers(total, 30, maximum, sampling);
-    for (const number of numbers.slice(1)) await read(number);
-    const partial = numbers.length < Math.max(1, Math.ceil(total / 30));
+    const sampled = sampling === 'first-last' && Math.ceil(total / 30) > maximum && maximum >= 2;
+    const numbers = sampled
+      ? didiPageNumbers(total, 30, maximum, sampling)
+      : Array.from({ length: maximum }, (_, index) => index + 1);
+    let stalled = false;
+    for (const number of numbers.slice(1)) {
+      if (!sampled && current.records.length < 30) break;
+      const next = await read(number);
+      if (
+        !sampled &&
+        next.records.length === 30 &&
+        next.records.every((record, index) => record.id === current.records[index]?.id)
+      ) {
+        stalled = true;
+        break;
+      }
+      current = next;
+    }
+    const partial = sampled || stalled || current.records.length >= 30;
     return validateDidiCollection(
       {
         pages,
         coverage: partial ? 'partial' : 'complete',
         diagnostics: {
-          reason: partial
-            ? sampling === 'first-last'
-              ? 'sampled_pages'
-              : 'maximum_pages_reached'
-            : null,
+          reason: stalled
+            ? 'pagination_not_advanced'
+            : partial
+              ? sampled
+                ? 'sampled_pages'
+                : 'maximum_pages_reached'
+              : null,
           retryable: false,
         },
       },

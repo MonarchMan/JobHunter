@@ -165,7 +165,7 @@ describe('Meituan source adapter contract', () => {
     });
   });
 
-  it('reports partial when the advertised total cannot be reached', async () => {
+  it('accepts an actual terminal page when the reference total is too high', async () => {
     const emptySecond = {
       data: { list: [], page: { pageNo: 2, pageSize: 2, totalPage: 2, totalCount: 3 } },
       status: 1,
@@ -174,7 +174,11 @@ describe('Meituan source adapter contract', () => {
     const discovery = await collectDiscovery(
       adapter.discover(context(fixtureHttp({ secondPage: emptySecond }))),
     );
-    expect(discovery.completion).toMatchObject({ coverage: 'partial', discoveredCount: 2 });
+    expect(discovery.completion).toMatchObject({
+      coverage: 'complete',
+      discoveredCount: 2,
+      diagnostics: { absenceReliable: false },
+    });
   });
 
   it('deduplicates repeated internship records without degrading a fully fetched list', async () => {
