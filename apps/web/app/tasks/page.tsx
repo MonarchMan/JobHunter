@@ -238,11 +238,7 @@ export default async function TasksPage({
                         {taskPresentation(task).label}
                       </span>
                     </td>
-                    <td>
-                      {task.jobDetailBatch
-                        ? `${String(task.jobDetailBatch.counts.succeeded)} / ${String(task.jobDetailBatch.counts.total)}`
-                        : String(task.attemptCount)}
-                    </td>
+                    <td>{String(task.attemptCount)}</td>
                     <td>
                       <TruncatedText value={taskPresentation(task).error || '—'} />
                     </td>

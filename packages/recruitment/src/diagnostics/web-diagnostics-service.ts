@@ -65,6 +65,7 @@ export type WebTaskListEntry =
   | { readonly kind: 'task'; readonly taskId: string }
   | {
       readonly kind: 'source_job_detail_batch';
+      readonly attemptCount: number;
       readonly id: string;
       readonly status: TaskRecord['status'];
       readonly createdAt: number;
@@ -157,7 +158,7 @@ function presentTaskEntry(
     id: entry.id,
     taskType: 'source.job-detail',
     status: entry.status,
-    attemptCount: 0,
+    attemptCount: entry.attemptCount,
     errorCategory: entry.batch.counts.failed > 0 ? 'batch_partial_failure' : null,
     errorSummary:
       entry.batch.counts.failed > 0

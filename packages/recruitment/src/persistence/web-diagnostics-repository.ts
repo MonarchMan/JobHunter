@@ -60,6 +60,7 @@ const columns = `id, agent_key, definition_hash, model_config_hash, status,
 
 /** 数据库查询结果对应的行结构。 */
 interface TaskEntryRow {
+  readonly attempt_count: number | null;
   readonly kind: 'task' | 'source_job_detail_batch' | null;
   readonly id: string | null;
   readonly status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | null;
@@ -82,7 +83,7 @@ interface TaskEntryRow {
 const taskEntriesCte = `
   WITH detail_tasks AS (
     SELECT task.id, task.status, task.created_at, task.started_at, task.finished_at,
-           task.cancel_requested_at,
+           task.cancel_requested_at, task.attempt_count,
            task.source_run_id AS run_id,
            task.source_id
     FROM tasks task
@@ -97,6 +98,7 @@ const taskEntriesCte = `
            CASE WHEN SUM(CASE WHEN task.status IN ('pending', 'running') THEN 1 ELSE 0 END) = 0
                 THEN MAX(task.finished_at) ELSE NULL END AS finished_at,
            MAX(CASE WHEN task.cancel_requested_at IS NOT NULL THEN 1 ELSE 0 END) AS cancel_requested,
+           MAX(task.attempt_count) AS attempt_count,
            COUNT(*) AS total,
            SUM(CASE WHEN task.status = 'pending' THEN 1 ELSE 0 END) AS pending,
            SUM(CASE WHEN task.status = 'running' THEN 1 ELSE 0 END) AS running,
@@ -118,7 +120,7 @@ const taskEntriesCte = `
            detail.created_at, detail.started_at, detail.finished_at, detail.cancel_requested,
            company.name AS company_name, channel.channel, source.slug AS source_slug,
            detail.total, detail.pending, detail.running, detail.succeeded,
-           detail.failed, detail.cancelled
+           detail.failed, detail.cancelled, detail.attempt_count
     FROM detail_groups detail
     JOIN job_sources source ON source.id = detail.source_id
     JOIN companies company ON company.id = source.company_id
@@ -130,7 +132,7 @@ const taskEntriesCte = `
            CASE WHEN task.cancel_requested_at IS NULL THEN 0 ELSE 1 END AS cancel_requested,
            NULL AS company_name, NULL AS channel, NULL AS source_slug,
            NULL AS total, NULL AS pending, NULL AS running, NULL AS succeeded,
-           NULL AS failed, NULL AS cancelled
+           NULL AS failed, NULL AS cancelled, task.attempt_count
     FROM tasks task WHERE task.task_type NOT IN ('source.job-detail', 'source.scan')
     UNION ALL
     SELECT * FROM batch_entries
@@ -330,7 +332,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
          SELECT page.kind, page.id, page.status, page.created_at, page.started_at,
                 page.finished_at, page.cancel_requested, page.company_name, page.channel,
                 page.source_slug, page.total, page.pending, page.running, page.succeeded,
-                page.failed, page.cancelled, count.result_total
+                page.failed, page.cancelled, page.attempt_count, count.result_total
          FROM entry_count count
          LEFT JOIN page_entries page ON TRUE
          ORDER BY page.created_at DESC, page.id ASC`,
@@ -363,6 +365,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
             kind: row.kind,
             id: row.id,
             status: row.status,
+            attemptCount: row.attempt_count ?? 0,
             createdAt: row.created_at,
             startedAt: row.started_at,
             finishedAt: row.finished_at,

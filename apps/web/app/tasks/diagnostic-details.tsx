@@ -175,10 +175,7 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
               <div>
                 <dt>状态</dt>
                 <dd>
-                  <span className={`status status-${presentation.status}`}>
-                    {presentation.label}
-                  </span>
-                  {progress ? (
+                  {task.status === 'running' && progress ? (
                     <div className={styles.progress}>
                       <progress
                         aria-label="批量任务进度"
@@ -189,16 +186,16 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
                         已处理 {progress.processed} / {progress.total}
                       </small>
                     </div>
-                  ) : null}
+                  ) : (
+                    <span className={`status status-${presentation.status}`}>
+                      {presentation.label}
+                    </span>
+                  )}
                 </dd>
               </div>
               <div>
-                <dt>{task.jobDetailBatch ? '成功 / 总数' : '尝试次数'}</dt>
-                <dd>
-                  {task.jobDetailBatch
-                    ? `${String(task.jobDetailBatch.counts.succeeded)} / ${String(task.jobDetailBatch.counts.total)}`
-                    : String(task.attemptCount)}
-                </dd>
+                <dt>尝试次数</dt>
+                <dd>{String(task.attemptCount)}</dd>
               </div>
               <div>
                 <dt>创建时间</dt>
