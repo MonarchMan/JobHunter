@@ -1,4 +1,5 @@
 import { ImapFlow, type FetchMessageObject, type MessageStructureObject } from 'imapflow';
+import { createHash } from 'node:crypto';
 import { simpleParser } from 'mailparser';
 import { z } from 'zod';
 import {
@@ -156,19 +157,31 @@ export class ImapConnector implements MailboxConnector {
         throw new MailConnectorError('cursor_invalid', 'IMAP message identity is no longer valid.');
       }
       // 1、先读取信封和 BODYSTRUCTURE；2、只选择非附件的 text/plain 或 text/html 部件。
-      const metadata = await client.fetchOne(
+      let metadata = await client.fetchOne(
         String(uid),
         { uid: true, envelope: true, bodyStructure: true },
         { uid: true },
       );
-      if (!metadata || !metadata.bodyStructure)
+      // 1.a、移走邮件会更换 UID；只有可验证的 Message-ID 哈希才能恢复读取。
+      let bodyUid = uid;
+      let recovered = false;
+      if (!metadata && context.messageIdHash) {
+        metadata = await this.#findMovedMessage(client, context, message, context.messageIdHash);
+        if (metadata) {
+          bodyUid = metadata.uid;
+          recovered = true;
+        }
+      }
+      if (!metadata)
         throw new MailConnectorError('message_not_found', 'IMAP message was not found.');
+      if (!metadata.bodyStructure)
+        throw new MailConnectorError('parse_changed', 'IMAP message body structure is missing.');
       const parts = selectBodyParts(metadata.bodyStructure);
       const result =
         parts.length === 0
           ? metadata
           : await client.fetchOne(
-              String(uid),
+              String(bodyUid),
               {
                 uid: true,
                 bodyParts: parts.map((part) => ({
@@ -180,6 +193,11 @@ export class ImapConnector implements MailboxConnector {
             );
       if (!result) throw new MailConnectorError('message_not_found', 'IMAP message was not found.');
       const parsedBodies = await parseSelectedBodies(parts, result.bodyParts ?? new Map());
+      if (recovered && !parsedBodies.text.trim() && !parsedBodies.html?.trim())
+        throw new MailConnectorError(
+          'message_not_found',
+          'Moved IMAP message has no readable body.',
+        );
       const from = metadata.envelope?.from?.[0];
       return externalMailMessageSchema.parse(
         safeMessage({
@@ -195,6 +213,51 @@ export class ImapConnector implements MailboxConnector {
     } finally {
       await client.logout().catch(() => undefined);
     }
+  }
+
+  /** 查询原接收日前后三天内的信封，只按精确哈希匹配，不读取其他邮件正文。 */
+  async #findMovedMessage(
+    client: ImapFlow,
+    context: MailboxReadContext,
+    message: ExternalMailMessageRef,
+    messageIdHash: string,
+  ): Promise<FetchMessageObject | false> {
+    const dayMs = 86_400_000;
+    const sentSince = new Date(message.receivedAt - 3 * dayMs);
+    const sentBefore = new Date(message.receivedAt + 4 * dayMs);
+    for (const folder of await client.list()) {
+      context.signal?.throwIfAborted();
+      if (
+        folder.path === message.folderId ||
+        folder.flags.has('\\Noselect') ||
+        folder.specialUse === '\\Junk' ||
+        folder.specialUse === '\\Trash' ||
+        folder.flags.has('\\Junk') ||
+        folder.flags.has('\\Trash')
+      )
+        continue;
+      await client.mailboxOpen(folder.path, { readOnly: true });
+      const candidates = await client.search({ sentSince, sentBefore }, { uid: true });
+      if (!candidates || candidates.length === 0 || candidates.length > 2000) continue;
+      // fetchAll 结束后才能发起下一条 IMAP 命令。
+      const envelopes = await client.fetchAll(
+        candidates,
+        { uid: true, envelope: true },
+        { uid: true },
+      );
+      for (const candidate of envelopes) {
+        const messageId = candidate.envelope?.messageId;
+        if (!messageId || createHash('sha256').update(messageId).digest('hex') !== messageIdHash)
+          continue;
+        const metadata = await client.fetchOne(
+          String(candidate.uid),
+          { uid: true, envelope: true, bodyStructure: true },
+          { uid: true },
+        );
+        if (metadata && metadata.uid === candidate.uid && metadata.bodyStructure) return metadata;
+      }
+    }
+    return false;
   }
 
   public async healthCheck(context: MailboxReadContext): Promise<MailHealthResult> {

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import type { ExternalMailMessageRef } from '@jobhunter/recruitment/mail-contracts';
 import { GmailConnector } from '../../../src/mail/connectors/gmail.js';
 import { MicrosoftGraphConnector } from '../../../src/mail/connectors/graph.js';
@@ -9,6 +10,9 @@ const imap = vi.hoisted(() => ({
   logout: vi.fn(),
   mailboxOpen: vi.fn(),
   fetchOne: vi.fn(),
+  list: vi.fn(),
+  search: vi.fn(),
+  fetchAll: vi.fn(),
 }));
 
 vi.mock('imapflow', () => ({
@@ -17,6 +21,9 @@ vi.mock('imapflow', () => ({
     public logout = imap.logout;
     public mailboxOpen = imap.mailboxOpen;
     public fetchOne = imap.fetchOne;
+    public list = imap.list;
+    public search = imap.search;
+    public fetchAll = imap.fetchAll;
   },
 }));
 
@@ -39,6 +46,75 @@ afterEach(() => {
 });
 
 describe('mail body-only boundary', () => {
+  it.each([true, false])('requires an exact ID match to recover IMAP mail: %s', async (match) => {
+    const messageId = '<fixture@example.test>';
+    imap.connect.mockResolvedValue(undefined);
+    imap.logout.mockResolvedValue(undefined);
+    imap.mailboxOpen.mockResolvedValue({ uidValidity: 1n });
+    imap.list.mockResolvedValue([
+      { path: 'INBOX', flags: new Set() },
+      { path: 'Archive', flags: new Set() },
+    ]);
+    imap.search.mockResolvedValue([8, 9]);
+    imap.fetchAll.mockResolvedValue([
+      { uid: 8, envelope: { messageId: '<other@example.test>' } },
+      { uid: 9, envelope: { messageId: match ? messageId : '<another@example.test>' } },
+    ]);
+    imap.fetchOne
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce({
+        uid: 9,
+        bodyStructure: { type: 'text/plain', encoding: '8bit' },
+      })
+      .mockResolvedValueOnce({
+        uid: 9,
+        bodyParts: new Map([['1', Buffer.from('Recovered body')]]),
+      });
+    const connector = new ImapConnector(() =>
+      Promise.resolve({ host: 'imap.example.test', user: 'fixture', password: 'fixture' }),
+    );
+    const pending = connector.fetchMessage(
+      { ...context, messageIdHash: createHash('sha256').update(messageId).digest('hex') },
+      reference,
+    );
+    if (match) {
+      await expect(pending).resolves.toMatchObject({
+        externalMessageKey: reference.externalMessageKey,
+        textBody: 'Recovered body',
+      });
+      expect(imap.fetchOne.mock.calls.map(([uid]) => uid)).toEqual(['2', '9', '9']);
+    } else {
+      await expect(pending).rejects.toMatchObject({ category: 'message_not_found' });
+      expect(imap.fetchOne).toHaveBeenCalledOnce();
+    }
+    expect(imap.mailboxOpen).toHaveBeenLastCalledWith('Archive', { readOnly: true });
+  });
+
+  it('treats messages in Junk and Trash as permanently unavailable', async () => {
+    imap.connect.mockResolvedValue(undefined);
+    imap.logout.mockResolvedValue(undefined);
+    imap.mailboxOpen.mockResolvedValue({ uidValidity: 1n });
+    imap.list.mockResolvedValue([
+      { path: 'Junk', specialUse: '\\Junk', flags: new Set() },
+      { path: 'Trash', flags: new Set(['\\Trash']) },
+    ]);
+    imap.fetchOne.mockResolvedValue(false);
+    const connector = new ImapConnector(() =>
+      Promise.resolve({ host: 'imap.example.test', user: 'fixture', password: 'fixture' }),
+    );
+    await expect(
+      connector.fetchMessage(
+        {
+          ...context,
+          messageIdHash: createHash('sha256').update('<deleted@example.test>').digest('hex'),
+        },
+        reference,
+      ),
+    ).rejects.toMatchObject({ category: 'message_not_found' });
+    expect(imap.mailboxOpen).toHaveBeenCalledTimes(1);
+    expect(imap.search).not.toHaveBeenCalled();
+  });
+
   it('does not expose calendar, text attachments, or nested message bodies from Gmail', async () => {
     const encode = (value: string): string => Buffer.from(value).toString('base64url');
     const fetcher = vi.fn().mockResolvedValue(

@@ -1,4 +1,5 @@
 import { resolveAppConfig, resolveBootstrapConfig } from '@jobhunter/common/config/index';
+import { parseId } from '@jobhunter/common/domain';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { describe, expect, it } from 'vitest';
@@ -168,6 +169,63 @@ describe('Web diagnostics', () => {
           expect(result.tasks).toHaveLength(1);
           expect(result.agentRuns).toHaveLength(1);
         }
+      } finally {
+        container.close();
+      }
+    } finally {
+      await root.cleanup();
+    }
+  });
+
+  it('retries mailbox synchronization with its original ID and page checkpoint', async () => {
+    const root = await createTemporaryDataRoot('jobhunter-web-mailbox-retry-');
+    try {
+      const database = openSqliteDatabase({ dataRoot: root.path });
+      const mailboxKey = 'fixture-mailbox';
+      const completedCursors = [{ INBOX: { lastUid: 3 } }];
+      try {
+        database.client
+          .prepare(
+            `INSERT INTO tasks
+             (id, task_type, private_state, public_state, status, idempotency_key, concurrency_key,
+              attempt_count, available_at, created_at, started_at, finished_at, error_category)
+             VALUES (?, 'mailbox.sync@v1', ?, ?, 'failed', 'fixture-mailbox-failed', ?,
+                     3, 1, 1, 1, 2, 'permanent')`,
+          )
+          .run(
+            failedTaskId,
+            JSON.stringify({ mailboxKey }),
+            JSON.stringify({ completedCursors }),
+            `mailbox-sync:${mailboxKey}`,
+          );
+      } finally {
+        database.close();
+      }
+      const bootstrap = resolveBootstrapConfig({
+        cli: { dataRoot: root.path },
+        environment: {},
+        cwd: root.path,
+      });
+      const container = createLocalWebContainer(resolveAppConfig({ bootstrap, environment: {} }));
+      try {
+        const mutation = {
+          kind: 'retry' as const,
+          taskId: failedTaskId,
+          idempotencyToken: 'fixture-mailbox-retry',
+        };
+        expect(container.services.diagnostics.mutate(mutation)).toMatchObject({
+          kind: 'accepted',
+          task: { taskId: failedTaskId, status: 'pending', deduplicated: false },
+        });
+        expect(container.services.tasks.get(parseId(failedTaskId, 'Task'))).toMatchObject({
+          payload: { mailboxKey, resume: { completedCursors } },
+          errorCategory: null,
+          attemptCount: 3,
+        });
+        expect(container.services.diagnostics.mutate(mutation)).toMatchObject({
+          kind: 'accepted',
+          task: { taskId: failedTaskId, deduplicated: true },
+        });
       } finally {
         container.close();
       }

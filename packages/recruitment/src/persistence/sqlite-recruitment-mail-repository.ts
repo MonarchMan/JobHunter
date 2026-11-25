@@ -190,6 +190,7 @@ export class SqliteRecruitmentMailRepository {
       externalMessageKey: String(row.external_message_key),
       folderId: String(row.folder_id),
       threadKey: null,
+      messageIdHash: typeof row.thread_key_hash === 'string' ? row.thread_key_hash : null,
       receivedAt: Number(row.received_at),
       contentVersion: String(row.content_version),
       sourceUrl: typeof row.source_url === 'string' ? row.source_url : null,

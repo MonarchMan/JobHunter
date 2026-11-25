@@ -5,6 +5,7 @@ import type {
   MailboxConfig,
   MailboxConnector,
 } from '@jobhunter/recruitment/mail-contracts';
+import { MailConnectorError } from '@jobhunter/recruitment/mail-contracts';
 import { recruitmentMailPolicyVersion } from '../src/mail/application/mail-task-handlers.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -123,7 +124,12 @@ function classification(
 
 /** 记录分类阶段的持久化副作用，不模拟数据库实现细节。 */
 class RecordingRepository implements RecruitmentMailProcessingRepository {
-  public listPendingReferences(): readonly RecruitmentMailMessageRef[] {
+  public listPendingReferences(
+    mailboxKey: string,
+    afterId: string,
+  ): readonly RecruitmentMailMessageRef[] {
+    void mailboxKey;
+    void afterId;
     return [];
   }
 
@@ -179,6 +185,58 @@ function connector(): MailboxConnector {
 const messageRefIdOf = (): string => 'message-ref-1';
 
 describe('mailbox sync task handler', () => {
+  it.each(['backlog', 'page'])('isolates a missing message from the %s', async (origin) => {
+    const repository = new RecordingRepository();
+    const missing = { ...message, id: 'message-ref-1' };
+    const next = { ...message, externalMessageKey: 'INBOX:1:3' };
+    const mail = connector();
+    vi.spyOn(mail, 'fetchMessage')
+      .mockRejectedValueOnce(new MailConnectorError('message_not_found', 'Message missing.'))
+      .mockResolvedValue(next);
+    vi.spyOn(repository, 'listPendingReferences').mockImplementation((_key, after) =>
+      origin === 'backlog' && !after ? [missing] : [],
+    );
+    const classify = vi.fn().mockResolvedValue(classification());
+    const configs = { list: () => Promise.resolve([mailbox]) };
+    const connectorFor = () => mail;
+    const service = new MailClassificationService({
+      configs,
+      connectorFor,
+      classifier: { classify },
+      repository,
+      messageRefIdOf: (_key, externalKey) =>
+        externalKey === message.externalMessageKey ? missing.id : 'next-ref',
+      createId: () => 'fixture-event',
+    });
+    const sync = vi.fn<MailSyncService['sync']>(
+      async (_config, _connector, _ref, _signal, control) => {
+        if (!control) throw new Error('Missing page control');
+        await control.processPage(origin === 'page' ? [missing, next] : [next]);
+        control.onPageCommitted?.({ lastUid: 3 });
+        return { pages: 1, messages: 1, cursor: null };
+      },
+    );
+    const checkpoint = vi.fn();
+    const taskContext = context();
+    const warn = vi.spyOn(taskContext.logger, 'warn');
+    const handler = createMailboxSyncTaskHandler({
+      configs,
+      connectorFor,
+      service: { sync } as unknown as MailSyncService,
+      classification: service,
+    });
+    await expect(
+      handler.execute({ ...taskContext, checkpoint }, { mailboxKey: mailbox.mailboxKey }),
+    ).resolves.toMatchObject({ pages: 1, classified: 1 });
+    expect(repository.updates).toMatchObject([
+      { id: missing.id, status: 'ignored' },
+      { id: 'next-ref', status: 'accepted' },
+    ]);
+    expect(classify).toHaveBeenCalledOnce();
+    expect(checkpoint).toHaveBeenCalledWith({ completedCursors: [{ lastUid: 3 }] });
+    expect(warn).toHaveBeenCalledWith('mailbox.messages_unavailable', { unavailable: 1 });
+  });
+
   it('replays persisted backlog independently of the cursor and rejects a failed page', async () => {
     const failure = new Error('temporary');
     const classifyOne = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue('accepted');

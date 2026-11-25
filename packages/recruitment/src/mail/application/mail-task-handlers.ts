@@ -27,6 +27,7 @@ export interface MailboxConfigReader {
 
 /** 分类阶段使用的最小邮件引用，附带已提交结论，供幂等重放判定。 */
 export interface RecruitmentMailMessageRef extends ExternalMailMessageRef {
+  readonly messageIdHash?: string | null;
   readonly id: string;
   readonly processingStatus: string;
   readonly lastClassifierVersion: string | null;
@@ -121,7 +122,7 @@ function withResumeFromCheckpoint(value: unknown, result: unknown): unknown {
 
 /**
  * 单邮件分类用例（同步任务第二阶段）：正文读取、规则筛选、模型分类与结论提交。
- * 单封失败映射为稳定错误类别向上抛出，由页内串行循环决定是否继续。
+ * 单封不存在时将引用标记为忽略并返回隔离结论，其他错误继续向上抛出。
  */
 export class MailClassificationService {
   readonly #configs: MailboxConfigReader;
@@ -162,7 +163,7 @@ export class MailClassificationService {
     readonly reference: ExternalMailMessageRef;
     readonly signal: AbortSignal;
     readonly now: () => number;
-  }): Promise<'accepted' | 'needs_review' | 'ignored' | null> {
+  }): Promise<'accepted' | 'needs_review' | 'ignored' | 'unavailable' | null> {
     const id = this.#messageRefIdOf(input.reference.mailboxKey, input.reference.externalMessageKey);
     const stored = this.#repository.findMessageRef(id);
     // 1、幂等判定：已按当前策略提交终态结论的引用不再重复调用模型。
@@ -194,6 +195,7 @@ export class MailClassificationService {
         {
           mailboxKey: config.mailboxKey,
           credentialRef: config.credentialRef,
+          ...(stored?.messageIdHash ? { messageIdHash: stored.messageIdHash } : {}),
           signal: input.signal,
           timeoutMs: 30_000,
         },
@@ -308,21 +310,53 @@ export class MailClassificationService {
           : error instanceof AgentRuntimeError
             ? mapAgentRuntimeError(error, '邮件分类')
             : mapMailConnectorError(error);
+      // 5、不可用邮件直接标记忽略，避免后续同步反复重放。
+      const unavailable =
+        error instanceof MailConnectorError && error.category === 'message_not_found';
       if (
         mapped.category !== 'cancelled' &&
         this.#repository.findMessageRef(id)?.contentVersion === reference.contentVersion
       )
         this.#repository.updateMessageStatus({
           id,
-          status: 'failed',
+          status: unavailable ? 'ignored' : 'failed',
           classifierKind: 'rules',
           classifierVersion: recruitmentMailPolicyVersion,
           contentHash: sourceContentHash,
           updatedAt: input.now(),
         });
+      if (unavailable) return 'unavailable';
       throw mapped;
     }
   }
+}
+
+/** Web 登记重试和 Worker 执行共用的邮箱任务契约。 */
+type MailboxSyncTaskHandler = TaskHandler<
+  z.infer<typeof mailboxSyncTaskPayloadSchema>,
+  z.infer<typeof mailboxSyncTaskOutputSchema>
+>;
+
+const mailboxSyncTaskDefinition = {
+  taskType: 'mailbox.sync@v1',
+  payloadSchema: mailboxSyncTaskPayloadSchema,
+  outputSchema: mailboxSyncTaskOutputSchema,
+  defaultMaxAttempts: 4,
+  // 租约为单次续租窗口，Worker 心跳在扫描与分类整段执行期间持续续租。
+  leaseDurationMs: 30 * 60_000,
+  concurrencyKey: (payload) => `mailbox-sync:${payload.mailboxKey}`,
+  retryPayload: withResumeFromCheckpoint,
+  manualRetryPayload: withResumeFromCheckpoint,
+} satisfies Omit<MailboxSyncTaskHandler, 'execute'>;
+
+/** 创建只登记任务的处理器；Web 可以恢复检查点，但不能直接执行邮箱同步。 */
+export function createMailboxSyncRegistrationHandler(): MailboxSyncTaskHandler {
+  return {
+    ...mailboxSyncTaskDefinition,
+    execute() {
+      throw new TaskExecutionError('invalid_config', 'Mailbox synchronization requires a Worker.');
+    },
+  };
 }
 
 /** 创建单个邮箱的同步任务：阶段一发现引用，阶段二串行分类（ADR-0066）。 */
@@ -331,20 +365,9 @@ export function createMailboxSyncTaskHandler(input: {
   readonly connectorFor: (config: MailboxConfig) => MailboxConnector | undefined;
   readonly service: MailSyncService;
   readonly classification: MailClassificationService;
-}): TaskHandler<
-  z.infer<typeof mailboxSyncTaskPayloadSchema>,
-  z.infer<typeof mailboxSyncTaskOutputSchema>
-> {
+}): MailboxSyncTaskHandler {
   return {
-    taskType: 'mailbox.sync@v1',
-    payloadSchema: mailboxSyncTaskPayloadSchema,
-    outputSchema: mailboxSyncTaskOutputSchema,
-    defaultMaxAttempts: 4,
-    // 租约为单次续租窗口，Worker 心跳在扫描与分类整段执行期间持续续租。
-    leaseDurationMs: 30 * 60_000,
-    concurrencyKey: (payload) => `mailbox-sync:${payload.mailboxKey}`,
-    retryPayload: withResumeFromCheckpoint,
-    manualRetryPayload: withResumeFromCheckpoint,
+    ...mailboxSyncTaskDefinition,
     async execute(context, payload) {
       // 1、定位对应邮箱配置；2、阶段一逐页发现引用；3、阶段二每页串行分类并落检查点。
       const config = (await input.configs.list()).find(
@@ -359,6 +382,7 @@ export function createMailboxSyncTaskHandler(input: {
       );
       const completedCursors: unknown[] = [...(payload.resume?.completedCursors ?? [])];
       let classified = 0;
+      let unavailable = 0;
       let backlogError: Error | undefined;
       const processReference = async (reference: ExternalMailMessageRef): Promise<void> => {
         context.signal.throwIfAborted();
@@ -368,7 +392,8 @@ export function createMailboxSyncTaskHandler(input: {
           now: () => context.clock.now(),
           ...(context.taskId ? { taskId: context.taskId } : {}),
         });
-        if (outcome !== null) classified++;
+        if (outcome === 'unavailable') unavailable++;
+        else if (outcome !== null) classified++;
       };
       // 1.a、历史积压独立于供应商游标重放，分页前进避免本轮重复尝试失败引用。
       let afterId = '';
@@ -421,6 +446,7 @@ export function createMailboxSyncTaskHandler(input: {
           },
         },
       );
+      if (unavailable > 0) context.logger.warn('mailbox.messages_unavailable', { unavailable });
       if (backlogError) throw backlogError;
       return {
         mailboxKey: payload.mailboxKey,

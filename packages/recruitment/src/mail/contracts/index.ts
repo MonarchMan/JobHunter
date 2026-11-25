@@ -121,6 +121,8 @@ export interface MailChangeRequest {
 export interface MailboxReadContext {
   readonly mailboxKey: string;
   readonly credentialRef: string;
+  /** 单封读取的可选恢复线索：原始 Message-ID 的 SHA-256，不传递明文。 */
+  readonly messageIdHash?: string;
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
 }

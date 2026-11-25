@@ -67,7 +67,10 @@ import { WebDiagnosticsService } from '@jobhunter/recruitment/diagnostics/web-di
 import { HandlerRegistry, ScheduleService, TaskService } from '@jobhunter/common/tasks';
 import { SystemSettingsService } from '@jobhunter/recruitment/settings';
 import { createCleanupTaskHandler } from '@jobhunter/common/operations/cleanup-handler';
-import { MailboxSettingsService } from '@jobhunter/recruitment/mail-application';
+import {
+  createMailboxSyncRegistrationHandler,
+  MailboxSettingsService,
+} from '@jobhunter/recruitment/mail-application';
 import { loadRuntimeAppConfig, type AppConfig } from '@jobhunter/common/config/index';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
 import { SqliteArtifactStore } from '@jobhunter/user/persistence/artifact-store';
@@ -245,6 +248,7 @@ export function createLocalWebContainer(
       }),
     );
     registry.register(createCleanupTaskHandler({ unavailable: true }));
+    registry.register(createMailboxSyncRegistrationHandler());
     registry.register(createResumeProfileTaskHandler({ unavailable: true }));
     registry.register(createResumePolishTaskHandler({ unavailable: true }));
     registry.register(createResumePdfExportTaskHandler());
