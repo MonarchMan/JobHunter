@@ -3,7 +3,6 @@ import { currentModelMessage } from '../agent/message-context.js';
 import type Database from 'better-sqlite3';
 import { z } from 'zod';
 import {
-  modelBillingSchema,
   modelRequestRecordSchema,
   type ModelBilling,
   type ModelRequestRecord,
@@ -38,33 +37,41 @@ const fields = {
   period: 'period',
   precision: 'precision',
 } as const;
+const fieldEntries = Object.entries(fields);
+const requestRowSchema = z.record(z.string(), z.unknown());
+
 /** 从数据库边界重建已校验账单，生成速度由输出量与有效生成时间计算。 */
 export function readModelRequest(
   value: unknown,
 ): ModelRequestRecord & { agentRunId: string | null; agentKey: string } {
-  const row = z.record(z.string(), z.unknown()).parse(value);
+  const row = requestRowSchema.parse(value);
   const values = Object.fromEntries(
-    Object.entries(fields).map(([key, column]) => [
+    fieldEntries.map(([key, column]) => [
       key,
       row[column] == null && (key === 'application' || key === 'provider')
         ? undefined
         : row[column],
     ]),
   );
-  const billing = modelBillingSchema.parse({
-    ...values,
-    requestId: row.id,
-    ...(row.failure_reason == null ? {} : { failureReason: row.failure_reason }),
-    rates:
-      row.rates_json == null ? null : (JSON.parse(z.string().parse(row.rates_json)) as unknown),
+  const record = modelRequestRecordSchema.parse({
+    id: row.id,
+    state: row.state,
+    billing: {
+      ...values,
+      requestId: row.id,
+      ...(row.failure_reason == null ? {} : { failureReason: row.failure_reason }),
+      rates:
+        row.rates_json == null ? null : (JSON.parse(z.string().parse(row.rates_json)) as unknown),
+    },
   });
+  const { billing } = record;
   const generation = (billing.durationMs ?? 0) - (billing.firstTokenMs ?? 0);
   billing.outputTokensPerSecond ??=
     billing.firstTokenMs != null && billing.outputTokens != null && generation > 0
       ? (billing.outputTokens * 1000) / generation
       : null;
   return {
-    ...modelRequestRecordSchema.parse({ id: row.id, state: row.state, billing }),
+    ...record,
     agentRunId: z.string().nullable().parse(row.agent_run_id),
     agentKey: z.string().parse(row.agent_key),
   };

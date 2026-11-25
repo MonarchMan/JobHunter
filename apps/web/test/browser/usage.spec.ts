@@ -3,9 +3,16 @@ import { expect, test } from '@playwright/test';
 test('usage tab shares filters across totals, charts, models and paginated logs', async ({
   page,
 }) => {
+  // 隔离开发服务器首次访问任务页时需要现场编译路由。
+  test.setTimeout(90_000);
   await page.goto('/tasks');
   await page.getByRole('link', { name: '用量统计', exact: true }).click();
   await expect(page.getByText('$0.09', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: '使用趋势' }).getByRole('button', { name: /00:00 Tokens / }),
+  ).toHaveCount(1);
+  // 筛选回归只观察用户触发的导航，避免定时刷新插入测试序列。
+  await page.getByRole('button', { name: '暂停自动刷新' }).click();
   await expect(page.getByText(/次请求未定价/)).toHaveCount(0);
   await expect(page.locator('[title*="次请求未定价"]')).toHaveCount(0);
   await expect(page.getByRole('cell', { name: 'network-failed-fixture', exact: true })).toHaveCount(
@@ -34,6 +41,7 @@ test('usage tab shares filters across totals, charts, models and paginated logs'
   await expect(page.getByRole('combobox', { name: '时间范围' })).toBeVisible();
   await page.getByRole('combobox', { name: '供应商', exact: true }).click();
   await page.getByRole('option', { name: 'api.example.test', exact: true }).click();
+  await expect(page).toHaveURL(/[?&]provider=api\.example\.test(?:&|$)/);
   await page.getByRole('combobox', { name: '模型', exact: true }).click();
   await page.getByRole('option', { name: 'usage-fixture-model', exact: true }).click();
   await expect(page).toHaveURL(/model=usage-fixture-model/);
@@ -43,6 +51,7 @@ test('usage tab shares filters across totals, charts, models and paginated logs'
   // 同一轮页面验收会生成其他合成调用；分页断言只统计本测试的 28 条固定账单。
   await page.getByRole('combobox', { name: '模型', exact: true }).click();
   await page.getByRole('option', { name: 'usage-fixture-model', exact: true }).click();
+  await expect(page).toHaveURL(/[?&]model=usage-fixture-model(?:&|$)/);
   await page.getByRole('button', { name: '更多指标' }).click();
   await expect(page.getByText('Output', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '更多指标' }).click();
@@ -51,14 +60,23 @@ test('usage tab shares filters across totals, charts, models and paginated logs'
     'aria-pressed',
     'true',
   );
+  const documentTimeOrigin = await page.evaluate(() => performance.timeOrigin);
   await page.getByRole('link', { name: '下一页', exact: true }).click();
+  await expect(page).toHaveURL(/usagePage=2/);
   await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(8);
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
+  await expect(page.getByRole('button', { name: '成本', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByText('$0.08', { exact: true })).toBeVisible();
   await page
     .getByRole('navigation', { name: '统计明细' })
     .getByRole('link', { name: '模型', exact: true })
     .click();
+  await expect(page).toHaveURL(/[?&]view=models(?:&|$)/);
   await expect(page.getByRole('table').locator('tbody tr')).toHaveCount(1);
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
   await page
     .getByRole('navigation', { name: '统计明细' })
     .getByRole('link', { name: '供应商', exact: true })
@@ -112,6 +130,7 @@ test('usage tab shares filters across totals, charts, models and paginated logs'
   await expect(page).toHaveURL(/currency=CNY/);
   await page.getByRole('combobox', { name: '模型', exact: true }).click();
   await page.getByRole('option', { name: '模型', exact: true }).click();
+  await expect(page).toHaveURL(/[?&]model=(?:&|$)/);
   await page
     .getByRole('navigation', { name: '统计明细' })
     .getByRole('link', { name: '请求日志', exact: true })

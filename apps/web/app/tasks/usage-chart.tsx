@@ -3,19 +3,42 @@ import { useState, type ReactElement } from 'react';
 import type { UsageReport } from '@jobhunter/common/usage';
 import styles from './usage.module.css';
 
+/** 趋势图不携带各时间桶的账单细项，只读取坐标和三种可切换指标。 */
+export type UsageChartBucket = {
+  at: number;
+  total: Pick<UsageReport['total'], 'tokens' | 'requests' | 'cost'>;
+};
+
+const shanghaiDateOptions = {
+  timeZone: 'Asia/Shanghai',
+  month: '2-digit',
+  day: '2-digit',
+} as const;
+const shanghaiDay = new Intl.DateTimeFormat('zh-CN', shanghaiDateOptions);
+const shanghaiHour = new Intl.DateTimeFormat('zh-CN', {
+  ...shanghaiDateOptions,
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+const compactAxis = new Intl.NumberFormat('zh-CN', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
 /** 时间桶柱形图；按钮支持键盘聚焦和触屏读取精确值。 */
 export function UsageChart({
   report,
   chartStyle = 'bar',
 }: {
-  report: Pick<UsageReport, 'buckets' | 'filters'>;
+  report: Pick<UsageReport, 'filters'> & { buckets: UsageChartBucket[] };
   chartStyle?: 'bar' | 'line';
 }): ReactElement {
   const [metric, setMetric] = useState<'tokens' | 'requests' | 'cost'>('tokens');
   const [active, setActive] = useState<number | null>(null);
   const currency = report.filters.currency;
   /** 成本由统计服务统一换算，币种切换不改变请求与 Tokens。 */
-  const value = (total: UsageReport['total']): number =>
+  const value = (total: UsageChartBucket['total']): number =>
     metric === 'cost' ? (total.cost ?? 0) : total[metric];
   const labels = { tokens: 'Tokens', requests: '请求', cost: '成本' };
   const peak = Math.max(1, ...report.buckets.map((bucket) => value(bucket.total)));
@@ -26,20 +49,12 @@ export function UsageChart({
       ? `${currency === 'USD' ? '$' : '¥'}${(value / 1000000).toFixed(4)}`
       : value.toLocaleString('zh-CN');
   const axisValue = (value: number): string =>
-    metric === 'cost'
-      ? format(value)
-      : Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
-  const display = (total: UsageReport['total']): string =>
+    metric === 'cost' ? format(value) : compactAxis.format(value);
+  const display = (total: UsageChartBucket['total']): string =>
     metric === 'cost' && total.cost === null ? '—' : format(value(total));
-  const date = (at: number): string =>
-    new Intl.DateTimeFormat('zh-CN', {
-      timeZone: 'Asia/Shanghai',
-      month: '2-digit',
-      day: '2-digit',
-      ...(['today', '24h'].includes(report.filters.range)
-        ? { hour: '2-digit', minute: '2-digit', hour12: false }
-        : {}),
-    }).format(at);
+  const date = (
+    report.filters.range === 'today' || report.filters.range === '24h' ? shanghaiHour : shanghaiDay
+  ).format;
   const selected = active === null ? null : report.buckets[active];
   return (
     <section className={styles.chart} aria-label="使用趋势">

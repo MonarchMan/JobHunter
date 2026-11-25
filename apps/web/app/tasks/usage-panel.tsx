@@ -9,8 +9,33 @@ import {
 } from '@jobhunter/common/usage';
 import { SelectField } from '../components/forms/select-field.js';
 import { TaskAutoRefresh } from './task-auto-refresh.js';
-import { UsageChart } from './usage-chart.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
+import { UsageChart, type UsageChartBucket } from './usage-chart.js';
 import styles from './usage.module.css';
+
+/** 服务端到用量组件的报告，仅趋势桶使用精简展示投影。 */
+export type UsagePanelReport = Omit<UsageReport, 'buckets'> & { buckets: UsageChartBucket[] };
+
+const compactNumber = new Intl.NumberFormat('en', {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+const shanghaiLogDateTime = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+});
+const shanghaiLogTime = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+  hour12: false,
+});
 
 /** 未知量保持破折号，禁止将未知展示为零。 */
 function number(value: number | null | undefined): string {
@@ -18,11 +43,7 @@ function number(value: number | null | undefined): string {
 }
 /** 大计数使用紧凑格式，小计数保留千位分隔。 */
 function compact(value: number | null | undefined): string {
-  return value == null
-    ? '—'
-    : value < 10000
-      ? number(value)
-      : Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(value);
+  return value == null ? '—' : value < 10000 ? number(value) : compactNumber.format(value);
 }
 /** 缓存命中率按已上报输入加权，零分母不报告比率。 */
 function rate(total: UsageTotals): string {
@@ -79,7 +100,13 @@ const ranges = [
 ];
 
 /** 统计主视图：公共下拉框更新 URL，所有聚合与分页使用同一筛选集。 */
-export function UsagePanel({ report, view }: { report: UsageReport; view: string }): ReactElement {
+export function UsagePanel({
+  report,
+  view,
+}: {
+  report: UsagePanelReport;
+  view: string;
+}): ReactElement {
   const router = useRouter();
   const search = useSearchParams();
   const [expanded, setExpanded] = useState(false);
@@ -335,13 +362,14 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
                 ['settings', '设置'],
               ] as const
             ).map(([key, label]) => (
-              <a
+              <NavigationLink
                 key={key}
                 href={href({ view: key, usagePage: '1' })}
+                prefetch={false}
                 aria-current={currentView === key ? 'page' : undefined}
               >
                 {label}
-              </a>
+              </NavigationLink>
             ))}
           </nav>
           {currentView === 'logs' ? (
@@ -536,15 +564,8 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
                         key={call.id}
                         title={`${call.statusCode == null ? '无状态码' : `HTTP ${String(call.statusCode)}`}${call.transportError ? ` · ${call.transportError}` : ''}`}
                       >
-                        <td
-                          title={new Date(call.requestedAt).toLocaleString('zh-CN', {
-                            timeZone: 'Asia/Shanghai',
-                          })}
-                        >
-                          {new Date(call.requestedAt).toLocaleTimeString('zh-CN', {
-                            timeZone: 'Asia/Shanghai',
-                            hour12: false,
-                          })}
+                        <td title={shanghaiLogDateTime.format(call.requestedAt)}>
+                          {shanghaiLogTime.format(call.requestedAt)}
                         </td>
                         {columns
                           .filter(([key]) => visible.includes(key))
@@ -576,9 +597,13 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
           <nav className={styles.pagination} aria-label="用量日志分页">
             <span className={styles.recordCount}>共 {count} 条记录</span>
             {page > 1 ? (
-              <a aria-label="上一页" href={href({ usagePage: String(page - 1) })}>
+              <NavigationLink
+                aria-label="上一页"
+                href={href({ usagePage: String(page - 1) })}
+                prefetch={false}
+              >
                 ‹
-              </a>
+              </NavigationLink>
             ) : (
               <span aria-label="上一页">‹</span>
             )}
@@ -586,9 +611,13 @@ export function UsagePanel({ report, view }: { report: UsageReport; view: string
               {page} / {pages}
             </span>
             {page < pages ? (
-              <a aria-label="下一页" href={href({ usagePage: String(page + 1) })}>
+              <NavigationLink
+                aria-label="下一页"
+                href={href({ usagePage: String(page + 1) })}
+                prefetch={false}
+              >
                 ›
-              </a>
+              </NavigationLink>
             ) : (
               <span aria-label="下一页">›</span>
             )}

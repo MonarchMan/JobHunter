@@ -112,7 +112,16 @@ export default async function TasksPage({
     return (
       <main id="main-content" tabIndex={-1}>
         <TaskTabs usage />
-        <UsagePanel report={report} view={firstSearchParameter(parameters, 'view') ?? 'logs'} />
+        <UsagePanel
+          report={{
+            ...report,
+            buckets: report.buckets.map(({ at, total: { tokens, requests, cost } }) => ({
+              at,
+              total: { tokens, requests, cost },
+            })),
+          }}
+          view={firstSearchParameter(parameters, 'view') ?? 'logs'}
+        />
       </main>
     );
   }

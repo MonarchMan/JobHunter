@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { readModelRequest } from './model-request-repository.js';
 import type { UsageCall, UsageRepository } from '../usage/service.js';
 
+const runStatusSchema = z.object({ run_status: z.string().nullable() });
+
 /** 从现有请求快照读取账本；不写数据库，不以运行开始时间截断重试调用。 */
 export class SqliteUsageRepository implements UsageRepository {
   public constructor(private readonly client: Database.Database) {}
@@ -22,8 +24,7 @@ export class SqliteUsageRepository implements UsageRepository {
         ...row.billing,
         id: row.id,
         agent: row.agentKey,
-        status:
-          z.object({ run_status: z.string().nullable() }).parse(value).run_status ?? 'deleted',
+        status: runStatusSchema.parse(value).run_status ?? 'deleted',
         requestState: row.state,
       };
     });
