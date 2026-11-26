@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { useRef } from 'react';
 import { Icon } from '../ui-icon.js';
+import { NavigationLink } from './navigation-pending.js';
 import styles from './site-nav.module.css';
 
 const primaryLinks = [
@@ -32,6 +33,13 @@ function isCurrentPath(pathname: string, href: string): boolean {
   return href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/** 仅对已有加载边界的动态入口预取轻量外壳。 */
+function shellPrefetch(href: string): false | null {
+  return href === '/jobs' || href === '/my' || href === '/tasks' || href === '/settings'
+    ? null
+    : false;
+}
+
 export function SiteNav(): ReactElement {
   const pathname = usePathname();
   const moreNavigationReference = useRef<HTMLDetailsElement>(null);
@@ -42,11 +50,12 @@ export function SiteNav(): ReactElement {
       {primaryLinks.map((link) => {
         const current = isCurrentPath(pathname, link.href);
         return (
-          <a
+          <NavigationLink
             className={[styles.link, current ? styles.current : undefined]
               .filter(Boolean)
               .join(' ')}
             href={link.href}
+            prefetch={shellPrefetch(link.href)}
             aria-current={current ? 'page' : undefined}
             key={link.href}
           >
@@ -55,23 +64,24 @@ export function SiteNav(): ReactElement {
             <span className={styles.shortLabel}>
               {'shortLabel' in link ? link.shortLabel : link.label}
             </span>
-          </a>
+          </NavigationLink>
         );
       })}
       {secondaryLinks.map((link) => {
         const current = isCurrentPath(pathname, link.href);
         return (
-          <a
+          <NavigationLink
             className={[styles.link, styles.secondary, current ? styles.current : undefined]
               .filter(Boolean)
               .join(' ')}
             href={link.href}
+            prefetch={shellPrefetch(link.href)}
             aria-current={current ? 'page' : undefined}
             key={link.href}
           >
             <Icon name={link.icon} />
             {link.label}
-          </a>
+          </NavigationLink>
         );
       })}
       <details
@@ -96,18 +106,19 @@ export function SiteNav(): ReactElement {
           {secondaryLinks.map((link) => {
             const current = isCurrentPath(pathname, link.href);
             return (
-              <a
+              <NavigationLink
                 className={[styles.moreLink, current ? styles.moreLinkCurrent : undefined]
                   .filter(Boolean)
                   .join(' ')}
                 href={link.href}
+                prefetch={shellPrefetch(link.href)}
                 aria-current={current ? 'page' : undefined}
                 key={link.href}
                 onClick={() => moreNavigationReference.current?.removeAttribute('open')}
               >
                 <Icon name={link.icon} />
                 {link.label}
-              </a>
+              </NavigationLink>
             );
           })}
         </div>

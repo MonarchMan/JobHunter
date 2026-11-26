@@ -1,4 +1,5 @@
 import type { ReactElement, ReactNode } from 'react';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import styles from './metric-card.module.css';
 
 const toneClasses = {
@@ -22,10 +23,10 @@ export function MetricCard({
   tone?: 'primary' | 'blue' | 'amber' | 'violet';
 }>): ReactElement {
   return (
-    <a className={[styles.card, toneClasses[tone]].join(' ')} href={href}>
+    <NavigationLink className={[styles.card, toneClasses[tone]].join(' ')} href={href}>
       <p>{label}</p>
       <strong>{value}</strong>
       <span>{detail}</span>
-    </a>
+    </NavigationLink>
   );
 }

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation.js';
+import { NavigationLink } from '../../components/layout/navigation-pending.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import {
@@ -27,7 +28,7 @@ export default async function AgentRunPage({
   return (
     <main id="main-content" tabIndex={-1}>
       <PageHeader title={labelAgentKey(run.agentKey)}>
-        <a href="/tasks">返回任务</a>
+        <NavigationLink href="/tasks">返回任务</NavigationLink>
       </PageHeader>
       <section className="panel">
         <dl className={['facts', styles.facts].filter(Boolean).join(' ')}>

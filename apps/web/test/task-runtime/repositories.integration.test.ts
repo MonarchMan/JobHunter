@@ -444,6 +444,17 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     expect(page.items[0]?.score).toBe(88);
     const search = page.items[0]?.title;
     if (!search) throw new Error('Expected a scored job.');
+    const profileVersionId = parseId('018f0000-0000-7000-8000-000000000054', 'ProfileVersion');
+    // 时间排序的评分只装饰当页记录，搜索计数和越界回落不依赖评分。
+    for (const sort of ['published_desc', 'updated_desc'] as const) {
+      expect(repository.query({ profileVersionId, page: 1, sort })).toMatchObject({
+        total: 1,
+        items: [{ score: 88 }],
+      });
+      expect(
+        repository.query({ profileVersionId, search, sort, page: 99, pageSize: 1 }),
+      ).toMatchObject({ total: 1, page: 1, items: [{ score: 88 }] });
+    }
     expect(
       repository.query({
         search,
@@ -454,6 +465,18 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
         sort: 'score_desc',
       }),
     ).toMatchObject({ total: 1, page: 1, items: page.items });
+    // 评分只属于当前内容；改版后旧评分既不展示，也不参与最低分筛选。
+    handle.client
+      .prepare('UPDATE jobs SET content_id = ? WHERE id = ?')
+      .run('018f0000-0000-7000-8000-000000000057', page.items[0]?.id);
+    expect(repository.query({ profileVersionId, page: 1 })).toMatchObject({
+      total: 1,
+      items: [{ score: null }],
+    });
+    expect(repository.query({ profileVersionId, minimumScore: 80, page: 1 })).toMatchObject({
+      total: 0,
+      items: [],
+    });
   });
 });
 

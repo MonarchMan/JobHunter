@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactElement, type SyntheticEvent } f
 import type { BossCommand } from '@jobhunter/recruitment/platform-application/platforms';
 import type { WebBossSnapshot } from '@jobhunter/recruitment/platform-application/web-platforms';
 import { mutationHeaders } from '../../src/client/csrf.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import styles from './boss-browser.module.css';
 import { Icon } from '../components/ui-icon.js';
 
@@ -253,9 +254,12 @@ export function PlatformBrowser({
           >
             {frozen ? '重新连接' : '获取职位'}
           </button>
-          <a className="button-secondary" href={`/jobs?source=platform&provider=${provider}`}>
+          <NavigationLink
+            className="button-secondary"
+            href={`/jobs?source=platform&provider=${provider}`}
+          >
             查看平台职位
-          </a>
+          </NavigationLink>
         </div>
         {readError && (
           <p className={styles.error} role="alert">
@@ -282,9 +286,9 @@ export function PlatformBrowser({
         <section className={styles.results} aria-label="采集记录">
           <div className={styles.fieldHeader}>
             <h3>{active ? '本次采集' : '最近记录'}</h3>
-            <a className={styles.link} href={`/tasks?type=platform.${provider}`}>
+            <NavigationLink className={styles.link} href={`/tasks?type=platform.${provider}`}>
               {active ? '查看任务或取消' : '查看任务'} <Icon name="chevronRight" size={14} />
-            </a>
+            </NavigationLink>
           </div>
           <div role="status">
             {active && <p>{progress ? stageLabels[progress.stage] : '等待执行'}</p>}

@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import type { WebDashboardHighlightJob } from '../../src/shared/dashboard-contracts.js';
 import styles from './dashboard-highlight-jobs.module.css';
 
@@ -18,7 +19,7 @@ function formatRelativeTime(dateString: string): string {
 function HighlightJobCard({ job }: Readonly<{ job: WebDashboardHighlightJob }>): ReactElement {
   // 1、保留完整标题与地点，避免按字符截断造成中英文可用宽度不一致。
   return (
-    <a href={`/jobs/${job.id}`} className={styles.card}>
+    <NavigationLink href={`/jobs/${job.id}`} className={styles.card}>
       <div className={styles.header}>
         <div className={styles.company}>
           <strong>{job.companyName}</strong>
@@ -50,7 +51,7 @@ function HighlightJobCard({ job }: Readonly<{ job: WebDashboardHighlightJob }>):
           ))}
         </div>
       ) : null}
-    </a>
+    </NavigationLink>
   );
 }
 
@@ -67,9 +68,9 @@ export function DashboardHighlightJobs({
         <div>
           <h2 id="highlight-jobs-title">值得关注的职位</h2>
         </div>
-        <a className={styles.viewAll} href="/jobs?sort=score_desc">
+        <NavigationLink className={styles.viewAll} href="/jobs?sort=score_desc">
           查看全部 <span aria-hidden="true">↗</span>
-        </a>
+        </NavigationLink>
       </div>
       <div className={styles.grid}>
         {jobs.map((job) => (

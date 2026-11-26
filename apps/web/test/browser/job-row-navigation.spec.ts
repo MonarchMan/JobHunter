@@ -14,14 +14,9 @@ for (const width of [1280, 768, 390]) {
     const listPath = '/jobs?q=大模型&category=internship&sort=updated_desc&page=1';
     await page.goto(listPath);
     const listUrl = page.url();
-    const record =
-      width > 900
-        ? page
-            .getByRole('row')
-            .filter({ has: page.getByRole('link', { name: '大模型应用实习生', exact: true }) })
-        : page
-            .getByRole('article')
-            .filter({ has: page.getByRole('link', { name: '大模型应用实习生', exact: true }) });
+    const record = page
+      .getByRole('row')
+      .filter({ has: page.getByRole('link', { name: '大模型应用实习生', exact: true }) });
     await expect(record).toBeVisible();
     // 1、勾选、评分弹层及官网链接都不能触发父行导航。
     await record.getByRole('checkbox').check();
@@ -64,7 +59,7 @@ for (const width of [1280, 768, 390]) {
       await popup.close();
     }
     // 2、文本选择和修饰键不会误跳，空白区域的正常点击才激活真实链接。
-    const body = width > 900 ? record.locator('td').nth(5) : record.locator('p').first();
+    const body = record.getByRole('cell').nth(5);
     await body.click({ modifiers: ['Control'] });
     expect(page.url()).toBe(listUrl);
     await body.evaluate((element) => {
@@ -87,7 +82,7 @@ for (const width of [1280, 768, 390]) {
     });
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     await body.click();
-    await expect(page).toHaveURL(new URL(href, listUrl).href);
+    await expect(page).toHaveURL(new URL(href, listUrl).href, { timeout: 45_000 });
     await expect(page.getByRole('heading', { name: '匹配与建议' })).toBeVisible();
     await expect(page.getByRole('heading', { name: '修订时间线' })).toHaveCount(0);
     await page.getByRole('link', { name: '← 返回职位列表' }).click();
@@ -98,6 +93,39 @@ for (const width of [1280, 768, 390]) {
     await expect(page).toHaveURL(new URL(href, listUrl).href);
   });
 }
+
+test('job filters and detail round trip retain the same document and browser history', async ({
+  page,
+}) => {
+  await page.goto('/jobs?q=大模型&page=1');
+  const originalUrl = page.url();
+  const documentTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+  const form = page.getByRole('form', { name: '职位筛选' });
+  await form.getByRole('textbox', { name: '关键词' }).fill('AI 产品');
+  await form.getByRole('button', { name: '搜索' }).click();
+  const detail = page.getByRole('link', { name: '查看职位详情：AI 产品实习生' });
+  await expect(detail).toBeVisible({ timeout: 45_000 });
+  const filteredUrl = page.url();
+  expect(new URL(filteredUrl).searchParams.get('q')).toBe('AI 产品');
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
+  await detail.click();
+  const back = page.getByRole('link', { name: '← 返回职位列表' });
+  await expect(back).toBeVisible({ timeout: 45_000 });
+  const detailUrl = page.url();
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
+  await back.click();
+  await expect(page).toHaveURL(filteredUrl);
+  await expect(detail).toBeVisible();
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
+  await page.goBack();
+  await expect(page).toHaveURL(detailUrl);
+  await page.goBack();
+  await expect(page).toHaveURL(filteredUrl);
+  await page.goBack();
+  await expect(page).toHaveURL(originalUrl);
+  await expect(form.getByRole('textbox', { name: '关键词' })).toHaveValue('大模型');
+  expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
+});
 
 test('rejects external job detail return targets', async ({ page }) => {
   await page.goto('/jobs');

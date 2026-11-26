@@ -2,6 +2,7 @@
 
 import type { ExperienceResearchDetail } from '@jobhunter/user/interview';
 import { useRouter } from 'next/navigation.js';
+import { NavigationLink } from '../../../components/layout/navigation-pending.js';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../../src/client/csrf.js';
@@ -420,7 +421,9 @@ export function ResearchWorkbench({
                 {taskStateLabels[currentTask.status]}
               </span>
               <code>{currentTask.id}</code>
-              <a href="/tasks?type=interview.experience-research.execute">查看任务诊断</a>
+              <NavigationLink href="/tasks?type=interview.experience-research.execute">
+                查看任务诊断
+              </NavigationLink>
               {taskPending ? (
                 <button
                   type="button"

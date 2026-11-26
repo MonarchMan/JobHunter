@@ -1,16 +1,20 @@
 import { SearchButton } from '../components/forms/search-button.js';
+import { NavigationForm } from '../components/forms/navigation-form.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import { listPageSize } from '../../src/server/job-query.js';
 import { canonicalJobSubfamilies } from '@jobhunter/recruitment/domain';
 import type { Metadata } from 'next';
-import type { ReactElement } from 'react';
+import { Suspense, type ReactElement } from 'react';
 import { Pagination } from '../components/lists/pagination.js';
 import { SelectField } from '../components/forms/select-field.js';
 import { NumberField } from '../components/forms/number-field.js';
 import { JobsRefresh } from './jobs-refresh.js';
 import { PageHeader } from '../components/layout/page-header.js';
+import { SectionLoading } from '../components/layout/section-loading.js';
 import { JobsTable } from './jobs-table.js';
 import { CompanyCombobox } from '../components/forms/company-combobox.js';
 import { getWebContainer } from '../../src/server/container.js';
+import { browserTestRenderDelay } from '../../src/server/browser-test-render-delay.js';
 import {
   firstSearchParameter,
   pageHref,
@@ -32,9 +36,30 @@ function fieldValue(source: SearchParameterSource, name: string): string {
   return firstSearchParameter(source, name) ?? '';
 }
 
-export default async function JobsPage({
-  searchParams,
-}: JobsPageProperties): Promise<ReactElement> {
+/** 职位标题不依赖列表查询；列表筛选与结果仍使用同一个服务端快照。 */
+export default function JobsPage({ searchParams }: JobsPageProperties): ReactElement {
+  return (
+    <main id="main-content" tabIndex={-1}>
+      <Suspense fallback={<JobsListLoading />}>
+        <JobsListContent searchParams={searchParams} />
+      </Suspense>
+    </main>
+  );
+}
+
+/** 加载时保留列表标题，不提前展示未知的来源、总数或筛选结果。 */
+function JobsListLoading(): ReactElement {
+  return (
+    <>
+      <PageHeader title="职位列表" />
+      <SectionLoading label="正在加载职位列表" />
+    </>
+  );
+}
+
+/** 读取当前筛选条件对应的列表、来源与画像。 */
+async function JobsListContent({ searchParams }: JobsPageProperties): Promise<ReactElement> {
+  await browserTestRenderDelay('jobs');
   const parameters = await searchParams;
   const hasFilters =
     ['q', 'company', 'location', 'subfamily', 'status', 'sort', 'minScore', 'profile'].some(
@@ -70,7 +95,7 @@ export default async function JobsPage({
       ? `/sources?channel=platform${query.providerKey ? `&provider=${query.providerKey}` : ''}`
       : '/sources';
   return (
-    <main id="main-content" tabIndex={-1}>
+    <>
       <JobsFilterMemory enabled={jobListPreferences.rememberFilters} />
       <PageHeader title="职位列表">
         <JobSourceFilter
@@ -80,11 +105,10 @@ export default async function JobsPage({
       </PageHeader>
       <details className={styles.filterPanel} open={hasFilters}>
         <summary>筛选职位{hasFilters ? ' · 已设置条件' : ''}</summary>
-        <form
-          key={`${query.sourceKind}:${query.providerKey ?? ''}`}
+        <NavigationForm
+          key={JSON.stringify(Object.entries(parameters).filter(([name]) => name !== 'page'))}
           className={styles.filters}
           action="/jobs"
-          method="get"
           aria-label="职位筛选"
           noValidate
           data-job-filters
@@ -214,12 +238,12 @@ export default async function JobsPage({
             </label>
             <div className={styles.filterActions}>
               <SearchButton />
-              <a className="button-secondary" href={clearHref}>
+              <NavigationLink className="button-secondary" href={clearHref}>
                 清除
-              </a>
+              </NavigationLink>
             </div>
           </div>
-        </form>
+        </NavigationForm>
       </details>
       <div className={styles.resultToolbar}>
         <p className={styles.resultSummary} aria-live="polite">
@@ -247,12 +271,12 @@ export default async function JobsPage({
               : '尝试减少筛选条件，或先同步官网来源。'}
           </p>
           <div className="inline-actions">
-            <a className="button-secondary" href={clearHref}>
+            <NavigationLink className="button-secondary" href={clearHref}>
               清除筛选
-            </a>
-            <a className="button-primary" href={sourcesHref}>
+            </NavigationLink>
+            <NavigationLink className="button-primary" href={sourcesHref}>
               管理招聘来源
-            </a>
+            </NavigationLink>
           </div>
         </section>
       ) : (
@@ -268,6 +292,6 @@ export default async function JobsPage({
         label="职位分页"
         createHref={(pageNumber) => `/jobs${pageHref(parameters, 'page', pageNumber)}`}
       />
-    </main>
+    </>
   );
 }

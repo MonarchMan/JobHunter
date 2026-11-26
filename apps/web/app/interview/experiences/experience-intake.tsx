@@ -2,6 +2,7 @@
 
 import type { ExperienceDocumentSummary } from '@jobhunter/user/interview';
 import { useRouter } from 'next/navigation.js';
+import { NavigationLink } from '../../components/layout/navigation-pending.js';
 import type { DragEvent, ReactElement, SyntheticEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { mutationHeaders } from '../../../src/client/csrf.js';
@@ -490,7 +491,7 @@ export function ExperienceIntake({
           <ol className={styles.archiveList}>
             {documents.map((item, index) => (
               <li key={item.document.id}>
-                <a href={`/interview/experiences/${item.document.id}`}>
+                <NavigationLink href={`/interview/experiences/${item.document.id}`}>
                   <span className={styles.archiveIndex}>{String(index + 1).padStart(2, '0')}</span>
                   <span className={styles.archiveCopy}>
                     <strong>
@@ -505,7 +506,7 @@ export function ExperienceIntake({
                     {item.document.status === 'accepted' ? '已入历史' : '待校对'}
                     {item.unansweredCount > 0 ? ` · ${String(item.unansweredCount)} 题未回答` : ''}
                   </span>
-                </a>
+                </NavigationLink>
               </li>
             ))}
           </ol>

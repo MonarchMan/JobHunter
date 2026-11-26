@@ -50,7 +50,7 @@ test.describe('外部 Agent 网友面经研究', () => {
     expect(request).toBeDefined();
     if (!request) throw new Error('Research creation response did not include a request.');
 
-    await expect(page).toHaveURL(`/interview/research/${request.id}`);
+    await expect(page).toHaveURL(`/interview/research/${request.id}`, { timeout: 45_000 });
     await expect(page.getByRole('heading', { name: role, level: 1 })).toBeVisible();
     await expect(page.getByRole('link', { name: '下载 .md' })).toHaveAttribute(
       'href',
@@ -153,7 +153,14 @@ test.describe('外部 Agent 网友面经研究', () => {
 
     const reviewQueue = page.locator('section[aria-labelledby="candidate-review-title"]');
     const firstCandidate = reviewQueue.getByRole('article').filter({ hasText: firstSourceTitle });
+    const firstReviewResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith(`/api/interview/research/${request.id}/review`) &&
+        response.request().method() === 'POST',
+      { timeout: 45_000 },
+    );
     await firstCandidate.getByRole('button', { name: '接受' }).click();
+    expect((await firstReviewResponse).ok()).toBe(true);
     await expect(
       page.getByLabel('通知').getByRole('status').filter({ hasText: '候选已进入网友面经' }),
     ).toBeVisible();
@@ -173,6 +180,7 @@ test.describe('外部 Agent 网友面经研究', () => {
     await expect(page.getByRole('heading', { name: secondSourceTitle })).toBeVisible();
 
     const acceptedArchive = page.getByRole('region', { name: '已接受的网友面经' });
+    const documentTimeOrigin = await page.evaluate(() => performance.timeOrigin);
     await acceptedArchive.getByRole('combobox', { name: '公司' }).selectOption(firstCompany);
     await acceptedArchive.getByRole('combobox', { name: '岗位' }).selectOption(role);
     await acceptedArchive.getByRole('combobox', { name: '阶段' }).selectOption('技术一面');
@@ -182,6 +190,7 @@ test.describe('外部 Agent 网友面经研究', () => {
       .toEqual({ company: firstCompany, role, stage: '技术一面' });
     await expect(page.getByRole('heading', { name: firstSourceTitle })).toBeVisible();
     await expect(page.getByRole('heading', { name: secondSourceTitle })).toHaveCount(0);
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
     await expect(
       page.getByRole('link', { name: `${firstSourceTitle}（在新窗口打开来源）` }),
     ).toHaveAttribute('rel', 'noopener noreferrer');

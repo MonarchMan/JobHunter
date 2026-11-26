@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { NavigationLink } from './components/layout/navigation-pending.js';
 
 export default function NotFound(): ReactElement {
   return (
@@ -6,12 +7,12 @@ export default function NotFound(): ReactElement {
       <h1>页面不存在</h1>
       <p>这个页面可能已被移除，或链接地址不再有效。</p>
       <div className="inline-actions">
-        <a className="button-primary" href="/">
+        <NavigationLink className="button-primary" href="/">
           返回工作台
-        </a>
-        <a className="button-secondary" href="/jobs">
+        </NavigationLink>
+        <NavigationLink className="button-secondary" href="/jobs">
           查看职位
-        </a>
+        </NavigationLink>
       </div>
     </main>
   );

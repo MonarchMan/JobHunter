@@ -52,6 +52,7 @@ interface JobQueryRow {
   readonly id: string;
   readonly company_id: string;
   readonly company_name: string;
+  readonly content_id: string | null;
   readonly title: string;
   readonly department: string | null;
   readonly job_family: string | null;
@@ -116,30 +117,28 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
   /** 执行数据库组件对外暴露的操作。 */
   public query(input: JobQueryFilter): JobQueryPage {
     const filter = filterSchema.parse(input);
-    if (
-      (filter.sort === 'score_desc' || filter.minimumScore !== undefined) &&
-      !filter.profileVersionId
-    ) {
+    const scoresAffectPage = filter.sort === 'score_desc' || filter.minimumScore !== undefined;
+    const profileVersionId = filter.profileVersionId as
+      Parameters<JobScoreSnapshotReader['scores']>[0] | undefined;
+    if (scoresAffectPage && !profileVersionId) {
       throw new TypeError('Score sorting and filtering require profileVersionId.');
     }
 
     const innerConditions: string[] = [];
     const innerParameters: unknown[] = [];
-    const scoreExpression = filter.profileVersionId
-      ? `(SELECT MAX(json_extract(snapshot.value, '$.totalScore'))
+    // 评分影响结果时先聚合再关联；显式 TEXT 使 SQLite 可为连接建索引。
+    const scoreJoin = scoresAffectPage
+      ? `LEFT JOIN (
+          SELECT CAST(json_extract(snapshot.value, '$.jobRevisionId') AS TEXT) AS content_id,
+                 MAX(json_extract(snapshot.value, '$.totalScore')) AS score
           FROM json_each(?) snapshot
-          JOIN ${currentJobContentSql} jr ON jr.id = json_extract(snapshot.value, '$.jobRevisionId')
-          WHERE jr.job_id = j.id)`
-      : 'NULL';
-    const selectParameters: unknown[] = filter.profileVersionId
-      ? [
-          JSON.stringify(
-            this.scoreReader.scores(
-              filter.profileVersionId as Parameters<JobScoreSnapshotReader['scores']>[0],
-            ),
-          ),
-        ]
-      : [];
+          GROUP BY content_id
+        ) scores ON scores.content_id = j.content_id`
+      : '';
+    const selectParameters =
+      scoresAffectPage && profileVersionId
+        ? [JSON.stringify(this.scoreReader.scores(profileVersionId))]
+        : [];
 
     // 1、来源范围进入共同查询基表，确保列表、计数和分页不会串入其他渠道。
     if (filter.sourceKind) {
@@ -222,13 +221,14 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
 
     const baseSql = `
       FROM (
-        SELECT j.id, j.company_id, company.name AS company_name, j.title, j.department,
+        SELECT j.id, j.company_id, company.name AS company_name, j.content_id, j.title, j.department,
                j.job_family, j.job_subfamily, j.recruitment_category, j.locations_json,
                j.status, j.detail_url, j.apply_url, j.published_at, j.updated_at,
-               ${scoreExpression} AS score
+               ${scoresAffectPage ? 'scores.score' : 'NULL'} AS score
         FROM jobs j
         JOIN companies company ON company.id = j.company_id
         JOIN job_sources source ON source.id = j.source_id
+        ${scoreJoin}
         ${innerConditions.length > 0 ? `WHERE ${innerConditions.join(' AND ')}` : ''}
       ) query
       ${outerConditions.length > 0 ? `WHERE ${outerConditions.join(' AND ')}` : ''}`;
@@ -295,6 +295,16 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       rows = result.filter((row) => row.id !== null);
     }
     const pageRows = rows.slice(0, limit);
+    // 3、纯时间排序先确定页面；仅保留当前页评分，避免在全量计数和排序中关联评分。
+    const pageScores = new Map<string, number>();
+    if (!scoresAffectPage && profileVersionId && pageRows.length > 0) {
+      const pageContent = new Set(pageRows.map((row) => row.content_id));
+      for (const { jobRevisionId, totalScore } of this.scoreReader.scores(profileVersionId)) {
+        if (pageContent.has(jobRevisionId)) {
+          pageScores.set(jobRevisionId, Math.max(pageScores.get(jobRevisionId) ?? 0, totalScore));
+        }
+      }
+    }
     const items: JobListItem[] = pageRows.map((row) => ({
       id: parseId(row.id, 'Job'),
       companyId: parseId(row.company_id, 'Company'),
@@ -310,7 +320,7 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
       applyUrl: row.apply_url,
       publishedAt: row.published_at === null ? null : utcInstant(row.published_at),
       updatedAt: utcInstant(row.updated_at),
-      score: row.score,
+      score: row.score ?? (row.content_id ? (pageScores.get(row.content_id) ?? null) : null),
     }));
     const last = pageRows.at(-1);
     return {
@@ -337,7 +347,7 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     const row = this.#client
       .prepare<unknown[], JobDetailRow>(
         `
-        SELECT j.id, j.company_id, company.name AS company_name, j.source_id,
+        SELECT j.id, j.company_id, company.name AS company_name, j.source_id, j.content_id,
                j.external_job_id, j.title, j.department, j.job_family, j.job_subfamily, j.locations_json,
                j.employment_type, j.recruitment_category, j.experience_text, j.education_text, j.description,
                j.status, j.detail_url, j.apply_url, j.published_at, j.updated_at,

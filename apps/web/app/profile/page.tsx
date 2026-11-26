@@ -1,8 +1,10 @@
-import { ExtractionReview } from './extraction-review.js';
+import { ExtractionReviewEntry } from './profile-on-demand.js';
+import { ResumeEditor } from './resume-editor.js';
 import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { PageHeader } from '../components/layout/page-header.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { ProfileEditor } from './profile-editor.js';
@@ -10,7 +12,6 @@ import { ResumeDeletion } from './resume-deletion.js';
 import { ResumeImport } from './resume-import.js';
 import { Pagination } from '../components/lists/pagination.js';
 import { webPagination } from '@jobhunter/common/web-contracts';
-import { ResumeEditor } from './resume-editor.js';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -47,12 +48,12 @@ export default async function ProfilePage({
           <h2 id="profile-empty-title">尚无个人资料</h2>
           <p>导入简历后，后台会提取个人资料并生成可匹配的求职意向。</p>
           <div className="inline-actions">
-            <a className="button-primary" href="/">
+            <NavigationLink className="button-primary" href="/">
               返回工作台
-            </a>
-            <a className="button-secondary" href="/jobs">
+            </NavigationLink>
+            <NavigationLink className="button-secondary" href="/jobs">
               先浏览职位
-            </a>
+            </NavigationLink>
           </div>
         </section>
       </Container>
@@ -72,15 +73,19 @@ export default async function ProfilePage({
           {selectedProfile ? <p>当前档案：{selectedProfile.name}</p> : null}
           <p>简历已保存，个人资料尚未提取成功。可在任务页查看提取状态或重试失败任务。</p>
           <div className="inline-actions">
-            <a className="button-secondary" href="/tasks?type=resume.profile.extract">
+            <NavigationLink className="button-secondary" href="/tasks?type=resume.profile.extract">
               查看提取任务
-            </a>
+            </NavigationLink>
           </div>
         </section>
       </Container>
     );
   }
   const detail = container.services.webProfiles.get(selectedId);
+  const candidate = detail.versions.find(
+    (version) => version.isCandidate && version.baseVersionId === detail.current.id,
+  );
+  const effective = detail.current.effective;
   const versionPagination = webPagination(
     detail.versions.length,
     versionPageNumber,
@@ -95,14 +100,27 @@ export default async function ProfilePage({
       {!embedded ? <PageHeader title="个人资料" /> : null}
       <ResumeImport profileId={detail.profile.id} />
       <ResumeEditor
+        key={detail.current.id}
         profileId={detail.profile.id}
         versionId={detail.current.id}
-        profile={detail.current.effective}
+        profile={effective}
       />
       <section className={styles.overview} data-profile-overview>
         <article className="panel-block">
           <h2>版本 {detail.current.versionNumber}</h2>
           <dl className="facts">
+            {effective.basicInfo.name ? (
+              <div>
+                <dt>姓名</dt>
+                <dd>{effective.basicInfo.name}</dd>
+              </div>
+            ) : null}
+            {effective.targetRoles.length ? (
+              <div>
+                <dt>岗位方向</dt>
+                <dd>{effective.targetRoles.join('、')}</dd>
+              </div>
+            ) : null}
             <div>
               <dt>版本 ID</dt>
               <dd>
@@ -157,7 +175,14 @@ export default async function ProfilePage({
           />
         </article>
       </section>
-      <ExtractionReview detail={detail} />
+      {candidate ? (
+        <ExtractionReviewEntry
+          key={candidate.id}
+          profileId={detail.profile.id}
+          current={detail.current}
+          candidate={candidate}
+        />
+      ) : null}
       <section className={styles.comparison} data-profile-comparison aria-label="当前画像">
         <details className="panel-block developer-details">
           <summary>开发者详情：当前有效值 JSON</summary>

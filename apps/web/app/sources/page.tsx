@@ -1,6 +1,7 @@
 import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { SourceTabs, type SourceChannel } from './source-tabs.js';
@@ -80,9 +81,9 @@ export default async function SourcesPage({
             <h2 id="source-sync-prerequisite-title">确认目标岗位后再同步</h2>
             <p>请先在个人资料中填写并保存目标岗位，系统确认职位大类后才会开始同步。</p>
           </div>
-          <a className="button-primary" href="/my?tab=profile#resume-intention">
+          <NavigationLink className="button-primary" href="/my?tab=profile#resume-intention">
             去确认目标岗位
-          </a>
+          </NavigationLink>
         </section>
       ) : null}
       {channel === 'platform' ? (
@@ -101,9 +102,9 @@ export default async function SourcesPage({
           </span>
           <h2 id="sources-empty-title">还没有招聘来源</h2>
           <p>先用 CLI 初始化或导入招聘来源，回来后就能在这里管理同步和健康检查。</p>
-          <a className="button-primary" href="/">
+          <NavigationLink className="button-primary" href="/">
             返回工作台
-          </a>
+          </NavigationLink>
         </section>
       ) : (
         <>

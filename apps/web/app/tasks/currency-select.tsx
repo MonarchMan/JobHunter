@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { SelectField } from '../components/forms/select-field.js';
 import styles from './page.module.css';
@@ -12,6 +13,7 @@ export function CurrencySelect({
   value: 'USD' | 'CNY';
   hrefs: Readonly<Record<'USD' | 'CNY', string>>;
 }>): ReactElement {
+  const router = useRouter();
   return (
     <div className={styles.currencyPicker}>
       <SelectField
@@ -23,7 +25,7 @@ export function CurrencySelect({
           { value: 'CNY', label: 'CNY / ¥' },
         ]}
         onValueChange={(nextValue) => {
-          if (nextValue === 'USD' || nextValue === 'CNY') window.location.assign(hrefs[nextValue]);
+          if (nextValue === 'USD' || nextValue === 'CNY') router.push(hrefs[nextValue]);
         }}
       />
     </div>

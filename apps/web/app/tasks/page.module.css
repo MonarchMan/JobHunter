@@ -26,7 +26,7 @@
   padding-inline: 1rem;
 }
 
-.cards {
+.mobileOnly {
   display: none;
 }
 
@@ -53,17 +53,6 @@
   text-align: center;
 }
 
-.card {
-  display: grid;
-  gap: 0.6rem;
-  padding: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.85rem;
-  background: var(--surface);
-  min-width: 0;
-  overflow: hidden;
-}
-
 .sectionHeading {
   display: flex;
   align-items: center;
@@ -81,53 +70,104 @@
   font-size: 0.85rem;
 }
 
-.cardHeading {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.taskCard {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.75rem 1rem;
-}
-
-.taskCardContent {
-  display: grid;
-  gap: 0.6rem;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.taskCardActions {
-  display: grid;
-  justify-items: end;
-  gap: 0.75rem;
-}
-
-.taskCardError {
-  grid-column: 1 / -1;
-  min-width: 0;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--line-soft);
-  overflow-wrap: anywhere;
-  font-size: 0.85rem;
-}
-
-.card p {
-  margin: 0;
-  color: var(--text-tertiary);
-}
-
 @media (max-width: 900px) {
   .desktopTable {
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* 同一张表在窄屏改排卡片，不复制行、详情按钮或操作。 */
+  .desktopTable :is(.taskTable, .agentTable) {
+    display: block;
+    min-width: 0;
+  }
+
+  .desktopTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .desktopTable tbody {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .desktopTable tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.65rem 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 0.85rem;
+    background: var(--surface);
+  }
+
+  .desktopTable :is(.taskTable, .agentTable) td {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: start;
+    overflow-wrap: anywhere;
+  }
+
+  .desktopTable td:only-child,
+  .desktopTable :is(.cardTime, .cardError) {
+    grid-column: 1 / -1;
+  }
+
+  .desktopTable .desktopOnly {
     display: none;
   }
 
-  .cards {
-    display: grid;
-    gap: 0.75rem;
+  .mobileOnly {
+    display: revert;
+  }
+
+  .desktopTable .cardTitle button {
+    width: auto;
+    white-space: normal;
+    text-align: start;
+    overflow-wrap: anywhere;
+  }
+
+  .cardTitle p {
+    margin: 0.35rem 0 0;
+    color: var(--text-tertiary);
+  }
+
+  .cardActions {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .taskTable .cardTime {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .cardTime > [role='group'] {
+    display: inline-block;
+    vertical-align: bottom;
+  }
+
+  .desktopTable .taskTable .cardError {
+    grid-row: 3;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--line-soft);
+    font-size: 0.85rem;
+  }
+
+  .cardError > [role='group'] > span[aria-hidden='true'] {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 }
 

@@ -27,21 +27,21 @@ const fieldLabels: Readonly<Record<string, string>> = {
 
 /** 展示候选与当前值的差异，只有用户选中的字段可以成为新生效版本。 */
 export function ExtractionReview({
-  detail,
+  profileId,
+  current,
+  candidate,
 }: {
-  readonly detail: WebProfileDetail;
-}): ReactElement | null {
-  const candidate = detail.versions.find(
-    (version) => version.isCandidate && version.baseVersionId === detail.current.id,
-  );
+  readonly profileId: WebProfileDetail['profile']['id'];
+  readonly current: WebProfileDetail['current'];
+  readonly candidate: WebProfileDetail['versions'][number];
+}): ReactElement {
   const [fields, setFields] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  if (!candidate) return null;
   const differences = Object.entries(candidate.effective).filter(
     ([key, value]) =>
       JSON.stringify(value) !==
-      JSON.stringify(detail.current.effective[key as keyof typeof candidate.effective]),
+      JSON.stringify(current.effective[key as keyof typeof candidate.effective]),
   );
   return (
     <section className="panel-block" aria-label="提取结果确认">
@@ -66,11 +66,7 @@ export function ExtractionReview({
           </label>
           <p>当前值</p>
           <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-            {JSON.stringify(
-              detail.current.effective[key as keyof typeof candidate.effective],
-              null,
-              2,
-            )}
+            {JSON.stringify(current.effective[key as keyof typeof candidate.effective], null, 2)}
           </pre>
           <p>提取值</p>
           <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
@@ -91,8 +87,8 @@ export function ExtractionReview({
                 headers: await mutationHeaders(),
                 body: JSON.stringify({
                   kind: 'confirm-extraction',
-                  profileId: detail.profile.id,
-                  expectedVersionId: detail.current.id,
+                  profileId,
+                  expectedVersionId: current.id,
                   candidateVersionId: candidate.id,
                   fields,
                 }),

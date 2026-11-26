@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
@@ -49,7 +50,7 @@ export function TaskActions({
 
   // 1、维护审计由专用子进程管理，不提供普通队列的重试和取消入口。
   if (taskType === 'interview.experience-research')
-    return <a href={`/interview/research/${taskId}`}>查看研究流程</a>;
+    return <NavigationLink href={`/interview/research/${taskId}`}>查看研究流程</NavigationLink>;
   if (taskType === 'maintenance.sqlite') return <small>系统自动维护</small>;
   if (status !== 'failed' && status !== 'pending' && status !== 'running') return null;
   return (

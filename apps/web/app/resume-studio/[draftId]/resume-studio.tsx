@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation.js';
 import type { ResumeDraftDetail } from '@jobhunter/user/profile';
 import {
   renderResumeHtml,
@@ -301,6 +302,7 @@ function eventElement(event: Event): HTMLElement | null {
 }
 
 export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail }>): ReactElement {
+  const router = useRouter();
   const initializedContent = useMemo(
     () => initializeResumeSections(initial.draft.content),
     [initial.draft.content],
@@ -601,9 +603,7 @@ export function ResumeStudio({ initial }: Readonly<{ initial: ResumeDraftDetail 
 
   const leaveStudio = async (): Promise<void> => {
     if (await save())
-      window.location.assign(
-        `/profile?profile=${encodeURIComponent(initial.draft.profileId)}#resume-basic`,
-      );
+      router.push(`/profile?profile=${encodeURIComponent(initial.draft.profileId)}#resume-basic`);
   };
 
   const refresh = async (): Promise<void> => {

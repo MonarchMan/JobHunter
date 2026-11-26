@@ -1,13 +1,22 @@
 import { TaskTabs } from './task-tabs.js';
 import { UsagePanel } from './usage-panel.js';
 import { SearchButton } from '../components/forms/search-button.js';
+import { NavigationForm } from '../components/forms/navigation-form.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import { listPageSize } from '../../src/server/job-query.js';
 import type { Metadata } from 'next';
-import type { ReactElement } from 'react';
-import { agentRunStatusLabels, labelStatus, taskTypeLabels } from '../components/status-labels.js';
+import { Suspense, type ReactElement } from 'react';
+import { SectionLoading } from '../components/layout/section-loading.js';
+import {
+  agentRunStatusLabels,
+  labelStatus,
+  taskStatusLabels,
+  taskTypeLabels,
+} from '../components/status-labels.js';
 import { TruncatedText } from '../components/lists/truncated-text.js';
 import { Pagination } from '../components/lists/pagination.js';
 import { getWebContainer } from '../../src/server/container.js';
+import { browserTestRenderDelay } from '../../src/server/browser-test-render-delay.js';
 import {
   firstSearchParameter,
   pageHref,
@@ -30,12 +39,14 @@ import styles from './page.module.css';
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: '任务与 Agent 运行' };
 
+const timeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  dateStyle: 'short',
+  timeStyle: 'medium',
+});
+
+/** 列表共享格式化器，避免为每个时间单元格重复创建实例。 */
 function time(value: string | null): string {
-  return value
-    ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'short', timeStyle: 'medium' }).format(
-        new Date(value),
-      )
-    : '—';
+  return value ? timeFormatter.format(new Date(value)) : '—';
 }
 
 /** 根据开始和完成时间显示执行耗时；时间缺失时不推算未完成任务的最终耗时。 */
@@ -75,10 +86,60 @@ interface TasksPageProperties {
   readonly searchParams: Promise<SearchParameterSource>;
 }
 
+/** 页签在任务或用量数据查询之前确定；同一路由切换视图时重置数据边界。 */
 export default async function TasksPage({
   searchParams,
 }: TasksPageProperties): Promise<ReactElement> {
   const parameters = await searchParams;
+  const usage = firstSearchParameter(parameters, 'tab') === 'usage';
+  return (
+    <main id="main-content" tabIndex={-1}>
+      <TaskTabs usage={usage} />
+      <Suspense
+        key={usage ? 'usage' : 'tasks'}
+        fallback={<SectionLoading label={usage ? '正在加载用量统计' : '正在加载任务与 Agent'} />}
+      >
+        {usage ? (
+          <UsageContent parameters={parameters} />
+        ) : (
+          <TasksContent parameters={parameters} />
+        )}
+      </Suspense>
+    </main>
+  );
+}
+
+type TaskContentProperties = Readonly<{ parameters: SearchParameterSource }>;
+
+/** 只读取用量视图所需的数据。 */
+async function UsageContent({ parameters }: TaskContentProperties): Promise<ReactElement> {
+  await browserTestRenderDelay('usage');
+  const container = await getWebContainer();
+  const report = container.services.usage.query({
+    range: firstSearchParameter(parameters, 'range'),
+    model: firstSearchParameter(parameters, 'model'),
+    status: firstSearchParameter(parameters, 'usageStatus'),
+    provider: firstSearchParameter(parameters, 'provider'),
+    statusCode: firstSearchParameter(parameters, 'statusCode'),
+    currency: firstSearchParameter(parameters, 'currency'),
+    page: firstSearchParameter(parameters, 'usagePage'),
+  });
+  return (
+    <UsagePanel
+      report={{
+        ...report,
+        buckets: report.buckets.map(({ at, total: { tokens, requests, cost } }) => ({
+          at,
+          total: { tokens, requests, cost },
+        })),
+      }}
+      view={firstSearchParameter(parameters, 'view') ?? 'logs'}
+    />
+  );
+}
+
+/** 读取任务与 Agent 列表，明细仍由原有入口按需查询。 */
+async function TasksContent({ parameters }: TaskContentProperties): Promise<ReactElement> {
   const status = firstSearchParameter(parameters, 'status');
   const taskType = firstSearchParameter(parameters, 'type');
   const taskPage = positivePage(parameters, 'taskPage');
@@ -99,32 +160,6 @@ export default async function TasksPage({
     {} as Record<'USD' | 'CNY', string>,
   );
   const container = await getWebContainer();
-  if (firstSearchParameter(parameters, 'tab') === 'usage') {
-    const report = container.services.usage.query({
-      range: firstSearchParameter(parameters, 'range'),
-      model: firstSearchParameter(parameters, 'model'),
-      status: firstSearchParameter(parameters, 'usageStatus'),
-      provider: firstSearchParameter(parameters, 'provider'),
-      statusCode: firstSearchParameter(parameters, 'statusCode'),
-      currency: requestedCurrency,
-      page: firstSearchParameter(parameters, 'usagePage'),
-    });
-    return (
-      <main id="main-content" tabIndex={-1}>
-        <TaskTabs usage />
-        <UsagePanel
-          report={{
-            ...report,
-            buckets: report.buckets.map(({ at, total: { tokens, requests, cost } }) => ({
-              at,
-              total: { tokens, requests, cost },
-            })),
-          }}
-          view={firstSearchParameter(parameters, 'view') ?? 'logs'}
-        />
-      </main>
-    );
-  }
   const { range, ...timeFilter } = taskTimeRange(firstSearchParameter(parameters, 'range'));
   const diagnostics = container.services.diagnostics.list({
     ...timeFilter,
@@ -142,13 +177,14 @@ export default async function TasksPage({
     taskPageSize: listPageSize(parameters, 'taskPageSize'),
     agentPageSize: listPageSize(parameters, 'agentPageSize'),
   });
+  // 仅已打开的详情使用本轮快照标识重新查询，不随列表传输详情。
+  const diagnosticsRevision = Date.now();
   return (
-    <main id="main-content" tabIndex={-1}>
-      <TaskTabs />
-      <form
+    <>
+      <NavigationForm
+        key={JSON.stringify([range, status, taskType])}
         className={styles.filters}
         action="/tasks"
-        method="get"
         aria-label="任务筛选"
         noValidate
       >
@@ -176,7 +212,7 @@ export default async function TasksPage({
             options={[
               { value: '', label: '全部' },
               { value: 'pending', label: '等待中' },
-              { value: 'running', label: '运行中' },
+              { value: 'running', label: taskStatusLabels.running },
               { value: 'failed', label: '失败' },
               { value: 'warning', label: '警告' },
               { value: 'succeeded', label: '已完成' },
@@ -198,11 +234,11 @@ export default async function TasksPage({
           />
         </label>
         <SearchButton />
-        <a className="button-secondary" href="/tasks">
+        <NavigationLink className="button-secondary" href="/tasks">
           清除
-        </a>
+        </NavigationLink>
         <TaskAutoRefresh />
-      </form>
+      </NavigationForm>
 
       <section
         className={['panel', dataTableStyles.panel].filter(Boolean).join(' ')}
@@ -214,99 +250,104 @@ export default async function TasksPage({
           className={[dataTableStyles.scroll, styles.desktopTable].filter(Boolean).join(' ')}
           data-task-table
         >
-          <table className={styles.taskTable}>
+          <table className={styles.taskTable} role="table" aria-label="后台任务列表">
             <caption className="sr-only">后台任务列表</caption>
-            <thead>
-              <tr>
-                <th scope="col">类型</th>
-                <th scope="col">状态</th>
-                <th scope="col">重试</th>
-                <th scope="col">错误</th>
-                <th scope="col">耗时</th>
-                <th scope="col">操作</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">
+                  类型
+                </th>
+                <th role="columnheader" scope="col">
+                  状态
+                </th>
+                <th role="columnheader" scope="col">
+                  重试
+                </th>
+                <th role="columnheader" scope="col">
+                  错误
+                </th>
+                <th role="columnheader" scope="col">
+                  耗时
+                </th>
+                <th role="columnheader" scope="col">
+                  操作
+                </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {diagnostics.tasks.length === 0 ? (
-                <tr key="empty-tasks">
-                  <td className={dataTableStyles.empty} colSpan={6}>
+                <tr role="row">
+                  <td role="cell" className={dataTableStyles.empty} colSpan={6}>
                     <strong>暂无后台任务</strong>
                     <span>来源同步、健康检查或其他操作开始后，任务会显示在这里。</span>
                   </td>
                 </tr>
               ) : (
-                diagnostics.tasks.map((task) => (
-                  <DiagnosticRecord as="tr" key={task.id}>
-                    <td>
-                      <strong>
-                        <TaskDetailsDialog task={task} />
-                      </strong>
-                    </td>
-                    <td>
-                      <span className={`status status-${taskPresentation(task).status}`}>
-                        {taskPresentation(task).label}
-                      </span>
-                    </td>
-                    <td>{String(task.attemptCount)}</td>
-                    <td>
-                      <TruncatedText value={taskPresentation(task).error || '—'} />
-                    </td>
-                    <td>
-                      <TruncatedText
-                        value={taskDuration(task.startedAt, task.finishedAt)}
-                        tooltip={`${time(task.startedAt)} - ${time(task.finishedAt)}`}
-                      />
-                    </td>
-                    <td>
-                      {task.kind === 'task' ? (
-                        <TaskActions
-                          taskId={task.id}
-                          status={task.status}
-                          taskType={task.taskType}
+                diagnostics.tasks.map((task) => {
+                  const presentation = taskPresentation(task);
+                  const duration = taskDuration(task.startedAt, task.finishedAt);
+                  const counts = task.jobDetailBatch?.counts;
+                  return (
+                    <DiagnosticRecord key={task.id}>
+                      <td role="cell" className={styles.cardTitle}>
+                        <strong>
+                          <TaskDetailsDialog
+                            id={task.id}
+                            kind={task.kind}
+                            taskType={task.taskType}
+                            revision={diagnosticsRevision}
+                          />
+                        </strong>
+                        {counts ? (
+                          <p className={styles.mobileOnly}>
+                            总数 {counts.total}，成功 {counts.succeeded}，失败 {counts.failed}
+                          </p>
+                        ) : null}
+                      </td>
+                      <td role="cell">
+                        <span className={`status status-${presentation.status}`}>
+                          {presentation.label}
+                        </span>
+                      </td>
+                      <td role="cell" className={styles.desktopOnly}>
+                        {String(task.attemptCount)}
+                      </td>
+                      <td
+                        role="cell"
+                        className={presentation.error ? styles.cardError : styles.desktopOnly}
+                      >
+                        {presentation.error ? <TruncatedText value={presentation.error} /> : '—'}
+                      </td>
+                      <td
+                        role="cell"
+                        className={duration === '—' ? styles.desktopOnly : styles.cardTime}
+                      >
+                        <span className={styles.mobileOnly}>耗时 </span>
+                        <TruncatedText
+                          value={duration}
+                          tooltip={`${time(task.startedAt)} - ${time(task.finishedAt)}`}
                         />
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                  </DiagnosticRecord>
-                ))
+                      </td>
+                      <td
+                        role="cell"
+                        className={task.kind === 'task' ? styles.cardActions : styles.desktopOnly}
+                      >
+                        {task.kind === 'task' ? (
+                          <TaskActions
+                            taskId={task.id}
+                            status={task.status}
+                            taskType={task.taskType}
+                          />
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </DiagnosticRecord>
+                  );
+                })
               )}
             </tbody>
           </table>
-        </div>
-        <div className={styles.cards} role="group" aria-label="后台任务卡片列表" data-task-cards>
-          {diagnostics.tasks.map((task) => (
-            <DiagnosticRecord
-              as="article"
-              className={[styles.card, styles.taskCard].filter(Boolean).join(' ')}
-              key={task.id}
-            >
-              <div className={styles.taskCardContent}>
-                <strong>
-                  <TaskDetailsDialog task={task} />
-                </strong>
-                {taskDuration(task.startedAt, task.finishedAt) !== '—' ? (
-                  <p>耗时 {taskDuration(task.startedAt, task.finishedAt)}</p>
-                ) : null}
-                {task.jobDetailBatch ? (
-                  <p>
-                    总数 {String(task.jobDetailBatch.counts.total)}，成功{' '}
-                    {String(task.jobDetailBatch.counts.succeeded)}，失败{' '}
-                    {String(task.jobDetailBatch.counts.failed)}
-                  </p>
-                ) : null}
-              </div>
-              <div className={styles.taskCardActions}>
-                <span className={`status status-${taskPresentation(task).status}`}>
-                  {taskPresentation(task).label}
-                </span>
-                <TaskActions taskId={task.id} status={task.status} taskType={task.taskType} />
-              </div>
-              {taskPresentation(task).error ? (
-                <p className={styles.taskCardError}>{taskPresentation(task).error}</p>
-              ) : null}
-            </DiagnosticRecord>
-          ))}
         </div>
         <Pagination
           total={diagnostics.taskPagination.total}
@@ -334,40 +375,50 @@ export default async function TasksPage({
           className={[dataTableStyles.scroll, styles.desktopTable].filter(Boolean).join(' ')}
           data-agent-table
         >
-          <table className={styles.agentTable}>
+          <table className={styles.agentTable} role="table" aria-label="Agent 运行列表">
             <caption className="sr-only">Agent 运行列表</caption>
-            <thead>
-              <tr>
-                <th scope="col">Agent</th>
-                <th scope="col">状态</th>
-                <th scope="col">Token</th>
-                <th scope="col">估算成本</th>
-                <th scope="col">时间</th>
+            <thead role="rowgroup">
+              <tr role="row">
+                <th role="columnheader" scope="col">
+                  Agent
+                </th>
+                <th role="columnheader" scope="col">
+                  状态
+                </th>
+                <th role="columnheader" scope="col">
+                  Token
+                </th>
+                <th role="columnheader" scope="col">
+                  估算成本
+                </th>
+                <th role="columnheader" scope="col">
+                  时间
+                </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {diagnostics.agentRuns.length === 0 ? (
-                <tr key="empty-agent-runs">
-                  <td className={dataTableStyles.empty} colSpan={5}>
+                <tr role="row">
+                  <td role="cell" className={dataTableStyles.empty} colSpan={5}>
                     <strong>暂无 Agent 运行记录</strong>
                     <span>简历提取、匹配或建议生成后，运行记录会显示在这里。</span>
                   </td>
                 </tr>
               ) : (
                 diagnostics.agentRuns.map((run) => (
-                  <DiagnosticRecord as="tr" key={run.id}>
-                    <td>
+                  <DiagnosticRecord key={run.id}>
+                    <td role="cell" className={styles.cardTitle}>
                       <AgentRunDetailsDialog run={run} />
                     </td>
-                    <td>
+                    <td role="cell">
                       <span className={`status status-${run.status}`}>
                         {labelStatus(agentRunStatusLabels, run.status)}
                       </span>
                     </td>
-                    <td>
+                    <td role="cell" className={styles.desktopOnly}>
                       {run.inputTokens ?? '—'} / {run.outputTokens ?? '—'}
                     </td>
-                    <td>
+                    <td role="cell" className={styles.desktopOnly}>
                       {/* 未报告用量的请求不抹去已知费用，实际缺价继续明示。 */}
                       {run.estimatedCostMicros !== null
                         ? formatCost(run.estimatedCostMicros, run.costCurrency, displayCurrency)
@@ -380,25 +431,14 @@ export default async function TasksPage({
                               displayCurrency,
                             )}
                     </td>
-                    <td>{time(run.startedAt)}</td>
+                    <td role="cell" className={styles.cardTime}>
+                      {time(run.startedAt)}
+                    </td>
                   </DiagnosticRecord>
                 ))
               )}
             </tbody>
           </table>
-        </div>
-        <div className={styles.cards} role="group" aria-label="Agent 运行卡片列表" data-agent-cards>
-          {diagnostics.agentRuns.map((run) => (
-            <DiagnosticRecord as="article" className={styles.card} key={run.id}>
-              <div className={styles.cardHeading}>
-                <AgentRunDetailsDialog run={run} />
-                <span className={`status status-${run.status}`}>
-                  {labelStatus(agentRunStatusLabels, run.status)}
-                </span>
-              </div>
-              <p>{time(run.startedAt)}</p>
-            </DiagnosticRecord>
-          ))}
         </div>
         <Pagination
           total={diagnostics.agentPagination.total}
@@ -411,6 +451,6 @@ export default async function TasksPage({
           createHref={(page) => `/tasks${pageHref(parameters, 'agentPage', page)}`}
         />
       </section>
-    </main>
+    </>
   );
 }

@@ -1,10 +1,7 @@
-import NextLink from 'next/link.js';
 import type { ReactElement } from 'react';
+import { NavigationLink } from '../layout/navigation-pending.js';
 import { PageSizeSelect } from './page-size-select.js';
 import styles from './pagination.module.css';
-
-// NodeNext 将 Next.js 的 CommonJS 入口视为模块对象，实际默认导出是链接组件。
-const Link = NextLink as unknown as typeof NextLink.default;
 
 interface PaginationProperties {
   readonly currentPage: number;
@@ -62,7 +59,7 @@ export function Pagination({
               …
             </span>
           ) : (
-            <Link
+            <NavigationLink
               className={item === currentPage ? styles.current : undefined}
               href={scrollTargetId ? `${createHref(item)}#${scrollTargetId}` : createHref(item)}
               scroll={Boolean(scrollTargetId)}
@@ -70,7 +67,7 @@ export function Pagination({
               aria-current={item === currentPage ? 'page' : undefined}
             >
               {item}
-            </Link>
+            </NavigationLink>
           ),
         )}
       </div>

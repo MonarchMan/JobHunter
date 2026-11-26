@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import styles from './dashboard-hero.module.css';
 
 export function DashboardHero(): ReactElement {
@@ -11,15 +12,15 @@ export function DashboardHero(): ReactElement {
         </h1>
         <p>从简历画像到官网职位同步，把每一次求职行动集中在一个清晰的工作台里。</p>
         <div className={styles.actions}>
-          <a
+          <NavigationLink
             className={['button-primary', styles.primaryAction].filter(Boolean).join(' ')}
             href="/my"
           >
             建立个人资料 <span aria-hidden="true">→</span>
-          </a>
-          <a className={styles.quietAction} href="/jobs">
+          </NavigationLink>
+          <NavigationLink className={styles.quietAction} href="/jobs">
             浏览职位 <span aria-hidden="true">↗</span>
-          </a>
+          </NavigationLink>
         </div>
       </div>
       <div className={styles.aside} aria-label="工作台状态">

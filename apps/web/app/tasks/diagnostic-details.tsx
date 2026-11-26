@@ -23,19 +23,12 @@ import styles from './diagnostic-details.module.css';
 import { AgentBillingDetails } from './agent-billing-details.js';
 import { taskPresentation } from './task-presentation.js';
 
-/** 行和卡片共用名称按钮打开详情，按钮也提供键盘入口及焦点恢复。 */
-export function DiagnosticRecord({
-  as: Tag,
-  className,
-  children,
-}: Readonly<{
-  as: 'tr' | 'article';
-  className?: string | undefined;
-  children: ReactNode;
-}>): ReactElement {
+/** 桌面表格与窄屏卡片共用同一行；名称按钮提供键盘入口和焦点恢复。 */
+export function DiagnosticRecord({ children }: Readonly<{ children: ReactNode }>): ReactElement {
   return (
-    <Tag
-      className={[styles.record, className].filter(Boolean).join(' ')}
+    <tr
+      role="row"
+      className={styles.record}
       onClick={(event) => {
         if (
           !(event.target instanceof Element) ||
@@ -46,7 +39,7 @@ export function DiagnosticRecord({
       }}
     >
       {children}
-    </Tag>
+    </tr>
   );
 }
 
@@ -122,21 +115,47 @@ function DialogShell({
   );
 }
 
-export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactElement {
-  const presentation = taskPresentation(task);
-  // 完整同步也可能隔离个别职位，详情仍需展示来源警告。
-  const showWarning =
-    presentation.warning || (task.status === 'succeeded' && Boolean(presentation.error));
+/** 列表仅传入记录标识；只在弹窗打开期间读取完整详情。 */
+export function TaskDetailsDialog({
+  id,
+  kind,
+  taskType,
+  revision,
+}: Readonly<Pick<WebTask, 'id' | 'kind' | 'taskType'> & { revision: number }>): ReactElement {
   const [open, setOpen] = useState(false);
+  const [task, setTask] = useState<WebTask | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const triggerReference = useRef<HTMLButtonElement>(null);
-  const displayName = task.jobDetailBatch ? '职位详情同步' : labelTaskType(task.taskType);
-  const counts = task.jobDetailBatch?.counts;
+  const displayName = kind === 'source_job_detail_batch' ? '职位详情同步' : labelTaskType(taskType);
+
+  useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    const query = kind === 'source_job_detail_batch' ? '?kind=source_job_detail_batch' : '';
+    // 列表刷新时保留已显示的内容，直到取得新快照；关窗时取消未完成请求。
+    void fetch(`/api/tasks/${id}${query}`, { signal: controller.signal, cache: 'no-store' })
+      .then(async (response) => {
+        const body = (await response.json()) as { data?: WebTask; error?: { message?: string } };
+        if (!response.ok || !body.data)
+          throw new Error(body.error?.message ?? '任务详情加载失败。');
+        if (controller.signal.aborted) return;
+        setTask(body.data);
+        setError(null);
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted)
+          setError(reason instanceof Error ? reason.message : '任务详情加载失败。');
+      });
+    return () => controller.abort();
+  }, [id, kind, open, revision]);
+
+  const presentation = task ? taskPresentation(task) : null;
+  const showWarning =
+    presentation?.warning || (task?.status === 'succeeded' && Boolean(presentation?.error));
+  const counts = task?.jobDetailBatch?.counts;
   const progress = counts
-    ? {
-        total: counts.total,
-        processed: counts.succeeded + counts.failed + counts.cancelled,
-      }
-    : task.batchProgress;
+    ? { total: counts.total, processed: counts.succeeded + counts.failed + counts.cancelled }
+    : task?.batchProgress;
   return (
     <>
       <button
@@ -158,231 +177,247 @@ export function TaskDetailsDialog({ task }: Readonly<{ task: WebTask }>): ReactE
           returnFocusTo={triggerReference.current}
           onClose={() => {
             setOpen(false);
+            setTask(null);
+            setError(null);
           }}
         >
           <div className={styles.body}>
-            <dl className="facts">
-              <div>
-                <dt>ID</dt>
-                <dd>
-                  <code>{task.id}</code>
-                </dd>
-              </div>
-              <div>
-                <dt>任务类型</dt>
-                <dd>{displayName}</dd>
-              </div>
-              <div>
-                <dt>状态</dt>
-                <dd>
-                  {task.status === 'running' && progress ? (
-                    <div className={styles.progress}>
-                      <progress
-                        aria-label="批量任务进度"
-                        max={progress.total}
-                        value={progress.processed}
-                      />
-                      <small>
-                        已处理 {progress.processed} / {progress.total}
-                      </small>
-                    </div>
-                  ) : (
-                    <span className={`status status-${presentation.status}`}>
-                      {presentation.label}
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div>
-                <dt>尝试次数</dt>
-                <dd>{String(task.attemptCount)}</dd>
-              </div>
-              <div>
-                <dt>创建时间</dt>
-                <dd>{time(task.createdAt)}</dd>
-              </div>
-              <div>
-                <dt>开始 - 完成</dt>
-                <dd>
-                  {time(task.startedAt)} - {time(task.finishedAt)}
-                </dd>
-              </div>
-            </dl>
-            {task.jobDetailBatch ? (
-              <section className={styles.batchDetail} aria-label="职位详情同步统计">
+            {!task && !error ? <p role="status">正在加载任务详情……</p> : null}
+            {error ? <p role="alert">{error}</p> : null}
+            {task && presentation ? (
+              <>
                 <dl className="facts">
                   <div>
-                    <dt>公司 / 招聘渠道</dt>
+                    <dt>ID</dt>
                     <dd>
-                      {task.jobDetailBatch.companyName} /{' '}
-                      {sourceChannelLabels[task.jobDetailBatch.channel]}
+                      <code>{task.id}</code>
                     </dd>
                   </div>
                   <div>
-                    <dt>物理来源</dt>
-                    <dd>{task.jobDetailBatch.sourceSlug}</dd>
+                    <dt>任务类型</dt>
+                    <dd>{displayName}</dd>
                   </div>
                   <div>
-                    <dt>总数</dt>
-                    <dd>{task.jobDetailBatch.counts.total}</dd>
-                  </div>
-                  <div>
-                    <dt>等待 / 运行</dt>
+                    <dt>状态</dt>
                     <dd>
-                      {String(task.jobDetailBatch.counts.pending)} /{' '}
-                      {String(task.jobDetailBatch.counts.running)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>成功 / 失败 / 取消</dt>
-                    <dd>
-                      {[
-                        task.jobDetailBatch.counts.succeeded,
-                        task.jobDetailBatch.counts.failed,
-                        task.jobDetailBatch.counts.cancelled,
-                      ]
-                        .map(String)
-                        .join(' / ')}
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-            ) : null}
-            {task.sourceSync ? (
-              <section aria-labelledby={`source-sync-detail-${task.id}`}>
-                <h3 id={`source-sync-detail-${task.id}`}>官网同步信息</h3>
-                {task.sourceSync.sources && task.sourceSync.sources.length > 1
-                  ? task.sourceSync.sources.map((source) => (
-                      <section key={source.adapterKey} aria-label={`${source.adapterKey} 同步结果`}>
-                        <h4>
-                          {source.companyName} / {source.sourceSlug}
-                        </h4>
-                        <p>
-                          <code>{source.adapterKey}</code>：
-                          {source.run ? syncRunStatusLabels[source.run.status] : '尚未开始同步运行'}
-                        </p>
-                        {source.run?.errorSummary ? <p>{source.run.errorSummary}</p> : null}
-                      </section>
-                    ))
-                  : null}
-                <dl className={['facts', styles.sourceFacts].filter(Boolean).join(' ')}>
-                  <div>
-                    <dt>公司 / 招聘渠道</dt>
-                    <dd>
-                      {task.sourceSync.companyName} / {sourceChannelLabels[task.sourceSync.channel]}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>物理来源</dt>
-                    <dd>{task.sourceSync.sourceSlug}</dd>
-                  </div>
-                  <div>
-                    <dt>触发方式</dt>
-                    <dd>{sourceTriggerLabels[task.sourceSync.trigger]}</dd>
-                  </div>
-                  <div>
-                    <dt>职位总数</dt>
-                    <dd>{task.sourceSync.run?.stats.discovered ?? '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>新增 / 更新 / 未变化</dt>
-                    <dd>
-                      {task.sourceSync.run
-                        ? [
-                            task.sourceSync.run.stats.created,
-                            task.sourceSync.run.stats.revised,
-                            task.sourceSync.run.stats.unchanged,
-                          ]
-                            .map(String)
-                            .join(' / ')
-                        : '—'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>关联详情任务</dt>
-                    <dd>
-                      {task.sourceSync.run
-                        ? String(task.sourceSync.run.stats.followupEnqueued)
-                        : '—'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>意向外 / 非国内 / 地域未知</dt>
-                    <dd>
-                      {task.sourceSync.run
-                        ? [
-                            task.sourceSync.run.stats.skippedOutOfScope,
-                            task.sourceSync.run.stats.skippedNonDomestic,
-                            task.sourceSync.run.stats.skippedUnknownRegion,
-                          ]
-                            .map(String)
-                            .join(' / ')
-                        : '—'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>恢复 / 过期 / 关闭</dt>
-                    <dd>
-                      {task.sourceSync.run
-                        ? [
-                            task.sourceSync.run.stats.restored,
-                            task.sourceSync.run.stats.staled,
-                            task.sourceSync.run.stats.closed,
-                          ]
-                            .map(String)
-                            .join(' / ')
-                        : '—'}
-                    </dd>
-                  </div>
-                </dl>
-              </section>
-            ) : null}
-            {task.syncScoring ? (
-              <section aria-label="评分阶段进度">
-                <h3>评分阶段进度</h3>
-                <dl className={['facts', styles.sourceFacts].filter(Boolean).join(' ')}>
-                  <div>
-                    <dt>已完成 / 总数</dt>
-                    <dd>
-                      {String(
-                        task.syncScoring.items.filter((item) => item.status === 'succeeded').length,
-                      )}{' '}
-                      / {String(task.syncScoring.items.length)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>失败</dt>
-                    <dd>
-                      {String(
-                        task.syncScoring.items.filter((item) => item.status === 'failed').length,
+                      {task.status === 'running' && progress ? (
+                        <div className={styles.progress}>
+                          <progress
+                            aria-label="批量任务进度"
+                            max={progress.total}
+                            value={progress.processed}
+                          />
+                          <small>
+                            已处理 {progress.processed} / {progress.total}
+                          </small>
+                        </div>
+                      ) : (
+                        <span className={`status status-${presentation.status}`}>
+                          {presentation.label}
+                        </span>
                       )}
                     </dd>
                   </div>
                   <div>
-                    <dt>降级（模型不可用）</dt>
-                    <dd>{String(task.syncScoring.degraded)}</dd>
+                    <dt>尝试次数</dt>
+                    <dd>{String(task.attemptCount)}</dd>
+                  </div>
+                  <div>
+                    <dt>创建时间</dt>
+                    <dd>{time(task.createdAt)}</dd>
+                  </div>
+                  <div>
+                    <dt>开始 - 完成</dt>
+                    <dd>
+                      {time(task.startedAt)} - {time(task.finishedAt)}
+                    </dd>
                   </div>
                 </dl>
-              </section>
-            ) : null}
-            {task.status === 'failed' || showWarning ? (
-              <section
-                className={showWarning ? styles.warningDetail : styles.failureDetail}
-                aria-labelledby="task-failure-heading"
-              >
-                <h3 id="task-failure-heading">
-                  {showWarning ? '警告' : '失败'}：{presentation.errorCategory ?? '未分类'}
-                </h3>
-                <p>{presentation.error || '系统未记录具体原因。'}</p>
-              </section>
-            ) : null}
-            {task.kind === 'task' ? (
-              <TaskActions
-                taskId={task.id}
-                status={task.status}
-                taskType={task.taskType}
-                size="regular"
-              />
+                {task.jobDetailBatch ? (
+                  <section className={styles.batchDetail} aria-label="职位详情同步统计">
+                    <dl className="facts">
+                      <div>
+                        <dt>公司 / 招聘渠道</dt>
+                        <dd>
+                          {task.jobDetailBatch.companyName} /{' '}
+                          {sourceChannelLabels[task.jobDetailBatch.channel]}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>物理来源</dt>
+                        <dd>{task.jobDetailBatch.sourceSlug}</dd>
+                      </div>
+                      <div>
+                        <dt>总数</dt>
+                        <dd>{task.jobDetailBatch.counts.total}</dd>
+                      </div>
+                      <div>
+                        <dt>等待 / 运行</dt>
+                        <dd>
+                          {String(task.jobDetailBatch.counts.pending)} /{' '}
+                          {String(task.jobDetailBatch.counts.running)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>成功 / 失败 / 取消</dt>
+                        <dd>
+                          {[
+                            task.jobDetailBatch.counts.succeeded,
+                            task.jobDetailBatch.counts.failed,
+                            task.jobDetailBatch.counts.cancelled,
+                          ]
+                            .map(String)
+                            .join(' / ')}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                ) : null}
+                {task.sourceSync ? (
+                  <section aria-labelledby={`source-sync-detail-${task.id}`}>
+                    <h3 id={`source-sync-detail-${task.id}`}>官网同步信息</h3>
+                    {task.sourceSync.sources && task.sourceSync.sources.length > 1
+                      ? task.sourceSync.sources.map((source) => (
+                          <section
+                            key={source.adapterKey}
+                            aria-label={`${source.adapterKey} 同步结果`}
+                          >
+                            <h4>
+                              {source.companyName} / {source.sourceSlug}
+                            </h4>
+                            <p>
+                              <code>{source.adapterKey}</code>：
+                              {source.run
+                                ? syncRunStatusLabels[source.run.status]
+                                : '尚未开始同步运行'}
+                            </p>
+                            {source.run?.errorSummary ? <p>{source.run.errorSummary}</p> : null}
+                          </section>
+                        ))
+                      : null}
+                    <dl className={['facts', styles.sourceFacts].filter(Boolean).join(' ')}>
+                      <div>
+                        <dt>公司 / 招聘渠道</dt>
+                        <dd>
+                          {task.sourceSync.companyName} /{' '}
+                          {sourceChannelLabels[task.sourceSync.channel]}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>物理来源</dt>
+                        <dd>{task.sourceSync.sourceSlug}</dd>
+                      </div>
+                      <div>
+                        <dt>触发方式</dt>
+                        <dd>{sourceTriggerLabels[task.sourceSync.trigger]}</dd>
+                      </div>
+                      <div>
+                        <dt>职位总数</dt>
+                        <dd>{task.sourceSync.run?.stats.discovered ?? '—'}</dd>
+                      </div>
+                      <div>
+                        <dt>新增 / 更新 / 未变化</dt>
+                        <dd>
+                          {task.sourceSync.run
+                            ? [
+                                task.sourceSync.run.stats.created,
+                                task.sourceSync.run.stats.revised,
+                                task.sourceSync.run.stats.unchanged,
+                              ]
+                                .map(String)
+                                .join(' / ')
+                            : '—'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>关联详情任务</dt>
+                        <dd>
+                          {task.sourceSync.run
+                            ? String(task.sourceSync.run.stats.followupEnqueued)
+                            : '—'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>意向外 / 非国内 / 地域未知</dt>
+                        <dd>
+                          {task.sourceSync.run
+                            ? [
+                                task.sourceSync.run.stats.skippedOutOfScope,
+                                task.sourceSync.run.stats.skippedNonDomestic,
+                                task.sourceSync.run.stats.skippedUnknownRegion,
+                              ]
+                                .map(String)
+                                .join(' / ')
+                            : '—'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>恢复 / 过期 / 关闭</dt>
+                        <dd>
+                          {task.sourceSync.run
+                            ? [
+                                task.sourceSync.run.stats.restored,
+                                task.sourceSync.run.stats.staled,
+                                task.sourceSync.run.stats.closed,
+                              ]
+                                .map(String)
+                                .join(' / ')
+                            : '—'}
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+                ) : null}
+                {task.syncScoring ? (
+                  <section aria-label="评分阶段进度">
+                    <h3>评分阶段进度</h3>
+                    <dl className={['facts', styles.sourceFacts].filter(Boolean).join(' ')}>
+                      <div>
+                        <dt>已完成 / 总数</dt>
+                        <dd>
+                          {String(
+                            task.syncScoring.items.filter((item) => item.status === 'succeeded')
+                              .length,
+                          )}{' '}
+                          / {String(task.syncScoring.items.length)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>失败</dt>
+                        <dd>
+                          {String(
+                            task.syncScoring.items.filter((item) => item.status === 'failed')
+                              .length,
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>降级（模型不可用）</dt>
+                        <dd>{String(task.syncScoring.degraded)}</dd>
+                      </div>
+                    </dl>
+                  </section>
+                ) : null}
+                {task.status === 'failed' || showWarning ? (
+                  <section
+                    className={showWarning ? styles.warningDetail : styles.failureDetail}
+                    aria-labelledby="task-failure-heading"
+                  >
+                    <h3 id="task-failure-heading">
+                      {showWarning ? '警告' : '失败'}：{presentation.errorCategory ?? '未分类'}
+                    </h3>
+                    <p>{presentation.error || '系统未记录具体原因。'}</p>
+                  </section>
+                ) : null}
+                {task.kind === 'task' ? (
+                  <TaskActions
+                    taskId={task.id}
+                    status={task.status}
+                    taskType={task.taskType}
+                    size="regular"
+                  />
+                ) : null}
+              </>
             ) : null}
           </div>
         </DialogShell>

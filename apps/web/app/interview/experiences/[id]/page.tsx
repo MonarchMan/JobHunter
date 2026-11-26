@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../../../src/server/container.js';
 import { PageHeader } from '../../../components/layout/page-header.js';
+import { NavigationLink } from '../../../components/layout/navigation-pending.js';
 import { ExperienceReview } from './experience-review.js';
 
 export const dynamic = 'force-dynamic';
@@ -20,9 +21,9 @@ export default async function ExperienceDetailPage({
       <main id="main-content" tabIndex={-1}>
         <PageHeader title={`${first?.company ?? '公司待补充'} · ${first?.role ?? '岗位待补充'}`}>
           <div>
-            <a className="button-secondary" href="/interview/experiences">
+            <NavigationLink className="button-secondary" href="/interview/experiences">
               返回历史面经
-            </a>
+            </NavigationLink>
           </div>
         </PageHeader>
         <ExperienceReview detail={detail} />

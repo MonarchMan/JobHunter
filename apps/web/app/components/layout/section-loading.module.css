@@ -1,0 +1,15 @@
+.region {
+  min-height: 7rem;
+  padding: 1rem 0;
+}
+
+.placeholder {
+  width: min(100%, 46rem);
+  height: 4.5rem;
+  border-radius: 0.5rem;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--line) 0 0.75rem,
+    transparent 0.75rem 1.5rem
+  );
+}

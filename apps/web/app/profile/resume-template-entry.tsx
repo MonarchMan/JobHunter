@@ -1,19 +1,23 @@
 'use client';
 
+import { useRouter } from 'next/navigation.js';
 import { resumeTemplates, type ResumeTemplateKey } from '@jobhunter/user/templates';
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
 import { mutationHeaders } from '../../src/client/csrf.js';
 import { SelectField } from '../components/forms/select-field.js';
 import styles from './resume-template-entry.module.css';
 
 export function ResumeTemplateEntry({ profileId }: Readonly<{ profileId: string }>): ReactElement {
+  const router = useRouter();
   const [templateKey, setTemplateKey] = useState<ResumeTemplateKey>('technical-blueprint');
-  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [navigating, startNavigation] = useTransition();
+  const busy = saving || navigating;
   const [error, setError] = useState<string | null>(null);
 
   const openStudio = async (): Promise<void> => {
-    setBusy(true);
+    setSaving(true);
     setError(null);
     try {
       const response = await fetch('/api/resume-drafts', {
@@ -27,10 +31,12 @@ export function ResumeTemplateEntry({ profileId }: Readonly<{ profileId: string 
       };
       if (!response.ok || !body.data?.draft?.id)
         throw new Error(body.error?.message ?? '无法打开简历制作页。');
-      window.location.assign(`/resume-studio/${body.data.draft.id}`);
+      const href = `/resume-studio/${encodeURIComponent(body.data.draft.id)}`;
+      startNavigation(() => router.push(href));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '无法打开简历制作页。');
-      setBusy(false);
+    } finally {
+      setSaving(false);
     }
   };
 

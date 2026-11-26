@@ -1,6 +1,6 @@
 import { expect, test, type Locator } from '@playwright/test';
 
-test('我的页在标签下方直接显示简历导入，不重复显示画像切换区', async ({ page }) => {
+test('我的页直接显示简历导入和当前简历，不重复显示画像切换区', async ({ page }) => {
   await page.goto('/my');
   await expect(page.getByRole('navigation', { name: '我的页面分区' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '导入简历' })).toBeVisible();
@@ -10,6 +10,16 @@ test('我的页在标签下方直接显示简历导入，不重复显示画像�
   ).toHaveCSS('font-size', '16px');
   await expect(page.getByRole('combobox', { name: '选择画像' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '查看', exact: true })).toHaveCount(0);
+  await expect(page.locator('[data-profile-overview]')).toBeVisible();
+  await expect(page.getByRole('button', { name: '编辑简历' })).toHaveCount(0);
+  await expect(page.locator('[data-resume-editor]')).toBeVisible();
+  await expect(page.locator('[data-resume-editor]').getByLabel('姓名')).not.toHaveValue('');
+});
+
+test('简历章节直达链接定位到求职意向', async ({ page }) => {
+  await page.goto('/my?tab=profile#resume-intention');
+  await expect(page.locator('#resume-intention')).toBeInViewport();
+  await expect(page.getByRole('button', { name: '编辑简历' })).toHaveCount(0);
 });
 
 /** 非空的控件边界，用于比较响应式布局的实际尺寸。 */

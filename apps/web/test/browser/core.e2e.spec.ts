@@ -1,6 +1,34 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('校招实习管理台核心流程', () => {
+  test('keeps the document when navigating from jobs to tasks and usage', async ({ page }) => {
+    // 独立开发服务器首次访问职位和任务时会分别编译路由。
+    test.setTimeout(90_000);
+    await page.goto('/jobs');
+    const documentTimeOrigin = await page.evaluate(() => performance.timeOrigin);
+    const nav = page.getByRole('navigation', { name: '主导航' });
+    const tasks = nav.getByRole('link', { name: '任务', exact: true });
+    if (!(await tasks.first().isVisible())) await nav.getByText('更多', { exact: true }).click();
+    await tasks.click();
+    await expect(page).toHaveURL(/\/tasks$/, { timeout: 45_000 });
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
+    const tabs = page.getByRole('navigation', { name: '任务视图' });
+    await expect(tabs.getByRole('link', { name: '任务与Agent' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await tabs.getByRole('link', { name: '用量统计' }).click();
+    await expect(page).toHaveURL(/\/tasks\?tab=usage$/);
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
+    await expect(tabs.getByRole('link', { name: '用量统计' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await page.goBack();
+    await expect(page).toHaveURL(/\/tasks$/);
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentTimeOrigin);
+  });
+
   test('shows the three focused workflow setting groups', async ({ page }) => {
     await page.goto('/settings');
     // 1、移除说明后，渠道选项只占单行高度，单选框与名称居中对齐。
@@ -374,6 +402,27 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(restoredToast).toHaveCount(0);
   });
 
+  test('shares job rows and selection across desktop and mobile without duplicating links', async ({
+    page,
+  }) => {
+    await page.goto('/jobs');
+    const checkbox = page.getByRole('checkbox', { name: '选择职位：AI 产品实习生' });
+    const detail = page.getByRole('link', { name: '查看职位详情：AI 产品实习生' });
+    await checkbox.check();
+    const element = await checkbox.elementHandle();
+    await page.setViewportSize({ width: 390, height: 850 });
+    await expect(checkbox).toBeChecked();
+    expect(await element?.evaluate((input) => input.isConnected)).toBe(true);
+    await expect(detail).toHaveCount(1);
+    await expect(page.getByRole('button', { name: '批量评分（1）' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      390,
+    );
+    await detail.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/jobs\/[^?]+\?/, { timeout: 45_000 });
+  });
+
   test('keeps job actions aligned and exposes complete truncated locations', async ({ page }) => {
     await page.goto('/jobs');
     const headers = page.getByRole('columnheader');
@@ -599,7 +648,7 @@ test.describe('校招实习管理台核心流程', () => {
     const outline = page.getByRole('navigation', { name: '在线简历章节' });
     const resumeDocument = page.locator('[data-resume-edit-document]');
 
-    await expect(outline.getByRole('link')).toHaveCount(11);
+    await expect(outline.getByRole('link')).toHaveCount(11, { timeout: 30_000 });
     await expect(outline.getByRole('link', { name: '基本信息' })).toHaveAttribute(
       'aria-current',
       'location',
@@ -820,7 +869,7 @@ test.describe('校招实习管理台核心流程', () => {
     await page.getByRole('button', { name: '保存简历' }).click();
     await expect(
       page.getByRole('heading', { name: `版本 ${String(currentVersion + 1)}` }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 20_000 });
     const savedToast = page
       .getByRole('region', { name: '通知', exact: true })
       .getByRole('status')
@@ -859,8 +908,8 @@ test.describe('校招实习管理台核心流程', () => {
     await page.getByRole('button', { name: '保存简历' }).click();
     await expect(
       page.getByRole('heading', { name: `版本 ${String(currentVersion + 1)}` }),
-    ).toBeVisible();
-    await expect(page.getByLabel('职位').last()).toHaveValue('待填写职位');
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByLabel('职位').last()).toHaveValue('待填写职位', { timeout: 20_000 });
     await expect(page.getByLabel('项目名称').last()).toHaveValue('待填写项目');
     await expect(page.getByLabel('证书名称').last()).toHaveValue('待填写证书');
   });
@@ -1025,6 +1074,14 @@ test.describe('校招实习管理台核心流程', () => {
   });
 
   test('shows queued task and redacted Agent trace diagnostics', async ({ page }) => {
+    // 开发 fixture 首次访问来源和任务需要编译两个路由。
+    test.setTimeout(90_000);
+    const taskDetailsRequests: string[] = [];
+    page.on('request', (request) => {
+      const pathname = new URL(request.url()).pathname;
+      if (request.method() === 'GET' && /^\/api\/tasks\/[^/]+$/.test(pathname))
+        taskDetailsRequests.push(pathname);
+    });
     await page.goto('/tasks?range=all');
     await expect(page.getByRole('heading', { name: '任务与Agent', exact: true })).toBeVisible();
     const taskFilters = page.getByRole('form', { name: '任务筛选' });
@@ -1066,16 +1123,62 @@ test.describe('校招实习管理台核心流程', () => {
     await expect(taskTable.getByRole('cell').first()).toHaveCSS('vertical-align', 'middle');
 
     await expect(taskTitle).toHaveCSS('text-decoration-line', 'none');
+    expect(taskDetailsRequests).toHaveLength(0);
     await taskTable.getByRole('row').filter({ has: taskTitle }).getByRole('cell').nth(1).click();
-    await expect(page.getByRole('dialog', { name: '任务详情' })).toBeVisible();
+    const taskDetail = page.getByRole('dialog', { name: '任务详情' });
+    await expect(taskDetail.getByText('创建时间', { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    expect(taskDetailsRequests).toHaveLength(1);
+    await page.keyboard.press('Escape');
+    await taskTitle.click();
+    await expect(taskDetail.getByText('创建时间', { exact: true })).toBeVisible();
+    expect(taskDetailsRequests).toHaveLength(2);
+    expect(taskDetailsRequests[1]).toBe(taskDetailsRequests[0]);
     await page.keyboard.press('Escape');
     const agentTitle = page.getByRole('button', { name: '职位分析' });
     await expect(agentTitle).toHaveCSS('text-decoration-line', 'none');
     await page.getByRole('row').filter({ has: agentTitle }).getByRole('cell').nth(1).click();
     await expect(page.getByRole('heading', { name: 'Agent 运行详情' })).toBeVisible();
     const toolTable = page.getByRole('table', { name: '工具调用' });
-    await expect(toolTable.getByText('fixture.lookup', { exact: true }).first()).toBeVisible();
+    // 首次展开会按需请求详情，开发 fixture 还需冷编译该 API。
+    await expect(toolTable.getByText('fixture.lookup', { exact: true }).first()).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(toolTable).toBeVisible();
+  });
+
+  test('reuses diagnostic rows and their actions at mobile width', async ({ page }) => {
+    await page.goto('/tasks?range=all');
+    await page.getByRole('button', { name: '暂停自动刷新' }).click();
+    const taskList = page.getByRole('table', { name: '后台任务列表' });
+    const agentList = page.getByRole('table', { name: 'Agent 运行列表' });
+    for (const section of ['[data-task-section]', '[data-agent-section]']) {
+      const list = page.locator(section);
+      const rows = list.locator('tbody tr:has([data-record-details])');
+      expect(await rows.count()).toBeGreaterThan(0);
+      await expect(list.locator('[data-record-details]')).toHaveCount(await rows.count());
+    }
+    const taskTitle = taskList.getByRole('button', { name: '来源同步' }).first();
+    const original = await taskTitle.elementHandle();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(taskTitle).toBeVisible();
+    expect(await taskTitle.evaluate((element, desktop) => element === desktop, original)).toBe(
+      true,
+    );
+    await expect(taskList.getByRole('button', { name: /^取消任务/ }).first()).toBeVisible();
+    await taskTitle.focus();
+    await page.keyboard.press('Enter');
+    const detail = page.getByRole('dialog', { name: '任务详情' });
+    await expect(detail).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(detail).toBeHidden();
+    await expect(taskTitle).toBeFocused();
+    await expect(agentList.getByRole('button', { name: '职位分析' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      390,
+    );
   });
 
   test('reports task retry and cancel results through the global toast', async ({ page }) => {
@@ -1091,6 +1194,14 @@ test.describe('校招实习管理台核心流程', () => {
       });
     });
     await page.goto('/tasks?range=all');
+    // 先确认同页客户端交互已就绪，再点击不会触发原生导航的按钮。
+    const pause = page.getByRole('button', { name: '暂停自动刷新' });
+    await expect(async () => {
+      if (await pause.isVisible()) await pause.click();
+      await expect(page.getByRole('button', { name: '恢复自动刷新' })).toBeVisible({
+        timeout: 500,
+      });
+    }).toPass({ timeout: 10_000 });
     const action = page.getByRole('button', { name: /^(?:取消|重试)任务 / }).first();
     await expect(action).toBeVisible();
     const actionBox = await action.boundingBox();
@@ -1107,7 +1218,7 @@ test.describe('校招实习管理台核心流程', () => {
     await action.click();
     await expect(
       page.getByRole('region', { name: '通知', exact: true }).getByRole('status'),
-    ).toContainText(/重试任务已创建|取消请求已提交/);
+    ).toContainText(/任务已重新入队|取消请求已提交/);
   });
 
   test('requires confirming a target role before source sync', async ({ page }) => {

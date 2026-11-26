@@ -645,6 +645,14 @@ export function ResumeEditor({
     JSON.stringify(cleanDraft(draft)) !== JSON.stringify(cleanDraft(prepareDraft(profile)));
 
   useEffect(() => {
+    // 资料流式挂载可能晚于 URL 锚点生效，挂载后补做一次章节定位。
+    const section = window.location.hash.slice(1);
+    if (resumeSections.some(([id]) => id === section)) {
+      document.getElementById(section)?.scrollIntoView({ block: 'start' });
+    }
+  }, []);
+
+  useEffect(() => {
     if (!dirty) return;
     const beforeUnload = (event: BeforeUnloadEvent): void => {
       if (allowUnload.current) return;

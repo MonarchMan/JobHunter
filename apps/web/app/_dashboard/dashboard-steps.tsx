@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore, useState, type ReactElement } from 'react';
 import { Icon } from '../components/ui-icon.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import panelStyles from '../dashboard-panel.module.css';
 import styles from './dashboard-steps.module.css';
 
@@ -29,9 +30,9 @@ function Step({
         <p>{detail}</p>
       </div>
       {!complete ? (
-        <a href={href} aria-label={`前往${title}`}>
+        <NavigationLink href={href} aria-label={`前往${title}`}>
           →
-        </a>
+        </NavigationLink>
       ) : null}
     </li>
   );

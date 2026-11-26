@@ -75,8 +75,10 @@ test('keyboard can skip navigation, filter jobs and return to the list', async (
 });
 
 test('resume preview dialog is accessible and traps keyboard focus', async ({ page }) => {
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/profile');
+  await expect(page.locator('[data-resume-editor]')).toBeVisible({ timeout: 45_000 });
   await page.getByRole('button', { name: '预览' }).click();
   const dialog = page.getByRole('dialog', { name: '简历预览' });
   await expect(dialog).toBeVisible();

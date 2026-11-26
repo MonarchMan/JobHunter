@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactElement } from 'react';
 import { PageHeader } from '../components/layout/page-header.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import { CompanyLogo } from '../components/company-logo.js';
 import { getWebContainer } from '../../src/server/container.js';
 import type { WebApplicationProgress } from '@jobhunter/recruitment/contracts/application-progress-web';
@@ -76,9 +77,9 @@ export async function ApplicationsProgressContent({
           </span>
           <h2 id="applications-empty-title">还没有应聘进展</h2>
           <p>同步招聘邮箱后，申请确认、测评、笔试和面试记录会自动汇总到这里。</p>
-          <a className="button-primary" href="/settings">
+          <NavigationLink className="button-primary" href="/settings">
             去配置邮箱
-          </a>
+          </NavigationLink>
         </section>
       ) : (
         <div className={styles.companyList}>

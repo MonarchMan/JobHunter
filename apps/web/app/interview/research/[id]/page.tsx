@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation.js';
 import type { ReactElement } from 'react';
 import { getWebContainer } from '../../../../src/server/container.js';
 import { PageHeader } from '../../../components/layout/page-header.js';
+import { NavigationLink } from '../../../components/layout/navigation-pending.js';
 import { InterviewSectionNav } from '../../interview-section-nav.js';
 import { ResearchWorkbench, type ResearchTaskView } from './research-workbench.js';
 
@@ -30,9 +31,9 @@ export default async function ResearchDetailPage({
     return (
       <main id="main-content" tabIndex={-1}>
         <PageHeader title={detail.request.brief.targetRoles.join(' / ')}>
-          <a className="button-secondary" href="/interview/research">
+          <NavigationLink className="button-secondary" href="/interview/research">
             返回研究列表
-          </a>
+          </NavigationLink>
         </PageHeader>
         <InterviewSectionNav />
         <ResearchWorkbench detail={detail} task={taskView} />

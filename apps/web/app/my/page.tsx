@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
-import type { ReactElement } from 'react';
+import { Suspense, type ReactElement } from 'react';
 import { PageTabs } from '../components/layout/page-tabs.js';
+import { SectionLoading } from '../components/layout/section-loading.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import ProfilePage from '../profile/page.js';
 import { ApplicationsProgressContent } from '../applications/page.js';
@@ -27,11 +28,20 @@ export default async function MyPage({ searchParams }: MyPageProperties): Promis
         ]}
       />
       <section className={styles.content} aria-label={tab === 'profile' ? '个人资料' : '应聘进展'}>
-        {tab === 'applications' ? (
-          <ApplicationsProgressContent embedded />
-        ) : (
-          <ProfilePage searchParams={Promise.resolve(query)} embedded />
-        )}
+        <Suspense
+          key={tab}
+          fallback={
+            <SectionLoading
+              label={tab === 'applications' ? '正在加载应聘进展' : '正在加载个人资料'}
+            />
+          }
+        >
+          {tab === 'applications' ? (
+            <ApplicationsProgressContent embedded />
+          ) : (
+            <ProfilePage searchParams={Promise.resolve(query)} embedded />
+          )}
+        </Suspense>
       </section>
     </main>
   );

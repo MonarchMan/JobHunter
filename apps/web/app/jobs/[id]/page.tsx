@@ -2,12 +2,16 @@ import { JobNotFoundError } from '@jobhunter/recruitment/jobs/job-query-service'
 import { MatchAnalysis } from './match-analysis.js';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation.js';
-import type { ReactElement } from 'react';
+import { Suspense, type ReactElement } from 'react';
 import { JobStatus } from '../job-status.js';
 import { JobViewActivity } from '../job-view-activity.js';
 import { getWebContainer } from '../../../src/server/container.js';
+import { browserTestRenderDelay } from '../../../src/server/browser-test-render-delay.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../../src/server/job-query.js';
 import { JobScoreAction } from '../job-score-action.js';
+import { NavigationLink } from '../../components/layout/navigation-pending.js';
+import { PageHeader } from '../../components/layout/page-header.js';
+import { SectionLoading } from '../../components/layout/section-loading.js';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +28,7 @@ const adviceStatusLabels = {
   failed: '生成失败',
 } as const;
 
+/** 保留返回入口，实际职位名称和正文等到合法详情返回后再显示。 */
 export default async function JobDetailPage({
   params,
   searchParams,
@@ -38,6 +43,32 @@ export default async function JobDetailPage({
       : profile
         ? `/jobs?profile=${encodeURIComponent(profile)}`
         : '/jobs';
+  return (
+    <main id="main-content" tabIndex={-1}>
+      <NavigationLink className={styles.backLink} href={returnHref}>
+        ← 返回职位列表
+      </NavigationLink>
+      <Suspense
+        key={id}
+        fallback={
+          <>
+            <PageHeader title="职位详情" />
+            <SectionLoading label="正在加载职位详情" />
+          </>
+        }
+      >
+        <JobDetailContent id={id} profile={profile} />
+      </Suspense>
+    </main>
+  );
+}
+
+/** 职位存在且实际展示后才挂载浏览记录。 */
+async function JobDetailContent({
+  id,
+  profile,
+}: Readonly<{ id: string; profile: string | undefined }>): Promise<ReactElement> {
+  await browserTestRenderDelay('job-detail');
   const container = await getWebContainer();
   const currentProfileVersionId =
     profile ?? container.services.webProfiles.list()[0]?.currentVersionId ?? undefined;
@@ -49,11 +80,8 @@ export default async function JobDetailPage({
     throw error;
   }
   return (
-    <main id="main-content" tabIndex={-1}>
+    <>
       <JobViewActivity key={job.id} jobId={job.id} />
-      <a className={styles.backLink} href={returnHref}>
-        ← 返回职位列表
-      </a>
       <header className={styles.heading}>
         <div>
           <p className="eyebrow">{job.companyName}</p>
@@ -177,6 +205,6 @@ export default async function JobDetailPage({
           ))
         )}
       </section>
-    </main>
+    </>
   );
 }

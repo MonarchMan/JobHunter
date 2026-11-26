@@ -57,7 +57,7 @@ test('jobs default to official and isolate platform provider, categories and pag
     .getByRole('link', { name: /查看职位详情：BOSS/ })
     .first()
     .click();
-  await expect(page.getByRole('heading', { name: '职位描述' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '职位描述' })).toBeVisible({ timeout: 45_000 });
   await page.goBack();
   await expect(page).toHaveURL(/source=platform.*provider=boss.*page=2/);
   // 3、窄屏沿用职位卡片；标题操作自然换行且无结果仍保留同一来源的恢复入口。
@@ -66,10 +66,7 @@ test('jobs default to official and isolate platform provider, categories and pag
   await expect(page.getByText('共 1 个职位', { exact: false })).toBeVisible();
   expect((await source.boundingBox())?.width ?? Infinity).toBeLessThanOrEqual(176);
   await expect(
-    page
-      .getByRole('article')
-      .filter({ hasText: '智联 平台工程师 1' })
-      .locator('[data-company-logo]'),
+    page.getByRole('row').filter({ hasText: '智联 平台工程师 1' }).locator('[data-company-logo]'),
   ).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -109,7 +106,9 @@ test('platform empty recovery and filter clearing preserve the selected provider
       );
     }
     await page.getByRole('link', { name: '管理招聘来源', exact: true }).click();
-    await expect(page).toHaveURL(`/sources?channel=platform&provider=${provider}`);
+    await expect(page).toHaveURL(`/sources?channel=platform&provider=${provider}`, {
+      timeout: 45_000,
+    });
     await expect(
       page.getByRole('combobox', { name: '招聘平台选择' }).locator('img'),
     ).toHaveAttribute('src', `/assets/company-logos/${provider}.jpg`);

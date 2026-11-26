@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import type { WebDashboardNextAction } from '../../src/shared/dashboard-contracts.js';
 import styles from './dashboard-next-action.module.css';
 
@@ -38,9 +39,9 @@ export function DashboardNextAction({
               </h2>
               <p className={styles.message}>{action.message}</p>
             </div>
-            <a className={styles.action} href={action.href}>
+            <NavigationLink className={styles.action} href={action.href}>
               前往 <span aria-hidden="true">→</span>
-            </a>
+            </NavigationLink>
           </>
         );
 
@@ -53,9 +54,12 @@ export function DashboardNextAction({
               </h2>
               <p className={styles.message}>{action.message}</p>
             </div>
-            <a className={[styles.action, styles.taskAction].join(' ')} href={action.href}>
+            <NavigationLink
+              className={[styles.action, styles.taskAction].join(' ')}
+              href={action.href}
+            >
               查看任务 <span aria-hidden="true">→</span>
-            </a>
+            </NavigationLink>
           </>
         );
 
@@ -80,9 +84,9 @@ export function DashboardNextAction({
                 </div>
               ) : null}
             </div>
-            <a className={styles.action} href={action.href}>
+            <NavigationLink className={styles.action} href={action.href}>
               查看 <span aria-hidden="true">→</span>
-            </a>
+            </NavigationLink>
           </>
         );
 

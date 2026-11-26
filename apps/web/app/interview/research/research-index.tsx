@@ -1,6 +1,8 @@
 'use client';
 
 import { SearchButton } from '../../components/forms/search-button.js';
+import { NavigationForm } from '../../components/forms/navigation-form.js';
+import { NavigationLink } from '../../components/layout/navigation-pending.js';
 
 import type {
   CommunityExperienceFilter,
@@ -237,7 +239,7 @@ export function ResearchIndex({
           <ol className={styles.requestList}>
             {requests.map(({ request, currentTask }, index) => (
               <li key={request.id}>
-                <a href={`/interview/research/${request.id}`}>
+                <NavigationLink href={`/interview/research/${request.id}`}>
                   <span className={styles.archiveIndex}>{String(index + 1).padStart(2, '0')}</span>
                   <span className={styles.requestCopy}>
                     <strong>{request.brief.targetRoles.join(' / ')}</strong>
@@ -253,7 +255,7 @@ export function ResearchIndex({
                       : ''}
                     {requestStateLabels[request.state]} · {formatTime(request.updatedAt)}
                   </span>
-                </a>
+                </NavigationLink>
               </li>
             ))}
           </ol>
@@ -276,10 +278,10 @@ export function ResearchIndex({
           </span>
         </header>
         {acceptedTotal > 0 ? (
-          <form
+          <NavigationForm
+            key={JSON.stringify(acceptedFilter)}
             className={styles.archiveFilters}
             action="/interview/research"
-            method="get"
             noValidate
           >
             <label>
@@ -317,11 +319,11 @@ export function ResearchIndex({
             </label>
             <SearchButton />
             {Object.keys(acceptedFilter).length > 0 ? (
-              <a className="button-secondary" href="/interview/research">
+              <NavigationLink className="button-secondary" href="/interview/research">
                 清除
-              </a>
+              </NavigationLink>
             ) : null}
-          </form>
+          </NavigationForm>
         ) : null}
         {accepted.length > 0 ? (
           <div className={styles.experienceStack}>

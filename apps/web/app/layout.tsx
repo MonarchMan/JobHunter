@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactElement, ReactNode } from 'react';
+import { NavigationLink } from './components/layout/navigation-pending.js';
 import { SiteNav } from './components/layout/site-nav.js';
 import './styles.css';
 import styles from './app-shell.module.css';
@@ -22,7 +23,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
             跳到主要内容
           </a>
           <header className={styles.header}>
-            <a className={styles.brand} href="/">
+            <NavigationLink className={styles.brand} href="/" prefetch={false}>
               <img
                 className={styles.brandMark}
                 src="/assets/brand/jobhunter-logo.png"
@@ -32,7 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: ReactNode 
                 data-brand-logo="navigation"
               />
               <span>JobHunter</span>
-            </a>
+            </NavigationLink>
             <SiteNav />
           </header>
           {children}

@@ -9,8 +9,11 @@ import { JobStatus } from './job-status.js';
 import { Icon } from '../components/ui-icon.js';
 import { TruncatedText } from '../components/lists/truncated-text.js';
 import { CompanyLogo } from '../components/company-logo.js';
+import { NavigationLink } from '../components/layout/navigation-pending.js';
 import styles from './jobs-table.module.css';
 import { scoreBand } from './score-band.js';
+
+const publishedDateFormatter = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai' });
 
 /** 分数链接在桌面和移动端使用一致的契合度档位，同时保留详情入口。 */
 function JobScoreLink({
@@ -24,7 +27,7 @@ function JobScoreLink({
 }>): ReactElement {
   const band = scoreBand(score);
   return (
-    <a
+    <NavigationLink
       className={styles.detailLink}
       href={href}
       data-row-detail-link
@@ -34,7 +37,7 @@ function JobScoreLink({
       title={band.label}
     >
       {score === null ? '无' : `${score.toFixed(1)} 分`}
-    </a>
+    </NavigationLink>
   );
 }
 
@@ -43,11 +46,7 @@ function PublishedDate({ value }: Readonly<{ value: string | null }>): ReactElem
   // 1、没有来源日期时明确展示缺失，不生成虚假的 time 元素。
   if (value === null) return <span>未提供</span>;
   // 2、沿用中文日期格式，固定时区使服务端与浏览器展示一致。
-  return (
-    <time dateTime={value}>
-      {new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai' }).format(new Date(value))}
-    </time>
-  );
+  return <time dateTime={value}>{publishedDateFormatter.format(new Date(value))}</time>;
 }
 
 /** 表格行与移动记录卡的指针增强；真正的链接仍负责键盘和路由语义。 */
@@ -106,6 +105,15 @@ export function JobsTable({
   return (
     <>
       <div className={styles.selectionToolbar}>
+        <label className={styles.mobileSelectAll}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleAll}
+            aria-label="选择当前页全部职位"
+          />
+          全选
+        </label>
         <span aria-live="polite">已选择 {selectedIds.length} 项</span>
         <JobScoreAction
           jobIds={selectedIds}
@@ -114,11 +122,12 @@ export function JobsTable({
         />
       </div>
       <div className={styles.tableScroll}>
-        <table>
+        <table role="table">
           <caption className="sr-only">可投递职位列表</caption>
-          <thead>
-            <tr>
-              <th scope="col" className={styles.selectionCell}>
+          <thead role="rowgroup">
+            <tr role="row">
+              <th role="columnheader" scope="col" className={styles.selectionCell}>
+                <span className="sr-only">选择职位</span>
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -126,24 +135,37 @@ export function JobsTable({
                   aria-label="选择当前页全部职位"
                 />
               </th>
-              <th scope="col">职位</th>
-              <th scope="col">公司</th>
-              <th scope="col">地点</th>
-              <th scope="col">匹配</th>
-              <th scope="col">发布时间</th>
-              <th scope="col">操作</th>
+              <th role="columnheader" scope="col">
+                职位
+              </th>
+              <th role="columnheader" scope="col">
+                公司
+              </th>
+              <th role="columnheader" scope="col">
+                地点
+              </th>
+              <th role="columnheader" scope="col">
+                匹配
+              </th>
+              <th role="columnheader" scope="col">
+                发布时间
+              </th>
+              <th role="columnheader" scope="col">
+                操作
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody role="rowgroup">
             {jobs.map((job) => (
               <tr
+                role="row"
                 key={job.id}
                 className={[styles.linkedRow, job.status === 'stale' ? styles.staleRow : ''].join(
                   ' ',
                 )}
                 onClick={openLinkedRow}
               >
-                <td className={styles.selectionCell} data-row-navigation-ignore>
+                <td role="cell" className={styles.selectionCell} data-row-navigation-ignore>
                   <input
                     type="checkbox"
                     checked={selected.has(job.id)}
@@ -153,7 +175,7 @@ export function JobsTable({
                     aria-label={`选择职位：${job.title}`}
                   />
                 </td>
-                <td>
+                <td role="cell">
                   <a
                     className={styles.jobLink}
                     href={job.detailUrl}
@@ -178,25 +200,26 @@ export function JobsTable({
                     <JobStatus status={job.status} />
                   </span>
                 </td>
-                <td>
+                <td role="cell">
                   <span className={styles.company}>
                     <CompanyLogo name={job.companyName} size="small" />
                     <TruncatedText value={job.companyName} />
                   </span>
                 </td>
-                <td>
+                <td role="cell">
                   <TruncatedText
                     value={job.locations.join('、') || '地点未注明'}
                     className="location-truncate"
                   />
                 </td>
-                <td>
+                <td role="cell">
                   <JobScoreLink score={job.score} href={detailHref(job.id)} jobTitle={job.title} />
                 </td>
-                <td>
+                <td role="cell">
+                  <span className={styles.mobileDateLabel}>发布时间：</span>
                   <PublishedDate value={job.publishedAt} />
                 </td>
-                <td>
+                <td role="cell">
                   <div className={styles.rowActions} data-row-navigation-ignore>
                     <a
                       className={['button-secondary', styles.applyLink].filter(Boolean).join(' ')}
@@ -214,60 +237,6 @@ export function JobsTable({
             ))}
           </tbody>
         </table>
-      </div>
-      <div className={styles.cards} aria-label="可投递职位卡片列表">
-        {jobs.map((job) => (
-          <article
-            className={[styles.card, styles.linkedRow].join(' ')}
-            key={job.id}
-            onClick={openLinkedRow}
-          >
-            <div className={styles.cardHeading}>
-              <label className={styles.cardSelection}>
-                <input
-                  type="checkbox"
-                  checked={selected.has(job.id)}
-                  onChange={() => {
-                    toggle(job.id);
-                  }}
-                />
-                <span className="sr-only">选择职位：{job.title}</span>
-              </label>
-              <a
-                className={styles.jobLink}
-                href={job.detailUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {job.title}
-              </a>
-              <JobStatus status={job.status} />
-            </div>
-            <p className={styles.cardCompany}>
-              <CompanyLogo name={job.companyName} size="small" />
-              <span>
-                {job.companyName} · {job.locations.join('、') || '地点未注明'}
-              </span>
-            </p>
-            <small>
-              <JobScoreLink score={job.score} href={detailHref(job.id)} jobTitle={job.title} /> ·
-              发布时间：
-              <PublishedDate value={job.publishedAt} />
-            </small>
-            <div className={styles.rowActions} data-row-navigation-ignore>
-              <a
-                className={['button-primary', styles.applyLink].filter(Boolean).join(' ')}
-                href={job.applyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Icon name="external" />
-                官网投递
-              </a>
-              <JobScoreAction jobIds={[job.id]} profileVersionId={profileVersionId} showHint />
-            </div>
-          </article>
-        ))}
       </div>
     </>
   );

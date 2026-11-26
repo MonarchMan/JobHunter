@@ -192,7 +192,7 @@
 }
 
 .tableScroll .selectionCell input,
-.cardSelection input {
+.mobileSelectAll input {
   width: 1.1rem;
   min-height: 1.1rem;
   accent-color: var(--primary);
@@ -234,67 +234,99 @@
   font-weight: 750;
 }
 
-.cards {
+.mobileSelectAll,
+.mobileDateLabel {
   display: none;
 }
 
-.card {
-  display: grid;
-  gap: 0.5rem;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
-  transition:
-    border-color var(--motion-fast) var(--ease-standard),
-    box-shadow var(--motion-standard) var(--ease-out),
-    transform var(--motion-fast) var(--ease-out);
-}
-
-.card:hover {
-  border-color: var(--action);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.cardHeading {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.card p,
-.card small {
-  margin: 0;
-  color: var(--text-tertiary);
-}
-
-.cardCompany {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-width: 0;
-}
-
-.cardCompany > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.cardSelection {
-  display: inline-grid;
-  min-height: 2.25rem;
-  place-items: center;
-}
-
 @media (max-width: 900px) {
+  .selectionToolbar {
+    flex-wrap: wrap;
+  }
+
+  .mobileSelectAll {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .mobileDateLabel {
+    display: inline;
+  }
+
   .tableScroll {
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .tableScroll table {
+    display: block;
+    min-width: 0;
+  }
+
+  .tableScroll thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .tableScroll thead input {
     display: none;
   }
 
-  .cards {
+  .tableScroll tbody {
     display: grid;
     gap: 0.75rem;
+  }
+
+  .tableScroll tbody tr {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 0.5rem 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .tableScroll tbody .staleRow {
+    background: var(--warning-soft);
+  }
+
+  .tableScroll tbody td {
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+
+  .tableScroll tbody .selectionCell {
+    width: auto;
+    min-width: 0;
+  }
+
+  .tableScroll td:nth-child(n + 3) {
+    grid-column: 1 / -1;
+  }
+
+  .tableScroll .jobLink,
+  .tableScroll .jobLink :global(.job-title-truncate) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .tableScroll .detailLink {
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.35rem;
+    background: var(--score-background);
+  }
+
+  .rowActions {
+    min-width: 0;
+    flex-wrap: wrap;
   }
 }
