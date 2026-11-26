@@ -12,7 +12,7 @@
 
 岗位深链为 `https://jobs.mihoyo.com/#/position/:id` 或 `#/campus/position/:id`。城市来自 addressDetailList；未提供发布日期则 null。字段白名单不保存用户投递状态、内部代码或认证数据。
 
-生产顺序串行分页，12 请求/分钟、burst=1；maximumPages 默认 1000。显式 first-last/maximumPages=2 用于 smoke。采样、短页、重复 ID、总数漂移均 partial，不触发缺失下线；健康检查仅首页。required 详情失败不写占位岗位。
+生产顺序串行分页，12 请求/分钟、burst=1；maximumPages 默认 1000。显式 first-last/maximumPages=2 用于 smoke。生产覆盖按 005《职位同步流水线》判定；健康检查仅首页。required 详情失败不写占位岗位。
 
 当前社招入口实习筛选为合法零，实习支持范围明确为校园实习专项；其他独立品牌/海外入口不隐含覆盖。社招列表本身的海外地点保留原始字段，由应用地域规则处理。三个来源默认启用，逻辑渠道沿用仅实习默认开；不重置已有数据库运行开关。
 

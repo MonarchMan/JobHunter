@@ -7,7 +7,6 @@ import {
   canonicalizeOfficialUrl,
   type DiscoveryEvent,
   type JobSourceAdapter,
-  type SourcePageCollection,
   type SourceHealth,
 } from '@jobhunter/recruitment/source-contracts';
 import { ZodError } from 'zod';
@@ -105,11 +104,6 @@ function descriptions(detail: MeituanDetail): string {
     .join('\n\n');
 }
 
-function hasOnlyDuplicateMeituanRecords(collection: SourcePageCollection): boolean {
-  const diagnostics = collection.diagnostics;
-  return collection.coverage === 'partial' && diagnostics?.reason === 'duplicate_job_ids';
-}
-
 /** 执行来源数据的解析、转换、请求或分页逻辑。 */
 function createMeituanChannelAdapter(options: {
   readonly key: 'meituan.social' | 'meituan.intern' | 'meituan.campus';
@@ -158,12 +152,12 @@ function createMeituanChannelAdapter(options: {
         });
         let discoveredCount = 0;
         const seen = new Set<string>();
-        const duplicateOnly = hasOnlyDuplicateMeituanRecords(collection);
-        const coverage = duplicateOnly ? 'complete' : collection.coverage;
+        let duplicates = 0;
         for (const collectedPage of collection.pages) {
           for (const value of collectedPage.records) {
             const raw = meituanJobSchema.parse(value);
             if (seen.has(raw.jobUnionId)) {
+              duplicates += 1;
               continue;
             }
             seen.add(raw.jobUnionId);
@@ -181,19 +175,17 @@ function createMeituanChannelAdapter(options: {
         }
         yield {
           type: 'complete',
-          coverage,
+          coverage: collection.coverage,
           cursor: null,
           pages: collection.pages.length,
           discoveredCount,
           diagnostics: {
             ...collection.diagnostics,
-            reason: duplicateOnly ? null : (collection.diagnostics?.reason ?? null),
+            reason: collection.diagnostics?.reason ?? null,
             retryable: collection.diagnostics?.retryable ?? false,
-            absenceReliable: !duplicateOnly && collection.diagnostics?.absenceReliable !== false,
+            absenceReliable: duplicates === 0 && collection.diagnostics?.absenceReliable !== false,
             discoveredCount,
-            duplicateIds:
-              collection.diagnostics?.duplicateIds ??
-              collection.pages.reduce((count, page) => count + page.records.length, 0) - seen.size,
+            duplicateIds: collection.diagnostics?.duplicateIds ?? duplicates,
           },
         };
         return;
@@ -203,7 +195,7 @@ function createMeituanChannelAdapter(options: {
       let expectedCount: number | null = null;
       let expectedPages: number | null = null;
       const seen = new Set<string>();
-      let coverage: 'complete' | 'partial' = 'complete';
+      let reason: 'invalid_page_boundary' | 'maximum_pages_reached' | null = null;
       let duplicateIds = 0;
       let totalChanged = false;
 
@@ -237,13 +229,12 @@ function createMeituanChannelAdapter(options: {
           pageInfo.pageSize !== context.config.pageSize ||
           parsed.data.list.length > pageInfo.pageSize
         ) {
-          coverage = 'partial';
+          reason = 'invalid_page_boundary';
           break;
         }
 
         for (const raw of parsed.data.list) {
           if (seen.has(raw.jobUnionId)) {
-            coverage = 'partial';
             duplicateIds += 1;
             continue;
           }
@@ -261,8 +252,8 @@ function createMeituanChannelAdapter(options: {
         yield { type: 'page', page, discoveredCount };
 
         if (parsed.data.list.length < pageInfo.pageSize) break;
-        if (coverage === 'partial' || page >= 1_000) {
-          coverage = 'partial';
+        if (page >= 1_000) {
+          reason = 'maximum_pages_reached';
           break;
         }
         page += 1;
@@ -270,20 +261,18 @@ function createMeituanChannelAdapter(options: {
 
       yield {
         type: 'complete',
-        coverage,
+        coverage: reason ? 'partial' : 'complete',
         cursor: null,
         pages: page,
         discoveredCount,
         diagnostics: {
-          reason:
-            coverage === 'complete'
-              ? null
-              : duplicateIds > 0
-                ? 'duplicate_job_ids'
-                : 'invalid_page_boundary',
+          reason,
           retryable: false,
           absenceReliable:
-            coverage === 'complete' && !totalChanged && discoveredCount === expectedCount,
+            reason === null &&
+            duplicateIds === 0 &&
+            !totalChanged &&
+            discoveredCount === expectedCount,
           expectedCount,
           discoveredCount,
           expectedPages,

@@ -889,12 +889,21 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
     await run(fixture);
     fixture.scenario.jobs = fixture.scenario.jobs.slice(0, 2);
     fixture.scenario.absenceReliable = false;
+    fixture.handle.client.exec(
+      "UPDATE job_sources SET health_status = 'degraded', consecutive_failures = 2",
+    );
     const result = await run(fixture);
     expect(result).toMatchObject({
       status: 'succeeded',
       coverage: 'complete',
+      errorCategory: null,
       stats: { discovered: 2, staled: 0, closed: 0 },
     });
+    expect(
+      fixture.handle.client
+        .prepare('SELECT health_status, consecutive_failures FROM job_sources')
+        .get(),
+    ).toMatchObject({ health_status: 'healthy', consecutive_failures: 0 });
     expect(
       fixture.handle.client
         .prepare("SELECT status, missing_count FROM jobs WHERE external_job_id = 'job-3'")

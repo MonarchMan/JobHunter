@@ -49,15 +49,13 @@ packages/sources/
 
 ### 浏览器渲染采集端口（2026-08-22）
 
-字节和得物的官网页面能够在匿名浏览器中由官网自身脚本初始化请求上下文，但裸 HTTP 列表请求依赖运行时签名。因此来源不得复制签名，也不得解析职位 DOM 或点击 DOM 分页；`SourcePageClient.collect` 使用同一匿名页面会话打开入口并等待首个 JSON 列表请求，保存其会话 Cookie、必要请求头、请求体和签名 URL，读取响应中的 `job_post_list/count/limit/offset`，按 `ceil(count / limit)` 计算覆盖范围，再在同一页面上下文中直接发起后续 JSON 请求，仅修改 `offset`（或对应的页码字段），最后返回脱敏的页面记录与 coverage。
+字节和得物的官网页面能够在匿名浏览器中由官网自身脚本初始化请求上下文，但裸 HTTP 列表请求依赖运行时签名。因此来源不得复制签名，也不得解析职位 DOM 或点击 DOM 分页；`SourcePageClient.collect` 使用同一匿名页面会话打开入口并等待首个 JSON 列表请求，保存其会话 Cookie、必要请求头、请求体和签名 URL，读取响应中的 `job_post_list/count/limit/offset`，按配置容量与实际分页边界推进，再在同一页面上下文中直接发起后续 JSON 请求，仅修改 `offset`（或对应的页码字段），最后返回脱敏的页面记录与 coverage。
 
 `SourcePageClient.collect` 只返回普通 JSON 记录和分页证据，不暴露 Playwright/Page、Cookie、Storage、请求头或签名。实现层负责页面超时、取消、并发限制、资源回收和连续失败熔断；遇到登录、验证码或访问验证立即返回 `access_blocked`。来源适配器只负责把记录映射为 `DiscoveredJob` 和规范职位，不能自行生成或持久化动态令牌。
 
-生产 Worker 通过浏览器 session factory 装配该端口；未装配时相关来源健康状态为 `unhealthy/access_blocked`。响应分页参数、稳定 ID 重复复核、字段归一化、固定样本和匿名 Smoke 通过后，来源可晋级；完整同步由运行时按 `count/limit` 自动执行，不把签名复制到配置或源码。
+生产 Worker 通过浏览器 session factory 装配该端口；未装配时相关来源健康状态为 `unhealthy/access_blocked`。响应分页参数、稳定 ID 重复复核、字段归一化、固定样本和匿名 Smoke 通过后，来源可晋级；完整同步由运行时按实际分页边界执行，不把签名复制到配置或源码。
 
 阿里巴巴校园实习与华为校园实习现已接入同一响应驱动采集端口：前者按 `pageIndex/pageSize` 读取 `/position/search` 的 `content`，后者按 `curPage/pageSize` 读取网关响应的 `data.pageVO`。两者均使用官网自身匿名会话生成运行时请求参数，并通过完整分页 Smoke 后标记为 `supported`。
-
-美团实习接口可能在分页期间重复返回相同 `jobUnionId`。适配器只在所有预期页均已抓取、总数未变化，且“唯一 ID 数 + 重复记录数”等于接口总数时，将重复视为可安全去重的数据冗余：重复数量继续写入 coverage evidence，但不产生错误 reason，也不降低来源健康。任何缺页、总数变化、解析失败或无法闭合的计数仍保持 partial，避免把真实覆盖缺口误判为完整。
 
 ### 百度校园 JSON 适配（2026-08-22）
 

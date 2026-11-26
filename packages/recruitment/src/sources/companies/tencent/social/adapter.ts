@@ -150,7 +150,6 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
 
         for (const raw of parsed.Data.Posts) {
           if (seen.has(raw.PostId)) {
-            coverage = 'partial';
             duplicateIds += 1;
             continue;
           }
@@ -168,7 +167,7 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
         yield { type: 'page', page, discoveredCount };
 
         if (parsed.Data.Posts.length < context.config.pageSize) break;
-        if (coverage === 'partial' || page >= 1_000) {
+        if (page >= 1_000) {
           coverage = 'partial';
           break;
         }
@@ -182,15 +181,13 @@ export function createTencentAdapter(): JobSourceAdapter<TencentConfig, TencentD
         pages: page,
         discoveredCount,
         diagnostics: {
-          reason:
-            coverage === 'complete'
-              ? null
-              : duplicateIds > 0
-                ? 'duplicate_job_ids'
-                : 'maximum_pages_reached',
+          reason: coverage === 'complete' ? null : 'maximum_pages_reached',
           retryable: false,
           absenceReliable:
-            coverage === 'complete' && !totalChanged && discoveredCount === expectedCount,
+            coverage === 'complete' &&
+            duplicateIds === 0 &&
+            !totalChanged &&
+            discoveredCount === expectedCount,
           expectedCount,
           discoveredCount,
           expectedPages: Math.ceil(expectedCount / context.config.pageSize),

@@ -105,8 +105,8 @@ function harness(
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Kuaishou native browser lifecycle (ADR-0023)', () => {
-  it.each(['recover', 'persistent', 'total-change', 'sampled'] as const)(
-    'rechecks duplicate pages once without unioning stale results: %s',
+  it.each(['duplicates', 'total-change', 'sampled', 'truncated'] as const)(
+    'records duplicates without replay and preserves real coverage limits: %s',
     async (mode) => {
       const h = harness();
       const original = h.page.evaluate.getMockImplementation();
@@ -120,43 +120,39 @@ describe('Kuaishou native browser lifecycle (ADR-0023)', () => {
           if (input.operation === 'list' && input.pageNum) {
             const attempt = (calls.get(input.pageNum) ?? 0) + 1;
             calls.set(input.pageNum, attempt);
-            if (input.pageNum === 3 && (attempt === 1 || mode !== 'recover')) {
+            if (input.pageNum === 3) {
               const job = response.result.list[0];
               if (!job) throw new Error('Missing fixture job');
               job.id = 1;
             }
-            if (mode === 'total-change' && attempt > 1) response.result.total = 4;
+            if (mode === 'total-change' && input.pageNum === 2) response.result.total = 4;
           }
           return response;
         },
       );
       const result = await h.run(
-        mode === 'sampled' ? { maximumPages: 2, pageSampling: 'first-last' } : {},
+        mode === 'sampled'
+          ? { maximumPages: 2, pageSampling: 'first-last' }
+          : mode === 'truncated'
+            ? { maximumPages: 3 }
+            : {},
       );
-      expect(result.coverage).toBe(mode === 'recover' ? 'complete' : 'partial');
-      expect(result.pages).toHaveLength(mode === 'sampled' ? 2 : 4);
-      if (mode === 'sampled') {
-        expect([...calls.values()]).toEqual([1, 1]);
-        expect(result.diagnostics?.recheckedPages).toBeUndefined();
-      } else {
-        expect(result.diagnostics?.recheckedPages).toEqual([1, 3]);
-        expect(calls.get(1)).toBe(2);
-        expect(calls.get(2)).toBe(1);
-        expect(calls.get(3)).toBe(2);
-      }
-      if (mode === 'persistent')
-        expect(result.diagnostics).toMatchObject({
-          reason: 'duplicate_job_ids',
-          duplicateIds: 1,
-          discoveredCount: 2,
-          duplicateJobSamples: [{ id: '1', pages: [1, 3] }],
-        });
-      if (mode === 'recover')
-        expect(result.diagnostics).toMatchObject({
-          reason: null,
-          duplicateIds: 0,
-          discoveredCount: 3,
-        });
+      const reason =
+        mode === 'sampled'
+          ? 'sampled_pages'
+          : mode === 'truncated'
+            ? 'maximum_pages_reached'
+            : null;
+      expect(result.coverage).toBe(reason ? 'partial' : 'complete');
+      expect(result.pages).toHaveLength(mode === 'sampled' ? 2 : mode === 'truncated' ? 3 : 4);
+      expect([...calls.values()]).toEqual(result.pages.map(() => 1));
+      expect(result.diagnostics).toMatchObject({
+        reason,
+        duplicateIds: 1,
+        absenceReliable: false,
+        totalChanged: mode === 'total-change',
+        duplicateJobSamples: [{ id: '1', pages: [1, 3] }],
+      });
     },
   );
 

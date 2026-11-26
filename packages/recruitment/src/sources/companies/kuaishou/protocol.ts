@@ -240,13 +240,11 @@ export function validateKuaishouCollection(
   // 2、异常优先于采样原因；已标 partial 的集合永远不会被升级为 complete。
   const reason = invalidBoundary
     ? 'invalid_page_boundary'
-    : duplicateIds
-      ? 'duplicate_job_ids'
-      : (collection.diagnostics?.reason ?? null);
+    : (collection.diagnostics?.reason ?? null);
   return {
     ...collection,
     pages,
-    coverage: duplicateIds > 0 || invalidBoundary ? 'partial' : collection.coverage,
+    coverage: invalidBoundary ? 'partial' : collection.coverage,
     diagnostics: {
       ...collection.diagnostics,
       reason,
@@ -254,6 +252,7 @@ export function validateKuaishouCollection(
       absenceReliable:
         collection.diagnostics?.absenceReliable !== false &&
         reason === null &&
+        duplicateIds === 0 &&
         !totalChanged &&
         ids.size === total,
       expectedCount: total,

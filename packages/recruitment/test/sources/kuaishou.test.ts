@@ -161,7 +161,7 @@ describe('Kuaishou physical source contracts (SWT-009..011)', () => {
               createKuaishouAdapter(key).discover(context(key, { ...original, pages })),
             )
           ).completion.coverage,
-        ).toBe(kind === 'short' || kind === 'total' ? 'complete' : 'partial');
+        ).toBe(kind === 'missing' || kind === 'page' ? 'partial' : 'complete');
       },
     );
     it(`${key} preserves sampled coverage and verified zero`, () => {

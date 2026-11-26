@@ -8,17 +8,19 @@
 
 已确认三条物理来源：social（hireType=0，不过滤性质）、intern（校园 hireType=1/jobNatures=[3]）、campus（hireType=1/jobNatures=[1]），均 channelDetailIds=[1]。jobNatures 是官网公开详情推荐列表使用的字段，已独立验证它将校园 262 拆为实习 144 与应届 118；不固定项目 ID/年份，覆盖对应性质全部在招项目。社招包括 nature=1 全职和 nature=5 第三方编制，不能用全职筛选遗漏后者，归一化保留原始 employmentType，不冒充米哈游直聘。社招入口实习筛选当前返回合法零，不注册无详情证据的占位来源；实习支持范围为校园实习专项，不声称其他独立入口已接入。
 
-POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、data.list/total/pageNo/pageSize；固定每页 10，严格核对回显和 nature/channelDetailIds。POST /v1/job/info 用 id、channelDetailIds、hireType 读取详情，核对 id、hireType、性质与开放 status=1。真实 description/jobRequire 必须非空，不使用 jobSummary 代替。无发布日期则 publishedAt=null，不猜测；地点直接使用 addressDetailList 的公开名称。分页采样、重复、实际边界错误保留 partial，参考总数偏差只限制下架推断；健康仅首页，生产 HTTP 每分钟 12 次，详情限流复用同一 sourceKey。无浏览器或登录态依赖，不需要新 ADR。
+POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、data.list/total/pageNo/pageSize；固定每页 10，严格核对回显和 nature/channelDetailIds。POST /v1/job/info 用 id、channelDetailIds、hireType 读取详情，核对 id、hireType、性质与开放 status=1。真实 description/jobRequire 必须非空，不使用 jobSummary 代替。无发布日期则 publishedAt=null，不猜测；地点直接使用 addressDetailList 的公开名称。健康仅首页，生产 HTTP 每分钟 12 次，详情限流复用同一 sourceKey。无浏览器或登录态依赖，不需要新 ADR。
 
 携程采用统一官网 careers.ctrip.com 的匿名 HTTP，不需要浏览器、账号或签名。三条 required 物理来源分别为社会正式岗位（category=1/kind=1）、日常实习（category=1/kind=3）及应届校招（category=2/kind=1）。客服导航只是社招类别筛选，已包含；留用实习当前官网明确未开启，后续独立验证，不注册占位 adapter，也不宣称覆盖其他品牌或 Global Recruitment 独立站。
 
-协议置于 companies/ctrip，渠道入口分别放入 social/intern/campus。固定官网容量 10，生产串行顺序分页，maximumPages 上限 1000；显式 first-last 用于两页 smoke。响应不回显页码，不能将请求页号当作响应证据；以实际短页结束，校验容量与唯一 ID。采样、实际边界错误和重复均为 partial，保护旧岗位。健康检查仅首页，请求复用 SourceHttpClient 限流（12/min，burst=1）。
+协议置于 companies/ctrip，渠道入口分别放入 social/intern/campus。固定官网容量 10，生产串行顺序分页，maximumPages 上限 1000；显式 first-last 用于两页 smoke。响应不回显页码，不能将请求页号当作响应证据；以实际短页结束，校验容量。健康检查仅首页，请求复用 SourceHttpClient 限流（12/min，burst=1）。
 
 仅 head.language=zh_CN 会返回英文城市。正常官网设置固定展示偏好 Cookie `language=zh-CN`；匿名 HTTP 仅携带该常量即可返回中文，不使用任何用户、登录、追踪或风控 Cookie，不需要 c-sign。城市直接采用官网字段，避免引入不完整的人工英文城市映射。
 
 列表与详情均为 POST /api/hrrecruit/getJobAd，成功码字符串 201。详情 condition.fromId 指定已发现职位；使用 fromId（MJ 编号）作为稳定身份和官网深链，不使用易变列表行 id。列表内联真实 requirements/duty，声明 inline；HTML 转纯文本，publishDate 按中国标准时间解释并拒绝非法日期。解析器剔除内部 HR/用户字段，逐条校验 category/kind；缺少城市保持空数组，不从职位名称猜测。独立详情 smoke 验证 fromId 与正文，不逐岗请求详情。不改变进程或依赖方向，无需新增 ADR。
 
 本轮先建立五家公司范围并验证快手与哔哩哔哩。滴滴、携程、米哈游进入后续接入队列，不将推荐入口视为已验证接口。研究结果写入 research.md；运行原始样本写入忽略版本管理的 var/，提交 fixture 时仅保留公开职位字段。
+
+生产同步覆盖按[005 职位同步流水线](../005-job-sync-pipeline/design.md)判定。
 
 ## 验证顺序
 
@@ -40,7 +42,7 @@ POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、
 
 新增 `companies/bilibili/social`，公司目录拥有入口、字段 Schema、业务 code 分类、招聘类型检查和归一化规则，并经包公开入口供 Worker 使用。沿用既有 SourcePageClient responseShape 分发，增加 `bilibili-social`：Worker 只构造 pageNum/pageSize 的会话内分页请求，调用公司解析器处理响应。无需新增进程、登录状态或依赖方向，因此不新增 ADR。
 
-适配器仅支持浏览器传输，复用 inline 分页适配器归一化机制，生产容量默认 50（允许 1–100）。首屏 UI 容量为 10 时先重放第 1 页，再按 total/请求容量分页；响应 pages/size 仅为不可靠上游字段，不影响完整性。B 站解析器严格验证社招过滤、业务 code、total 与白名单记录；适配器校验浏览器 collection 的页码、页长、唯一 ID 和累计计数，阻止缺页或重复集合被误判为 complete。
+适配器仅支持浏览器传输，复用 inline 分页适配器归一化机制，生产容量默认 50（允许 1–100）。首屏 UI 容量为 10 时先重放第 1 页，再依据实际分页边界推进。B 站解析器严格验证社招过滤、业务 code、total 与白名单记录；适配器校验浏览器 collection 的页码、页长。
 
 列表已包含完整职责和要求，capabilities.detail=inline，无需为每个职位请求详情。在线 smoke 使用生产适配器和实际 Worker 浏览器客户端取首页/末页（连同 UI 初始化最多三次列表请求），并独立加载其中一条官方详情，核对 ID、名称、职责与要求。采样 partial 不关闭旧职位；普通测试通过固定样本注入 SourcePageClient，不访问官网。
 
@@ -56,9 +58,9 @@ POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、
 
 三个逻辑渠道映射四个物理来源：social/C001、intern/C002、intern.campus/当前 intern 项目、campus/当前 fulltime 项目。实习两个来源均为 required，不能只完成一个就认为渠道完整。校园旧项目也标 active，因此按有效项目的最新 year 选择对应 projectType，完整清单缺失或同年歧义时失败，不把年份写死在配置中。
 
-每个来源默认每页 50（允许 1–100），从不触发职位列表的官网首页初始化，按总数计算末页，并检查一条独立详情。smoke 仅两次列表请求；所有采样报告 partial / sampled_pages。元数据和列表请求间隔至少 5 秒，单次调用 30 秒、整次采集 300 秒截止；健康检查最多一页。所有正常/异常出口释放页面，外层池释放 context/browser。无浏览器时 access_blocked，不降级为裸 HTTP。旧的通用 fetch 重放失败不作为否定官网原生请求路径的证据。
+每个来源默认每页 50（允许 1–100），从不触发职位列表的官网首页初始化，smoke 按参考总数选择末页样本并检查一条独立详情，仅两次列表请求；所有采样报告 partial / sampled_pages。元数据和列表请求间隔至少 5 秒，单次调用 30 秒、整次采集 300 秒截止；健康检查最多一页。所有正常/异常出口释放页面，外层池释放 context/browser。无浏览器时 access_blocked，不降级为裸 HTTP。旧的通用 fetch 重放失败不作为否定官网原生请求路径的证据。
 
-职责和要求以纯文本内联拼接，城市和经验按官网字典解码；不把 updateTime 当发布日期，当前 publishedAt 为 null。浏览器驱动和适配器两层校验完整性，实际缺页、重复或参考总数有差异时禁止旧岗位下线。公开字段白名单在 SourcePageClient 返回前剔除无关内部字段。
+职责和要求以纯文本内联拼接，城市和经验按官网字典解码；不把 updateTime 当发布日期，当前 publishedAt 为 null。浏览器驱动和适配器两层校验分页边界。公开字段白名单在 SourcePageClient 返回前剔除无关内部字段。
 
 ## 滴滴接入协议
 
@@ -66,7 +68,7 @@ POST ats.openout.mihoyo.com/ats-portal/v1/job/list 返回 code=0/success=true、
 
 三渠道对应社招、实习、常规校招三个 required 物理来源，以及未来精英（Moka 116021）这一校园 supplemental 来源；来源 ID 后缀 254–257 保持不变。三个逻辑渠道均 supported，国内范围不含国际招聘站。校招支持范围是已验证的常规校招；未来精英后续独立验证，当前保持 experimental/default off，不阻断逻辑渠道晋级。不改变来源身份、数据所有权或通用状态派生规则，也不放松完整性校验。
 
-原始 Moka 列表的 open/pause 均参与分页计数和唯一性检查，discover 只输出 open；完整集合可推导在招 expectedCount，采样发现 pause 时在招总数未知（null）。未知状态失败，暂停详情不可入库。字段白名单剔除无关内部配置；空地点不猜测城市，无时区 publishedAt 按中国标准时间解释。
+原始 Moka 列表的 open/pause 均参与原始分页计数，discover 只输出 open；完整集合可推导在招 expectedCount，采样发现 pause 时在招总数未知（null）。未知状态失败，暂停详情不可入库。字段白名单剔除无关内部配置；空地点不猜测城市，无时区 publishedAt 按中国标准时间解释。
 
 现有 deferred 是已有列表正文后的补充详情，不能承载空正文。因此社招/实习使用新的 detail=required 契约，Registry 要求 fetchDetail；JobSyncService 在逐条隔离错误的 try 内、任何写入事务之前调用 fetchDetail，再 normalize/merge。失败记录隔离观察，不创建占位、不排 deferred enrichment 任务。校园继续 inline；既有 deferred 的缓存和后续任务不变。该必要契约调整见 ADR-0024，源协议仍属于 sources。
 

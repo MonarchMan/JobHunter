@@ -115,7 +115,6 @@ function createTencentCampusVariant(
         totalChanged ||= count !== parsed.data.count;
         for (const raw of parsed.data.positionList) {
           if (seen.has(raw.postId)) {
-            coverage = 'partial';
             duplicateIds += 1;
             continue;
           }
@@ -128,7 +127,7 @@ function createTencentCampusVariant(
         }
         yield { type: 'page', page, discoveredCount };
         if (parsed.data.positionList.length < context.config.pageSize) break;
-        if (coverage === 'partial' || page >= 1_000) {
+        if (page >= 1_000) {
           coverage = 'partial';
           break;
         }
@@ -141,14 +140,13 @@ function createTencentCampusVariant(
         pages: page,
         discoveredCount,
         diagnostics: {
-          reason:
-            coverage === 'complete'
-              ? null
-              : duplicateIds > 0
-                ? 'duplicate_job_ids'
-                : 'maximum_pages_reached',
+          reason: coverage === 'complete' ? null : 'maximum_pages_reached',
           retryable: false,
-          absenceReliable: coverage === 'complete' && !totalChanged && discoveredCount === count,
+          absenceReliable:
+            coverage === 'complete' &&
+            duplicateIds === 0 &&
+            !totalChanged &&
+            discoveredCount === count,
           expectedCount: count,
           discoveredCount,
           expectedPages: Math.ceil(count / context.config.pageSize),

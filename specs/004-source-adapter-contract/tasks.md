@@ -2,7 +2,7 @@
 
 > 状态：Implemented
 
-- [x] **SRC-T011** 添加快手重复 ID/页码诊断及有界重读回归，覆盖恢复、持续重复、采样和总数变化。（SRC-014）
+- [x] **SRC-T011** 添加快手重复 ID/页码诊断及有界重读回归，覆盖恢复、持续重复、采样和总数变化。（历史实现；覆盖判定以[005 职位同步流水线](../005-job-sync-pipeline/design.md)为准。）
 
 - [x] **SRC-T010** 实现 Worker 官网浏览器进程复用、请求上下文隔离、失败恢复及退出清理回归。（SRC-013）
 - [x] **SRC-T001** 定义 metadata、capability、discover/fetch/normalize/health 类型与 Zod Schema。（SRC-001, SRC-002, SRC-003, SRC-004）

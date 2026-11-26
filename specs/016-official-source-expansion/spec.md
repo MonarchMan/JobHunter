@@ -20,7 +20,7 @@
 - **OSE-003**：catalog 的公司 UUID、来源 UUID 与来源配置必须写在同一条显式记录中，不得依赖平行数组下标对齐。
 - **OSE-004**：目录迁移本身保持现有 13 个来源的 adapter key、source slug、公司/来源 UUID、默认启用状态和运行行为；后续 `017-three-channel-sources` 为修正频道语义而显式 canonicalize 的 key/slug 除外。
 - **OSE-005**：新增小米实习、vivo 社招、OPPO 实习、360 社招和网易混合社招来源；每个来源拥有独立 adapter key、source slug、UUID、Schema、fixture 和契约测试。
-- **OSE-006**：外部响应必须在来源边界使用逐来源 Zod Schema 校验；分页总数变化、缺页或重复稳定 ID 必须报告 `partial`。
+- **OSE-006**：外部响应必须在来源边界使用逐来源 Zod Schema 校验；分页覆盖按[005 职位同步流水线](../005-job-sync-pipeline/design.md)判定。
 - **OSE-007**：职位必须使用稳定官方 external ID 和岗位级官方 detail/apply URL；不得回退到招聘首页或列表页。
 - **OSE-008**：招聘类别优先使用记录级招聘类型，其次仅使用职位名称，最后回退来源类型；网易职位名含“实习”时归为 `internship`。
 - **OSE-009**：直接匿名 JSON 可闭合分页、稳定 ID、字段和深链的来源才能标记 `supported` 并默认启用。

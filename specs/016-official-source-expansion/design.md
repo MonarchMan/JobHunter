@@ -46,7 +46,7 @@ packages/sources/
 
 ## 分页与完整性
 
-直接 JSON 来源读取响应声明的 total/pages/pageCount，并同时验证：每页长度不超过配置、总数跨页稳定、external ID 唯一、抓取页数达到预期且唯一记录数等于 total。失败时保留已发现记录并报告 partial。
+直接 JSON 来源校验实际页序和每页容量，按[005 职位同步流水线](../005-job-sync-pipeline/design.md)判断终页及覆盖；分页中断时保留已发现记录。
 
 ## 测试
 

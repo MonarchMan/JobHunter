@@ -596,7 +596,7 @@ const missingChannelInputs: readonly CatalogInput[] = [
     recruitmentType: 'social',
     supportStatus: 'supported',
     supportNote:
-      '匿名社招接口首页与末页 smoke 已于 2026-08-28 通过：总数与末页长度一致、样本 requirementId 唯一且归一化正确。全量跨页重复仍按 partial 报告。',
+      '匿名社招接口首页与末页 smoke 已于 2026-08-28 通过：总数与末页长度一致、样本 requirementId 唯一且归一化正确。全量采集曾观测到跨页重复。',
     config: { pageSize: 100 },
   },
   {

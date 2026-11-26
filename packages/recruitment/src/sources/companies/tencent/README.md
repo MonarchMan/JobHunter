@@ -5,7 +5,7 @@
 - 状态：`supported`，默认启用
 - 策略：公开匿名 JSON，列表 `Query`、详情 `ByPostId`；不携带 Cookie
 - ID：`PostId`，在重复列表与详情请求中一致
-- 完整性：逐页读取至发现数等于 `Count`；总数变动、重复 ID 或提前空页均降级为 `partial`
+- 完整性：按实际终页完成分页，生产覆盖按 005《职位同步流水线》判定
 - URL：详情与投递均规范化到 `careers.tencent.com` HTTPS
 - 限制：低频串行，默认 12 次/分钟、burst 1；403/429/验证页按公共错误分类停止
 - 样本：`test/fixtures/tencent/`，已脱敏，不含认证数据，媒体类型均为 `application/json`

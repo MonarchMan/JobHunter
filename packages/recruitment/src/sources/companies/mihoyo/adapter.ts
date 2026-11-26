@@ -85,17 +85,15 @@ export function createMihoyoAdapter(key: MihoyoKey): JobSourceAdapter<MihoyoConf
           terminal = true;
           break;
         }
-        if (!sampled && (invalid || duplicateIds > 0)) break;
+        if (!sampled && invalid) break;
       }
       const reason = invalid
         ? 'invalid_page_boundary'
-        : duplicateIds
-          ? 'duplicate_job_ids'
-          : sampled
-            ? 'sampled_pages'
-            : !terminal
-              ? 'maximum_pages_reached'
-              : null;
+        : sampled
+          ? 'sampled_pages'
+          : !terminal
+            ? 'maximum_pages_reached'
+            : null;
       yield {
         type: 'complete',
         coverage: reason ? 'partial' : 'complete',
@@ -105,7 +103,8 @@ export function createMihoyoAdapter(key: MihoyoKey): JobSourceAdapter<MihoyoConf
         diagnostics: {
           reason,
           retryable: false,
-          absenceReliable: reason === null && !totalChanged && ids.size === total,
+          absenceReliable:
+            reason === null && duplicateIds === 0 && !totalChanged && ids.size === total,
           expectedCount: total,
           discoveredCount: ids.size,
           expectedPages,

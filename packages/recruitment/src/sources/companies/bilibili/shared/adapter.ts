@@ -112,13 +112,11 @@ function validatedCollection(
   // 3、校验实际页序和职位身份；参考总数只影响下架判定。
   const reason = invalidBoundary
     ? 'invalid_page_boundary'
-    : duplicateIds
-      ? 'duplicate_job_ids'
-      : (collection.diagnostics?.reason ?? null);
+    : (collection.diagnostics?.reason ?? null);
   return {
     ...collection,
     pages,
-    coverage: duplicateIds > 0 || invalidBoundary ? 'partial' : collection.coverage,
+    coverage: invalidBoundary ? 'partial' : collection.coverage,
     diagnostics: {
       ...collection.diagnostics,
       reason,
@@ -126,6 +124,7 @@ function validatedCollection(
       absenceReliable:
         collection.diagnostics?.absenceReliable !== false &&
         reason === null &&
+        duplicateIds === 0 &&
         !totalChanged &&
         ids.size === total,
       expectedCount: total,

@@ -109,7 +109,7 @@ describe('Ctrip production protocol (SWT-018)', () => {
   it.each([
     ['complete', 21, (p: number) => envelope(rows((p - 1) * 10, p === 3 ? 1 : 10), 21), null],
     ['complete', 21, (p: number) => envelope(rows((p - 1) * 10, p === 3 ? 0 : 10), 21), null],
-    ['partial', 21, (p: number) => envelope(rows(0, p === 3 ? 1 : 10), 21), 'duplicate_job_ids'],
+    ['complete', 21, (p: number) => envelope(rows(0, p === 3 ? 1 : 10), 21), null],
     [
       'complete',
       21,

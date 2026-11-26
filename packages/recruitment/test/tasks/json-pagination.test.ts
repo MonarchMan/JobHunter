@@ -9,7 +9,6 @@ import type {
 /** 合成两页官网响应，保留 jobId 与发布 ID 不同的事实，不访问网络。 */
 function fixture(
   options: {
-    recovery?: 'stable' | 'missing' | 'changed';
     sampled?: boolean;
     sharedJob?: boolean;
     many?: boolean;
@@ -17,34 +16,37 @@ function fixture(
     pageCount?: number;
     maximumPages?: number;
     secondTotal?: number;
+    overlap?: 'same-page' | 'earlier-page';
   } = {},
 ): { calls: number[]; run: () => Promise<SourcePageCollection> } {
   const calls: number[] = [];
-  const counts = new Map<number, number>();
   const total = options.pageCount ? options.pageCount * 2 : options.many ? 10 : 4;
   const url = options.netease
     ? 'https://hr.163.com/api/hr163/position/queryPage'
     : 'https://hr.xiaomi.com/website/api/agent/searchJobPage?pageNum=1&pageSize=2&type=3';
-  /** 按页码和请求轮次生成响应，重读只替换当前页。 */
+  /** 按页码生成包含跨页重复的响应。 */
   function response(number: number): {
     data: { total: number; list: { id: string; jobPostId: string; jobId: string }[] };
   } {
-    const count = (counts.get(number) ?? 0) + 1;
-    counts.set(number, count);
     let ids = number === 1 ? ['a', 'b'] : ['b', 'd'];
-    if (options.many || options.pageCount) ids = ['a', `page-${String(number)}`];
+    if (options.overlap) {
+      const overlappingPages = [
+        ['a', 'b'],
+        ['c', 'd'],
+        ['b', 'a'],
+      ];
+      ids =
+        options.overlap === 'same-page'
+          ? number <= 2
+            ? ['a', 'b']
+            : []
+          : (overlappingPages[number - 1] ?? []);
+    } else if (options.many || options.pageCount) ids = ['a', `page-${String(number)}`];
     else if (options.sharedJob) ids = number === 1 ? ['a', 'b'] : ['c', 'd'];
-    else if (count > 1 && options.recovery)
-      ids = number === 1 ? ['a', 'c'] : options.recovery === 'missing' ? ['b'] : ['b', 'd'];
-    if (number > (options.pageCount ?? (options.many ? 5 : 2))) ids = [];
+    if (!options.overlap && number > (options.pageCount ?? (options.many ? 5 : 2))) ids = [];
     return {
       data: {
-        total:
-          number === 2 && options.secondTotal !== undefined
-            ? options.secondTotal
-            : count > 1 && options.recovery === 'changed'
-              ? 5
-              : total,
+        total: number === 2 ? (options.secondTotal ?? total) : total,
         list: ids.map((id) => ({
           id,
           jobPostId: id,
@@ -103,7 +105,7 @@ function fixture(
   };
 }
 
-describe('Xiaomi publication identity and bounded pagination recovery', () => {
+describe('Xiaomi publication identity and duplicate diagnostics', () => {
   it('keeps distinct publications sharing a jobId without false duplicate warnings', async () => {
     const h = fixture({ sharedJob: true });
     const result = await h.run();
@@ -111,55 +113,53 @@ describe('Xiaomi publication identity and bounded pagination recovery', () => {
     expect(result.diagnostics).toMatchObject({ duplicateIds: 0, discoveredCount: 4 });
     expect(h.calls).toEqual([2, 3]);
   });
-  it('replaces affected pages once and recomputes completeness', async () => {
-    const h = fixture({ recovery: 'stable' });
-    const result = await h.run();
-    expect(result.coverage).toBe('complete');
-    expect(result.pages.flatMap((page) => page.records.map((record) => record.id))).toEqual([
-      'a',
-      'c',
-      'b',
-      'd',
-    ]);
-    expect(result.diagnostics).toMatchObject({
-      reason: null,
-      duplicateIds: 0,
-      recheckedPages: [1, 2],
-    });
-    expect(h.calls).toEqual([2, 3, 1, 2]);
-  });
   it('preserves persistent duplicates and their page evidence', async () => {
     const h = fixture();
     const result = await h.run();
-    expect(result.coverage).toBe('partial');
+    expect(result.coverage).toBe('complete');
     expect(result.diagnostics).toMatchObject({
-      reason: 'duplicate_job_ids',
+      reason: null,
+      absenceReliable: false,
       duplicateIds: 1,
       discoveredCount: 3,
       duplicateJobSamples: [{ id: 'b', pages: [1, 2] }],
     });
-    expect(h.calls).toEqual([2, 3, 1, 2]);
+    expect(h.calls).toEqual([2, 3]);
   });
-  it.each(['missing', 'changed'] as const)(
+  it.each([3, 5])(
     'ignores reference total discrepancies after valid pagination: %s',
-    async (recovery) => {
-      const result = await fixture({ recovery }).run();
+    async (secondTotal) => {
+      const result = await fixture({ secondTotal }).run();
       expect(result.coverage).toBe('complete');
       expect(result.diagnostics).toMatchObject({ reason: null, absenceReliable: false });
     },
   );
-  it('does not recover sampled collections', async () => {
+  it.each([
+    ['same-page', 'partial', 'pagination_not_advanced', [2]],
+    ['earlier-page', 'complete', null, [2, 3, 4]],
+  ] as const)(
+    'distinguishes a repeated full page from overlap with an earlier page: %s',
+    async (overlap, coverage, reason, calls) => {
+      const h = fixture({ overlap });
+      expect(await h.run()).toMatchObject({
+        coverage,
+        diagnostics: { reason, duplicateIds: 2, absenceReliable: false },
+      });
+      expect(h.calls).toEqual(calls);
+    },
+  );
+  it('does not replay sampled collections', async () => {
     const h = fixture({ sampled: true });
     const result = await h.run();
     expect(result.diagnostics?.reason).toBe('sampled_pages');
     expect(h.calls).toEqual([]);
   });
-  it('caps the recovery at four pages', async () => {
+  it('does not replay when several pages contain duplicates', async () => {
     const h = fixture({ many: true });
     const result = await h.run();
-    expect(result.coverage).toBe('partial');
-    expect(result.diagnostics?.recheckedPages).toEqual([1, 2, 3, 4]);
-    expect(h.calls).toEqual([2, 3, 4, 5, 6, 1, 2, 3, 4]);
+    expect(result.coverage).toBe('complete');
+    expect(result.diagnostics).toMatchObject({ duplicateIds: 4, absenceReliable: false });
+    expect(h.calls).toEqual([2, 3, 4, 5, 6]);
   });
 });
 

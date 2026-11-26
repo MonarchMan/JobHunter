@@ -137,7 +137,7 @@ describe('Mihoyo protocol and required detail (SWT-019)', () => {
   it.each([
     ['complete', (p: number) => page(rows((p - 1) * 10, p === 3 ? 1 : 10), 21, p), null],
     ['complete', (p: number) => page(rows((p - 1) * 10, p === 3 ? 0 : 10), 21, p), null],
-    ['partial', (p: number) => page(rows(0, p === 3 ? 1 : 10), 21, p), 'duplicate_job_ids'],
+    ['complete', (p: number) => page(rows(0, p === 3 ? 1 : 10), 21, p), null],
     [
       'complete',
       (p: number) => page(rows((p - 1) * 10, p === 3 ? 1 : 10), p === 1 ? 21 : 22, p),

@@ -145,8 +145,8 @@ describe('Didi contracts and public schemas (SWT-013, SWT-014)', () => {
           },
           key,
           30,
-        ).diagnostics?.reason,
-      ).toBe('duplicate_job_ids');
+        ).diagnostics,
+      ).toMatchObject({ reason: null, duplicateIds: 1, absenceReliable: false });
     },
   );
   it.each([
@@ -308,7 +308,7 @@ describe('Didi contracts and public schemas (SWT-013, SWT-014)', () => {
                 },
               ];
         expect(validateDidiCollection({ coverage: 'complete', pages }, key, 1).coverage).toBe(
-          kind === 'short' || kind === 'total' ? 'complete' : 'partial',
+          kind === 'missing' || kind === 'page' ? 'partial' : 'complete',
         );
       },
     );

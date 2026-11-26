@@ -12,7 +12,7 @@
 
 成功码 `201`，固定每页 10。稳定 ID 为 `fromId`（MJ 编号），而非列表行 `id`。正文已内联，生产不逐岗请求详情；在线 smoke 用同一接口的 condition.fromId 独立读取一条详情并核对身份。Schema 严格校验 category/kind、正文和日期，白名单剔除内部 HR/用户信息。
 
-`maximumPages` 默认 1000；生产顺序分页。显式 `pageSampling: first-last, maximumPages: 2` 只读首尾两页。总数漂移、短页、重复 ID 或采样均保持 partial，不能触发缺失下线。响应不回显页码，不将请求页号冒充响应证据。健康检查只请求首页，沿用 HTTP 来源限流 12/min、burst=1。
+`maximumPages` 默认 1000；生产顺序分页。显式 `pageSampling: first-last, maximumPages: 2` 只读首尾两页。生产覆盖按 005《职位同步流水线》判定。响应不回显页码，不将请求页号冒充响应证据。健康检查只请求首页，沿用 HTTP 来源限流 12/min、burst=1。
 
 范围不含尚未开放的留用实习或其他独立品牌/国际站。缺少城市保留空数组，沿用应用未知地域规则，不根据标题补城市。没有改动既有数据库运行开关；新逻辑渠道沿用仅实习默认开启规则。
 

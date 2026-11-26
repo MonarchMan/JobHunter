@@ -144,7 +144,7 @@ describe('Bilibili intern contract (SWT-020, SWT-021)', () => {
         createBilibiliInternAdapter().discover(context({ ...original, pages })),
       );
       expect(result.completion.coverage).toBe(
-        kind === 'short' || kind === 'total' ? 'complete' : 'partial',
+        kind === 'missing' || kind === 'page' ? 'partial' : 'complete',
       );
       expect(result.completion.diagnostics?.absenceReliable).toBe(false);
     },

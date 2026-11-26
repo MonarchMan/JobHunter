@@ -195,7 +195,7 @@ describe('Meituan source adapter contract', () => {
           snapshot: () => Promise.reject(new Error('Unexpected snapshot request.')),
           collect: () =>
             Promise.resolve({
-              coverage: 'partial' as const,
+              coverage: 'complete' as const,
               pages: [
                 {
                   page: 1,
@@ -213,7 +213,7 @@ describe('Meituan source adapter contract', () => {
                 },
               ],
               diagnostics: {
-                reason: 'duplicate_job_ids',
+                reason: null,
                 retryable: false,
                 expectedCount: 3,
                 discoveredCount: 2,
@@ -230,7 +230,7 @@ describe('Meituan source adapter contract', () => {
     expect(discovery.completion).toMatchObject({
       coverage: 'complete',
       discoveredCount: 2,
-      diagnostics: { reason: null, duplicateIds: 1 },
+      diagnostics: { reason: null, duplicateIds: 1, absenceReliable: false },
     });
   });
 

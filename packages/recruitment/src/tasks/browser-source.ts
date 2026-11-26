@@ -511,154 +511,127 @@ export async function collectJsonPages(
   const first = shouldReplayFirstPage(request, firstCapture.page.limit)
     ? await requestJsonPage(page, request, firstTemplate, 1, 0)
     : firstCapture.page;
-  // 1、缓存本轮每页的当前版本；重读必须替换旧页，不能并集历史结果。
-  const snapshots = new Map<number, BrowserListPage>([[1, first]]);
-  // 网易不为官网重复重放；小米浏览器路径保留有限的重复页恢复。
-  const actualCount = request.responseShape === 'netease-jobs';
-  const recheckLimit = request.responseShape === 'xiaomi-jobs' ? 4 : 0;
-  let recheckedPages: number[] = [];
-  for (let pass = 0; pass < 2; pass += 1) {
-    const pages = [];
-    const maximumPages = Math.min(request.maximumPages, options.maximumPages ?? 1_000);
-    let coverage: SourcePageCollection['coverage'] = 'complete';
-    let totalChanged = false;
-    let paginationChanged = false;
-    let duplicateIds = 0;
-    const seenIds = new Set<string>();
-    const idPages = new Map<string, number[]>();
-    const expectedPages = first.total === 0 ? 0 : Math.ceil(first.total / first.limit);
-    const sampled = options.pageSampling === 'first-last' && expectedPages > maximumPages;
-    const samplePages = sampled
-      ? maximumPages <= 1
-        ? [1]
-        : maximumPages === 2
-          ? [1, expectedPages]
-          : [1, Math.ceil(expectedPages / 2), expectedPages]
-      : [];
-    let terminal = false;
-    let stalled = false;
-    for (let index = 0; index < (sampled ? samplePages.length : maximumPages); index += 1) {
-      const pageNumber = samplePages[index] ?? index + 1;
-      if (request.signal.aborted)
-        throw new SourceError('temporary', 'Browser collection was aborted.');
-      const expectedOffset = (pageNumber - 1) * first.limit;
-      const current =
-        snapshots.get(pageNumber) ??
-        (await requestJsonPage(page, request, firstTemplate, pageNumber, expectedOffset));
-      snapshots.set(pageNumber, current);
-      const countBeforePage = seenIds.size;
-      if (current.total !== first.total) totalChanged = true;
-      if (current.limit !== first.limit || current.items.length > current.limit) {
-        coverage = 'partial';
-        paginationChanged = true;
-      }
-      pages.push({
-        page: pageNumber,
-        url: page.url(),
-        records: current.items.map((raw) => {
-          // 2、小米发布职位的身份是 jobPostId，同一 jobId 可以对应不同发布记录。
-          const rawId =
-            request.responseShape === 'xiaomi-jobs'
-              ? raw.jobPostId
-              : (raw.id ??
-                raw.jobId ??
-                raw.jobPostId ??
-                raw.positionId ??
-                raw.publishId ??
-                raw.jobUnionId);
-          const id = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : '';
-          if (!id) throw new SourceError('parse_changed', 'Browser list record has no stable ID.');
-          if (seenIds.has(id)) {
-            if (!actualCount) coverage = 'partial';
-            duplicateIds += 1;
-          }
-          seenIds.add(id);
-          idPages.set(id, [...(idPages.get(id) ?? []), pageNumber]);
-          const explicitUrl = [raw.detailUrl, raw.sourceUrl, raw.url, raw.positionUrl].find(
-            (value): value is string => typeof value === 'string' && value.startsWith('https://'),
-          );
-          const detailUrl =
-            explicitUrl ??
-            (request.responseShape === 'ats-job-posts' ? detailUrlFor(request.url, id) : null);
-          return {
-            ...raw,
-            id,
-            ...(detailUrl ? { detailUrl } : {}),
-          };
-        }),
-        total: current.total,
-        capturedAt: Date.now(),
-      });
-      if (!sampled && current.items.length < current.limit) {
-        terminal = true;
-        break;
-      }
-      if (!sampled && seenIds.size === countBeforePage) {
+  // 1、按实际分页读取；重复 ID 只记录诊断，不重放已读页面。
+  const pages = [];
+  const maximumPages = Math.min(request.maximumPages, options.maximumPages ?? 1_000);
+  let coverage: SourcePageCollection['coverage'] = 'complete';
+  let totalChanged = false;
+  let paginationChanged = false;
+  let duplicateIds = 0;
+  const seenIds = new Set<string>();
+  const idPages = new Map<string, number[]>();
+  const expectedPages = first.total === 0 ? 0 : Math.ceil(first.total / first.limit);
+  const sampled = options.pageSampling === 'first-last' && expectedPages > maximumPages;
+  const samplePages = sampled
+    ? maximumPages <= 1
+      ? [1]
+      : maximumPages === 2
+        ? [1, expectedPages]
+        : [1, Math.ceil(expectedPages / 2), expectedPages]
+    : [];
+  let terminal = false;
+  let stalled = false;
+  let previousFullPage: string | undefined;
+  for (let index = 0; index < (sampled ? samplePages.length : maximumPages); index += 1) {
+    const pageNumber = samplePages[index] ?? index + 1;
+    if (request.signal.aborted)
+      throw new SourceError('temporary', 'Browser collection was aborted.');
+    const expectedOffset = (pageNumber - 1) * first.limit;
+    const current =
+      pageNumber === 1
+        ? first
+        : await requestJsonPage(page, request, firstTemplate, pageNumber, expectedOffset);
+    const pageIds: string[] = [];
+    if (current.total !== first.total) totalChanged = true;
+    if (current.limit !== first.limit || current.items.length > current.limit) {
+      coverage = 'partial';
+      paginationChanged = true;
+    }
+    pages.push({
+      page: pageNumber,
+      url: page.url(),
+      records: current.items.map((raw) => {
+        // 2、小米发布职位的身份是 jobPostId，同一 jobId 可以对应不同发布记录。
+        const rawId =
+          request.responseShape === 'xiaomi-jobs'
+            ? raw.jobPostId
+            : (raw.id ??
+              raw.jobId ??
+              raw.jobPostId ??
+              raw.positionId ??
+              raw.publishId ??
+              raw.jobUnionId);
+        const id = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : '';
+        if (!id) throw new SourceError('parse_changed', 'Browser list record has no stable ID.');
+        if (seenIds.has(id)) {
+          duplicateIds += 1;
+        }
+        seenIds.add(id);
+        pageIds.push(id);
+        idPages.set(id, [...(idPages.get(id) ?? []), pageNumber]);
+        const explicitUrl = [raw.detailUrl, raw.sourceUrl, raw.url, raw.positionUrl].find(
+          (value): value is string => typeof value === 'string' && value.startsWith('https://'),
+        );
+        const detailUrl =
+          explicitUrl ??
+          (request.responseShape === 'ats-job-posts' ? detailUrlFor(request.url, id) : null);
+        return {
+          ...raw,
+          id,
+          ...(detailUrl ? { detailUrl } : {}),
+        };
+      }),
+      total: current.total,
+      capturedAt: Date.now(),
+    });
+    if (!sampled && current.items.length < current.limit) {
+      terminal = true;
+      break;
+    }
+    if (!sampled) {
+      // 3、连续返回同一满页才判定分页未推进；与早先页面重叠不等于卡页。
+      const fullPage = JSON.stringify(pageIds.sort());
+      if (fullPage === previousFullPage) {
         stalled = true;
         coverage = 'partial';
         break;
       }
+      previousFullPage = fullPage;
     }
-    if (sampled || !terminal) coverage = 'partial';
-    const truncated = !sampled && !terminal;
-    const duplicates = [...idPages].filter(([, numbers]) => numbers.length > 1);
-    // 3、仅完整且总数稳定的分页允许恢复，按来源预算重读涉及页一次。
-    if (
-      pass === 0 &&
-      recheckLimit > 0 &&
-      duplicateIds > 0 &&
-      !sampled &&
-      !truncated &&
-      !totalChanged
-    ) {
-      recheckedPages = [...new Set(duplicates.flatMap(([, numbers]) => numbers))]
-        .sort((a, b) => a - b)
-        .slice(0, recheckLimit);
-      for (const number of recheckedPages) {
-        if (request.signal.aborted)
-          throw new SourceError('temporary', 'Browser collection was aborted.');
-        snapshots.set(
-          number,
-          await requestJsonPage(page, request, firstTemplate, number, (number - 1) * first.limit),
-        );
-      }
-      continue;
-    }
-    return {
-      pages,
-      coverage,
-      diagnostics: {
-        reason: stalled
-          ? 'pagination_not_advanced'
-          : truncated
-            ? 'maximum_pages_reached'
-            : sampled
-              ? 'sampled_pages'
-              : paginationChanged
-                ? 'invalid_page_boundary'
-                : duplicateIds > 0 && !actualCount
-                  ? 'duplicate_job_ids'
-                  : null,
-        retryable: false,
-        absenceReliable: duplicateIds === 0 && !totalChanged && seenIds.size === first.total,
-        expectedCount: first.total,
-        discoveredCount: seenIds.size,
-        expectedPages,
-        fetchedPages: pages.length,
-        duplicateIds,
-        totalChanged,
-        ...(duplicates.length
-          ? {
-              duplicateJobSamples: duplicates
-                .slice(0, 5)
-                .map(([id, numbers]) => ({ id, pages: [...new Set(numbers)] })),
-            }
-          : {}),
-        ...(recheckedPages.length ? { recheckedPages } : {}),
-      },
-    };
   }
-  throw new SourceError('parse_changed', 'Browser pagination verification did not finish.');
+  if (sampled || !terminal) coverage = 'partial';
+  const truncated = !sampled && !terminal;
+  const duplicates = [...idPages].filter(([, numbers]) => numbers.length > 1);
+  return {
+    pages,
+    coverage,
+    diagnostics: {
+      reason: stalled
+        ? 'pagination_not_advanced'
+        : truncated
+          ? 'maximum_pages_reached'
+          : sampled
+            ? 'sampled_pages'
+            : paginationChanged
+              ? 'invalid_page_boundary'
+              : null,
+      retryable: false,
+      absenceReliable: duplicateIds === 0 && !totalChanged && seenIds.size === first.total,
+      expectedCount: first.total,
+      discoveredCount: seenIds.size,
+      expectedPages,
+      fetchedPages: pages.length,
+      duplicateIds,
+      totalChanged,
+      ...(duplicates.length
+        ? {
+            duplicateJobSamples: duplicates
+              .slice(0, 5)
+              .map(([id, numbers]) => ({ id, pages: [...new Set(numbers)] })),
+          }
+        : {}),
+    },
+  };
 }
 
 /** 执行 Worker 任务、浏览器访问或进程管理辅助逻辑。 */

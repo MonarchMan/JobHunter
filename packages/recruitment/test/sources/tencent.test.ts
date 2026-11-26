@@ -171,6 +171,20 @@ describe('Tencent source adapter contract', () => {
     });
   });
 
+  it('counts duplicate posts once even when the unique count matches the reference total', async () => {
+    const raw = firstRaw();
+    if (!raw) throw new Error('Missing Tencent fixture.');
+    const secondPage = { Code: 200, Data: { Count: 2, Posts: [raw] } };
+    const discovery = await collectDiscovery(
+      adapter.discover(context(fixtureHttp({ secondPage }))),
+    );
+    expect(discovery.completion).toMatchObject({
+      coverage: 'complete',
+      discoveredCount: 2,
+      diagnostics: { reason: null, duplicateIds: 1, absenceReliable: false },
+    });
+  });
+
   it('preserves access-blocked classification and health diagnostics', async () => {
     const blockedHttp: SourceHttpClient = {
       request: () => Promise.reject(new SourceError('access_blocked', 'Fixture challenge.')),

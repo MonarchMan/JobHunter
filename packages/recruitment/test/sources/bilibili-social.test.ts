@@ -141,7 +141,7 @@ describe('Bilibili social contract (SWT-007, SWT-008)', () => {
         createBilibiliSocialAdapter().discover(context({ ...original, pages })),
       );
       expect(result.completion.coverage).toBe(
-        kind === 'short' || kind === 'total' ? 'complete' : 'partial',
+        kind === 'missing' || kind === 'page' ? 'partial' : 'complete',
       );
       expect(result.completion.diagnostics?.absenceReliable).toBe(false);
     },

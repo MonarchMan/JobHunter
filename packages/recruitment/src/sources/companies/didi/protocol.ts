@@ -329,21 +329,18 @@ export function validateDidiCollection(
     pages.push({ ...page, records });
   }
   // 2、由采集器确认终页；这里只核验实际边界和身份。
-  const reason = invalid
-    ? 'invalid_page_boundary'
-    : duplicateIds
-      ? 'duplicate_job_ids'
-      : (value.diagnostics?.reason ?? null);
+  const reason = invalid ? 'invalid_page_boundary' : (value.diagnostics?.reason ?? null);
   return {
     ...value,
     pages,
-    coverage: duplicateIds > 0 || invalid ? 'partial' : value.coverage,
+    coverage: invalid ? 'partial' : value.coverage,
     diagnostics: {
       reason,
       retryable: value.diagnostics?.retryable ?? false,
       absenceReliable:
         value.diagnostics?.absenceReliable !== false &&
         reason === null &&
+        duplicateIds === 0 &&
         !totalChanged &&
         ids.size === total,
       expectedCount: total,
