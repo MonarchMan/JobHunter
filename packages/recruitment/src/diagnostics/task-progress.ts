@@ -7,7 +7,6 @@ const payloadSchema = z.object({
     .min(1)
     .max(100)
     .refine((ids) => new Set(ids).size === ids.length),
-  progress: z.unknown().optional(),
 });
 const checkpointSchema = z.object({
   items: z
@@ -29,8 +28,8 @@ export function presentBatchProgress(
   if (taskType !== 'match.score-batch') return null;
   const input = payloadSchema.safeParse(payload);
   if (!input.success) return null;
-  // 重试尚未产生新检查点时沿用输入中的进度，已成功项不应退回零。
-  const checkpoint = checkpointSchema.safeParse(result ?? input.data.progress);
+  // 恢复快照是私有输入；领取后由当前尝试重新发布进度。
+  const checkpoint = checkpointSchema.safeParse(result);
   const processed = new Set(
     checkpoint.success
       ? checkpoint.data.items

@@ -53,18 +53,20 @@ export function createSyncScoringStage(input: {
     if (!profileVersion) return { kind: 'skipped', reason: 'no_profile' };
 
     // 2、逐项串行评分：已成功项跳过，失败项分类后继续，每项经回调落任务检查点。
-    const items = new Map(
+    const recovered = new Map(
       (options.previous?.items ?? [])
         .filter((item) => options.jobIds.includes(item.jobId))
         .map((item) => [item.jobId, item]),
     );
+    // 已提交的成功项可以恢复，旧失败仅提供私有续跑输入。
+    const items = new Map([...recovered].filter(([, item]) => item.status === 'succeeded'));
     for (const jobId of options.jobIds) {
       if (options.context.signal.aborted) {
         throw new TaskExecutionError('cancelled', '评分阶段已取消。', {
           result: { items: [...items.values()], degraded: degradedCount(items) },
         });
       }
-      const previous = items.get(jobId);
+      const previous = recovered.get(jobId);
       if (previous?.status === 'succeeded') continue;
       const revision = input.matching.getLatestRevisionForJob(parseId(jobId, 'Job'));
       if (!revision || revision.jobStatus === 'closed') {

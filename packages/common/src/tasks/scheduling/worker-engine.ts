@@ -207,7 +207,8 @@ export class WorkerEngine implements TaskCancellationNotifier {
       leaseOwner: executionOwner(task),
     });
 
-    // 1、执行处理器并根据晚到取消策略决定结果优先级。
+    // 1、执行阶段的锁冲突不代表队列不可写；只在开始提交结果后切换阶段。
+    let committing = false;
     try {
       if (!handler) {
         throw new TaskExecutionError('invalid_config', 'No handler is registered for task type.');
@@ -266,6 +267,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
           ? handler.lateCancellationPolicy(output)
           : handler.lateCancellationPolicy;
       const completionWinsLateCancellation = lateCancellationPolicy === 'complete';
+      committing = true;
       if (controller.signal.reason === 'cancelled' && !completionWinsLateCancellation) {
         this.#queue.markCancelled(task.id, executionOwner(task), this.#clock.now());
       } else if (
@@ -294,7 +296,7 @@ export class WorkerEngine implements TaskCancellationNotifier {
     } catch (error) {
       // 2、失败路径统一交给分类、退避和最终失败处理。
       try {
-        if (this.#isQueueBusy(error)) {
+        if (committing && this.#isQueueBusy(error)) {
           // 2.a、数据库提交不可用时停止续租，由既有租约恢复处理，不能误报业务失败。
           controller.abort('lease_lost' satisfies AbortReason);
           this.#logger.warn('worker.queue_busy', { phase: 'completion', taskId: task.id });
@@ -371,7 +373,14 @@ export class WorkerEngine implements TaskCancellationNotifier {
     // 2、优先完成已请求取消的任务状态，再决定是否重试。
     if (this.#finalizeRequestedCancellation(task)) return;
 
-    const classified = classifyTaskError(error);
+    const failure = classifyTaskError(error);
+    // 2.a、扫描可能把底层锁冲突包装成永久失败，按暂态 I/O 处理并保留业务检查点。
+    const classified = this.#isQueueBusy(error)
+      ? new TaskExecutionError('io_temporary', '数据库暂时不可写，请稍后重试。', {
+          cause: error,
+          result: failure.result,
+        })
+      : failure;
     const decision = this.#retryPolicy.decide({
       category: classified.category,
       attemptCount: this.#queue.attemptsInCurrentRound(task.id),

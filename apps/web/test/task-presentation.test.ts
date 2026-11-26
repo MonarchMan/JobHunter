@@ -88,9 +88,10 @@ it('等待重试时隐藏任务和来源的上次错误摘要', () => {
     taskPresentation({
       status: 'pending',
       errorSummary: 'Browser operation failed.',
+      errorCategory: 'network_temporary',
       sourceSync: source,
     }),
-  ).toMatchObject({ status: 'pending', error: '', warning: false });
+  ).toMatchObject({ status: 'pending', error: '', warning: false, errorCategory: null });
 });
 
 it('终态且覆盖未知时仍保留不完整提示', () => {

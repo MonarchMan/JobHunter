@@ -12,6 +12,15 @@ export function taskPresentation(
   warning: boolean;
   errorCategory: string | null;
 } {
+  if (task.status === 'pending') {
+    return {
+      label: labelStatus(taskStatusLabels, task.status),
+      status: task.status,
+      error: '',
+      warning: false,
+      errorCategory: null,
+    };
+  }
   const sources = task.sourceSync?.sources?.length
     ? task.sourceSync.sources
     : task.sourceSync
@@ -47,8 +56,7 @@ export function taskPresentation(
         ? '完成'
         : labelStatus(taskStatusLabels, task.status),
     status: warning ? 'warning' : task.status,
-    // 等待重试时，任务和来源仍可能带有上次执行的摘要。
-    error: task.status === 'pending' ? '' : [...new Set(errors)].join('；'),
+    error: [...new Set(errors)].join('；'),
     warning,
     errorCategory:
       task.errorCategory ??

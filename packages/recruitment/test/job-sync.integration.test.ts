@@ -1012,15 +1012,27 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       }),
     );
 
-    expect(
-      new SqliteWebDiagnosticsRepository(fixture.handle.client).getSourceSyncTaskDetail({
-        taskId: 'historical-root',
-        sourceId,
-        trigger: 'manual',
-        windowStartedAt: startedAt,
-        windowFinishedAt: null,
-      })?.run?.stats,
-    ).toEqual({
+    const taskId = fixture.ids.generate();
+    fixture.handle.client
+      .prepare(
+        `
+      INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,attempt_count,available_at,created_at,started_at)
+      VALUES(?,'source.sync',?,'running',?,1,?,?,?)
+    `,
+      )
+      .run(
+        taskId,
+        JSON.stringify({ sourceId, trigger: 'manual' }),
+        taskId,
+        startedAt,
+        startedAt,
+        startedAt,
+      );
+    fixture.handle.client
+      .prepare('UPDATE tasks SET parent_task_id=? WHERE id=?')
+      .run(taskId, runId);
+    const diagnostics = new SqliteWebDiagnosticsRepository(fixture.handle.client);
+    expect(diagnostics.getTaskDetails([taskId])[0]?.sourceSync?.run?.stats).toEqual({
       discovered: 0,
       created: 0,
       revised: 0,
@@ -1034,34 +1046,6 @@ SELECT id,profile_id,version_no,content_hash,is_current,created_at,COALESCE(json
       closed: 0,
       followupEnqueued: 0,
     });
-
-    // 父任务重试会更新执行时间；明确关联的扫描不应因此从诊断中消失。
-    fixture.handle.client.exec(`
-      INSERT INTO tasks(id,task_type,private_state,status,idempotency_key,attempt_count,available_at,created_at)
-      VALUES('retry-parent','source.sync','{}','running','retry-parent',2,1,1);
-    `);
-    fixture.handle.client
-      .prepare('UPDATE tasks SET parent_task_id=? WHERE id=?')
-      .run('retry-parent', runId);
-    const diagnostics = new SqliteWebDiagnosticsRepository(fixture.handle.client);
-    expect(
-      diagnostics.getSourceSyncTaskDetail({
-        taskId: 'retry-parent',
-        sourceId,
-        trigger: 'manual',
-        windowStartedAt: startedAt + 1000,
-        windowFinishedAt: null,
-      })?.run?.id,
-    ).toBe(runId);
-    expect(
-      diagnostics.getSourceSyncTaskDetail({
-        taskId: 'another-parent',
-        sourceId,
-        trigger: 'manual',
-        windowStartedAt: startedAt,
-        windowFinishedAt: null,
-      })?.run,
-    ).toBeNull();
   });
 
   it('returns the existing run when the source mutex is already held', async () => {

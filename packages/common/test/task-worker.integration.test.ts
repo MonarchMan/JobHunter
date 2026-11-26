@@ -394,6 +394,24 @@ describe('persistent task queue', () => {
     }
   });
 
+  it('leaves the lease recoverable when the queue cannot commit the final failure', async () => {
+    const input = await setup();
+    const registry = registryWith({
+      maxAttempts: 1,
+      execute: () => {
+        throw Object.assign(new Error('scan locked'), { code: 'SQLITE_BUSY_SNAPSHOT' });
+      },
+    });
+    const { tasks } = services(input, registry);
+    const task = enqueueSync(tasks, 'failure-commit-lock').task;
+    const fail = vi.spyOn(input.queue, 'fail').mockImplementationOnce(() => {
+      throw Object.assign(new Error('queue locked'), { code: 'SQLITE_BUSY' });
+    });
+    expect(await engine(input, registry).runOnce()).toBe(true);
+    expect(fail).toHaveBeenCalledOnce();
+    expect(tasks.get(task.id)).toMatchObject({ status: 'running', errorCategory: null });
+  });
+
   it('leaves a busy completion for lease recovery rather than marking business failure', async () => {
     const input = await setup();
     const registry = registryWith({ execute: () => undefined });
@@ -614,7 +632,9 @@ describe('persistent task queue', () => {
     const registry = registryWith({
       maxAttempts: 2,
       execute: () => {
-        throw new TaskExecutionError('network_temporary', 'Temporary failure.');
+        throw new TaskExecutionError('permanent', 'Sync pipeline failed.', {
+          cause: Object.assign(new Error('locked'), { code: 'SQLITE_BUSY_SNAPSHOT' }),
+        });
       },
     });
     const { tasks } = services(input, registry);
@@ -629,7 +649,11 @@ describe('persistent task queue', () => {
       });
       input.clock.advance(100);
       expect(await worker.runOnce()).toBe(true);
-      expect(tasks.get(task.id)).toMatchObject({ status: 'failed', attemptCount: round * 2 + 2 });
+      expect(tasks.get(task.id)).toMatchObject({
+        status: 'failed',
+        errorCategory: 'io_temporary',
+        attemptCount: round * 2 + 2,
+      });
       expect(input.queue.attemptsInCurrentRound(task.id)).toBe(2);
       if (round === 0) {
         tasks.retryFailed(task.id, 'new-round');

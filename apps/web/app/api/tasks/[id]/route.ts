@@ -7,14 +7,18 @@ interface RouteContext {
 }
 
 /** 处理 Web API 的 GET 请求，读取并返回对应资源。 */
-export async function GET(_request: Request, context: RouteContext): Promise<Response> {
+export async function GET(request: Request, context: RouteContext): Promise<Response> {
   try {
     const { id } = await context.params;
     const container = await getWebContainer();
-    const task = container.services.diagnostics.getTask(id);
+    const kind = new URL(request.url).searchParams.get('kind');
+    const task =
+      kind === 'source_job_detail_batch'
+        ? container.services.diagnostics.getTaskBatch(id)
+        : container.services.diagnostics.getTask(id);
     return task ? dataResponse(task) : notFoundResponse('任务不存在。');
   } catch (error) {
     if (error instanceof TypeError) return notFoundResponse('任务不存在。');
-    return errorResponse(error, _request);
+    return errorResponse(error, request);
   }
 }

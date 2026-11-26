@@ -196,11 +196,22 @@ function withResumeFromCheckpoint(value: unknown, result: unknown): unknown {
   if (!parsed.success) return value;
   const checkpoint = checkpointResultSchema.safeParse(result);
   if (!checkpoint.success) return value;
-  const { resume: _resume, ...base } = parsed.data;
-  void _resume;
+  const { resume, ...base } = parsed.data;
   const { runs, accJobIds, scoring } = checkpoint.data;
-  // 1、发现与评分进度一并写入恢复快照，执行时跳过已完成来源与已成功职位。
-  return { ...base, resume: { runs, accJobIds, ...(scoring ? { scoring } : {}) } };
+  // 1、公开检查点只含本次评分；私有恢复输入保留尚未重跑项的阶段结果。
+  const previous = resume?.scoring;
+  const progress =
+    scoring && previous
+      ? {
+          ...scoring,
+          items: [
+            ...new Map(
+              [...previous.items, ...scoring.items].map((item) => [item.jobId, item]),
+            ).values(),
+          ],
+        }
+      : (scoring ?? previous);
+  return { ...base, resume: { runs, accJobIds, ...(progress ? { scoring: progress } : {}) } };
 }
 
 /** 创建来源同步任务处理器：阶段 A 抓取发现，阶段 B 在同一任务内执行自动评分（ADR-0061）。 */
@@ -261,11 +272,8 @@ export function createSourceSyncTaskHandler(
       let scoring: ScoringProgress | null = resume?.scoring ?? null;
       let skippedReason: 'disabled' | 'no_profile' | undefined;
       if (options.scoringStage && accJobIds.length > 0) {
-        context.checkpoint?.({
-          runs,
-          accJobIds,
-          ...(scoring ? { scoring } : {}),
-        });
+        // 上轮评分仅传入私有续跑，当前公开检查点不回填旧评分错误。
+        context.checkpoint?.({ runs, accJobIds });
         // 评分实现不得直接写任务级检查点，只能经回调合并运行结果后落库。
         const { checkpoint: _checkpoint, ...stageContext } = context;
         void _checkpoint;
@@ -283,7 +291,10 @@ export function createSourceSyncTaskHandler(
               items: [...outcome.progress.items],
               degraded: outcome.progress.degraded,
             };
-          } else skippedReason = outcome.reason;
+          } else {
+            scoring = null;
+            skippedReason = outcome.reason;
+          }
         } catch (error) {
           // 3.a、评分阶段取消：保留已提交的发现与逐项进度，便于诊断与手动重试续跑。
           if (error instanceof TaskExecutionError && error.category === 'cancelled') {

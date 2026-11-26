@@ -1,12 +1,9 @@
 import { parseId } from '@jobhunter/common/domain';
-import { z } from 'zod';
 import {
   webAgentRunDetailSchema,
   webDiagnosticsSchema,
-  webSyncScoringProgressSchema,
   webTaskMutationSchema,
   webTaskSchema,
-  type WebSourceSyncTaskDetail,
   type WebJobDetailBatch,
   type WebAgentRunDetail,
   type WebAgentRunSummary,
@@ -21,7 +18,6 @@ import {
 } from '@jobhunter/common/web-contracts';
 import type { TaskRecord } from '@jobhunter/common/tasks';
 import type { TaskService } from '@jobhunter/common/tasks';
-import { presentBatchProgress } from './task-progress.js';
 
 /** 应用层数据结构或端口契约。 */
 export interface WebDiagnosticsRepository {
@@ -29,6 +25,7 @@ export interface WebDiagnosticsRepository {
   getTaskDetails(ids: readonly string[]): readonly WebTask[];
   /** 时间边界为 UTC 毫秒、含首不含尾；先筛选完整批次再分页计数。 */
   listTaskEntries(input: {
+    readonly batchRunId?: string;
     readonly since?: number;
     readonly before?: number;
     readonly status?: TaskRecord['status'] | 'warning';
@@ -50,14 +47,6 @@ export interface WebDiagnosticsRepository {
     readonly total: number;
   };
   getAgentRun(id: string): WebAgentRunDetail | null;
-  getSourceSyncTaskDetail(input: {
-    readonly taskId: string;
-    readonly sourceId: string;
-    readonly sourceIds?: readonly string[];
-    readonly trigger: 'manual' | 'schedule' | 'retry';
-    readonly windowStartedAt: number;
-    readonly windowFinishedAt: number | null;
-  }): WebSourceSyncTaskDetail | null;
 }
 
 /** 应用层使用的类型约束。 */
@@ -84,65 +73,6 @@ export type WebTaskMutationResult =
 /** 执行应用层的解析、转换或编排辅助逻辑。 */
 function instant(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
-}
-
-/** 从任务结果提取评分阶段进度；旧结果或形状不符时按未执行评分处理。 */
-function presentSyncScoring(task: TaskRecord): z.infer<typeof webSyncScoringProgressSchema> | null {
-  if (task.taskType !== 'source.sync' || !task.result || typeof task.result !== 'object') {
-    return null;
-  }
-  const scoring = (task.result as { readonly scoring?: unknown }).scoring;
-  if (scoring === undefined) return null;
-  const parsed = webSyncScoringProgressSchema.safeParse(scoring);
-  return parsed.success ? parsed.data : null;
-}
-
-/** 执行应用层的解析、转换或编排辅助逻辑。 */
-function presentTask(task: TaskRecord, repository: WebDiagnosticsRepository): WebTask {
-  const sourceSyncPayload =
-    task.taskType === 'source.sync'
-      ? z
-          .object({
-            sourceId: z.string().trim().min(1).optional(),
-            sourceIds: z.array(z.string().trim().min(1)).min(2).optional(),
-            trigger: z.enum(['manual', 'schedule', 'retry']),
-          })
-          .refine(
-            (payload) => (payload.sourceId === undefined) !== (payload.sourceIds === undefined),
-          )
-          .strict()
-          .safeParse(task.payload)
-      : null;
-  return webTaskSchema.parse({
-    kind: 'task',
-    id: task.id,
-    taskType: task.taskType,
-    status: task.status,
-    attemptCount: task.attemptCount,
-    errorCategory: task.errorCategory,
-    errorSummary: task.errorSummary,
-    cancelRequested: task.cancelRequestedAt !== null,
-    createdAt: new Date(task.createdAt).toISOString(),
-    startedAt: instant(task.startedAt),
-    finishedAt: instant(task.finishedAt),
-    sourceSync:
-      sourceSyncPayload?.success === true
-        ? repository.getSourceSyncTaskDetail({
-            taskId: task.id,
-            sourceId:
-              sourceSyncPayload.data.sourceId ?? sourceSyncPayload.data.sourceIds?.[0] ?? '',
-            ...(sourceSyncPayload.data.sourceIds
-              ? { sourceIds: sourceSyncPayload.data.sourceIds }
-              : {}),
-            trigger: sourceSyncPayload.data.trigger,
-            windowStartedAt: task.startedAt ?? task.createdAt,
-            windowFinishedAt: task.finishedAt,
-          })
-        : null,
-    jobDetailBatch: null,
-    syncScoring: presentSyncScoring(task),
-    batchProgress: presentBatchProgress(task.taskType, task.payload, task.result),
-  });
 }
 
 /** 执行应用层的解析、转换或编排辅助逻辑。 */
@@ -262,8 +192,17 @@ export class WebDiagnosticsService {
 
   /** 执行应用组件对外暴露的操作。 */
   public getTask(id: string): WebTask | null {
-    const task = this.#tasks.get(parseId(id, 'Task'));
-    return task ? presentTask(task, this.#repository) : null;
+    return this.#repository.getTaskDetails([parseId(id, 'Task')])[0] ?? null;
+  }
+
+  /** 按同步运行 ID 读取合成批次；不与普通任务 ID 混用。 */
+  public getTaskBatch(id: string): WebTask | null {
+    const [entry] = this.#repository.listTaskEntries({
+      batchRunId: parseId(id, 'SourceRun'),
+      limit: 1,
+      offset: 0,
+    }).items;
+    return entry?.kind === 'source_job_detail_batch' ? presentTaskEntry(entry, new Map()) : null;
   }
 
   /** 执行应用组件对外暴露的操作。 */
@@ -281,9 +220,8 @@ export class WebDiagnosticsService {
       throw new TypeError('SQLite maintenance audit is read-only.');
     if (mutation.kind === 'cancel') {
       const result = this.#tasks.cancel(taskId);
-      return result.kind === 'not_found'
-        ? { kind: 'not_found' }
-        : { kind: 'task', task: presentTask(result.task, this.#repository) };
+      const task = result.kind === 'not_found' ? null : this.getTask(result.task.id);
+      return task ? { kind: 'task', task } : { kind: 'not_found' };
     }
     if (!this.#tasks.get(taskId)) return { kind: 'not_found' };
     const result = this.#tasks.retryFailed(taskId, mutation.idempotencyToken);

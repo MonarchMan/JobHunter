@@ -40,21 +40,31 @@ export function createBatchJobScoreTaskHandler(
     retryPayload: (value, result) => {
       const payload = payloadSchema.parse(value);
       const progress = progressSchema.safeParse(result);
-      return progress.success ? { ...payload, progress: progress.data } : payload;
+      if (!progress.success) return payload;
+      // 公开检查点不重发旧失败，但恢复输入仍保留尚未处理项目的阶段结果。
+      const items = new Map(
+        [...(payload.progress?.items ?? []), ...progress.data.items].map((item) => [
+          item.jobRevisionId,
+          item,
+        ]),
+      );
+      return { ...payload, progress: { items: [...items.values()] } };
     },
     async execute(context, payload) {
-      const items = new Map(
+      const recovered = new Map(
         (payload.progress?.items ?? [])
           .filter((item) => payload.jobRevisionIds.includes(item.jobRevisionId))
           .map((item) => [item.jobRevisionId, item]),
       );
+      // 已提交的成功项可以恢复，旧失败仅提供私有续跑输入。
+      const items = new Map([...recovered].filter(([, item]) => item.status === 'succeeded'));
       // 1、使用冻结修订逐项执行，不再创建子任务；检查点只包含结果 ID 和脱敏错误。
       for (const jobRevisionId of payload.jobRevisionIds) {
         if (context.signal.aborted)
           throw new TaskExecutionError('cancelled', '批量评分已取消。', {
             result: { items: [...items.values()] },
           });
-        const previous = items.get(jobRevisionId);
+        const previous = recovered.get(jobRevisionId);
         if (previous?.status === 'succeeded') continue;
         const base = {
           jobRevisionId,

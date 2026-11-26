@@ -356,7 +356,7 @@ INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key
           sourceId,
           'failed',
           'unknown',
-          stats(2),
+          stats(4),
           250,
           300,
         );
@@ -392,6 +392,108 @@ INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key
         expect(JSON.stringify(container.services.diagnostics.getTask(taskId))).not.toContain(
           sourceId,
         );
+
+        // 点击重试后父任务 ID 不变；上次已关联的失败扫描不能进入本次列表或详情。
+        const handle = openSqliteDatabase({ dataRoot: root.path });
+        try {
+          const oldRunId = '018f0000-0000-7000-8000-000000000712';
+          const committedRunId = '018f0000-0000-7000-8000-000000000713';
+          handle.client
+            .prepare(
+              "UPDATE tasks SET parent_task_id=?, error_category='internal', error_summary='Sync pipeline failed.' WHERE id=?",
+            )
+            .run(taskId, oldRunId);
+          handle.client
+            .prepare('UPDATE tasks SET parent_task_id=? WHERE id=?')
+            .run(taskId, committedRunId);
+          handle.client
+            .prepare(
+              "UPDATE tasks SET status='failed', error_category='internal', error_summary='Sync pipeline failed.' WHERE id=?",
+            )
+            .run(taskId);
+          expect(
+            container.services.diagnostics.mutate({
+              kind: 'retry',
+              taskId,
+              idempotencyToken: 'sync-detail-retry',
+            }),
+          ).toMatchObject({ kind: 'accepted', task: { status: 'pending' } });
+          const readBoth = (): ReturnType<typeof container.services.diagnostics.getTask> => {
+            const detail = container.services.diagnostics.getTask(taskId);
+            expect(
+              container.services.diagnostics.list().tasks.find((task) => task.id === taskId),
+            ).toEqual(detail);
+            return detail;
+          };
+          expect(readBoth()).toMatchObject({
+            status: 'pending',
+            errorSummary: null,
+            errorCategory: null,
+            startedAt: null,
+            finishedAt: null,
+            syncScoring: null,
+            sourceSync: { run: null },
+          });
+          handle.client
+            .prepare(
+              "UPDATE tasks SET status='running', started_at=600, attempt_count=3 WHERE id=?",
+            )
+            .run(taskId);
+          // 同毫秒甚至时间回拨也不能把旧领取次数上的扫描接回去。
+          handle.client
+            .prepare(
+              "UPDATE tasks SET started_at=600, private_state=json_set(private_state, '$.parentAttempt', 2) WHERE id=?",
+            )
+            .run(oldRunId);
+          expect(readBoth()).toMatchObject({
+            status: 'running',
+            errorSummary: null,
+            errorCategory: null,
+            finishedAt: null,
+            syncScoring: null,
+            sourceSync: { run: null },
+          });
+
+          handle.client
+            .prepare("UPDATE tasks SET status='succeeded', finished_at=800 WHERE id=?")
+            .run(taskId);
+          expect(readBoth()?.sourceSync?.run).toBeNull();
+          expect(
+            container.services.diagnostics
+              .list({ status: 'warning' })
+              .tasks.some((task) => task.id === taskId),
+          ).toBe(false);
+          // 终态可以明确引用续跑确认的旧业务结果，不必为展示统计重抓官网。
+          handle.client
+            .prepare('UPDATE tasks SET public_state=? WHERE id=?')
+            .run(JSON.stringify({ runId: committedRunId }), taskId);
+          expect(readBoth()?.sourceSync?.run).toMatchObject({
+            id: committedRunId,
+            errorSummary: null,
+          });
+          // 本轮真实失败不会被隐藏；详情、列表和警告筛选使用同一选择条件。
+          handle.client
+            .prepare(
+              "UPDATE tasks SET private_state=json_set(private_state, '$.parentAttempt', 3) WHERE id=?",
+            )
+            .run(oldRunId);
+          expect(readBoth()?.sourceSync?.run).toMatchObject({
+            id: oldRunId,
+            errorSummary: 'Sync pipeline failed.',
+          });
+          expect(
+            container.services.diagnostics
+              .list({ status: 'warning' })
+              .tasks.some((task) => task.id === taskId),
+          ).toBe(true);
+          expect(
+            container.services.diagnostics
+              .list({ status: 'succeeded' })
+              .tasks.some((task) => task.id === taskId),
+          ).toBe(false);
+        } finally {
+          handle.close();
+        }
       } finally {
         container.close();
       }
@@ -529,6 +631,10 @@ INSERT INTO tasks(id,task_type,private_state,public_state,status,idempotency_key
           },
         ]);
         expect(JSON.stringify(details)).not.toContain('000000000731');
+        for (const batch of details.tasks) {
+          expect(container.services.diagnostics.getTaskBatch(batch.id)).toEqual(batch);
+        }
+        expect(container.services.diagnostics.getTaskBatch(failedTaskId)).toBeNull();
 
         const failed = container.services.diagnostics.list({
           taskType: 'source.job-detail',

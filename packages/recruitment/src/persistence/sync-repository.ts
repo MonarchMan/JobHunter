@@ -150,7 +150,8 @@ export class SqliteSyncRepository implements SyncRepository {
 
   /** 执行数据库组件对外暴露的操作。 */
   public startRun(input: StartSyncRunInput): StartSyncRunResult {
-    // 1、阶段任务由当前主任务持有执行权；直接调用用于离线导入与测试。
+    // 1、扫描绑定当前主任务及领取次数；直接调用用于离线导入与测试。
+    const execution = currentTaskExecution();
     this.#client
       .prepare(
         `UPDATE tasks SET status='cancelled',error_category='cancelled',
@@ -168,7 +169,11 @@ export class SqliteSyncRepository implements SyncRepository {
         )
         .run(
           input.id,
-          canonicalJson({ sourceId: input.sourceId, trigger: input.trigger }),
+          canonicalJson({
+            sourceId: input.sourceId,
+            trigger: input.trigger,
+            ...(execution ? { parentAttempt: execution.attempt } : {}),
+          }),
           canonicalJson({
             status: 'running',
             coverage: input.coverage,
@@ -176,7 +181,7 @@ export class SqliteSyncRepository implements SyncRepository {
             coverageEvidence: {},
           }),
           'source.scan:' + input.id,
-          currentTaskExecution()?.taskId ?? null,
+          execution?.taskId ?? null,
           input.startedAt,
           input.startedAt,
           input.startedAt,

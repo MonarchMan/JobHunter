@@ -80,7 +80,8 @@ interface TaskEntryRow {
   readonly result_total: number;
 }
 
-const taskEntriesCte = `
+/** 列表聚合全部批次；按运行 ID 读取时先限制子任务范围。 */
+const taskEntriesCte = (singleBatch: boolean): string => `
   WITH detail_tasks AS (
     SELECT task.id, task.status, task.created_at, task.started_at, task.finished_at,
            task.cancel_requested_at, task.attempt_count,
@@ -88,7 +89,7 @@ const taskEntriesCte = `
            task.source_id
     FROM tasks task
     WHERE task.task_type = 'source.job-detail'
-      AND task.source_run_id IS NOT NULL
+      AND task.source_run_id ${singleBatch ? '= ?' : 'IS NOT NULL'}
       AND task.source_id IS NOT NULL
   ),
   detail_groups AS (
@@ -133,7 +134,7 @@ const taskEntriesCte = `
            NULL AS company_name, NULL AS channel, NULL AS source_slug,
            NULL AS total, NULL AS pending, NULL AS running, NULL AS succeeded,
            NULL AS failed, NULL AS cancelled, task.attempt_count
-    FROM tasks task WHERE task.task_type NOT IN ('source.job-detail', 'source.scan')
+    FROM tasks task WHERE ${singleBatch ? 'FALSE' : "task.task_type NOT IN ('source.job-detail', 'source.scan')"}
     UNION ALL
     SELECT * FROM batch_entries
   )`;
@@ -169,6 +170,24 @@ function summary(
   });
 }
 
+/** 只关联当前尝试的扫描；终态仅可显式引用本次确认的已提交扫描。 */
+const currentScan = `
+  task.started_at IS NOT NULL
+  AND task.status <> 'pending'
+  AND (candidate.parent_task_id = task.id OR candidate.parent_task_id IS NULL)
+  AND (
+    (candidate.parent_task_id = task.id AND candidate.parent_attempt = task.attempt_count)
+    OR (candidate.parent_attempt IS NULL AND candidate.started_at >= task.started_at
+      AND (task.finished_at IS NULL OR candidate.started_at <= task.finished_at))
+    OR (task.status IN ('succeeded', 'failed', 'cancelled')
+      AND candidate.status IN ('succeeded', 'partial')
+      AND (candidate.id = json_extract(task.public_state, '$.runId')
+        OR EXISTS (
+          SELECT 1 FROM json_each(task.public_state, '$.runs') result
+          WHERE result.type = 'object' AND json_extract(result.value, '$.runId') = candidate.id
+        )))
+  )`;
+
 /** 为 Web 诊断页提供任务、Agent 运行和工具调用只读详情。 */
 export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository {
   readonly #client: Database.Database;
@@ -184,17 +203,19 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     const rows = this.#client
       .prepare(
         `
-      SELECT task.private_state, task.public_state, task.started_at AS window_started_at,
-        task.finished_at AS window_finished_at, json_object(
+      SELECT task.private_state, task.public_state, json_object(
         'kind', 'task', 'id', task.id, 'taskType', task.task_type, 'status', task.status,
         'attemptCount', task.attempt_count,
-        'errorCategory', task.error_category, 'errorSummary', task.error_summary,
+        'errorCategory', CASE WHEN task.status NOT IN ('pending', 'running') THEN task.error_category END,
+        'errorSummary', CASE WHEN task.status NOT IN ('pending', 'running') THEN task.error_summary END,
         'cancelRequested', json(CASE WHEN task.cancel_requested_at IS NULL THEN 'false' ELSE 'true' END),
         'createdAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.created_at / 1000.0, 'unixepoch'),
-        'startedAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.started_at / 1000.0, 'unixepoch'),
-        'finishedAt', strftime('%Y-%m-%dT%H:%M:%fZ', task.finished_at / 1000.0, 'unixepoch'),
+        'startedAt', CASE WHEN task.status <> 'pending' THEN
+          strftime('%Y-%m-%dT%H:%M:%fZ', task.started_at / 1000.0, 'unixepoch') END,
+        'finishedAt', CASE WHEN task.status NOT IN ('pending', 'running') THEN
+          strftime('%Y-%m-%dT%H:%M:%fZ', task.finished_at / 1000.0, 'unixepoch') END,
         'jobDetailBatch', NULL,
-        'syncScoring', CASE WHEN task.task_type = 'source.sync' AND
+        'syncScoring', CASE WHEN task.task_type = 'source.sync' AND task.status <> 'pending' AND
             json_type(task.public_state, '$.scoring') = 'object' THEN
           json_extract(task.public_state, '$.scoring') ELSE NULL END,
         'sourceSync', CASE WHEN source.id IS NULL THEN NULL ELSE json_object(
@@ -217,9 +238,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       LEFT JOIN ${scanTaskProjection} run ON run.id = (
         SELECT candidate.id FROM ${scanTaskProjection} candidate
         WHERE candidate.source_id = source.id
-          AND (candidate.parent_task_id = task.id OR (candidate.parent_task_id IS NULL
-          AND candidate.started_at >= COALESCE(task.started_at, task.created_at)
-          AND (task.finished_at IS NULL OR candidate.started_at <= task.finished_at)))
+          AND ${currentScan}
         ORDER BY candidate.started_at DESC, candidate.id DESC LIMIT 1
       )
       WHERE task.id IN (SELECT value FROM json_each(?))
@@ -229,8 +248,6 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       readonly detail_json: string;
       readonly private_state: string;
       readonly public_state: string | null;
-      readonly window_started_at: number | null;
-      readonly window_finished_at: number | null;
     }[];
     // 2、与单任务详情共用运行时校验，阻止原始执行数据进入页面。
     return rows.map((row) => {
@@ -241,7 +258,9 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
         batchProgress: presentBatchProgress(
           String(detail.taskType),
           payload,
-          row.public_state ? (JSON.parse(row.public_state) as unknown) : null,
+          detail.status !== 'pending' && row.public_state
+            ? (JSON.parse(row.public_state) as unknown)
+            : null,
         ),
       });
       if (!task.sourceSync || !Array.isArray(payload.sourceIds)) return task;
@@ -249,12 +268,10 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       if (sourceIds.length < 2) return task;
       const trigger = task.sourceSync.trigger;
       const sources = sourceIds.flatMap((sourceId) => {
-        const detail = this.getSourceSyncTaskDetail({
+        const detail = this.#getSourceSyncTaskDetail({
           taskId: task.id,
           sourceId,
           trigger,
-          windowStartedAt: row.window_started_at ?? Date.parse(task.createdAt),
-          windowFinishedAt: row.window_finished_at,
         });
         return detail ? [detail] : [];
       });
@@ -264,6 +281,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
 
   /** 执行数据库组件对外暴露的操作。 */
   public listTaskEntries(input: {
+    readonly batchRunId?: string;
     readonly since?: number;
     readonly before?: number;
     readonly status?: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'warning';
@@ -273,6 +291,10 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
   }): { readonly items: readonly WebTaskListEntry[]; readonly total: number } {
     const conditions: string[] = [];
     const parameters: unknown[] = [];
+    if (input.batchRunId !== undefined) {
+      conditions.push("kind = 'source_job_detail_batch' AND id = ?");
+      parameters.push(input.batchRunId);
+    }
     if (input.since !== undefined) {
       conditions.push('created_at >= ?');
       parameters.push(input.since);
@@ -288,21 +310,19 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
       if (input.status === 'warning' || input.status === 'succeeded') {
         conditions.push(`
           ${input.status === 'succeeded' ? 'NOT ' : ''}EXISTS (
-            SELECT 1 FROM tasks parent
-            JOIN json_each(COALESCE(json_extract(parent.private_state, '$.sourceIds'),
-                                    json_array(parent.source_id))) source
+            SELECT 1 FROM tasks task
+            JOIN json_each(COALESCE(json_extract(task.private_state, '$.sourceIds'),
+                                    json_array(task.source_id))) source
             JOIN job_sources official ON official.id = source.value
             JOIN ${scanTaskProjection} run ON run.id = (
               SELECT candidate.id FROM ${scanTaskProjection} candidate
               WHERE candidate.source_id = official.id
-                AND (candidate.parent_task_id = parent.id OR (candidate.parent_task_id IS NULL
-                AND candidate.started_at >= COALESCE(parent.started_at, parent.created_at)
-                AND (parent.finished_at IS NULL OR candidate.started_at <= parent.finished_at)))
+                AND ${currentScan}
               ORDER BY candidate.started_at DESC, candidate.id DESC LIMIT 1
             )
-            WHERE task_entries.kind = 'task' AND parent.id = task_entries.id
-              AND parent.task_type = 'source.sync'
-              AND json_extract(parent.private_state, '$.trigger') IN ('manual', 'schedule', 'retry')
+            WHERE task_entries.kind = 'task' AND task.id = task_entries.id
+              AND task.task_type = 'source.sync'
+              AND json_extract(task.private_state, '$.trigger') IN ('manual', 'schedule', 'retry')
               AND run.status <> 'running'
               AND (run.status IN ('partial', 'failed') OR run.coverage <> 'complete')
           )
@@ -318,7 +338,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     // 2、从同一物化结果读取总数和分页；左连接保证空页仍返回总数供应用层回落。
     const rows = this.#client
       .prepare(
-        `${taskEntriesCte}
+        `${taskEntriesCte(input.batchRunId !== undefined)}
          , filtered_entries AS MATERIALIZED (
            SELECT * FROM task_entries ${where}
          ),
@@ -337,7 +357,12 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
          LEFT JOIN page_entries page ON TRUE
          ORDER BY page.created_at DESC, page.id ASC`,
       )
-      .all(...parameters, input.limit, input.offset) as TaskEntryRow[];
+      .all(
+        ...(input.batchRunId === undefined ? [] : [input.batchRunId]),
+        ...parameters,
+        input.limit,
+        input.offset,
+      ) as TaskEntryRow[];
     const total = rows[0]?.result_total ?? 0;
     return {
       total,
@@ -457,40 +482,30 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     });
   }
 
-  /** 执行数据库组件对外暴露的操作。 */
-  public getSourceSyncTaskDetail(input: {
+  /** 读取聚合任务的单个来源，沿用列表与单来源详情的扫描资格。 */
+  #getSourceSyncTaskDetail(input: {
     readonly taskId: string;
     readonly sourceId: string;
-    readonly sourceIds?: readonly string[];
     readonly trigger: 'manual' | 'schedule' | 'retry';
-    readonly windowStartedAt: number;
-    readonly windowFinishedAt: number | null;
   }): WebSourceSyncTaskDetail | null {
     const row = this.#client
       .prepare(
         `SELECT company.name AS company_name, channel.channel, source.slug AS source_slug,
                 source.adapter_key, run.id AS run_id, run.status AS run_status,
                 run.coverage, run.stats_json, run.error_category, run.error_summary
-         FROM job_sources source
+         FROM tasks task
+         JOIN job_sources source ON source.id = ?
          JOIN companies company ON company.id = source.company_id
          JOIN source_channels channel ON channel.id = source.channel_id
          LEFT JOIN ${scanTaskProjection} run ON run.id = (
            SELECT candidate.id FROM ${scanTaskProjection} candidate
            WHERE candidate.source_id = source.id
-             AND (candidate.parent_task_id = ? OR (candidate.parent_task_id IS NULL
-             AND candidate.started_at >= ?
-             AND (? IS NULL OR candidate.started_at <= ?)))
+             AND ${currentScan}
            ORDER BY candidate.started_at DESC, candidate.id DESC LIMIT 1
          )
-         WHERE source.id = ?`,
+         WHERE task.id = ?`,
       )
-      .get(
-        input.taskId,
-        input.windowStartedAt,
-        input.windowFinishedAt,
-        input.windowFinishedAt,
-        input.sourceId,
-      ) as
+      .get(input.sourceId, input.taskId) as
       | {
           readonly company_name: string;
           readonly channel: WebSourceSyncTaskDetail['channel'];
@@ -505,7 +520,7 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
         }
       | undefined;
     if (!row) return null;
-    const detail = webSourceSyncTaskDetailSchema.parse({
+    return webSourceSyncTaskDetailSchema.parse({
       companyName: row.company_name,
       channel: row.channel,
       sourceSlug: row.source_slug,
@@ -523,17 +538,5 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
             }
           : null,
     });
-    if (!input.sourceIds || input.sourceIds.length < 2) return detail;
-    const sources = input.sourceIds.flatMap((sourceId) => {
-      const source = this.getSourceSyncTaskDetail({
-        taskId: input.taskId,
-        sourceId,
-        trigger: input.trigger,
-        windowStartedAt: input.windowStartedAt,
-        windowFinishedAt: input.windowFinishedAt,
-      });
-      return source ? [source] : [];
-    });
-    return webSourceSyncTaskDetailSchema.parse({ ...detail, sources });
   }
 }

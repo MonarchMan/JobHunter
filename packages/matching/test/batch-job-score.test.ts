@@ -86,6 +86,22 @@ describe('batch scoring checkpoints', () => {
     expect(advice.execute).toHaveBeenCalledTimes(2);
   });
 
+  it('does not publish old failed items while reprocessing the batch', async () => {
+    const { handler, context } = fixture();
+    await handler
+      .execute(context, {
+        ...payload,
+        progress: {
+          items: [{ jobRevisionId: second, status: 'failed', result: null, error: 'stale' }],
+        },
+      })
+      .catch(() => undefined);
+    expect(context.checkpoint).toHaveBeenNthCalledWith(1, {
+      items: [expect.objectContaining({ jobRevisionId: first, status: 'succeeded' })],
+    });
+    expect(JSON.stringify(context.checkpoint.mock.calls)).not.toContain('stale');
+  });
+
   it('resumes saved progress after interruption without repeating successful jobs', async () => {
     const { handler, context, understanding } = fixture();
     context.checkpoint.mockImplementationOnce(() => {

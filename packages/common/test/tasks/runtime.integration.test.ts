@@ -5,8 +5,6 @@ import { createTemporaryDataRoot } from '@jobhunter/common/testing';
 import { createTaskRuntime } from '@jobhunter/common/task-runtime';
 import { voidTaskOutputSchema } from '@jobhunter/common/tasks';
 import { openSqliteDatabase } from '@jobhunter/common/persistence/connection';
-import { SqliteTaskRepository } from '@jobhunter/common/persistence/tasks';
-import { utcInstant } from '@jobhunter/common/domain';
 import { ThreadTaskExecutor } from '../../src/tasks/execution/thread-executor.js';
 import { AsyncSemaphore } from '../../src/tasks/concurrency/async-semaphore.js';
 import { defineAgent } from '../../src/agent/index.js';
@@ -140,23 +138,15 @@ it.each(['SQLITE_BUSY_SNAPSHOT', 'maintenance'])(
         payload: { code },
         idempotencyKey: 'storage-recovery',
       }) as { taskId: string };
-      // 1、第一轮错误跨线程返回后停止续租，不写成业务永久失败。
+      // 1、跨线程执行锁忙直接退避，不等待租约过期。
       expect(await application.engine.runOnce()).toBe(true);
       expect(application.request?.('query', { taskId: queued.taskId })).toMatchObject({
-        status: 'running',
+        status: 'pending',
         attemptCount: 1,
         errorCategory: null,
       });
-      // 2、仅推进合成任务的过期租约，验证既有恢复路径可以再次领取并成功。
-      database.client
-        .prepare('UPDATE tasks SET lease_expires_at = 0 WHERE id = ?')
-        .run(queued.taskId);
-      expect(
-        new SqliteTaskRepository(database.client).recoverExpired(utcInstant(Date.now())),
-      ).toEqual({
-        recovered: 1,
-        exhausted: 0,
-      });
+      // 2、仅推进合成任务的退避时间，验证可再次领取并成功。
+      database.client.prepare('UPDATE tasks SET available_at = 0 WHERE id = ?').run(queued.taskId);
       expect(await application.engine.runOnce()).toBe(true);
       expect(application.request?.('query', { taskId: queued.taskId })).toMatchObject({
         status: 'succeeded',

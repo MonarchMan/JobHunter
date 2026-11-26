@@ -19,7 +19,7 @@ describe('批量任务进度投影', () => {
     ).toEqual({ total: 3, processed: 2 });
   });
 
-  it('新批次显示零进度，重试未产生新结果时保留检查点', () => {
+  it('新批次和重试未发布本次检查点时均显示零进度', () => {
     expect(presentBatchProgress('match.score-batch', { jobRevisionIds: ['a'] }, null)).toEqual({
       total: 1,
       processed: 0,
@@ -33,7 +33,7 @@ describe('批量任务进度投影', () => {
         },
         null,
       ),
-    ).toEqual({ total: 2, processed: 1 });
+    ).toEqual({ total: 2, processed: 0 });
   });
 
   it('普通任务和无效批次不伪造进度', () => {
