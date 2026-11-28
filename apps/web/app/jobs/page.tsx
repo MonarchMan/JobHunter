@@ -67,9 +67,11 @@ async function JobsListContent({ searchParams }: JobsPageProperties): Promise<Re
     ) || Boolean(firstSearchParameter(parameters, 'category'));
   const container = await getWebContainer();
   const jobListPreferences = container.services.settings.get().jobListPreferences;
-  const effectiveParameters = firstSearchParameter(parameters, 'sort')
-    ? parameters
-    : { ...parameters, sort: jobListPreferences.defaultSort };
+  const effectiveParameters =
+    firstSearchParameter(parameters, 'sort') ||
+    firstSearchParameter(parameters, 'source') === 'platform'
+      ? parameters
+      : { ...parameters, sort: jobListPreferences.defaultSort };
   const companies = container.services.webSources.list();
   const profiles = container.services.webProfiles.list();
   const defaultProfileId = profiles[0]?.currentVersionId;
@@ -98,10 +100,9 @@ async function JobsListContent({ searchParams }: JobsPageProperties): Promise<Re
     <>
       <JobsFilterMemory enabled={jobListPreferences.rememberFilters} />
       <PageHeader title="职位列表">
-        <JobSourceFilter
-          sourceKind={query.sourceKind}
-          {...(query.providerKey ? { providerKey: query.providerKey } : {})}
-        />
+        <div data-job-source-switcher>
+          <JobSourceFilter field="source" value={query.sourceKind} />
+        </div>
       </PageHeader>
       <details className={styles.filterPanel} open={hasFilters}>
         <summary>筛选职位{hasFilters ? ' · 已设置条件' : ''}</summary>
@@ -168,11 +169,23 @@ async function JobsListContent({ searchParams }: JobsPageProperties): Promise<Re
               <SelectField
                 name="sort"
                 label="排序"
-                defaultValue={fieldValue(parameters, 'sort') || jobListPreferences.defaultSort}
+                defaultValue={query.sort}
                 options={[
                   { value: 'updated_desc', label: '最近更新' },
                   { value: 'published_desc', label: '最近发布' },
                   { value: 'score_desc', label: '匹配分数' },
+                ]}
+              />
+            </label>
+            <label className={styles.mobileSortDirection}>
+              排序方向
+              <SelectField
+                name="direction"
+                label="排序方向"
+                defaultValue={query.direction ?? 'desc'}
+                options={[
+                  { value: 'desc', label: '降序' },
+                  { value: 'asc', label: '升序' },
                 ]}
               />
             </label>
@@ -257,7 +270,12 @@ async function JobsListContent({ searchParams }: JobsPageProperties): Promise<Re
                 : '实习'}{' '}
           · 共 {page.page.total} 个职位
         </p>
-        <JobsRefresh />
+        <div className={styles.resultActions}>
+          {query.sourceKind === 'platform' && (
+            <JobSourceFilter field="provider" value={query.providerKey ?? ''} />
+          )}
+          <JobsRefresh />
+        </div>
       </div>
       {page.items.length === 0 ? (
         <section className="empty-state page-empty-state" aria-labelledby="jobs-empty-title">
@@ -281,7 +299,12 @@ async function JobsListContent({ searchParams }: JobsPageProperties): Promise<Re
         </section>
       ) : (
         <>
-          <JobsTable jobs={page.items} profileVersionId={query.profileVersionId} />
+          <JobsTable
+            jobs={page.items}
+            profileVersionId={query.profileVersionId}
+            sort={query.sort}
+            direction={query.direction ?? 'desc'}
+          />
         </>
       )}
       <Pagination

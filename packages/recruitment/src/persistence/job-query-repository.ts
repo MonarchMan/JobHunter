@@ -32,6 +32,7 @@ const filterSchema = z
     minimumScore: z.number().min(0).max(100).optional(),
     profileVersionId: id.optional(),
     sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('published_desc'),
+    direction: z.enum(['asc', 'desc']).default('desc'),
     page: z.number().int().positive().optional(),
     pageSize: z.number().int().min(1).max(100).optional(),
     cursor: z.string().max(1_000).optional(),
@@ -200,13 +201,13 @@ export class SqliteJobQueryRepository implements JobQueryRepository {
     }
 
     const sort = filter.sort;
-    // 发布时间非负，-1 保证未知日期始终排在已知日期后；同值仍以 ID 稳定分页。
+    const sortColumn =
+      sort === 'updated_desc' ? 'updated_at' : sort === 'published_desc' ? 'published_at' : 'score';
+    // 升序反转排序键，沿用降序游标比较；空值低于所有有效键，同值按 ID 分页。
     const sortExpression =
-      sort === 'updated_desc'
-        ? 'updated_at'
-        : sort === 'published_desc'
-          ? 'COALESCE(published_at, -1)'
-          : 'COALESCE(score, -1)';
+      filter.direction === 'asc'
+        ? `COALESCE(-${sortColumn}, -9007199254740992)`
+        : `COALESCE(${sortColumn}, -1)`;
     const outerConditions: string[] = [];
     const outerParameters: unknown[] = [];
     if (filter.minimumScore !== undefined) {

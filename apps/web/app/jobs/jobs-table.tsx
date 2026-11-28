@@ -1,6 +1,6 @@
 'use client';
 
-import type { WebJobListItem } from '@jobhunter/matching/contracts/web';
+import type { WebJobListItem, WebJobQuery } from '@jobhunter/matching/contracts/web';
 import type { MouseEvent, ReactElement } from 'react';
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation.js';
@@ -13,7 +13,7 @@ import { NavigationLink } from '../components/layout/navigation-pending.js';
 import styles from './jobs-table.module.css';
 import { scoreBand } from './score-band.js';
 
-const publishedDateFormatter = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai' });
+const jobDateFormatter = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai' });
 
 /** 分数链接在桌面和移动端使用一致的契合度档位，同时保留详情入口。 */
 function JobScoreLink({
@@ -41,12 +41,12 @@ function JobScoreLink({
   );
 }
 
-/** 桌面与移动共用来源发布时间；空值保持未知，不能回退到采集时间。 */
-function PublishedDate({ value }: Readonly<{ value: string | null }>): ReactElement {
+/** 统一格式化职位记录日期，空值显示为未提供。 */
+function JobDate({ value }: Readonly<{ value: string | null }>): ReactElement {
   // 1、没有来源日期时明确展示缺失，不生成虚假的 time 元素。
   if (value === null) return <span>未提供</span>;
   // 2、沿用中文日期格式，固定时区使服务端与浏览器展示一致。
-  return <time dateTime={value}>{publishedDateFormatter.format(new Date(value))}</time>;
+  return <time dateTime={value}>{jobDateFormatter.format(new Date(value))}</time>;
 }
 
 /** 表格行与移动记录卡的指针增强；真正的链接仍负责键盘和路由语义。 */
@@ -75,12 +75,53 @@ function openLinkedRow(event: MouseEvent<HTMLElement>): void {
 export function JobsTable({
   jobs,
   profileVersionId,
+  sort,
+  direction,
 }: Readonly<{
   jobs: readonly WebJobListItem[];
   profileVersionId: string | undefined;
+  sort: WebJobQuery['sort'];
+  direction: 'asc' | 'desc';
 }>): ReactElement {
+  const dateSort = sort === 'updated_desc' ? 'updated_desc' : 'published_desc';
+  const dateField = dateSort === 'updated_desc' ? 'updatedAt' : 'publishedAt';
+  const dateLabel = dateField === 'updatedAt' ? '更新时间' : '发布时间';
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const search = useSearchParams().toString();
+  /** 表头切换保留筛选条件，并从新排序的第一页开始。 */
+  const sortHeading = (field: WebJobQuery['sort'], label: string): ReactElement => {
+    const active = field === sort;
+    const nextDirection = active && direction === 'desc' ? 'asc' : 'desc';
+    const query = new URLSearchParams(search);
+    query.delete('page');
+    query.delete('cursor');
+    query.set('sort', field);
+    query.set('direction', nextDirection);
+    const action = `按${label}${nextDirection === 'asc' ? '升序' : '降序'}排列`;
+    return (
+      <th
+        role="columnheader"
+        scope="col"
+        aria-label={label}
+        aria-sort={active ? (direction === 'asc' ? 'ascending' : 'descending') : undefined}
+      >
+        <span className={styles.sortHeading}>
+          {label}
+          <NavigationLink
+            className={styles.sortControl}
+            href={`/jobs?${query.toString()}`}
+            scroll={false}
+            aria-label={action}
+            title={action}
+            data-direction={active ? direction : undefined}
+          >
+            <Icon name="chevronUp" />
+            <Icon name="chevronDown" />
+          </NavigationLink>
+        </span>
+      </th>
+    );
+  };
   /** 保留当前列表条件和评分画像，返回时不丢失用户的筛选上下文。 */
   const detailHref = (jobId: string): string => {
     const query = new URLSearchParams({ returnTo: search ? `/jobs?${search}` : '/jobs' });
@@ -144,12 +185,8 @@ export function JobsTable({
               <th role="columnheader" scope="col">
                 地点
               </th>
-              <th role="columnheader" scope="col">
-                匹配
-              </th>
-              <th role="columnheader" scope="col">
-                发布时间
-              </th>
+              {sortHeading('score_desc', '匹配分数')}
+              {sortHeading(dateSort, dateLabel)}
               <th role="columnheader" scope="col">
                 操作
               </th>
@@ -216,8 +253,8 @@ export function JobsTable({
                   <JobScoreLink score={job.score} href={detailHref(job.id)} jobTitle={job.title} />
                 </td>
                 <td role="cell">
-                  <span className={styles.mobileDateLabel}>发布时间：</span>
-                  <PublishedDate value={job.publishedAt} />
+                  <span className={styles.mobileDateLabel}>{dateLabel}：</span>
+                  <JobDate value={job[dateField]} />
                 </td>
                 <td role="cell">
                   <div className={styles.rowActions} data-row-navigation-ignore>

@@ -28,6 +28,7 @@ export interface JobQueryFilter {
   readonly minimumScore?: number;
   readonly profileVersionId?: ProfileVersionId;
   readonly sort?: JobQuerySort;
+  readonly direction?: 'asc' | 'desc';
   readonly page?: number;
   readonly pageSize?: number;
   readonly cursor?: string;

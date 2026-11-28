@@ -234,6 +234,34 @@
   font-weight: 750;
 }
 
+.sortHeading {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.sortControl {
+  display: inline-grid;
+  justify-items: center;
+  align-content: center;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  color: var(--muted-ink);
+  border-radius: var(--radius-control);
+}
+
+.sortControl svg {
+  width: 0.75rem;
+  height: 0.65rem;
+}
+
+.sortControl[data-direction='asc'] svg:first-child,
+.sortControl[data-direction='desc'] svg:last-child {
+  color: var(--primary-hover);
+  stroke-width: 3;
+}
+
 .mobileSelectAll,
 .mobileDateLabel {
   display: none;

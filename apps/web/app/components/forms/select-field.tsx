@@ -136,7 +136,13 @@ export function SelectField({
           {fitOptions ? (
             <span className={styles.optionSizer} aria-hidden="true">
               {options.map((option) => (
-                <span key={option.value}>{option.label}</span>
+                <span
+                  key={option.value}
+                  className={option.iconSrc ? styles.optionLabel : undefined}
+                >
+                  {option.iconSrc ? <span aria-hidden="true" style={{ width: 22 }} /> : null}
+                  {option.label}
+                </span>
               ))}
             </span>
           ) : null}

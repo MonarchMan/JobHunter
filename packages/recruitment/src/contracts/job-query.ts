@@ -14,6 +14,7 @@ export interface JobSearchInput {
   readonly minimumScore?: number;
   readonly profileVersionId?: string;
   readonly sort?: JobQuerySort;
+  readonly direction?: JobQueryFilter['direction'];
   readonly page?: number;
   readonly pageSize?: number;
   readonly cursor?: string;

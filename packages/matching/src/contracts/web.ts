@@ -20,6 +20,7 @@ export const webJobQuerySchema = z
     minimumScore: z.number().min(0).max(100).optional(),
     profileVersionId: z.uuid().optional(),
     sort: z.enum(['updated_desc', 'published_desc', 'score_desc']).default('published_desc'),
+    direction: z.enum(['asc', 'desc']).optional(),
     page: z.number().int().positive().default(1),
     pageSize: z.number().int().min(1).max(100).default(25),
     cursor: z.string().max(1_000).optional(),

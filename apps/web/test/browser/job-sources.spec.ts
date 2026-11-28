@@ -11,7 +11,10 @@ test('jobs default to official and isolate platform provider, categories and pag
   });
   await page.goto('/jobs');
   const source = page.getByRole('combobox', { name: '来源类型', exact: true });
+  const provider = page.getByRole('combobox', { name: '招聘平台', exact: true });
+  const refresh = page.getByRole('button', { name: '刷新职位', exact: true });
   await expect(source).toHaveText('官网来源');
+  await expect(provider).toHaveCount(0);
   // 1、来源范围属于列表标题级操作；控件自带可访问名称，不再重复显示标签。
   const sourceSwitcher = page.locator('[data-job-source-switcher]');
   await expect(
@@ -34,16 +37,40 @@ test('jobs default to official and isolate platform provider, categories and pag
   await expect(page.getByRole('option', { name: '招聘平台', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/source=platform/);
-  const provider = page.getByRole('combobox', { name: '招聘平台', exact: true });
+  await expect(provider.locator(':scope > span').first()).toHaveText('全部平台');
+  await expect(sourceSwitcher.locator('[role="combobox"]')).toHaveCount(1);
   const platformSourceBox = await source.boundingBox();
   const providerBox = await provider.boundingBox();
+  const refreshBox = await refresh.boundingBox();
   expect(Math.abs((officialSourceBox?.x ?? 0) - (platformSourceBox?.x ?? 0))).toBeLessThan(1);
-  expect(providerBox?.x ?? Infinity).toBeLessThan(platformSourceBox?.x ?? 0);
+  expect((providerBox?.x ?? Infinity) + (providerBox?.width ?? 0)).toBeLessThan(refreshBox?.x ?? 0);
   await expect(page.getByText('共 12 个职位', { exact: false })).toBeVisible();
   await expect(
     page.getByRole('link', { name: 'BOSS 平台工程师 1', exact: true }).first(),
   ).toBeVisible();
   await provider.click();
+  const platformMenu = page.getByRole('listbox', { name: '招聘平台', exact: true });
+  for (const [label, logo] of [
+    ['BOSS 直聘', 'boss'],
+    ['智联招聘', 'zhilian'],
+    ['前程无忧', '51job'],
+    ['猎聘', 'liepin'],
+  ] as const) {
+    const item = platformMenu.getByRole('option', { name: label, exact: true });
+    const logoImage = item.locator('img');
+    await expect(logoImage).toHaveAttribute('src', `/assets/company-logos/${logo}.jpg`);
+    await expect
+      .poll(() =>
+        logoImage.evaluate((image) => (image instanceof HTMLImageElement ? image.naturalWidth : 0)),
+      )
+      .toBeGreaterThan(0);
+    expect(
+      await item
+        .locator(':scope > span')
+        .first()
+        .evaluate((text) => text.scrollWidth <= text.clientWidth),
+    ).toBe(true);
+  }
   await page.getByRole('option', { name: 'BOSS 直聘', exact: true }).click();
   await expect(page).toHaveURL(/provider=boss/);
   await expect(page.getByText('共 11 个职位', { exact: false })).toBeVisible();

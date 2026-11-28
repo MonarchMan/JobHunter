@@ -29,10 +29,13 @@ export function parseWebJobQuery(source: SearchParameterSource): WebJobQuery {
   const minimumScoreText = firstSearchParameter(source, 'minScore');
   const limitText = firstSearchParameter(source, 'limit');
   const pageText = firstSearchParameter(source, 'page');
+  const sourceKind = firstSearchParameter(source, 'source');
+  const direction = firstSearchParameter(source, 'direction');
+  const sort =
+    firstSearchParameter(source, 'sort') ||
+    (sourceKind === 'platform' ? 'updated_desc' : undefined);
   return webJobQuerySchema.parse({
-    ...(firstSearchParameter(source, 'source')
-      ? { sourceKind: firstSearchParameter(source, 'source') }
-      : {}),
+    ...(sourceKind ? { sourceKind } : {}),
     ...(firstSearchParameter(source, 'provider')
       ? { providerKey: firstSearchParameter(source, 'provider') }
       : {}),
@@ -56,7 +59,8 @@ export function parseWebJobQuery(source: SearchParameterSource): WebJobQuery {
     ...(firstSearchParameter(source, 'profile')
       ? { profileVersionId: firstSearchParameter(source, 'profile') }
       : {}),
-    ...(firstSearchParameter(source, 'sort') ? { sort: firstSearchParameter(source, 'sort') } : {}),
+    ...(sort ? { sort } : {}),
+    ...(direction ? { direction } : {}),
     ...(pageText ? { page: Number(pageText) } : {}),
     ...(firstSearchParameter(source, 'cursor')
       ? { cursor: firstSearchParameter(source, 'cursor') }

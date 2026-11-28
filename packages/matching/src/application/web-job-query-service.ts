@@ -24,6 +24,7 @@ export class WebJobQueryService {
         ? { providerKey: query.providerKey }
         : {}),
       sort: query.sort,
+      ...(query.direction ? { direction: query.direction } : {}),
       page: query.page,
       pageSize: query.limit ?? query.pageSize,
       ...(query.search ? { search: query.search } : {}),

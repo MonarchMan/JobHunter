@@ -85,6 +85,7 @@ export class JobQueryService {
         ? { profileVersionId: parseId(input.profileVersionId, 'ProfileVersion') }
         : {}),
       ...(input.sort ? { sort: input.sort } : {}),
+      ...(input.direction ? { direction: input.direction } : {}),
       ...(input.page === undefined ? {} : { page: input.page }),
       ...(input.pageSize === undefined ? {} : { pageSize: input.pageSize }),
       ...(input.cursor ? { cursor: input.cursor } : {}),
