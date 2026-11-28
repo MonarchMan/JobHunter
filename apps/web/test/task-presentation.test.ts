@@ -2,6 +2,28 @@ import { expect, it } from 'vitest';
 import type { WebSourceSyncTaskDetail } from '@jobhunter/recruitment/contracts/web';
 import { taskPresentation } from '../app/tasks/task-presentation.js';
 
+it('优先展示平台的具体诊断，并为历史任务提供可读标题', () => {
+  const task = {
+    status: 'failed' as const,
+    sourceSync: null,
+    errorCategory: 'permanent',
+    errorSummary: 'Platform request failed: session_unavailable',
+  };
+  expect(taskPresentation(task).errorTitle).toBe('Chrome 连接或平台会话不可用');
+  expect(
+    taskPresentation({
+      ...task,
+      diagnostic: {
+        title: 'Chrome 调试端口文件读取受限',
+        message: '请检查启动 JobHunter 的应用是否有读取权限。',
+      },
+    }),
+  ).toMatchObject({
+    errorTitle: 'Chrome 调试端口文件读取受限',
+    error: '请检查启动 JobHunter 的应用是否有读取权限。',
+  });
+});
+
 it('presents a historical sync scoring failure without the old prefix or mixed wording', () => {
   expect(
     taskPresentation({

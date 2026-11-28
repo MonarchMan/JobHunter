@@ -1,6 +1,10 @@
 import { scanTaskProjection } from './scan-task-sql.js';
 import { presentBatchProgress } from '../diagnostics/task-progress.js';
 import {
+  describePlatformFailure,
+  platformProgressSchema,
+} from '../platform/application/platform-progress.js';
+import {
   webAgentRunDetailSchema,
   webTaskSchema,
   type WebTask,
@@ -253,15 +257,21 @@ export class SqliteWebDiagnosticsRepository implements WebDiagnosticsRepository 
     return rows.map((row) => {
       const payload = JSON.parse(row.private_state) as { readonly sourceIds?: unknown };
       const detail = JSON.parse(row.detail_json) as Record<string, unknown>;
+      const result =
+        detail.status !== 'pending' && row.public_state
+          ? (JSON.parse(row.public_state) as { progress?: { failure?: unknown } } | null)
+          : null;
+      // 只投影已失败的平台任务中经过校验的诊断，不暴露检查点原文。
+      const failure =
+        detail.status === 'failed' && String(detail.taskType).startsWith('platform.')
+          ? platformProgressSchema.shape.failure.safeParse(result?.progress?.failure)
+          : null;
       const task = webTaskSchema.parse({
         ...detail,
-        batchProgress: presentBatchProgress(
-          String(detail.taskType),
-          payload,
-          detail.status !== 'pending' && row.public_state
-            ? (JSON.parse(row.public_state) as unknown)
-            : null,
-        ),
+        batchProgress: presentBatchProgress(String(detail.taskType), payload, result),
+        ...(failure?.success && failure.data
+          ? { diagnostic: describePlatformFailure(failure.data) }
+          : {}),
       });
       if (!task.sourceSync || !Array.isArray(payload.sourceIds)) return task;
       const sourceIds = payload.sourceIds.filter((id): id is string => typeof id === 'string');

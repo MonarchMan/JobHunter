@@ -1,55 +1,27 @@
 /* Route-local company source card and channel detail styles. */
 .company-source-card {
-  --company-health: var(--health-unknown);
-  --company-health-soft: var(--health-unknown-soft);
-  --company-health-rail: color-mix(in srgb, var(--company-health) 62%, var(--line));
+  --card-divider: var(--line-soft);
 
   container-name: company-card;
   container-type: inline-size;
   min-width: 0;
   overflow: hidden;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--company-health) 55%, var(--line));
-  border-radius: var(--radius-panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
   background: var(--surface);
-  box-shadow: inset 3px 0 0 var(--company-health-rail);
-  transform: none;
+  box-shadow: var(--shadow-sm);
   transition:
-    color var(--motion-fast) var(--ease-standard),
     background-color var(--motion-fast) var(--ease-standard),
-    border-color var(--motion-fast) var(--ease-standard),
-    box-shadow var(--motion-standard) var(--ease-out),
-    opacity var(--motion-fast) var(--ease-standard),
-    transform var(--motion-fast) var(--ease-out);
+    border-color var(--motion-fast) var(--ease-standard);
 }
 
-.company-source-card:hover {
-  border-color: color-mix(in srgb, var(--company-health) 72%, var(--line));
-  box-shadow: inset 3px 0 0 var(--company-health-rail);
-  transform: none;
-}
+.company-source-card:hover,
+.company-source-card:has(:focus-visible) {
+  --card-divider: color-mix(in srgb, var(--primary) 30%, var(--line));
 
-.company-health-healthy {
-  --company-health: var(--health-healthy);
-  --company-health-soft: var(--health-healthy-soft);
-  --company-health-rail: var(--company-health);
-}
-
-.company-health-degraded {
-  --company-health: var(--health-degraded);
-  --company-health-soft: var(--health-degraded-soft);
-  --company-health-rail: var(--company-health);
-}
-
-.company-health-unhealthy {
-  --company-health: var(--health-unhealthy);
-  --company-health-soft: var(--health-unhealthy-soft);
-  --company-health-rail: var(--company-health);
-}
-
-.company-health-unknown {
-  --company-health: var(--health-unknown);
-  --company-health-soft: var(--health-unknown-soft);
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary-soft) 35%, var(--surface));
 }
 
 .company-source-header {
@@ -58,9 +30,7 @@
   align-items: start;
   gap: 0.7rem 1rem;
   padding: 1rem 1.15rem 0.85rem 1.35rem;
-  border-bottom: 1px solid var(--line-soft);
-  background:
-    radial-gradient(circle at 100% 0%, var(--company-health-soft), transparent 42%), var(--surface);
+  border-bottom: 1px solid var(--card-divider);
 }
 
 .company-source-heading-block {
@@ -89,7 +59,8 @@
   text-decoration: none;
 }
 
-.company-source-name-link:hover h2 {
+.company-source-name-link:hover h2,
+.company-source-name-link:focus-visible h2 {
   color: var(--primary-hover);
   text-decoration: underline;
   text-decoration-thickness: 1px;
@@ -114,7 +85,7 @@
   gap: 0.75rem;
   min-width: 0;
   padding-top: 0.7rem;
-  border-top: 1px solid color-mix(in srgb, var(--company-health) 15%, var(--line-soft));
+  border-top: 1px solid var(--card-divider);
 }
 
 .company-channel-selector {
@@ -291,7 +262,7 @@
   gap: 0;
   margin: 0;
   border: 0;
-  border-top: 1px solid var(--line-soft);
+  border-top: 1px solid var(--card-divider);
   background: transparent;
 }
 
@@ -303,11 +274,11 @@
 }
 
 .company-overview-metrics div:nth-child(odd) {
-  border-right: 1px solid var(--line-soft);
+  border-right: 1px solid var(--card-divider);
 }
 
 .company-overview-metrics div:nth-child(-n + 2) {
-  border-bottom: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--card-divider);
 }
 
 .company-overview-metrics dt {
@@ -498,7 +469,7 @@
   }
 
   .company-overview-metrics div:nth-child(n) {
-    border-right: 1px solid var(--line-soft);
+    border-right: 1px solid var(--card-divider);
     border-bottom: 0;
   }
 

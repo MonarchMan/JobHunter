@@ -46,6 +46,7 @@ const reasonSchema = z.enum([
   'access_blocked',
   'rate_limited',
   'browser_not_found',
+  'browser_port_file_permission_denied',
   'platform_page_not_found',
   'too_many_targets',
   'security_check',
@@ -192,49 +193,134 @@ export function platformFailure(
   };
 }
 
-/** 统一 Web 恢复说明，不将解析或网络错误引导成反复登录。 */
-export function platformFailureMessage(failure: NonNullable<PlatformProgress['failure']>): string {
-  // 1、自动发现失败说明具体前置条件，不误报登录失效。
-  switch (failure.reason) {
-    case 'browser_not_found':
-      return '未找到 Chrome 调试连接。请在本机 Chrome 启用远程调试；自定义浏览器位置可在高级连接设置中指定。';
-    case 'platform_page_not_found':
-      return '未找到该平台支持的页面。请在 Chrome 打开下方官网入口并登录，然后重新获取。';
-    case 'too_many_targets':
-      return '该平台打开的页面过多，请关闭不需要的页面后重新获取。';
-    case 'query_required':
-      return '缺少搜索词。日常获取请先在默认第一份个人资料填写具体意向岗位；显式调试请填写关键词。';
-    case 'profile_required':
-      return '未找到默认个人资料的当前版本。请先保存个人资料，再获取平台职位。';
-    case 'query_invalid':
-      return '个人资料中的意向岗位过长或多于 10 个，请调整为具体职位名称后重新连接。';
-    case 'query_too_broad':
-      return '意向岗位填写的是职位大类。请在独立的意向岗位输入框填写具体职位名称后重新连接，职位类别无需修改。';
-    case 'search_unsupported':
-      return '该平台的关键词搜索协议尚未通过真实验收；本次没有改用推荐流，请等待搜索能力接入。';
-    case 'query_changed':
-      return '搜索条件已改变，请显式重新连接；旧批次不会混入新查询。';
-    case 'auth_context_missing':
-      return '未取得完整认证上下文。请在官网确认登录状态后重新连接，无需反复刷新或搜索职位。';
-    case 'verification_required':
-      return '官网页面要求验证，已停止本批请求。请在官网自行完成验证，确认职位页正常后重新连接；已入库职位保留。';
-    case 'redirect_login':
-      return '官网要求登录，已停止本批请求。请在官网登录后重新连接；已入库职位保留。';
-    case 'job_paused':
-      return '官网显示该职位已暂停招聘，未保存详情。';
-    case 'content_type':
-      return '职位接口未声明 JSON 响应类型，已停止读取。请检查官网是否要求登录或验证，恢复后重新连接；不要连续重试。';
-  }
-  // 2、没有专属恢复提示时按错误类别返回通用说明。
-  return {
-    access_blocked: '平台限制访问，已停止请求。请在官网确认状态，恢复后再显式连接。',
-    rate_limited: '平台限制请求频率，已停止请求。请稍后再显式连接。',
-    upstream_error: '平台返回异常，已停止请求。请查看任务诊断，不要反复刷新。',
-    parse_changed: '职位数据格式或身份校验未通过，已停止请求。请保留任务编号供排查，无需反复登录。',
-    network_error: '请求发生网络异常，已停止请求。请检查网络及任务原因码。',
-    session_unavailable:
-      '浏览器连接或当前会话不可用。请确认所选页面，必要时显式重新连接；不代表账号已退出。',
-    cancelled: '任务已取消，已入库职位保留。',
-    internal_error: '本地处理失败，已停止请求。请查看任务诊断和数据库状态。',
-  }[failure.category];
+type PlatformFailure = NonNullable<PlatformProgress['failure']>;
+type PlatformFailureDiagnostic = Readonly<{ title: string; message: string }>;
+
+const verificationDiagnostic = {
+  title: '招聘平台要求安全验证',
+  message:
+    '官网页面要求验证，已停止本批请求。请在官网自行完成验证，确认职位页正常后重新连接；已入库职位保留。',
+};
+const loginDiagnostic = {
+  title: '招聘平台要求登录',
+  message: '官网要求登录，已停止本批请求。请在官网登录后重新连接；已入库职位保留。',
+};
+
+/** 具体原因优先，标题与恢复说明共同维护。 */
+const failureByReason: Partial<
+  Record<NonNullable<PlatformFailure['reason']>, PlatformFailureDiagnostic>
+> = {
+  browser_not_found: {
+    title: '未能读取 Chrome 调试连接',
+    message:
+      'JobHunter 未能读取 Chrome 调试端口文件。请确认 Chrome 已开启远程调试，并检查启动 JobHunter 的应用是否能读取该文件。',
+  },
+  browser_port_file_permission_denied: {
+    title: 'Chrome 调试端口文件读取受限',
+    message:
+      'JobHunter 无法读取 Chrome 调试端口文件。请检查启动 JobHunter 的应用是否获准访问该文件，或在高级连接设置中指定可读取的端口文件。',
+  },
+  browser_disconnected: {
+    title: 'Chrome 调试连接中断',
+    message: 'Chrome 调试连接在任务进行中断开。请在 Chrome 保持平台页面打开，再重新连接。',
+  },
+  platform_page_not_found: {
+    title: '未找到平台页面',
+    message: '未找到该平台支持的页面。请在 Chrome 打开下方官网入口并登录，然后重新获取。',
+  },
+  too_many_targets: {
+    title: '平台页面过多',
+    message: '该平台打开的页面过多，请关闭不需要的页面后重新获取。',
+  },
+  query_required: {
+    title: '求职意向未就绪',
+    message: '缺少搜索词。日常获取请先在默认第一份个人资料填写具体意向岗位；显式调试请填写关键词。',
+  },
+  profile_required: {
+    title: '求职意向未就绪',
+    message: '未找到默认个人资料的当前版本。请先保存个人资料，再获取平台职位。',
+  },
+  query_invalid: {
+    title: '求职意向未就绪',
+    message: '个人资料中的意向岗位过长或多于 10 个，请调整为具体职位名称后重新连接。',
+  },
+  query_too_broad: {
+    title: '求职意向未就绪',
+    message:
+      '意向岗位填写的是职位大类。请在独立的意向岗位输入框填写具体职位名称后重新连接，职位类别无需修改。',
+  },
+  search_unsupported: {
+    title: '平台关键词搜索暂不可用',
+    message: '该平台的关键词搜索协议尚未通过真实验收；本次没有改用推荐流，请等待搜索能力接入。',
+  },
+  query_changed: {
+    title: '搜索条件已改变',
+    message: '搜索条件已改变，请显式重新连接；旧批次不会混入新查询。',
+  },
+  auth_context_missing: {
+    title: '未取得平台登录信息',
+    message: '未取得完整认证上下文。请在官网确认登录状态后重新连接，无需反复刷新或搜索职位。',
+  },
+  verification_required: verificationDiagnostic,
+  security_check: verificationDiagnostic,
+  redirect_login: loginDiagnostic,
+  login_required: loginDiagnostic,
+  job_paused: {
+    title: '职位已暂停招聘',
+    message: '官网显示该职位已暂停招聘，未保存详情。',
+  },
+  content_type: {
+    title: '职位接口返回格式异常',
+    message:
+      '职位接口未声明 JSON 响应类型，已停止读取。请检查官网是否要求登录或验证，恢复后重新连接；不要连续重试。',
+  },
+};
+
+/** 为所有平台错误分类提供兜底文案。 */
+const failureByCategory: Record<PlatformFailure['category'], PlatformFailureDiagnostic> = {
+  access_blocked: {
+    title: '招聘平台限制访问',
+    message: '平台限制访问，已停止请求。请在官网确认状态，恢复后再显式连接。',
+  },
+  rate_limited: {
+    title: '招聘平台请求过于频繁',
+    message: '平台限制请求频率，已停止请求。请稍后再显式连接。',
+  },
+  upstream_error: {
+    title: '招聘平台响应异常',
+    message: '平台返回异常，已停止请求。请查看任务诊断，不要反复刷新。',
+  },
+  parse_changed: {
+    title: '职位数据校验失败',
+    message: '职位数据格式或身份校验未通过，已停止请求。请保留任务编号供排查，无需反复登录。',
+  },
+  network_error: {
+    title: '招聘平台网络请求失败',
+    message: '请求发生网络异常，已停止请求。请检查网络及任务原因码。',
+  },
+  session_unavailable: {
+    title: 'Chrome 连接或平台会话不可用',
+    message: '浏览器连接或当前会话不可用。请确认所选页面，必要时显式重新连接；不代表账号已退出。',
+  },
+  cancelled: {
+    title: '平台任务已取消',
+    message: '任务已取消，已入库职位保留。',
+  },
+  internal_error: {
+    title: '平台任务本地处理失败',
+    message: '本地处理失败，已停止请求。请查看任务诊断和数据库状态。',
+  },
+};
+
+/** 从固定原因码查找诊断，未配置专属文案时使用错误分类。 */
+export function describePlatformFailure(failure: PlatformFailure): PlatformFailureDiagnostic {
+  return (
+    (failure.reason ? failureByReason[failure.reason] : undefined) ??
+    failureByCategory[failure.category]
+  );
+}
+
+/** 来源页复用任务诊断的恢复说明。 */
+export function platformFailureMessage(failure: PlatformFailure): string {
+  return describePlatformFailure(failure).message;
 }

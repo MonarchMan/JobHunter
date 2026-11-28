@@ -291,7 +291,6 @@ export function TaskDetailsDialog({
                                 ? syncRunStatusLabels[source.run.status]
                                 : '尚未开始同步运行'}
                             </p>
-                            {source.run?.errorSummary ? <p>{source.run.errorSummary}</p> : null}
                           </section>
                         ))
                       : null}
@@ -404,7 +403,7 @@ export function TaskDetailsDialog({
                     aria-labelledby="task-failure-heading"
                   >
                     <h3 id="task-failure-heading">
-                      {showWarning ? '警告' : '失败'}：{presentation.errorCategory ?? '未分类'}
+                      {showWarning ? '警告' : '失败'}：{presentation.errorTitle}
                     </h3>
                     <p>{presentation.error || '系统未记录具体原因。'}</p>
                   </section>

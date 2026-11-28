@@ -294,6 +294,7 @@ export const webTaskSchema = z
     /** 同步任务评分阶段进度；非同步任务或未执行评分阶段时为 null。 */
     syncScoring: webSyncScoringProgressSchema.nullable(),
     batchProgress: webBatchProgressSchema.nullable().default(null),
+    diagnostic: z.object({ title: z.string(), message: z.string() }).strict().optional(),
   })
   .strict();
 

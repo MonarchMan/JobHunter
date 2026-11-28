@@ -5,7 +5,6 @@ import { NavigationLink } from '../components/layout/navigation-pending.js';
 import { getWebContainer } from '../../src/server/container.js';
 import { firstSearchParameter, type SearchParameterSource } from '../../src/server/job-query.js';
 import { SourceTabs, type SourceChannel } from './source-tabs.js';
-import { PlatformSelect } from './platform-select.js';
 import { Pagination } from '../components/lists/pagination.js';
 import { webPagination } from '@jobhunter/common/web-contracts';
 import type { WebSourceChannel } from '@jobhunter/recruitment/contracts/web';
@@ -88,7 +87,6 @@ export default async function SourcesPage({
       ) : null}
       {channel === 'platform' ? (
         <div className={styles.platformLayout}>
-          <PlatformSelect active={provider} />
           <PlatformBrowser
             key={provider}
             provider={provider}

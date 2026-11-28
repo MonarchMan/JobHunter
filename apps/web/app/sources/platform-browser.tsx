@@ -7,6 +7,7 @@ import { mutationHeaders } from '../../src/client/csrf.js';
 import { NavigationLink } from '../components/layout/navigation-pending.js';
 import styles from './boss-browser.module.css';
 import { Icon } from '../components/ui-icon.js';
+import { PlatformSelect } from './platform-select.js';
 
 const statusLabels: Record<string, string> = {
   connected: '已连接',
@@ -192,7 +193,7 @@ export function PlatformBrowser({
     </label>
   );
 
-  return (
+  const workspace = (
     <section className={styles.workspace} aria-labelledby={`${provider}-title`}>
       <header className={styles.header}>
         <div className={styles.title}>
@@ -217,14 +218,6 @@ export function PlatformBrowser({
         </a>
       </header>
       <div className={styles.body}>
-        <div className={styles.fieldHeader}>
-          <h3>意向岗位</h3>
-        </div>
-        <div className={styles.keywords}>
-          {state.profileSearch?.keywords.length
-            ? state.profileSearch.keywords.map((keyword) => <span key={keyword}>{keyword}</span>)
-            : '尚未填写具体岗位'}
-        </div>
         {state.profileSearch?.error && (
           <p role="alert" className={styles.error}>
             {state.profileSearch.error}
@@ -426,5 +419,19 @@ export function PlatformBrowser({
         </details>
       </footer>
     </section>
+  );
+  return (
+    <>
+      <div className={styles.platformToolbar}>
+        <div className={styles.keywords}>
+          <strong>意向岗位</strong>
+          {state.profileSearch?.keywords.length
+            ? state.profileSearch.keywords.map((keyword) => <span key={keyword}>{keyword}</span>)
+            : '尚未填写具体岗位'}
+        </div>
+        <PlatformSelect active={provider} />
+      </div>
+      {workspace}
+    </>
   );
 }

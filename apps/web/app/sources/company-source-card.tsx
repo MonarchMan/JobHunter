@@ -423,10 +423,7 @@ export function CompanySourceCard({
 
   return (
     <article
-      className={classNames(
-        styles['company-source-card'],
-        styles[`company-health-${companyHealth}`],
-      )}
+      className={styles['company-source-card']}
       data-company-source-card
       data-health-status={companyHealth}
     >

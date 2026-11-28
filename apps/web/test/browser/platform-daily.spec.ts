@@ -137,7 +137,7 @@ test('连接失败可原地重试，不选择已有页面，窄屏键盘可操�
   await page.goto('/sources?channel=platform&provider=boss');
   await page.getByRole('checkbox', { name: /允许自动连接/ }).check();
   await page.getByRole('button', { name: '获取职位', exact: true }).click();
-  await expect(page.getByText('未找到 Chrome 调试连接。', { exact: false })).toBeVisible({
+  await expect(page.getByText(/Chrome 调试(?:连接|端口文件)/)).toBeVisible({
     timeout: 10000,
   });
   await expect(page.getByRole('combobox', { name: '选择平台页面' })).toHaveCount(0);
@@ -167,7 +167,7 @@ test('连接失败可原地重试，不选择已有页面，窄屏键盘可操�
       },
     },
   };
-  await expect(page.getByText('未找到 Chrome 调试连接。', { exact: false })).toBeVisible({
+  await expect(page.getByText(/Chrome 调试(?:连接|端口文件)/)).toBeVisible({
     timeout: 10000,
   });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

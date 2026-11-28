@@ -178,10 +178,6 @@ export function ResumeImport({ profileId }: Readonly<{ profileId?: string }>): R
           {busy ? '正在上传…' : '导入并生成资料'}
         </button>
       </form>
-      <p className={styles.hint}>
-        PDF 和 DOCX 会直接解析可读取文字；JPEG 和 PNG 会进入后台 OCR。图片型 PDF 暂不支持
-        OCR，请先转换为图片。
-      </p>
       {error ? (
         <p className="form-feedback error" role="alert">
           {error}

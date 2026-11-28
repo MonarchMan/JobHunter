@@ -22,8 +22,14 @@ export class CdpConnectionManager {
     // 1、仅接受本机调试描述文件；路径和端点不进入错误或日志。
     if (!path.isAbsolute(portFile) || path.basename(portFile) !== 'DevToolsActivePort')
       throw new PlatformError('session_unavailable');
-    const data = await readFile(portFile, { encoding: 'utf8', signal }).catch(() => {
-      throw new PlatformError('session_unavailable', null, 'browser_not_found');
+    const data = await readFile(portFile, { encoding: 'utf8', signal }).catch((error: unknown) => {
+      // 文件不可读与尚未启动调试是不同问题，诊断只记录固定原因码。
+      const code = error instanceof Error && 'code' in error ? error.code : null;
+      const reason =
+        code === 'EACCES' || code === 'EPERM'
+          ? 'browser_port_file_permission_denied'
+          : 'browser_not_found';
+      throw new PlatformError('session_unavailable', null, reason);
     });
     const [port, endpoint] = data.trim().split(/\r?\n/);
     if (
