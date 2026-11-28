@@ -10,6 +10,7 @@ import {
 } from '@jobhunter/common/tasks';
 import type { SyncScoringStage } from '../contracts/sync-scoring.js';
 import type { JobSyncService } from './job-sync-service.js';
+import { sourceTaskErrors } from './source-task-error.js';
 
 /** 单个来源的发现阶段输出。 */
 const sourceSyncRunOutputSchema = z
@@ -105,26 +106,11 @@ const checkpointResultSchema = z
   })
   .strict();
 
-/** 执行应用层的解析、转换或编排辅助逻辑。 */
+/** 扫描的来源取消归入调度的取消状态，其余错误共用来源分类。 */
 function taskErrorCategory(sourceCategory: string | null): TaskErrorCategory {
-  switch (sourceCategory) {
-    case 'temporary':
-      return 'network_temporary';
-    case 'rate_limited':
-      return 'rate_limited';
-    case 'invalid_config':
-      return 'invalid_config';
-    case 'parse_changed':
-      return 'parse_changed';
-    case 'cancelled':
-      return 'cancelled';
-    case 'access_blocked':
-    case 'not_found':
-    case 'isolated_items':
-    case 'internal':
-    default:
-      return 'permanent';
-  }
+  return sourceCategory === 'cancelled'
+    ? 'cancelled'
+    : (sourceTaskErrors.get(sourceCategory) ?? 'permanent');
 }
 
 /** 应用层使用的类型约束。 */

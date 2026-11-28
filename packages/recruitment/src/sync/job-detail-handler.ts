@@ -1,12 +1,9 @@
 import { parseContentHash, parseId } from '@jobhunter/common/domain';
 import { isSourceError } from '@jobhunter/recruitment/source-contracts';
 import { z } from 'zod';
-import {
-  TaskExecutionError,
-  type TaskErrorCategory,
-  type TaskHandler,
-} from '@jobhunter/common/tasks';
+import { TaskExecutionError, type TaskHandler } from '@jobhunter/common/tasks';
 import type { JobDetailService } from './job-detail-service.js';
+import { sourceTaskErrors } from './source-task-error.js';
 
 /** 职位详情补抓任务输入。 */
 export const sourceJobDetailTaskPayloadSchema = z
@@ -24,22 +21,6 @@ export const sourceJobDetailTaskPayloadSchema = z
       .strict(),
   })
   .strict();
-
-/** 将详情服务错误分类为任务错误类型。 */
-function taskCategory(category: string): TaskErrorCategory {
-  switch (category) {
-    case 'temporary':
-      return 'network_temporary';
-    case 'rate_limited':
-      return 'rate_limited';
-    case 'invalid_config':
-      return 'invalid_config';
-    case 'parse_changed':
-      return 'parse_changed';
-    default:
-      return 'permanent';
-  }
-}
 
 /** 创建职位详情补抓任务处理器。 */
 export function createSourceJobDetailTaskHandler(
@@ -73,10 +54,14 @@ export function createSourceJobDetailTaskHandler(
       } catch (error) {
         if (isSourceError(error)) {
           // 1、普通来源错误交由通用重试策略按类别判断；解析变化仍保留原有重试行为。
-          throw new TaskExecutionError(taskCategory(error.category), error.safeDiagnostic, {
-            ...(error.category === 'parse_changed' ? { retryable: true } : {}),
-            cause: error,
-          });
+          throw new TaskExecutionError(
+            sourceTaskErrors.get(error.category) ?? 'permanent',
+            error.safeDiagnostic,
+            {
+              ...(error.category === 'parse_changed' ? { retryable: true } : {}),
+              cause: error,
+            },
+          );
         }
         throw error;
       }

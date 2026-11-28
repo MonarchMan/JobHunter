@@ -15,7 +15,11 @@ import {
   type MailboxConnector,
 } from '@jobhunter/recruitment/mail-contracts';
 import { z } from 'zod';
-import { TaskExecutionError, type TaskHandler } from '@jobhunter/common/tasks';
+import {
+  TaskExecutionError,
+  type TaskErrorCategory,
+  type TaskHandler,
+} from '@jobhunter/common/tasks';
 import type { RecruitmentMailClassificationResult } from './mail-classifier.js';
 import { prepareRecruitmentMail } from './mail-content.js';
 import type { MailSyncService } from './mail-sync-service.js';
@@ -480,42 +484,29 @@ function normalizeApplicationIdentity(value: string): string {
   return value.trim().replace(/\s+/gu, ' ').toLocaleLowerCase('zh-CN');
 }
 
-/** 将连接器稳定错误映射为 Worker 重试类别，摘要不包含供应商响应或邮件数据。 */
+/** 邮箱错误的调度分类和安全摘要，不包含供应商响应或邮件数据。 */
+const mailTaskErrors: Partial<
+  Record<MailConnectorError['category'], readonly [TaskErrorCategory, string]>
+> = {
+  rate_limited: ['rate_limited', 'Mailbox provider rate limit reached.'],
+  network_temporary: ['network_temporary', 'Mailbox network request failed.'],
+  upstream_5xx: ['upstream_5xx', 'Mailbox provider is unavailable.'],
+  cancelled: ['cancelled', 'Mailbox task was cancelled.'],
+  authentication_required: ['invalid_config', 'Mailbox authorization is unavailable.'],
+  permission_denied: ['invalid_config', 'Mailbox authorization is unavailable.'],
+  invalid_config: ['invalid_config', 'Mailbox authorization is unavailable.'],
+  parse_changed: ['parse_changed', 'Mailbox incremental state is invalid.'],
+  cursor_invalid: ['parse_changed', 'Mailbox incremental state is invalid.'],
+};
+
+/** 将连接器错误转换成任务异常，保留原始异常链。 */
 function mapMailConnectorError(error: unknown): TaskExecutionError {
   if (!(error instanceof MailConnectorError)) {
     return new TaskExecutionError('permanent', 'Mailbox task failed.', { cause: error });
   }
-  switch (error.category) {
-    case 'rate_limited':
-      return new TaskExecutionError('rate_limited', 'Mailbox provider rate limit reached.', {
-        cause: error,
-      });
-    case 'network_temporary':
-      return new TaskExecutionError('network_temporary', 'Mailbox network request failed.', {
-        cause: error,
-      });
-    case 'upstream_5xx':
-      return new TaskExecutionError('upstream_5xx', 'Mailbox provider is unavailable.', {
-        cause: error,
-      });
-    case 'cancelled':
-      return new TaskExecutionError('cancelled', 'Mailbox task was cancelled.', { cause: error });
-    case 'authentication_required':
-    case 'permission_denied':
-    case 'invalid_config':
-      return new TaskExecutionError('invalid_config', 'Mailbox authorization is unavailable.', {
-        cause: error,
-      });
-    case 'parse_changed':
-    case 'cursor_invalid':
-      return new TaskExecutionError('parse_changed', 'Mailbox incremental state is invalid.', {
-        cause: error,
-      });
-    case 'message_not_found':
-    case 'payload_too_large':
-    default:
-      return new TaskExecutionError('permanent', 'Mailbox message cannot be processed.', {
-        cause: error,
-      });
-  }
+  const [category, message] = mailTaskErrors[error.category] ?? [
+    'permanent',
+    'Mailbox message cannot be processed.',
+  ];
+  return new TaskExecutionError(category, message, { cause: error });
 }

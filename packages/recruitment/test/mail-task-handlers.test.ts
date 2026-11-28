@@ -47,6 +47,14 @@ const message: ExternalMailMessage = {
   headers: {},
 };
 
+/** 已发现且尚未分类的邮件引用。 */
+const pendingMessage: RecruitmentMailMessageRef = {
+  ...message,
+  id: 'message-ref-1',
+  processingStatus: 'discovered',
+  lastClassifierVersion: null,
+};
+
 /** 构造任务上下文，确保测试覆盖 Worker 的取消信号、检查点和提交时间。 */
 function context(
   controller = new AbortController(),
@@ -141,9 +149,7 @@ class RecordingRepository implements RecruitmentMailProcessingRepository {
   >[0][] = [];
 
   public findMessageRef(id: string): RecruitmentMailMessageRef | null {
-    return id === 'message-ref-1'
-      ? { ...message, id, processingStatus: 'discovered', lastClassifierVersion: null }
-      : null;
+    return id === pendingMessage.id ? { ...pendingMessage } : null;
   }
 
   public updateMessageStatus(
@@ -187,7 +193,7 @@ const messageRefIdOf = (): string => 'message-ref-1';
 describe('mailbox sync task handler', () => {
   it.each(['backlog', 'page'])('isolates a missing message from the %s', async (origin) => {
     const repository = new RecordingRepository();
-    const missing = { ...message, id: 'message-ref-1' };
+    const missing = pendingMessage;
     const next = { ...message, externalMessageKey: 'INBOX:1:3' };
     const mail = connector();
     vi.spyOn(mail, 'fetchMessage')
@@ -346,7 +352,7 @@ describe('mailbox sync task handler', () => {
 
 /** 使用固定分类端口运行单邮件分类，便于验证事件提交门槛。 */
 async function execute(result: RecruitmentMailClassificationResult): Promise<{
-  output: 'accepted' | 'needs_review' | 'ignored' | null;
+  output: Awaited<ReturnType<MailClassificationService['classifyOne']>>;
   repository: RecordingRepository;
 }> {
   const repository = new RecordingRepository();
