@@ -174,7 +174,12 @@ export class SqlitePlatformRepository implements PlatformRepository {
             )
             .run(this.providerKey, detail.externalCompanyId, companyId);
         }
-        // 3、共用现有领域归一化与合并规则，不猜测招聘类型或发布日期。
+        const jobs = new SqliteJobRepository(this.client);
+        const current = jobs.findCurrent({
+          sourceId: parseId(sourceId, 'JobSource'),
+          externalJobId: detail.externalJobId,
+        });
+        // 3、来源暂缺发布时间时保留上次已验证的值。
         const normalized = parseNormalizedJob({
           companyId,
           sourceId,
@@ -192,12 +197,7 @@ export class SqlitePlatformRepository implements PlatformRepository {
           description: detail.description,
           detailUrl: detail.sourceUrl,
           applyUrl: detail.sourceUrl,
-          publishedAt: null,
-        });
-        const jobs = new SqliteJobRepository(this.client);
-        const current = jobs.findCurrent({
-          sourceId: parseId(sourceId, 'JobSource'),
-          externalJobId: detail.externalJobId,
+          publishedAt: detail.publishedAt ?? current?.normalized.publishedAt ?? null,
         });
         const decision = decideJobMerge(current, normalized);
         const jobId = current?.jobId ?? parseId(this.#ids.generate(), 'Job');

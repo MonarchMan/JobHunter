@@ -294,7 +294,7 @@ it('搜索 lptjob 卡片允许缺省学历，详情仍核对完整 JSON-LD 身�
     )
     .mockResolvedValueOnce(
       new Response(
-        `<script type="application/ld+json">${JSON.stringify({ ...posting, url: link })}</script>`,
+        `<script type="application/ld+json">${JSON.stringify({ ...posting, url: link, datePosted: '2026-10-20T13:16:41+08:00' })}</script>`,
         { headers: { 'content-type': 'text/html' } },
       ),
     );
@@ -309,6 +309,7 @@ it('搜索 lptjob 卡片允许缺省学历，详情仍核对完整 JSON-LD 身�
   });
   expect(await session.readDetail('lptjob:80000001', signal)).toMatchObject({
     description: posting.description,
+    publishedAt: Date.parse('2026-10-20T05:16:41Z'),
   });
 });
 

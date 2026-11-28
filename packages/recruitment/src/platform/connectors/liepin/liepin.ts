@@ -54,6 +54,7 @@ const postingSchema = z.object({
   url: z.string(),
   identifier: z.object({ propertyID: z.literal('liepin.com'), value: id }),
   hiringOrganization: z.object({ name: text.min(1), sameAs: z.string().nullish() }),
+  datePosted: z.unknown().optional(),
   description: z
     .string()
     .trim()
@@ -382,6 +383,11 @@ function parseDetail(
   const parsed = postingSchema.safeParse(postings[0]);
   if (!parsed.success) throw new LiepinParseError('detail_posting_schema');
   const posting = parsed.data;
+  // 日期是可选元数据，格式变化不应阻断已验证职位正文的入库。
+  const postedDate = z.iso.datetime({ offset: true }).safeParse(posting.datePosted);
+  const postedAt = postedDate.success ? Date.parse(postedDate.data) : NaN;
+  const publication =
+    Number.isSafeInteger(postedAt) && postedAt >= 0 ? { publishedAt: postedAt } : {};
   // 3、公开 URL 与内部职位 ID 同时核验；公司名称一致仍不能代替公司 ID 一致。
   if (posting.identifier.value !== internalId) throw new LiepinParseError('detail_job_id');
   if (posting.url !== candidate.sourceUrl) throw new LiepinParseError('detail_url');
@@ -394,7 +400,7 @@ function parseDetail(
       companyLink ?? '',
     )?.[1];
     if (!externalCompanyId || !companyNameMatches) throw new PlatformCompanyIdentityUnavailable();
-    return { ...candidate, externalCompanyId, description: posting.description };
+    return { ...candidate, externalCompanyId, description: posting.description, ...publication };
   }
   if (companyLink == null) throw new LiepinParseError('detail_posting_schema');
   const companyUrlMatches =
@@ -417,7 +423,7 @@ function parseDetail(
     );
   }
   // 公司身份已由规范链接确认；列表展示名可能是简称，继续使用列表名称。
-  return { ...candidate, description: posting.description };
+  return { ...candidate, description: posting.description, ...publication };
 }
 
 /** 仅把重定向目标映射为固定原因码，绝不把 Location 或查询参数带入任务日志。 */

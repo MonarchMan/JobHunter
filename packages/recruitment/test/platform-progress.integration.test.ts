@@ -94,6 +94,7 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
       education: '',
       sourceUrl: `https://www.liepin.com/${id.replace(':', '/')}.shtml`,
       description: '参与软件开发和测试，完整的职位描述。',
+      ...(id === 'job:1' ? { publishedAt: Date.parse('2026-10-20T05:16:41Z') } : {}),
     });
     const service = new PlatformBrowsingService(
       {
@@ -154,6 +155,9 @@ it.each(['succeeded', 'failed', 'cancelled'] as const)(
         await expect(execution).resolves.toMatchObject({ savedCount: 2 });
         expect(repository.verifyObservedBatch(taskId, 2)).toBe(true);
         expect(saved).toHaveBeenCalledTimes(2);
+        expect(
+          db.client.prepare('SELECT published_at FROM jobs ORDER BY external_job_id').pluck().all(),
+        ).toEqual([null, Date.parse('2026-10-20T05:16:41Z')]);
         expect(
           db.client
             .prepare("SELECT locations_json FROM jobs WHERE external_job_id='a:2'")

@@ -90,6 +90,8 @@ export interface PlatformCandidate {
 /** 详情身份与列表核对后，才允许交给正式职位写入流程。 */
 export interface PlatformJobDetail extends PlatformCandidate {
   readonly description: string;
+  /** 来源明确提供的发布时间，单位为 UTC 毫秒。 */
+  readonly publishedAt?: number;
 }
 
 /** 一批推荐不是来源完整快照，不提供 complete 覆盖标志。 */
